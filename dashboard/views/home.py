@@ -510,10 +510,11 @@ def _build_daw_html(data: dict) -> str:
             return f'<span style="color:#00e5ff">↑ deployed</span>  <span style="color:#7a5a9a">{msg}</span>'
 
         if tag == "TRADE":
-            # legacy fill format
-            msg = msg.replace("bought", '<span style="color:#00ff9d">bought</span>')
-            msg = msg.replace("sold",   '<span style="color:#ff9900">sold</span>')
-            return msg
+            verb = "bought" if "bought" in msg else "sold"
+            verb_col = "#00ff9d" if verb == "bought" else "#ff9900"
+            qty_m = _re.search(r'(\d+)\s+shares', msg)
+            qty = qty_m.group(1) if qty_m else "?"
+            return f'<span style="color:{verb_col}">{verb}</span> {qty} shares {_ts(sym)}'
 
         # fallback
         return f'<span style="color:#5a3a7a">{msg}</span>'
