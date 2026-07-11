@@ -342,22 +342,59 @@ def _load_chart_data() -> dict:
     _close_ms = int(_close_dt.timestamp() * 1000)
     _market_open = _open_dt <= _now_et < _close_dt
 
-    queued_actions: list[dict] = []
-    if _market_open:
-        queued_actions.append({"badge": "CLOSE", "label": "market closes",
-            "detail": "NYSE  4:00pm ET", "target_ms": _close_ms, "color": "#4a2a6a"})
-    else:
-        queued_actions.append({"badge": "OPEN", "label": "market opens",
-            "detail": "NYSE  9:30am ET", "target_ms": _open_ms, "color": "#00e5ff"})
-    queued_actions.append({"badge": "RUN", "label": "daily pipeline",
-        "detail": "ingest → signal → rebalance", "target_ms": _pipeline_ms, "color": "#ff00cc"})
-    for _p in [x for x in positions_data if not x["in_signal"]]:
-        queued_actions.append({"badge": "EXIT", "label": _p["sym"],
-            "detail": f"exits  {_next_td_str} close", "target_ms": _pipeline_ms, "color": "#ff9900"})
-    _hold_syms = [x["sym"] for x in positions_data if x["in_signal"]]
-    if _hold_syms:
-        queued_actions.append({"badge": "HOLD", "label": "  ·  ".join(_hold_syms),
-            "detail": "continuing  ·  still ranked top 5", "target_ms": _pipeline_ms, "color": "#00ff9d"})
+    # Which event types already fired today → filter them out of the queue
+    _done_today: set[str] = set()
+    try:
+        with get_session() as s:
+            _done_rows = s.execute(text("""
+                SELECT DISTINCT event_type FROM pipeline_events
+                WHERE run_date = :today
+            """), {"today": _today_et}).fetchall()
+            _done_today = {r.event_type for r in _done_rows}
+    except Exception:
+        pass
+
+    def _q(badge, label, detail, target_ms, color, done_key):
+        if done_key in _done_today:
+            return None
+        return {"badge": badge, "label": label, "detail": detail,
+                "target_ms": target_ms, "color": color}
+
+    # Full day sequence — items filter themselves out as they execute
+    _seq = [
+        # ── Morning ──────────────────────────────────────────────────────
+        _q("OPEN",    "market opens",          "NYSE  9:30am ET",
+           _open_ms,               "#00e5ff", "MARKET_OPEN"),
+        _q("PRICE",   "price all positions",   "gap analysis vs prev close",
+           _open_ms + 90_000,      "#00e5ff", "OPEN_PRICE"),
+        _q("PREVIEW", "score the universe",    "rank top-5  ·  predict today's moves",
+           _open_ms + 180_000,     "#9400ff", "SIGNAL_PREVIEW"),
+        _q("PLAN",    "preview today's trades","expected entries  ·  exits  ·  holds",
+           _open_ms + 240_000,     "#9400ff", "ACTION_PREVIEW"),
+        # ── Close ────────────────────────────────────────────────────────
+        _q("CLOSE",   "market closes",         "NYSE  4:00pm ET",
+           _close_ms,              "#6a3a8a", "MARKET_CLOSE"),
+        _q("INGEST",  "pre-ingest data",       f"97 symbols  ·  feeds 4:05 pipeline",
+           _close_ms + 120_000,    "#9400ff", "CLOSE_INGEST"),
+        # ── Pipeline ─────────────────────────────────────────────────────
+        _q("RUN",     "daily pipeline",        "signal → rebalance → snapshot → PnL",
+           _pipeline_ms,           "#ff00cc", "START"),
+        _q("DONE",    "pipeline complete",     "book marked  ·  performance logged",
+           _pipeline_ms + 180_000, "#ff00cc", "COMPLETE"),
+    ]
+    queued_actions: list[dict] = [q for q in _seq if q is not None]
+
+    # Position-level actions (always show until next pipeline confirms them)
+    if "COMPLETE" not in _done_today:
+        for _p in [x for x in positions_data if not x["in_signal"]]:
+            queued_actions.append({"badge": "EXIT", "label": _p["sym"],
+                "detail": f"exits at {_next_td_str} close  ·  fell out of top-5",
+                "target_ms": _pipeline_ms, "color": "#ff9900"})
+        _hold_syms = [x["sym"] for x in positions_data if x["in_signal"]]
+        if _hold_syms:
+            queued_actions.append({"badge": "HOLD", "label": "  ·  ".join(_hold_syms),
+                "detail": "continuing  ·  still ranked top 5",
+                "target_ms": _pipeline_ms, "color": "#00ff9d"})
 
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
@@ -1327,6 +1364,9 @@ def render() -> None:
     iframe { display: block !important; }
     </style>
     """, unsafe_allow_html=True)
+
+    # Auto-refresh every 60s so terminal + queue stay live without manual reload
+    st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
 
     try:
         data = _load_chart_data()
