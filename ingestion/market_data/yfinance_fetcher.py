@@ -23,6 +23,7 @@ def fetch_and_store(
     symbols: list[str] | None = None,
     start: date | None = None,
     end: date | None = None,
+    run_date: date | None = None,
 ) -> dict[str, int]:
     """Fetch OHLCV from yfinance and upsert into price_bars.
 
@@ -36,7 +37,7 @@ def fetch_and_store(
 
     for symbol in symbols:
         try:
-            rows = _fetch_symbol(symbol, start, end)
+            rows = _fetch_symbol(symbol, start, end, run_date=run_date)
             results[symbol] = rows
         except Exception as exc:
             logger.error(f"[{symbol}] Ingestion failed: {exc}")
@@ -45,7 +46,7 @@ def fetch_and_store(
     return results
 
 
-def _fetch_symbol(symbol: str, start: date, end: date) -> int:
+def _fetch_symbol(symbol: str, start: date, end: date, run_date: date | None = None) -> int:
     logger.info(f"[{symbol}] Fetching {start} → {end}")
     ticker = yf.Ticker(symbol)
     # yfinance end date is exclusive — add one day so today's bar is included
@@ -74,6 +75,14 @@ def _fetch_symbol(symbol: str, start: date, end: date) -> int:
 
     rows = _upsert_bars(symbol, raw)
     logger.info(f"[{symbol}] Inserted/updated {rows} bars.")
+
+    if run_date is not None and rows > 0:
+        try:
+            from data.pipeline_log import log_event
+            log_event(run_date, "FETCH", f"{symbol} · {rows} bars stored", symbol=symbol)
+        except Exception:
+            pass
+
     return rows
 
 

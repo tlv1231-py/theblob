@@ -37,7 +37,7 @@ def run(as_of_date: date | None = None) -> None:
 
     # ── 1. Ingest ─────────────────────────────────────────────────────────────
     logger.info("Step 1: Ingesting market data...")
-    results = fetch_and_store(symbols=DEFAULT_UNIVERSE, end=as_of_date)
+    results = fetch_and_store(symbols=DEFAULT_UNIVERSE, end=as_of_date, run_date=as_of_date)
     total_bars = sum(results.values())
     logger.info(f"Ingested {total_bars} new bars across {len(results)} symbols.")
     log_event(as_of_date, "INGEST",

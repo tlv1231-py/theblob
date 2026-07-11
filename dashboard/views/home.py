@@ -179,6 +179,8 @@ def _load_chart_data() -> dict:
             "START":      ("ev-pipeline", "RUN"),
             "COMPLETE":   ("ev-pipeline", "RUN"),
             "INGEST":     ("ev-pipeline", "DATA"),
+            "FETCH":      ("ev-pipeline", "FETCH"),
+            "INTRADAY":   ("ev-pipeline", "INTRADAY"),
             "SIGNAL":     ("ev-signal",   "SIGNAL"),
             "ENTRY":      ("ev-fill",     "BUY"),
             "EXIT":       ("ev-fill",     "SELL"),
@@ -191,7 +193,7 @@ def _load_chart_data() -> dict:
             pipe_rows = s.execute(text("""
                 SELECT event_type, symbol, message, detail, recorded_at as ts
                 FROM pipeline_events
-                ORDER BY recorded_at DESC LIMIT 200
+                ORDER BY recorded_at DESC LIMIT 500
             """)).fetchall()
             for r in pipe_rows:
                 cls, tag = _EVENT_MAP.get(r.event_type, ("ev-pipeline", r.event_type))
@@ -227,7 +229,22 @@ def _load_chart_data() -> dict:
                     "line1":f"valued at ${int(r.nav):,}","line2":"end of day snapshot","ts":r.ts,"tag":"NAV"})
 
     term_events.sort(key=lambda e: e["ts"] if e["ts"] else "")  # oldest first → newest at bottom
-    term_events = term_events[-80:]
+    term_events = term_events[-200:]
+
+    # Next trading day (for plain-English position subtext)
+    from datetime import timedelta as _td
+    try:
+        import pandas_market_calendars as _mcal
+        _nyse = _mcal.get_calendar("NYSE")
+        _today = __import__("datetime").date.today()
+        _sched = _nyse.schedule(
+            start_date=_today + _td(days=1),
+            end_date=_today + _td(days=10),
+        )
+        _next_td = _sched.index[0].date() if len(_sched) else _today + _td(days=1)
+        _next_td_str = _next_td.strftime("%-m/%-d")
+    except Exception:
+        _next_td_str = "next close"
 
     # Positions panel data
     positions_data: list[dict] = []
@@ -249,6 +266,17 @@ def _load_chart_data() -> dict:
                 """), {"syms": syms}).fetchall()
                 prices_map = {r.symbol: float(r.adj_close) for r in price_rows}
 
+                # Entry fills — earliest BUY per symbol
+                entry_rows = s.execute(text("""
+                    SELECT DISTINCT ON (symbol) symbol, fill_price, filled_at::date as entry_date
+                    FROM fills WHERE side = 'BUY' AND symbol = ANY(:syms)
+                    ORDER BY symbol, filled_at ASC
+                """), {"syms": syms}).fetchall()
+                entry_map = {
+                    r.symbol: {"price": float(r.fill_price), "date": str(r.entry_date)}
+                    for r in entry_rows
+                }
+
                 # Latest signals to get score + rank for each symbol
                 sig_rows = s.execute(text("""
                     SELECT symbol, score, as_of_date
@@ -256,7 +284,6 @@ def _load_chart_data() -> dict:
                     WHERE as_of_date = (SELECT MAX(as_of_date) FROM signals)
                     ORDER BY score DESC
                 """)).fetchall()
-                sig_date = sig_rows[0].as_of_date if sig_rows else None
                 sig_map = {r.symbol: {"score": float(r.score), "rank": i+1}
                            for i, r in enumerate(sig_rows)}
 
@@ -264,16 +291,28 @@ def _load_chart_data() -> dict:
                     price = prices_map.get(sym, 0.0)
                     value = qty * price
                     sig  = sig_map.get(sym)
+                    entry = entry_map.get(sym, {})
+                    entry_price = entry.get("price", 0.0)
+                    entry_date  = entry.get("date", "—")
+                    entry_cost  = qty * entry_price if entry_price else 0.0
+                    entry_pnl   = value - entry_cost if entry_cost else 0.0
+                    entry_pnl_pct = (entry_pnl / entry_cost * 100) if entry_cost else 0.0
+
                     if sig:
                         rank = sig["rank"]
-                        score = sig["score"]
-                        hold_text = f"ranked #{rank} of {len(sig_rows)} · holds while top 5"
+                        hold_text = f"ranked #{rank} · stays in until it drops out of top 5"
                     else:
-                        hold_text = "not in today's top-5 · exits next rebalance"
+                        hold_text = f"fell out of top 5 · the blob sells this at {_next_td_str} close"
+
                     positions_data.append({
                         "sym": sym, "qty": qty, "price": price,
                         "value": value, "hold_text": hold_text,
                         "in_signal": bool(sig),
+                        "entry_price": entry_price,
+                        "entry_date": entry_date,
+                        "entry_cost": entry_cost,
+                        "entry_pnl": entry_pnl,
+                        "entry_pnl_pct": entry_pnl_pct,
                     })
                 positions_data.sort(key=lambda x: -x["value"])
 
@@ -368,6 +407,18 @@ def _build_daw_html(data: dict) -> str:
             bars = bars_m.group(1) if bars_m else "?"
             syms = sym_m.group(1) if sym_m else "?"
             return f'<span style="color:#5a3a7a">pulled {bars} bars across {syms} symbols. clean.</span>'
+
+        if tag == "FETCH":
+            bars_m = _re.search(r'(\d+) bars', msg)
+            count = bars_m.group(1) if bars_m else "0"
+            return f'<span style="color:#1e0c30">{_ts(sym)} &nbsp;{count} bars</span>'
+
+        if tag == "INTRADAY":
+            bars_m = _re.search(r'([\d,]+) 1m bars', msg)
+            sym_m  = _re.search(r'(\d+) symbols', msg)
+            bars = bars_m.group(1) if bars_m else "?"
+            syms = sym_m.group(1) if sym_m else "?"
+            return f'<span style="color:#3a2a5a">cached {bars} intraday 1m bars across {syms} symbols</span>'
 
         if tag == "SIGNAL":
             # "universe scored · top pick: GOOGL (0.823)"
@@ -479,8 +530,22 @@ def _build_daw_html(data: dict) -> str:
     for p in data.get("positions_data", []):
         tcol = _TICKER_PAL[hash(p["sym"]) % len(_TICKER_PAL)]
         hold_cls = "active" if p["in_signal"] else "exiting"
+        ep = p["entry_price"]
+        ec = p["entry_cost"]
+        epnl = p["entry_pnl"]
+        epct = p["entry_pnl_pct"]
+        pnl_col = "#00ff9d" if epnl >= 0 else "#ff3366"
+        pnl_sign = "+" if epnl >= 0 else "−"
+        tip = (
+            f'<div class="pos-tip">'
+            f'<div>entered {p["entry_date"]} &nbsp;·&nbsp; {p["qty"]} sh @ ${ep:.2f}</div>'
+            f'<div>cost basis &nbsp;${ec:,.0f} &nbsp;→&nbsp; now ${p["value"]:,.0f}</div>'
+            f'<div style="color:{pnl_col}">{pnl_sign}${abs(epnl):,.0f} &nbsp;({epct:+.1f}% lifetime)</div>'
+            f'</div>'
+        ) if ep else ""
         pos_cards += (
             f'<div class="pos-card">'
+            f'{tip}'
             f'<div class="pos-top">'
             f'<span class="pos-sym" style="color:{tcol}">{p["sym"]}</span>'
             f'<span class="pos-qty">{p["qty"]} sh</span>'
@@ -690,7 +755,7 @@ body::after {{
   font-size:7.5px; letter-spacing:.28em; color:#2e1448;
   padding:0 14px 6px; text-transform:uppercase;
 }}
-.pos-card {{ padding:5px 14px 8px; }}
+.pos-card {{ padding:5px 14px 8px; position:relative; cursor:default; }}
 .pos-top {{
   display:flex; align-items:baseline; gap:6px;
   font-size:12px; line-height:1.3;
@@ -704,6 +769,17 @@ body::after {{
 }}
 .pos-hold.active  {{ color:#3a7a4a; }}
 .pos-hold.exiting {{ color:#a05020; }}
+.pos-tip {{
+  display:none;
+  position:absolute; left:0; bottom:100%;
+  background:#0a0015; border:1px solid #3a1a4a;
+  border-top:1px solid #ff00cc;
+  padding:7px 12px; font-size:9.5px; line-height:1.75;
+  z-index:999; white-space:nowrap; color:#6a4a8a;
+  pointer-events:none;
+  box-shadow:0 -4px 20px rgba(255,0,204,.1);
+}}
+.pos-card:hover .pos-tip {{ display:block; }}
 </style>
 </head>
 <body>

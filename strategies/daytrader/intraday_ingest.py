@@ -19,11 +19,24 @@ _CACHE_DIR = Path(__file__).resolve().parent / ".bar_cache"
 
 # Daytrader universe — keep in sync with run_daytrader.py
 _BASE_UNIVERSE = [
-    "SPY", "QQQ", "IWM",
+    # Index ETFs
+    "SPY", "QQQ", "IWM", "DIA", "MDY",
+    # Mega-cap tech
     "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA",
-    "AMD", "AVGO",
-    "JPM", "GS",
-    "XLE", "GLD", "TLT",
+    # Semiconductors
+    "AMD", "AVGO", "MU", "ARM", "SMCI", "AMAT",
+    # Financials
+    "JPM", "GS", "MS", "BAC", "V", "MA",
+    # Energy
+    "XOM", "CVX", "OXY",
+    # Consumer / retail
+    "WMT", "COST", "HD", "NKE",
+    # Biotech / healthcare
+    "LLY", "UNH", "MRNA", "BIIB",
+    # Sector ETFs
+    "XLE", "XLF", "XLK", "XLV", "ARKK",
+    # Macro / rates / volatility
+    "GLD", "TLT", "SLV", "UVXY",
 ]
 
 

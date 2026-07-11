@@ -36,16 +36,24 @@ _ET = ZoneInfo("America/New_York")
 # All symbols on a single Alpaca WebSocket connection â€” no extra cost.
 # Min ADTV ~10M shares so 10bps slippage assumption holds.
 _BASE_UNIVERSE = [
-    # Index ETFs â€” always included, highest intraday volume
-    "SPY", "QQQ", "IWM",
-    # Mega-cap tech â€” deepest order books, cleanest ORB setups
-    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA",
-    # High-beta semiconductors + hardware
-    "AMD", "AVGO",
-    # Financials â€” move hard on macro/rate news
-    "JPM", "GS",
-    # Sector ETFs â€” diversify setup sources
-    "XLE", "GLD", "TLT",
+    # Index ETFs — highest intraday volume, cleanest ORB
+    “SPY”, “QQQ”, “IWM”, “DIA”, “MDY”,
+    # Mega-cap tech
+    “AAPL”, “MSFT”, “NVDA”, “AMZN”, “META”, “GOOGL”, “TSLA”,
+    # Semiconductors
+    “AMD”, “AVGO”, “MU”, “ARM”, “SMCI”, “AMAT”,
+    # Financials — react hard to macro/rates
+    “JPM”, “GS”, “MS”, “BAC”, “V”, “MA”,
+    # Energy & commodities
+    “XOM”, “CVX”, “OXY”,
+    # Consumer / retail
+    “WMT”, “COST”, “HD”, “NKE”,
+    # Biotech / healthcare
+    “LLY”, “UNH”, “MRNA”, “BIIB”,
+    # Sector ETFs — broad exposure, low spread
+    “XLE”, “XLF”, “XLK”, “XLV”, “ARKK”,
+    # Macro / rates / volatility
+    “GLD”, “TLT”, “SLV”, “UVXY”,
 ]
 _TOP_MOMENTUM_N = 10
 
