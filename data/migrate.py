@@ -8,6 +8,7 @@ from data.models import (  # noqa: F401 — imports needed to register models
     ExperimentRecord,
     FillRecord,
     OrderRecord,
+    PipelineEvent,
     PnLRecord,
     PortfolioSnapshot,
     PriceBar,

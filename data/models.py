@@ -119,6 +119,20 @@ class ChartAnnotation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class PipelineEvent(Base):
+    """One structured log entry per pipeline step. Powers the terminal feed."""
+    __tablename__ = "pipeline_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    # INGEST | SIGNAL | ENTRY | EXIT | HOLD | RISK_VETO | SNAPSHOT | PNL | START | COMPLETE
+    symbol: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ExperimentRecord(Base):
     __tablename__ = "experiments"
 
