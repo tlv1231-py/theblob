@@ -404,9 +404,10 @@ def _render_sidebar_terminal() -> None:
                 FROM fills ORDER BY filled_at DESC LIMIT 8
             """)).fetchall()
             for r in fills:
+                action = "bought" if r.side == "BUY" else "sold"
                 events.append({"type": "fill", "sym": r.symbol,
-                                "line1": f"{r.side} {r.quantity} sh",
-                                "line2": f"@ ${r.price}", "ts": r.ts})
+                                "line1": f"{action} {r.quantity} shares",
+                                "line2": f"filled at ${r.price}", "ts": r.ts})
 
             sigs = s.execute(_text("""
                 SELECT symbol, UPPER(direction) as direction,
@@ -416,8 +417,8 @@ def _render_sidebar_terminal() -> None:
             """)).fetchall()
             for r in sigs:
                 events.append({"type": "signal", "sym": r.symbol,
-                                "line1": f"{r.direction} signal",
-                                "line2": f"score {r.score}", "ts": r.ts})
+                                "line1": "flagged for entry",
+                                "line2": f"momentum score {r.score}", "ts": r.ts})
 
             snaps = s.execute(_text("""
                 SELECT ROUND(total_value::numeric,0) as nav,
@@ -426,14 +427,14 @@ def _render_sidebar_terminal() -> None:
             """)).fetchall()
             for r in snaps:
                 events.append({"type": "snapshot", "sym": "PORTFOLIO",
-                                "line1": f"NAV  ${int(r.nav):,}",
-                                "line2": "snapshot", "ts": r.ts})
+                                "line1": f"valued at ${int(r.nav):,}",
+                                "line2": "end of day snapshot", "ts": r.ts})
 
         events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
         events = events[:18]
 
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
-        type_tag  = {"fill": "FILL", "signal": "SIG·", "snapshot": "SNAP"}
+        type_tag  = {"fill": "TRADE", "signal": "SIGNAL", "snapshot": "UPDATE"}
         lines_html = ""
         for i, ev in enumerate(events):
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
