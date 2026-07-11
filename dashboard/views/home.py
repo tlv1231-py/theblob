@@ -1558,19 +1558,13 @@ def render() -> None:
             try {
                 var p = window.parent;
                 var doc = p.document;
-                // Measure the Streamlit bottom toolbar (Manage app bar)
-                var bottomBar = doc.querySelector('[data-testid="stBottom"]')
-                             || doc.querySelector('[data-testid="stStatusWidget"]')
-                             || doc.querySelector('[data-testid="stToolbar"]')
-                             || doc.querySelector('[class*="StatusWidget"]')
-                             || doc.querySelector('[class*="toolbar"]');
-                var bottomH = bottomBar ? Math.ceil(bottomBar.getBoundingClientRect().height) : 0;
-                // Measure Streamlit top header if still present
+                // Manage app button is exactly 44px per measurement
+                var manageBtn = doc.querySelector('[data-testid="manage-app-button"]');
+                var bottomH = manageBtn ? Math.ceil(manageBtn.getBoundingClientRect().height) + 4 : 48;
                 var topBar = doc.querySelector('[data-testid="stHeader"]');
                 var topH = topBar ? Math.ceil(topBar.getBoundingClientRect().height) : 0;
-                // Available height = full viewport minus any chrome that survived our CSS
-                var h = p.innerHeight - topH - bottomH - 4;
-                if (h < 300) h = p.innerHeight - 50; // sanity fallback
+                var h = p.innerHeight - topH - bottomH;
+                if (h < 300) h = p.innerHeight - 52;
                 // Resize the main chart iframe (the biggest one)
                 var biggest = null, biggestH = 0;
                 doc.querySelectorAll('iframe').forEach(function(f) {
