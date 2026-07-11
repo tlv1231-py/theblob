@@ -15,7 +15,7 @@ st.set_page_config(
     page_title="The Blob",
     page_icon="◈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
     menu_items={},
 )
 
@@ -110,53 +110,91 @@ h3 {
     padding: 14px 16px 12px !important;
 }
 
-/* ── Sidebar ───────────────────────────────────────────────────────────── */
+/* ── Hide sidebar entirely ─────────────────────────────────────────────── */
 [data-testid="stSidebar"],
-section[data-testid="stSidebar"] {
-    background-color: var(--bg) !important;
-    border-right: 1px solid var(--border) !important;
-    min-width: 220px !important;
-    max-width: 220px !important;
-}
-[data-testid="stSidebar"] * {
-    font-family: Consolas, 'Courier New', monospace !important;
-}
+section[data-testid="stSidebar"],
 [data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"] { display: none !important; }
 
-/* ── Sidebar wordmark ──────────────────────────────────────────────────── */
-.blob-wordmark {
-    font-family: Consolas, 'Courier New', monospace !important;
-    font-size: 1.25rem !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.02em !important;
-    color: var(--accent) !important;
-    text-shadow:
-        0 0 12px rgba(255,0,204,0.8),
-        0 0 30px rgba(255,0,204,0.3),
-        0 0 60px rgba(255,0,204,0.1) !important;
-    display: block !important;
-    padding: 4px 0 1px !important;
+/* ── Icon rail ─────────────────────────────────────────────────────────── */
+#icon-rail {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: 52px;
+    background: var(--bg);
+    border-right: 1px solid var(--border2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+    z-index: 1000;
+    gap: 0;
 }
-.blob-sub {
-    font-size: 0.54rem !important;
-    letter-spacing: 0.2em !important;
-    color: var(--text-dim) !important;
-    text-transform: uppercase !important;
-    display: block !important;
-    margin-top: -1px !important;
+#icon-rail .ir-logo {
+    font-size: 1.2rem;
+    color: var(--accent);
+    text-shadow: 0 0 16px rgba(255,0,204,0.7);
+    padding: 14px 0 12px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    cursor: default;
+    font-family: Consolas, monospace;
+}
+#icon-rail .ir-divider {
+    width: 28px;
+    height: 1px;
+    background: var(--border);
+    margin: 2px 0 6px;
+    flex-shrink: 0;
+}
+#icon-rail .ir-spacer { flex: 1; }
+#icon-rail a.ir-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 44px;
+    text-decoration: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    font-family: Consolas, monospace;
+    transition: color 0.12s, background 0.12s;
+    position: relative;
+    flex-shrink: 0;
+}
+#icon-rail a.ir-item:hover {
+    color: var(--accent2);
+    background: rgba(0,229,255,0.06);
+}
+#icon-rail a.ir-item.ir-active {
+    color: var(--accent);
+}
+#icon-rail a.ir-item.ir-active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(255,0,204,0.6);
+}
+#icon-rail a.ir-run {
+    color: var(--accent);
+    font-size: 0.9rem;
+    border-top: 1px solid var(--border);
+    width: 52px;
+    height: 48px;
+    flex-shrink: 0;
+}
+#icon-rail a.ir-run:hover {
+    background: rgba(255,0,204,0.08);
+    color: var(--accent);
 }
 
-/* ── Sidebar nav ───────────────────────────────────────────────────────── */
-[data-testid="stSidebar"] .stRadio label {
-    font-size: 0.74rem !important;
-    font-weight: 400 !important;
-    color: var(--text-mid) !important;
-    letter-spacing: 0.02em !important;
-    padding: 3px 0 !important;
-    transition: color 0.1s !important;
+/* ── Shift main content right of icon rail ─────────────────────────────── */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+    margin-left: 52px !important;
 }
-[data-testid="stSidebar"] .stRadio label:hover { color: var(--accent) !important; }
 
 /* ── Terminal feed ─────────────────────────────────────────────────────── */
 .term-feed-wrap {
@@ -388,35 +426,23 @@ PAGES = {
     "Daytrader":      daytrader.render,
 }
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
-st.sidebar.markdown(
-    '<span class="blob-wordmark">The Blob</span>'
-    '<span class="blob-sub">Algorithmic Trading</span>',
-    unsafe_allow_html=True,
-)
-st.sidebar.divider()
+# ── Page selection via query params ───────────────────────────────────────────
+_qp_page = st.query_params.get("page", "Command Center")
+if _qp_page not in PAGES:
+    _qp_page = "Command Center"
 
-selection = st.sidebar.radio("nav", list(PAGES.keys()), label_visibility="collapsed")
-st.sidebar.divider()
-
-
-# ── Sidebar pipeline runner ────────────────────────────────────────────────────
-st.sidebar.divider()
+# ── Pipeline runner ────────────────────────────────────────────────────────────
+import subprocess as _sp, sys as _sys
 
 if "pipeline_proc" not in st.session_state:
     st.session_state.pipeline_proc    = None
     st.session_state.pipeline_output  = []
     st.session_state.pipeline_running = False
 
-import subprocess as _sp, sys as _sys
-
-_label = "◼ STOP" if st.session_state.pipeline_running else "▶ RUN PIPELINE"
-if st.sidebar.button(_label, type="primary", key="sidebar_pipeline_btn"):
-    if st.session_state.pipeline_running and st.session_state.pipeline_proc:
-        st.session_state.pipeline_proc.terminate()
-        st.session_state.pipeline_running = False
-        st.session_state.pipeline_proc    = None
-    else:
+_run_requested = st.query_params.get("run", "") == "1"
+if _run_requested:
+    st.query_params.pop("run", None)
+    if not st.session_state.pipeline_running:
         _proc = _sp.Popen(
             [_sys.executable, str(_ROOT / "run_pipeline.py")],
             stdout=_sp.PIPE, stderr=_sp.STDOUT,
@@ -438,9 +464,45 @@ if st.session_state.pipeline_running and st.session_state.pipeline_proc:
     if _proc.poll() is not None:
         st.session_state.pipeline_running = False
 
-if st.session_state.pipeline_output:
-    for _ln in st.session_state.pipeline_output[-3:]:
-        st.sidebar.caption(_ln)
+# ── Icon rail ──────────────────────────────────────────────────────────────────
+_PAGE_ICONS = {
+    "Command Center": ("◈", "Command Center"),
+    "Portfolio":      ("▣", "Portfolio"),
+    "Benchmarks":     ("≋", "Benchmarks"),
+    "Signals":        ("⚡", "Signals"),
+    "Backtest Lab":   ("⟳", "Backtest Lab"),
+    "Risk Monitor":   ("◬", "Risk Monitor"),
+    "Daytrader":      ("⊕", "Daytrader"),
+}
+
+_rail_items = ""
+for _pg, (_icon, _label) in _PAGE_ICONS.items():
+    _active_cls = " ir-active" if _pg == _qp_page else ""
+    _href = f"?page={_pg.replace(' ', '+')}"
+    _rail_items += f'<a href="{_href}" class="ir-item{_active_cls}" title="{_label}">{_icon}</a>\n'
+
+_run_icon = "◼" if st.session_state.pipeline_running else "▶"
+_run_title = "Stop Pipeline" if st.session_state.pipeline_running else "Run Pipeline"
+_run_href = f"?page={_qp_page.replace(' ', '+')}" if st.session_state.pipeline_running else f"?page={_qp_page.replace(' ', '+')}&run=1"
+
+st.markdown(f"""
+<div id="icon-rail">
+  <div class="ir-logo">◈</div>
+  <div class="ir-divider"></div>
+  {_rail_items}
+  <div class="ir-spacer"></div>
+  <a href="{_run_href}" class="ir-item ir-run" title="{_run_title}">{_run_icon}</a>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Pipeline status banner ─────────────────────────────────────────────────────
+if st.session_state.pipeline_running:
+    st.markdown(
+        '<div style="position:fixed;top:0;left:52px;right:0;height:3px;'
+        'background:linear-gradient(90deg,#ff00cc,#9400ff,#00e5ff);z-index:999;'
+        'animation:dot-pulse 1.2s ease-in-out infinite"></div>',
+        unsafe_allow_html=True,
+    )
 
 # ── Render page ────────────────────────────────────────────────────────────────
-PAGES[selection]()
+PAGES[_qp_page]()
