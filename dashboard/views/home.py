@@ -836,6 +836,7 @@ body::after {{
 .q-item {{
   padding:7px 14px 9px;
   border-top:1px solid rgba(26,0,40,.4);
+  overflow:hidden;
 }}
 .q-badge {{
   font-size:7px; letter-spacing:.2em; font-weight:700;
@@ -1208,11 +1209,28 @@ window.addEventListener('resize', function() {{
     document.querySelectorAll('.q-timer').forEach(function(el) {{
       var target = parseInt(el.getAttribute('data-target'), 10);
       var diff = target - now;
+      var item = el.closest('.q-item');
+      if (diff <= -3000) {{
+        /* 3s grace period then slide out and remove */
+        if (item && !item.classList.contains('q-dying')) {{
+          item.classList.add('q-dying');
+          item.style.transition = 'max-height .5s ease, opacity .5s ease, padding .5s ease';
+          item.style.maxHeight = item.offsetHeight + 'px';
+          requestAnimationFrame(function() {{
+            item.style.maxHeight = '0';
+            item.style.opacity = '0';
+            item.style.paddingTop = '0';
+            item.style.paddingBottom = '0';
+          }});
+          setTimeout(function() {{ if (item.parentNode) item.parentNode.removeChild(item); }}, 520);
+        }}
+        return;
+      }}
       el.textContent = fmtCountdown(diff);
       el.classList.remove('urgent','imminent');
-      if (diff <= 0) el.classList.add('imminent');
-      else if (diff < 300000) el.classList.add('imminent');   /* < 5 min */
-      else if (diff < 3600000) el.classList.add('urgent');    /* < 1 hr */
+      if (diff <= 0) {{ el.textContent = 'executing...'; el.classList.add('imminent'); }}
+      else if (diff < 300000) el.classList.add('imminent');
+      else if (diff < 3600000) el.classList.add('urgent');
     }});
   }}
   tick();
