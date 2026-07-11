@@ -1,0 +1,60 @@
+﻿strategy:
+  name: daytrader
+  version: "1.0"
+  status: research               # research | backtest | paper | live
+
+session:
+  market_open: "09:30"           # ET â€” do not trade before this
+  range_end: "09:45"             # ET â€” opening range closes here
+  trade_start: "09:46"           # ET â€” first valid entry bar
+  trade_cutoff: "15:30"          # ET â€” no new entries after this
+  hard_exit: "15:45"             # ET â€” force-close all positions
+
+universe:
+  # Pulled from The Blob momentum top-N at start of each day + index ETFs
+  index_etfs: ["SPY", "QQQ", "IWM"]
+  min_price: 10.0                # skip penny stocks
+  min_avg_volume: 1_000_000      # shares/day â€” liquidity filter
+
+opening_range_breakout:
+  range_minutes: 15              # 9:30â€“9:44:59 defines the range
+  breakout_buffer_pct: 0.0005   # 0.05% above/below range to avoid fakeouts
+  min_range_pct: 0.002           # range must be â‰¥ 0.2% of price (filters flat opens)
+  max_range_pct: 0.03            # range must be â‰¤ 3% (filters gap-and-go chaos days)
+
+vwap:
+  session_start: "09:30"        # reset VWAP each day at open
+  # Long only when price > VWAP, short only when price < VWAP
+  # VWAP deviation filter: entry bar must be within 1.5% of VWAP
+  max_vwap_deviation_pct: 0.015
+
+relative_volume:
+  rvol_threshold: 1.2            # current bar volume must be 1.2Ã— same-time avg
+  lookback_days: 20              # days of history to compute same-time average
+
+momentum_bias:
+  # Cross-strategy signal: reads The Blob momentum rankings from DB
+  enabled: true
+  top_n_long: 10                 # The Blob top-10 momentum stocks get long bias
+  bias_weight: 0.20              # 20% signal weight bonus for aligned trades
+
+position_sizing:
+  risk_per_trade_pct: 0.01       # risk 1% of portfolio per trade
+  max_positions: 5               # max simultaneous open positions
+  stop_at_range_midpoint: true   # stop = midpoint of opening range
+
+targets:
+  target1_rr: 1.0                # first target: 1:1 R:R â€” take 50% off
+  target2_rr: 2.0                # second target: 2:1 R:R â€” trail remainder
+  trail_stop_after_t1: true      # move stop to breakeven after target 1 hit
+
+risk:
+  max_daily_loss_pct: 0.04       # halt all trading if down 4% on the day
+  max_trades_per_day: 20         # circuit breaker â€” prevents revenge trading
+  max_consecutive_losses: 6      # halt if 6 losses in a row
+
+execution:
+  slippage_bps: 10               # 10 bps per side (higher than EOD â€” intraday spread)
+  order_type: "limit"            # aggressive limit at bid/ask
+  limit_buffer_pct: 0.0002       # 0.02% through the breakout price
+

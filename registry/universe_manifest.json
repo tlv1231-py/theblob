@@ -1,0 +1,877 @@
+{
+  "generated_at": "2026-05-29T20:57:18.782872Z",
+  "universe_size": 94,
+  "etf_benchmarks": [
+    "SPY",
+    "QQQ",
+    "IEF"
+  ],
+  "fetch_start": "2015-01-01",
+  "fetch_end": "2026-05-29",
+  "failed_symbols": [],
+  "symbols": {
+    "AAPL": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 109130910,
+      "status": "ok"
+    },
+    "MSFT": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 28522569,
+      "status": "ok"
+    },
+    "NVDA": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 435639392,
+      "status": "ok"
+    },
+    "AVGO": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 28053415,
+      "status": "ok"
+    },
+    "AMD": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 56400472,
+      "status": "ok"
+    },
+    "ORCL": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 13337717,
+      "status": "ok"
+    },
+    "CRM": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 6401259,
+      "status": "ok"
+    },
+    "INTC": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 41973692,
+      "status": "ok"
+    },
+    "QCOM": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 10638746,
+      "status": "ok"
+    },
+    "TXN": {
+      "sector": "Technology",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 5596426,
+      "status": "ok"
+    },
+    "GOOGL": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 35135375,
+      "status": "ok"
+    },
+    "META": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 21986721,
+      "status": "ok"
+    },
+    "NFLX": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 83254102,
+      "status": "ok"
+    },
+    "DIS": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 10294804,
+      "status": "ok"
+    },
+    "CMCSA": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 23624005,
+      "status": "ok"
+    },
+    "VZ": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 18164374,
+      "status": "ok"
+    },
+    "T": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 42270840,
+      "status": "ok"
+    },
+    "TMUS": {
+      "sector": "Communication Services",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4509473,
+      "status": "ok"
+    },
+    "AMZN": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 72399465,
+      "status": "ok"
+    },
+    "TSLA": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 109238793,
+      "status": "ok"
+    },
+    "HD": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4316957,
+      "status": "ok"
+    },
+    "MCD": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3799817,
+      "status": "ok"
+    },
+    "NKE": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 9305669,
+      "status": "ok"
+    },
+    "SBUX": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8937042,
+      "status": "ok"
+    },
+    "TGT": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 5304817,
+      "status": "ok"
+    },
+    "LOW": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4252811,
+      "status": "ok"
+    },
+    "BKNG": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 10312432,
+      "status": "ok"
+    },
+    "GM": {
+      "sector": "Consumer Discretionary",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 13904715,
+      "status": "ok"
+    },
+    "WMT": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 23657118,
+      "status": "ok"
+    },
+    "PG": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8219720,
+      "status": "ok"
+    },
+    "KO": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 14425808,
+      "status": "ok"
+    },
+    "PEP": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 5156630,
+      "status": "ok"
+    },
+    "COST": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2317571,
+      "status": "ok"
+    },
+    "CL": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4221012,
+      "status": "ok"
+    },
+    "MDLZ": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 7773075,
+      "status": "ok"
+    },
+    "GIS": {
+      "sector": "Consumer Staples",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4253981,
+      "status": "ok"
+    },
+    "JPM": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 13409047,
+      "status": "ok"
+    },
+    "BAC": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 61293528,
+      "status": "ok"
+    },
+    "WFC": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 22146708,
+      "status": "ok"
+    },
+    "GS": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2848373,
+      "status": "ok"
+    },
+    "MS": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 9749667,
+      "status": "ok"
+    },
+    "BLK": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 671648,
+      "status": "ok"
+    },
+    "AXP": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3942334,
+      "status": "ok"
+    },
+    "USB": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8045373,
+      "status": "ok"
+    },
+    "PNC": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2283874,
+      "status": "ok"
+    },
+    "SCHW": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 9096942,
+      "status": "ok"
+    },
+    "V": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 7945151,
+      "status": "ok"
+    },
+    "MA": {
+      "sector": "Financials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3561191,
+      "status": "ok"
+    },
+    "JNJ": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 7839815,
+      "status": "ok"
+    },
+    "UNH": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4475324,
+      "status": "ok"
+    },
+    "LLY": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4078272,
+      "status": "ok"
+    },
+    "ABBV": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 7218335,
+      "status": "ok"
+    },
+    "MRK": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 10959334,
+      "status": "ok"
+    },
+    "PFE": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 31361222,
+      "status": "ok"
+    },
+    "TMO": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 1664915,
+      "status": "ok"
+    },
+    "ABT": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 6365483,
+      "status": "ok"
+    },
+    "CVS": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 7802036,
+      "status": "ok"
+    },
+    "AMGN": {
+      "sector": "Health Care",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2968468,
+      "status": "ok"
+    },
+    "CAT": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3997427,
+      "status": "ok"
+    },
+    "HON": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3384617,
+      "status": "ok"
+    },
+    "UPS": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3766804,
+      "status": "ok"
+    },
+    "BA": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8527052,
+      "status": "ok"
+    },
+    "LMT": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 1411396,
+      "status": "ok"
+    },
+    "GE": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 11014921,
+      "status": "ok"
+    },
+    "MMM": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3563039,
+      "status": "ok"
+    },
+    "RTX": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 6456223,
+      "status": "ok"
+    },
+    "DE": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2066009,
+      "status": "ok"
+    },
+    "FDX": {
+      "sector": "Industrials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2111725,
+      "status": "ok"
+    },
+    "XOM": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 17465949,
+      "status": "ok"
+    },
+    "CVX": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8699389,
+      "status": "ok"
+    },
+    "COP": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 7739058,
+      "status": "ok"
+    },
+    "EOG": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3949584,
+      "status": "ok"
+    },
+    "SLB": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 11264157,
+      "status": "ok"
+    },
+    "PSX": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3054487,
+      "status": "ok"
+    },
+    "VLO": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4255878,
+      "status": "ok"
+    },
+    "MPC": {
+      "sector": "Energy",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 5125319,
+      "status": "ok"
+    },
+    "LIN": {
+      "sector": "Materials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 1836326,
+      "status": "ok"
+    },
+    "APD": {
+      "sector": "Materials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 1235297,
+      "status": "ok"
+    },
+    "ECL": {
+      "sector": "Materials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 1236262,
+      "status": "ok"
+    },
+    "NEM": {
+      "sector": "Materials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8287888,
+      "status": "ok"
+    },
+    "FCX": {
+      "sector": "Materials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 21295258,
+      "status": "ok"
+    },
+    "NUE": {
+      "sector": "Materials",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2364299,
+      "status": "ok"
+    },
+    "PLD": {
+      "sector": "Real Estate",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3151660,
+      "status": "ok"
+    },
+    "AMT": {
+      "sector": "Real Estate",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2180902,
+      "status": "ok"
+    },
+    "EQIX": {
+      "sector": "Real Estate",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 550830,
+      "status": "ok"
+    },
+    "SPG": {
+      "sector": "Real Estate",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2068856,
+      "status": "ok"
+    },
+    "O": {
+      "sector": "Real Estate",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3459248,
+      "status": "ok"
+    },
+    "DLR": {
+      "sector": "Real Estate",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 1694062,
+      "status": "ok"
+    },
+    "NEE": {
+      "sector": "Utilities",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 8991476,
+      "status": "ok"
+    },
+    "DUK": {
+      "sector": "Utilities",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3269352,
+      "status": "ok"
+    },
+    "SO": {
+      "sector": "Utilities",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 4924464,
+      "status": "ok"
+    },
+    "D": {
+      "sector": "Utilities",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3902579,
+      "status": "ok"
+    },
+    "AEP": {
+      "sector": "Utilities",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 2927744,
+      "status": "ok"
+    },
+    "XEL": {
+      "sector": "Utilities",
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867,
+      "years_of_data": 11.4,
+      "avg_daily_volume": 3435617,
+      "status": "ok"
+    }
+  },
+  "benchmarks": {
+    "SPY": {
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867
+    },
+    "QQQ": {
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867
+    },
+    "IEF": {
+      "min_date": "2015-01-02",
+      "max_date": "2026-05-28",
+      "bars": 2867
+    }
+  }
+}

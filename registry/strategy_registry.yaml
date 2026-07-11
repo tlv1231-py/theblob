@@ -1,0 +1,27 @@
+﻿strategies:
+  - name: daytrader
+    module: strategies.daytrader.models.strategy
+    params_file: strategies/daytrader/config.yaml
+    status: research              # research | backtest | paper | live
+    description: >
+      Multi-Factor Intraday Momentum (MFIM). Opening Range Breakout signal
+      filtered by VWAP alignment, Relative Volume â‰¥ 1.5Ã—, and The Blob momentum
+      cross-strategy bias. 2:1 R:R target with bracket orders. Intraday only â€”
+      all positions closed by 3:45pm ET. Requires Alpaca live feed.
+    added: "2026-07-02"
+    author: tyler
+    dependencies:
+      - momentum                  # reads momentum signals for directional bias
+
+  - name: momentum
+    module: models.momentum
+    params_file: config/strategy_params/momentum.yaml
+    status: paper              # research | backtest | paper | live
+    promoted_to_paper: "2026-05-29"
+    description: >
+      Classic cross-sectional price momentum. Long top-5 performers
+      over a trailing 12-1 month window. Weekly rebalance.
+      Sharpe 1.21 (10yr backtest, top-5 config). See experiment b6de4389.
+    added: "2026-05-29"
+    author: tyler
+

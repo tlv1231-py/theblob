@@ -1,0 +1,59 @@
+# Edge Enhancement Queue
+# ======================
+# Source of truth for enhancements that are queued or blocked for research.
+#
+# Completed/rejected enhancements are NOT listed here — they live in the
+# experiments table (enhancement_type column) and auto-appear on the dashboard.
+#
+# FIELDS
+# ------
+# name         : display name shown on the Command Center
+# status       : queued | blocked | active
+# priority     : integer, lower = higher priority; sets display order
+# blocked_by   : null if not blocked; human-readable reason if blocked
+# detail       : one-line description of what the experiment will test
+#
+# WORKFLOW
+# --------
+# Adding a new enhancement:   add an entry here with status: queued
+# Starting research:          change status to active
+# Completing research:        remove from this file; tag the experiment
+#                             in the DB with enhancement_type and run
+#                             scripts/tag_enhancement.py (or manual UPDATE)
+
+enhancements:
+  - name: Volume Confirmation
+    status: queued
+    priority: 1
+    blocked_by: null
+    detail: Filter signals by relative volume — exclude thin or anomalous momentum
+
+  - name: Score-Weighted Sizing
+    status: queued
+    priority: 2
+    blocked_by: null
+    detail: Weight positions by momentum score strength instead of equal-weight
+
+  - name: Earnings Blackout Filter
+    status: queued
+    priority: 3
+    blocked_by: null
+    detail: Avoid entering positions within 3 days of earnings to reduce event risk
+
+  - name: Post-Mortem Auto-Review
+    status: blocked
+    priority: 4
+    blocked_by: "Requires 60+ days of live fill data (tracking/post_mortem.py)"
+    detail: Weekly self-audit of fills vs outcomes; auto-proposes parameter changes
+
+  - name: Cash Buffer Rule
+    status: queued
+    priority: 5
+    blocked_by: null
+    detail: Hold 10% cash always, deploy only on high-conviction signals. Reduces drawdown at cost of ~2-3pp CAGR.
+
+  - name: Long/Short Overlay
+    status: blocked
+    priority: 6
+    blocked_by: "Complete 20-day monitoring period and validate volume confirmation first"
+    detail: Short bottom-5 momentum ranked stocks to hedge long positions. Requires margin simulation, borrowing cost model (~0.5-2% annually), and net exposure tracking in risk engine. Architecture already supports it — signals, executor, and broker adapter need short-direction wiring only.

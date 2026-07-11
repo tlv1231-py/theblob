@@ -1,0 +1,18 @@
+strategy: momentum
+version: "0.1.0"
+status: research
+
+lookback_days: 252          # 1-year momentum window
+short_lookback_days: 21     # 1-month exclusion window (skip last month — Jegadeesh/Titman)
+rebalance_frequency: "Daily EOD (after market close)"
+top_n_stocks: 5             # number of positions (top-5, Sharpe 1.21 per experiment b6de4389)
+min_adv_usd: 5_000_000      # minimum average daily volume (USD)
+min_price: 5.00             # minimum share price filter
+
+signal:
+  score_method: total_return  # total_return | sharpe | rank
+  min_score_threshold: 0.05   # minimum 5% return over lookback to qualify
+
+risk:
+  stop_loss_pct: 0.07         # 7% stop loss
+  max_position_pct: 0.10      # 10% max per position

@@ -1,0 +1,38 @@
+# Core
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+loguru>=0.7.0
+
+# Data
+pandas>=2.0.0
+numpy>=1.24.0
+yfinance>=0.2.0
+pandas-market-calendars>=4.3.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+alembic>=1.12.0
+
+# HTTP / APIs
+httpx>=0.25.0
+websockets>=12.0
+
+# Research / Backtesting
+backtrader>=1.9.78
+jupyter>=1.0.0
+jupyterlab>=4.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Dashboard
+streamlit>=1.35.0
+plotly>=5.22.0
+
+# Config / Utils
+pyyaml>=6.0

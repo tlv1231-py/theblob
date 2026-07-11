@@ -1,0 +1,51 @@
+# Environment & secrets — NEVER commit these
+.env
+*.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.pytest_cache
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Local data / exports (keep experiments/results but not raw dumps)
+*.csv
+*.parquet
+*.pkl
+pg_dump_*.sql
+
+# Streamlit
+.streamlit/secrets.toml
