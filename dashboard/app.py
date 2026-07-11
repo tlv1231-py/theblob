@@ -443,97 +443,60 @@ def _render_sidebar_terminal() -> None:
 
         # oldest first so newest lands at bottom
         events.sort(key=lambda e: e["ts"] if e["ts"] else "")
-        events = events[-16:]
+        events = events[-14:]
 
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
         type_tag  = {"fill": "TRADE", "signal": "SIGNAL", "snapshot": "UPDATE"}
 
-        # Build data payload for JS typewriter — emit as JSON
-        import json as _json
-        entries = []
-        for ev in events:
+        # Build lines — CSS typewriter using steps() per character count
+        CHAR_MS   = 20   # ms per character
+        LINE_GAP  = 120  # ms gap between lines starting
+        lines_html = ""
+        cursor_delay = 0.0
+
+        for idx, ev in enumerate(events):
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
             ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw
             cls    = css_class.get(ev["type"], "ev-pipeline")
             tag    = type_tag.get(ev["type"], "EVT")
-            full   = f"{tag}  {ev['sym']}  —  {ev.get('line1','')}"
-            sub    = f"{ts_str}  {ev.get('line2','')}"
-            entries.append({"text": full, "sub": sub, "cls": cls})
+            text   = f"{tag}  {ev['sym']}  —  {ev.get('line1','')}"
+            sub    = f"{ts_str}  ·  {ev.get('line2','')}"
+            n      = max(len(text), 1)
+            dur    = n * CHAR_MS        # ms to type this line
+            delay  = cursor_delay / 1000  # convert to seconds for CSS
 
-        entries_json = _json.dumps(entries)
+            lines_html += f"""
+<div class="term-entry" style="animation-delay:{delay:.2f}s">
+  <div class="term-main {cls}" style="
+    overflow:hidden; white-space:nowrap;
+    width:0; max-width:100%;
+    animation: tw {dur}ms steps({n},end) {delay:.2f}s forwards;
+  ">{text}</div>
+  <div class="term-sub" style="
+    opacity:0;
+    animation: fadein 0.2s ease {delay + dur/1000:.2f}s forwards;
+  ">{sub}</div>
+</div>"""
+            cursor_delay += dur + LINE_GAP
+
+        # blinking cursor after last line
+        blink_delay = cursor_delay / 1000
 
         st.sidebar.markdown(f"""
+<style>
+@keyframes tw      {{ from{{width:0}} to{{width:100%}} }}
+@keyframes fadein  {{ from{{opacity:0}} to{{opacity:1}} }}
+@keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
+</style>
 <div class="term-feed-wrap">
   <span class="term-feed-header">▶ SYSTEM FEED</span>
-  <div class="term-feed-body" id="sf-body"></div>
+  <div class="term-feed-body">
+    {lines_html}
+    <div class="term-entry" style="opacity:0;animation:fadein 0s {blink_delay:.2f}s forwards">
+      <span style="color:#ff00cc;animation:blink-c 1s step-start {blink_delay:.2f}s infinite">█</span>
+    </div>
+  </div>
 </div>
-<script>
-(function(){{
-  var body  = document.getElementById('sf-body');
-  if (!body) return;
-  var entries = {entries_json};
-  var LINE_DELAY = 80;   // ms between lines starting
-  var CHAR_DELAY = 18;   // ms between characters
-
-  function makeEntry(e, cb) {{
-    var wrap = document.createElement('div');
-    wrap.className = 'term-entry';
-
-    var main = document.createElement('div');
-    main.className = 'term-main ' + e.cls;
-    wrap.appendChild(main);
-
-    var sub = document.createElement('div');
-    sub.className = 'term-sub';
-    sub.textContent = e.sub;
-    sub.style.opacity = '0';
-    wrap.appendChild(sub);
-
-    body.appendChild(wrap);
-    body.scrollTop = body.scrollHeight;
-
-    // typewriter
-    var i = 0;
-    var cursor = document.createElement('span');
-    cursor.className = 'tw-cursor';
-    cursor.textContent = '█';
-    main.appendChild(cursor);
-
-    var t = setInterval(function() {{
-      if (i < e.text.length) {{
-        main.insertBefore(document.createTextNode(e.text[i]), cursor);
-        i++;
-        body.scrollTop = body.scrollHeight;
-      }} else {{
-        clearInterval(t);
-        cursor.remove();
-        sub.style.opacity = '1';
-        body.scrollTop = body.scrollHeight;
-        if (cb) cb();
-      }}
-    }}, CHAR_DELAY);
-  }}
-
-  // add blinking cursor line at end
-  function addCursorLine() {{
-    var cl = document.createElement('div');
-    cl.className = 'term-entry term-cursor-line';
-    cl.innerHTML = '<span class="tw-cursor blink">█</span>';
-    body.appendChild(cl);
-    body.scrollTop = body.scrollHeight;
-  }}
-
-  // chain entries sequentially
-  function runChain(idx) {{
-    if (idx >= entries.length) {{ addCursorLine(); return; }}
-    setTimeout(function() {{
-      makeEntry(entries[idx], function() {{ runChain(idx + 1); }});
-    }}, idx === 0 ? 0 : LINE_DELAY);
-  }}
-
-  runChain(0);
-}})();
-</script>
 """, unsafe_allow_html=True)
 
     except Exception:
