@@ -191,9 +191,13 @@ def _load_chart_data() -> dict:
             "UPDATE":       ("ev-signal",   "UPDATE"),
             "MARKET_OPEN":    ("ev-signal",   "MARKET_OPEN"),
             "MARKET_CLOSE":   ("ev-pipeline", "MARKET_CLOSE"),
-            "OPEN_PRICE":     ("ev-fill",     "OPEN_PRICE"),
-            "GAP_ALERT":      ("ev-fill",     "GAP_ALERT"),
-            "OPEN_SNAPSHOT":  ("ev-snapshot", "OPEN_SNAPSHOT"),
+            "OPEN_PRICE":      ("ev-fill",     "OPEN_PRICE"),
+            "GAP_ALERT":       ("ev-fill",     "GAP_ALERT"),
+            "OPEN_SNAPSHOT":   ("ev-snapshot", "OPEN_SNAPSHOT"),
+            "CLOSE_INGEST":    ("ev-pipeline", "CLOSE_INGEST"),
+            "SIGNAL_PREVIEW":  ("ev-signal",   "SIGNAL_PREVIEW"),
+            "RANK_CHANGE":     ("ev-signal",   "RANK_CHANGE"),
+            "ACTION_PREVIEW":  ("ev-snapshot", "ACTION_PREVIEW"),
         }
         try:
             pipe_rows = s.execute(text("""
@@ -540,6 +544,40 @@ def _build_daw_html(data: dict) -> str:
             val_m = _re.search(r'\$([\d,]+)', msg)
             val_s = f'<span style="color:#9060b8">${val_m.group(1)}</span>' if val_m else ""
             return f'portfolio est. {val_s} at open'
+
+        if tag == "CLOSE_INGEST":
+            bars_m = _re.search(r'(\d+) bars', msg)
+            sym_m  = _re.search(r'(\d+) symbols', msg)
+            bars = bars_m.group(1) if bars_m else "?"
+            syms = sym_m.group(1) if sym_m else "?"
+            return f'<span style="color:#3a2a5a">pre-loaded {bars} bars across {syms} symbols  ·  pipeline ready</span>'
+
+        if tag == "SIGNAL_PREVIEW":
+            # "morning preview  ·  #1 NVDA  #2 AAPL ..."
+            picks = _re.findall(r'#\d+\s+(\w+)', msg)
+            colored = "  ".join(f'<span style="color:#5a3a7a">#{i+1}</span> {_ts(p)}' for i, p in enumerate(picks))
+            return f'<span style="color:#5a3a7a">morning preview  ·</span>  {colored}' if colored else f'<span style="color:#5a3a7a">{msg}</span>'
+
+        if tag == "RANK_CHANGE":
+            entered = "entered" in msg
+            col = "#00e5ff" if entered else "#ff9900"
+            verb = "↑ entered top-5" if entered else "↓ dropped from top-5"
+            return f'<span style="color:{col}">{verb}</span>  {_ts(sym)}'
+
+        if tag == "ACTION_PREVIEW":
+            if "entries" in msg:
+                tickers = _re.sub(r'expected entries at close:\s*', '', msg)
+                colored = "  ".join(_ts(t.strip()) for t in tickers.split(",") if t.strip())
+                return f'<span style="color:#5a3a7a">expected entries at close  ·</span>  {colored}'
+            if "exits" in msg:
+                tickers = _re.sub(r'expected exits at close:\s*', '', msg)
+                colored = "  ".join(_ts(t.strip()) for t in tickers.split(",") if t.strip())
+                return f'<span style="color:#5a3a7a">expected exits at close  ·</span>  {colored}'
+            if "holding" in msg:
+                tickers = _re.sub(r'holding:\s*', '', msg)
+                colored = "  ".join(_ts(t.strip()) for t in tickers.split(",") if t.strip())
+                return f'<span style="color:#2a1a3a">holding  {colored}</span>'
+            return f'<span style="color:#5a3a7a">{msg}</span>'
 
         if tag == "TRADE":
             verb = "bought" if "bought" in msg else "sold"
