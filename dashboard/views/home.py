@@ -703,9 +703,10 @@ def _build_daw_html(data: dict) -> str:
         nav_col = None
         if tag in ("NAV", "UPDATE", "SNAPSHOT"):
             curr = _snap_vals[_snap_idx] if _snap_idx < len(_snap_vals) else None
-            prev = _snap_vals[_snap_idx - 1] if _snap_idx > 0 else None
+            prev = _snap_vals[_snap_idx - 1] if 0 < _snap_idx <= len(_snap_vals) else None
             nav_col = "#00ff9d" if (prev is None or curr is None or curr >= prev) else "#ff3366"
-            _snap_idx += 1
+            if _snap_idx < len(_snap_vals):
+                _snap_idx += 1
 
         prose = _humanize(ev, nav_col)
 
