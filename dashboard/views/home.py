@@ -262,7 +262,6 @@ body::after {{
 </div>
 
 <div class="nav-card">
-  <span class="nv-label">Net Asset Value</span>
   <span class="nv-val">{nav_str}</span>
   <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
   <span class="nv-dpnl">today  {dpnl_str}</span>

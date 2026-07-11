@@ -184,9 +184,9 @@ section[data-testid="stSidebar"] {
     scrollbar-color: var(--border2) transparent;
 }
 .term-line {
-    font-size: 9.5px;
-    line-height: 1.65;
-    padding: 0 8px;
+    font-size: 11px;
+    line-height: 1.9;
+    padding: 1px 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -407,13 +407,16 @@ def _render_sidebar_terminal() -> None:
         type_tag  = {"fill": "FILL", "signal": "SIG", "snapshot": "SNAP"}
         lines_html = ""
         for i, ev in enumerate(events):
-            ts_str = str(ev["ts"])[:16] if ev["ts"] else "----------"
+            ts_raw = str(ev["ts"]) if ev["ts"] else ""
+            ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw  # MM-DD HH:MM
             cls    = css_class.get(ev["type"], "ev-pipeline")
             tag    = type_tag.get(ev["type"], "EVT")
             delay  = i * 0.06
             lines_html += (
                 f'<div class="term-line {cls}" style="animation-delay:{delay:.2f}s">'
-                f'{ts_str}  {tag}  {ev["sym"]}  {ev["detail"]}'
+                f'<span style="color:#3a1a4a;margin-right:6px">{ts_str}</span>'
+                f'<span style="letter-spacing:.1em;margin-right:6px">{tag}</span>'
+                f'<strong>{ev["sym"]}</strong> {ev["detail"]}'
                 f'</div>\n'
             )
 
