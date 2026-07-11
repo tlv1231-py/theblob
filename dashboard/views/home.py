@@ -338,13 +338,13 @@ def _build_daw_html(data: dict) -> str:
         "VETO": "Veto",  "RISK_VETO": "Veto",
     }
     _VERB_COLOR = {
-        "Run":    "#ff00cc",
-        "Data":   "#8060a0",
-        "Signal": "#9400ff",
-        "Trade":  "#00e5ff",
+        "Run":    "#9400ff",
+        "Data":   "#5a3a7a",
+        "Signal": "#00e5ff",
+        "Trade":  "#ff00cc",   # the sauce
         "Hold":   "#ff9900",
-        "Update": "#00e5ff",
-        "PnL":    "#8060a0",
+        "Update": "#00ff9d",
+        "PnL":    "#5a3a7a",
         "Veto":   "#ff3366",
     }
     # stable ticker color from symbol hash
@@ -596,15 +596,15 @@ body::after {{
   scrollbar-width:thin;
   scrollbar-color:#2a003d transparent;
 }}
-.te {{ padding:2px 16px; flex-shrink:0;
-       font-size:11.5px; line-height:1.5;
+.te {{ padding:1px 16px; flex-shrink:0;
+       font-size:11.5px; line-height:1.6;
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-.te-ts  {{ color:#3a1a4a; font-size:10.5px; }}
-.te-dash {{ color:#2a003d; }}
+.te-ts  {{ color:#6a4a8a; font-size:10.5px; }}
+.te-dash {{ color:#3a1a4a; }}
 .te-msg  {{ color:#c0a0d8; font-weight:400; }}
-.te-date {{ padding:5px 16px 3px; flex-shrink:0;
-            font-size:9px; letter-spacing:.18em; color:#2a003d;
-            border-top:1px solid #1a0025; margin-top:2px; }}
+.te-date {{ padding:10px 16px 4px; flex-shrink:0;
+            font-size:11px; font-weight:700; letter-spacing:.06em;
+            color:#f0e0ff; }}
 /* positions panel */
 #pos-panel {{
   width:230px; flex-shrink:0;
@@ -618,8 +618,7 @@ body::after {{
   padding:0 14px 6px; text-transform:uppercase;
 }}
 .pos-card {{
-  padding:5px 14px 6px;
-  border-bottom:1px solid rgba(42,0,61,.35);
+  padding:5px 14px 8px;
 }}
 .pos-top {{
   display:flex; align-items:baseline; gap:6px;
