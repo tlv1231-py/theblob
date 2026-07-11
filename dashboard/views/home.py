@@ -1557,28 +1557,31 @@ def render() -> None:
         function resize() {
             try {
                 var p = window.parent;
-                // Streamlit Community Cloud floats a ~40px "Manage app" bar at
-                // the very bottom of the page — subtract it so our iframe
-                // doesn't extend under it.
-                var manageBar = p.document.querySelector('[data-testid="manage-app-button"], .stDeployButton, [class*="toolbar"]');
-                var offset = manageBar ? (manageBar.offsetHeight + 4) : 40;
-                var h = p.innerHeight - offset;
-                var iframes = p.document.querySelectorAll('iframe');
+                // Use the actual Streamlit main block container height if available,
+                // otherwise fall back to innerHeight minus a generous fixed offset.
+                var container = p.document.querySelector('[data-testid="stMainBlockContainer"]')
+                             || p.document.querySelector('[data-testid="stMain"]')
+                             || p.document.querySelector('.main');
+                var h = container
+                    ? Math.floor(container.getBoundingClientRect().height)
+                    : (p.innerHeight - 80);
+                // Find our sibling (the largest iframe)
                 var biggest = null, biggestH = 0;
-                iframes.forEach(function(f) {
+                p.document.querySelectorAll('iframe').forEach(function(f) {
                     if (f !== window.frameElement && f.offsetHeight > biggestH) {
                         biggest = f; biggestH = f.offsetHeight;
                     }
                 });
-                if (biggest) {
+                if (biggest && h > 100) {
                     biggest.setAttribute('height', h);
                     biggest.style.height = h + 'px';
                 }
             } catch(e) {}
         }
         resize();
-        setTimeout(resize, 300);
-        setTimeout(resize, 800);
+        setTimeout(resize, 200);
+        setTimeout(resize, 600);
+        setTimeout(resize, 1500);
         window.parent.addEventListener('resize', resize);
     })();
     </script>
