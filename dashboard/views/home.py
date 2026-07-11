@@ -14,7 +14,6 @@ from zoneinfo import ZoneInfo
 
 import yaml
 import streamlit as st
-import streamlit.components.v1 as components
 from sqlalchemy import text
 
 from dashboard.db import get_session
@@ -564,4 +563,4 @@ def render() -> None:
         return
 
     html = _build_daw_html(data)
-    components.html(html, height=860, scrolling=False)
+    st.iframe(html, height=860, scrolling=False)

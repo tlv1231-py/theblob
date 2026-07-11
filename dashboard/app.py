@@ -10,7 +10,6 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="The Blob",
