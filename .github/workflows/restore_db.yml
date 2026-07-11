@@ -1,0 +1,35 @@
+name: Restore DB to Supabase (run once)
+
+on:
+  workflow_dispatch: # manual trigger only
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Download dump from release
+        run: |
+          curl -L -o theblob_dump.dump \
+            "https://github.com/tlv1231-py/theblob/releases/download/db-dump/theblob_dump.dump"
+
+      - name: Restore to Supabase
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          pg_restore \
+            -h db.seeevuklabvhkawawtxn.supabase.co \
+            -p 5432 \
+            -U postgres \
+            -d postgres \
+            --no-owner \
+            --no-acl \
+            --verbose \
+            theblob_dump.dump
