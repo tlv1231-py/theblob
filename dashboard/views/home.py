@@ -822,7 +822,7 @@ body::after {{
 .pos-hold.exiting {{ color:#a05020; }}
 /* ── Queue panel ── */
 #queue-panel {{
-  width:300px; flex-shrink:0;
+  width:360px; flex-shrink:0;
   border-left:1px solid #1a0028;
   overflow-y:auto; padding:4px 0;
   scrollbar-width:none;
@@ -1166,7 +1166,7 @@ window.addEventListener('resize', function() {{
   <div id="term-hdr">
     <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
     <span style="flex:1"></span>
-    <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc;width:300px;flex-shrink:0">QUEUED ACTIONS</span>
+    <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc;width:360px;flex-shrink:0">QUEUED ACTIONS</span>
     <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc;width:290px;flex-shrink:0">POSITIONS</span>
   </div>
   <div id="term-cols">
