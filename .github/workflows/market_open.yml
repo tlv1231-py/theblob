@@ -1,0 +1,31 @@
+name: Market Open
+
+on:
+  schedule:
+    # 9:30 AM ET = 13:30 UTC (EDT, Mar-Nov). Adjust to 14:30 UTC in winter (EST).
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  log-open:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Log market open
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENV: production
+        run: python scripts/log_market_event.py open

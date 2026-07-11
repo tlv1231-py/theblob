@@ -188,7 +188,9 @@ def _load_chart_data() -> dict:
             "SNAPSHOT":   ("ev-snapshot", "NAV"),
             "PNL":        ("ev-pipeline", "PNL"),
             "RISK_VETO":  ("ev-fill",     "VETO"),
-            "UPDATE":     ("ev-signal",   "UPDATE"),
+            "UPDATE":       ("ev-signal",   "UPDATE"),
+            "MARKET_OPEN":  ("ev-signal",   "MARKET_OPEN"),
+            "MARKET_CLOSE": ("ev-pipeline", "MARKET_CLOSE"),
         }
         try:
             pipe_rows = s.execute(text("""
@@ -508,6 +510,12 @@ def _build_daw_html(data: dict) -> str:
 
         if tag == "UPDATE":
             return f'<span style="color:#00e5ff">↑ deployed</span>  <span style="color:#7a5a9a">{msg}</span>'
+
+        if tag == "MARKET_OPEN":
+            return f'<span style="color:#00e5ff">market open</span>  <span style="color:#3a2a5a">NYSE  9:30am ET  ·  watching</span>'
+
+        if tag == "MARKET_CLOSE":
+            return f'<span style="color:#4a2a6a">market closed</span>  <span style="color:#2a1a3a">NYSE  4:00pm ET  ·  pipeline incoming</span>'
 
         if tag == "TRADE":
             verb = "bought" if "bought" in msg else "sold"

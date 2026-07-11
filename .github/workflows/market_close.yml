@@ -1,0 +1,31 @@
+name: Market Close
+
+on:
+  schedule:
+    # 4:00 PM ET = 20:00 UTC (EDT, Mar-Nov). Adjust to 21:00 UTC in winter (EST).
+    - cron: '0 20 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  log-close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Log market close
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENV: production
+        run: python scripts/log_market_event.py close
