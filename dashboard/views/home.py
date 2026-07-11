@@ -1556,8 +1556,14 @@ def render() -> None:
     (function() {
         function resize() {
             try {
-                var h = window.parent.innerHeight;
-                var iframes = window.parent.document.querySelectorAll('iframe');
+                var p = window.parent;
+                // Streamlit Community Cloud floats a ~40px "Manage app" bar at
+                // the very bottom of the page — subtract it so our iframe
+                // doesn't extend under it.
+                var manageBar = p.document.querySelector('[data-testid="manage-app-button"], .stDeployButton, [class*="toolbar"]');
+                var offset = manageBar ? (manageBar.offsetHeight + 4) : 40;
+                var h = p.innerHeight - offset;
+                var iframes = p.document.querySelectorAll('iframe');
                 var biggest = null, biggestH = 0;
                 iframes.forEach(function(f) {
                     if (f !== window.frameElement && f.offsetHeight > biggestH) {
@@ -1572,6 +1578,7 @@ def render() -> None:
         }
         resize();
         setTimeout(resize, 300);
+        setTimeout(resize, 800);
         window.parent.addEventListener('resize', resize);
     })();
     </script>
