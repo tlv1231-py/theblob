@@ -16,9 +16,13 @@ jobs:
         run: sudo apt-get install -y postgresql-client
 
       - name: Download dump from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          curl -L -o theblob_dump.dump \
-            "https://github.com/tlv1231-py/theblob/releases/download/db-dump/theblob_dump.dump"
+          gh release download db-dump \
+            --repo tlv1231-py/theblob \
+            --pattern "theblob_dump.dump" \
+            --output theblob_dump.dump
 
       - name: Restore to Supabase
         env:
