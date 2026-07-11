@@ -163,7 +163,7 @@ section[data-testid="stSidebar"] {
     margin-top: 8px;
     border: 1px solid var(--border);
     border-left: 2px solid var(--accent);
-    background: rgba(13,0,16,0.8);
+    background: rgba(6,0,8,0.95);
     padding: 0;
     overflow: hidden;
 }
@@ -172,32 +172,56 @@ section[data-testid="stSidebar"] {
     letter-spacing: 0.22em;
     color: var(--accent);
     text-shadow: 0 0 8px rgba(255,0,204,0.5);
-    padding: 5px 8px;
+    padding: 6px 10px;
     border-bottom: 1px solid var(--border);
     display: block;
 }
 .term-feed-body {
     padding: 4px 0;
-    max-height: 280px;
+    max-height: 320px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--border2) transparent;
 }
-.term-line {
-    font-size: 11px;
-    line-height: 1.9;
-    padding: 1px 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    animation: term-in 0.3s ease forwards;
-    opacity: 0;
-    color: var(--text-dim);
+.term-entry {
+    padding: 5px 10px 4px;
+    border-bottom: 1px solid rgba(42,0,61,0.4);
 }
-.ev-fill     { color: #ff00cc !important; }
-.ev-signal   { color: #00e5ff !important; }
-.ev-snapshot { color: #9400ff !important; }
-.ev-pipeline { color: var(--text-mid) !important; }
+.term-entry:last-child { border-bottom: none; }
+.term-main {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+.term-tag {
+    font-size: 8px;
+    letter-spacing: .18em;
+    opacity: .7;
+    flex-shrink: 0;
+}
+.term-sym {
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.term-val {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: .85;
+}
+.term-sub {
+    font-size: 9px;
+    color: #3a1a4a;
+    margin-top: 2px;
+    letter-spacing: .04em;
+}
+.ev-fill     { color: #ff00cc; }
+.ev-signal   { color: #00e5ff; }
+.ev-snapshot { color: #9400ff; }
+.ev-pipeline { color: var(--text-mid); }
 
 @keyframes term-in {
     from { opacity: 0; transform: translateX(-6px); }
@@ -374,49 +398,57 @@ def _render_sidebar_terminal() -> None:
 
         with get_session() as s:
             fills = s.execute(_text("""
-                SELECT 'FILL' as etype, symbol,
-                       side || ' ' || quantity || ' @ $' || ROUND(fill_price::numeric,2) as detail,
+                SELECT symbol, UPPER(side) as side, quantity,
+                       ROUND(fill_price::numeric,2) as price,
                        filled_at as ts
-                FROM fills ORDER BY filled_at DESC LIMIT 6
+                FROM fills ORDER BY filled_at DESC LIMIT 8
             """)).fetchall()
             for r in fills:
-                events.append({"type": "fill", "sym": r.symbol, "detail": r.detail, "ts": r.ts})
+                events.append({"type": "fill", "sym": r.symbol,
+                                "line1": f"{r.side} {r.quantity} sh",
+                                "line2": f"@ ${r.price}", "ts": r.ts})
 
             sigs = s.execute(_text("""
-                SELECT 'SIG' as etype, symbol,
-                       direction || ' score=' || ROUND(score::numeric,3) as detail,
+                SELECT symbol, UPPER(direction) as direction,
+                       ROUND(score::numeric,3) as score,
                        as_of_date::timestamp as ts
-                FROM signals ORDER BY as_of_date DESC LIMIT 6
+                FROM signals ORDER BY as_of_date DESC LIMIT 8
             """)).fetchall()
             for r in sigs:
-                events.append({"type": "signal", "sym": r.symbol, "detail": r.detail, "ts": r.ts})
+                events.append({"type": "signal", "sym": r.symbol,
+                                "line1": f"{r.direction} signal",
+                                "line2": f"score {r.score}", "ts": r.ts})
 
             snaps = s.execute(_text("""
-                SELECT 'SNAP' as etype, 'PORTFOLIO' as symbol,
-                       'NAV=$' || ROUND(total_value::numeric,0) as detail,
+                SELECT ROUND(total_value::numeric,0) as nav,
                        snapshot_date::timestamp as ts
                 FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 3
             """)).fetchall()
             for r in snaps:
-                events.append({"type": "snapshot", "sym": r.symbol, "detail": r.detail, "ts": r.ts})
+                events.append({"type": "snapshot", "sym": "PORTFOLIO",
+                                "line1": f"NAV  ${int(r.nav):,}",
+                                "line2": "snapshot", "ts": r.ts})
 
         events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
         events = events[:18]
 
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
-        type_tag  = {"fill": "FILL", "signal": "SIG", "snapshot": "SNAP"}
+        type_tag  = {"fill": "FILL", "signal": "SIG·", "snapshot": "SNAP"}
         lines_html = ""
         for i, ev in enumerate(events):
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
-            ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw  # MM-DD HH:MM
+            ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw
             cls    = css_class.get(ev["type"], "ev-pipeline")
-            tag    = type_tag.get(ev["type"], "EVT")
+            tag    = type_tag.get(ev["type"], "EVT·")
             delay  = i * 0.06
             lines_html += (
-                f'<div class="term-line {cls}" style="animation-delay:{delay:.2f}s">'
-                f'<span style="color:#3a1a4a;margin-right:6px">{ts_str}</span>'
-                f'<span style="letter-spacing:.1em;margin-right:6px">{tag}</span>'
-                f'<strong>{ev["sym"]}</strong> {ev["detail"]}'
+                f'<div class="term-entry" style="animation-delay:{delay:.2f}s;animation:term-in 0.3s ease {delay:.2f}s forwards;opacity:0">'
+                f'  <div class="term-main {cls}">'
+                f'    <span class="term-tag">{tag}</span>'
+                f'    <span class="term-sym">{ev["sym"]}</span>'
+                f'    <span class="term-val">{ev.get("line1","")}</span>'
+                f'  </div>'
+                f'  <div class="term-sub">{ts_str} · {ev.get("line2","")}</div>'
                 f'</div>\n'
             )
 
