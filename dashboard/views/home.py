@@ -376,12 +376,14 @@ body::after {{
 
 /* ── Terminal overlay (bottom third) ── */
 #term-overlay {{
-  position:absolute; bottom:44px; left:0; right:0; height:33%;
+  position:absolute; bottom:44px; left:0; right:0;
+  height:calc(33vh - 44px); max-height:260px; min-height:140px;
   background:rgba(4,0,6,.88);
   border-top:2px solid #ff00cc;
   backdrop-filter:blur(12px);
   display:flex; flex-direction:column;
   z-index:20; pointer-events:none;
+  overflow:hidden;
 }}
 #term-hdr {{
   flex-shrink:0; padding:5px 18px;
