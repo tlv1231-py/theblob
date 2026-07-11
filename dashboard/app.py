@@ -448,60 +448,112 @@ def _render_bottom_terminal() -> None:
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
         type_tag  = {"fill": "TRADE", "signal": "SIGNAL", "snapshot": "UPDATE"}
 
-        lines_html = ""
-        for ev in events:  # newest first → column-reverse puts them at bottom
+        import json as _json
+        import streamlit.components.v1 as _cv1
+
+        entries = []
+        for ev in events:  # newest first
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
             ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw
             cls    = css_class.get(ev["type"], "ev-pipeline")
             tag    = type_tag.get(ev["type"], "EVT")
-            text   = f"{tag}  {ev['sym']}  —  {ev.get('line1','')}"
-            sub    = f"{ts_str}  ·  {ev.get('line2','')}"
-            lines_html += f"""
-<div class="te">
-  <div class="tm {cls}">{text}</div>
-  <div class="ts">{sub}</div>
-</div>"""
+            entries.append({
+                "cls":  cls,
+                "text": f"{tag}  {ev['sym']}  —  {ev.get('line1','')}",
+                "sub":  f"{ts_str}  ·  {ev.get('line2','')}",
+            })
 
-        st.markdown(f"""
-<style>
-#blob-term{{
-  position:fixed;bottom:0;left:0;right:0;height:220px;z-index:9000;
-  background:rgba(4,0,6,.97);border-top:2px solid #ff00cc;
-  font-family:Consolas,'Courier New',monospace;display:flex;flex-direction:column;
-}}
-#blob-term-hdr{{
-  flex-shrink:0;padding:5px 16px;border-bottom:1px solid #2a003d;
-  font-size:8px;letter-spacing:.22em;color:#ff00cc;
-  text-shadow:0 0 8px rgba(255,0,204,.5);
-  display:flex;align-items:center;gap:10px;
-}}
-.live-dot{{
-  width:6px;height:6px;border-radius:50%;background:#ff00cc;
-  box-shadow:0 0 6px #ff00cc;flex-shrink:0;
-  animation:blink-c 2s ease-in-out infinite;
-}}
-#blob-term-body{{
-  flex:1;overflow:hidden;
-  display:flex;flex-direction:column-reverse;
-  padding:4px 0;
-}}
-.te{{padding:3px 18px 2px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
-.tm{{font-size:13px;font-weight:600;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-.ts{{font-size:9px;color:#3a1a4a;margin-top:1px;letter-spacing:.04em}}
-.ev-fill{{color:#ff00cc}}.ev-signal{{color:#00e5ff}}.ev-snapshot{{color:#9400ff}}
-.blob-cursor{{padding:4px 18px;flex-shrink:0;color:#ff00cc;
-  animation:blink-c 1s step-start infinite}}
-@keyframes blink-c{{0%,100%{{opacity:1}}50%{{opacity:0}}}}
-section[data-testid="stMain"] .block-container{{padding-bottom:240px!important}}
-</style>
-<div id="blob-term">
-  <div id="blob-term-hdr"><div class="live-dot"></div>SYSTEM FEED</div>
-  <div id="blob-term-body">
-    <div class="blob-cursor">█</div>
-    {lines_html}
-  </div>
-</div>
-""", unsafe_allow_html=True)
+        entries_json = _json.dumps(entries)
+
+        # Inject terminal into parent document from inside the iframe
+        inject_html = f"""<!DOCTYPE html><html><head><style>
+body{{margin:0;background:transparent}}
+</style></head><body>
+<script>
+(function(){{
+  var p = window.parent || window;
+  var doc = p.document;
+
+  // remove old terminal if reloading
+  var old = doc.getElementById('blob-term');
+  if (old) old.remove();
+  var oldStyle = doc.getElementById('blob-term-style');
+  if (oldStyle) oldStyle.remove();
+
+  // inject styles
+  var s = doc.createElement('style');
+  s.id = 'blob-term-style';
+  s.textContent = `
+    #blob-term {{
+      position:fixed;bottom:0;left:0;right:0;height:220px;z-index:99999;
+      background:rgba(4,0,6,.97);border-top:2px solid #ff00cc;
+      font-family:Consolas,'Courier New',monospace;
+      display:flex;flex-direction:column;
+    }}
+    #blob-term-hdr {{
+      flex-shrink:0;padding:5px 16px;border-bottom:1px solid #2a003d;
+      font-size:8px;letter-spacing:.22em;color:#ff00cc;
+      text-shadow:0 0 8px rgba(255,0,204,.5);
+      display:flex;align-items:center;gap:10px;
+    }}
+    .bt-dot {{
+      width:6px;height:6px;border-radius:50%;background:#ff00cc;
+      box-shadow:0 0 6px #ff00cc;flex-shrink:0;
+      animation:bt-blink 2s ease-in-out infinite;
+    }}
+    #blob-term-body {{
+      flex:1;overflow:hidden;
+      display:flex;flex-direction:column-reverse;
+      padding:4px 0;
+    }}
+    .bt-entry {{
+      padding:4px 20px 3px;
+      border-top:1px solid rgba(42,0,61,.3);
+      flex-shrink:0;
+    }}
+    .bt-main {{
+      font-size:13px;font-weight:600;line-height:1.4;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }}
+    .bt-sub {{
+      font-size:9px;color:#3a1a4a;margin-top:1px;letter-spacing:.04em;
+    }}
+    .ev-fill    {{color:#ff00cc}}
+    .ev-signal  {{color:#00e5ff}}
+    .ev-snapshot{{color:#9400ff}}
+    .bt-cursor  {{
+      padding:4px 20px;flex-shrink:0;color:#ff00cc;
+      animation:bt-blink 1s step-start infinite;
+    }}
+    @keyframes bt-blink{{0%,100%{{opacity:1}}50%{{opacity:0}}}}
+  `;
+  doc.head.appendChild(s);
+
+  // inject terminal div
+  var entries = {entries_json};
+  var html = '<div id="blob-term"><div id="blob-term-hdr"><div class="bt-dot"></div>SYSTEM FEED</div><div id="blob-term-body"><div class="bt-cursor">█</div>';
+  entries.forEach(function(e){{
+    html += '<div class="bt-entry"><div class="bt-main ' + e.cls + '">' + e.text + '</div><div class="bt-sub">' + e.sub + '</div></div>';
+  }});
+  html += '</div></div>';
+
+  var wrapper = doc.createElement('div');
+  wrapper.innerHTML = html;
+  doc.body.appendChild(wrapper.firstChild);
+
+  // push main content up
+  var existing = doc.getElementById('blob-term-pad');
+  if (!existing) {{
+    var pad = doc.createElement('style');
+    pad.id = 'blob-term-pad';
+    pad.textContent = 'section[data-testid="stMain"] .block-container{{padding-bottom:240px!important}}';
+    doc.head.appendChild(pad);
+  }}
+}})();
+</script>
+</body></html>"""
+
+        _cv1.html(inject_html, height=0, scrolling=False)
 
     except Exception:
         pass  # terminal offline — fail silently
