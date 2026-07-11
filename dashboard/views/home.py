@@ -860,27 +860,17 @@ body::after {{
 .leg-val {{ font-size:11px; font-weight:700; letter-spacing:-.01em; }}
 .leg-ret {{ font-size:9px; margin-left:4px; }}
 
-/* ── Bottom bar ── */
-.bottombar {{
-  position:absolute; bottom:0; left:0; right:0; height:44px;
-  background:rgba(6,0,8,.93); border-top:1px solid #2a003d;
-  backdrop-filter:blur(12px);
-  display:flex; align-items:center; padding:0 20px; gap:0; z-index:10;
-}}
-.bm {{
-  display:flex; flex-direction:column; gap:0;
-  padding:0 20px; border-right:1px solid #2a003d;
-}}
-.bm:first-child {{ padding-left:0; }}
-.bm:last-child {{ border-right:none; }}
-.bm-label {{ font-size:7px; letter-spacing:.2em; color:#3a1a4a; text-transform:uppercase; line-height:1; }}
-.bm-val {{ font-size:13px; font-weight:700; letter-spacing:-.02em; line-height:1.3; }}
+/* ── Topbar stat chips (right side) ── */
+.tb-sep {{ width:1px; height:18px; background:#2a003d; flex-shrink:0; }}
+.tb-stat {{ display:flex; flex-direction:column; gap:0; padding:0 12px; flex-shrink:0; }}
+.tb-stat-label {{ font-size:6.5px; letter-spacing:.22em; color:#3a1a4a; text-transform:uppercase; line-height:1; }}
+.tb-stat-val {{ font-size:12px; font-weight:700; letter-spacing:-.02em; line-height:1.4; }}
 .spacer {{ flex:1; }}
 .hint {{ font-size:8px; letter-spacing:.1em; color:#2a003d; white-space:nowrap; }}
 
 /* ── Terminal overlay — CRT retrowave ── */
 #term-overlay {{
-  position:absolute; bottom:44px; left:0; right:0;
+  position:absolute; bottom:0; left:0; right:0;
   height:calc(33vh - 44px); max-height:260px; min-height:140px;
   background:#03000a;
   border-top:2px solid #ff00cc;
@@ -1061,6 +1051,36 @@ body::after {{
   <span class="pill pill-m">MOMENTUM · {status}</span>
   <span class="pill pill-c">▸ DAY {mon}/{_MONITOR_TARGET}</span>
   <span class="pill pill-d">LAST RUN {last_run}</span>
+  <div class="spacer"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">NAV</span>
+    <span class="tb-stat-val" style="color:#ff00cc">{nav_str}</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">return</span>
+    <span class="tb-stat-val" style="color:{ret_color}">{ret_str}</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">day P&amp;L</span>
+    <span class="tb-stat-val" style="color:{'#00ff9d' if day_pnl >= 0 else '#ff3366'}">{dpnl_str}</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">sharpe</span>
+    <span class="tb-stat-val" style="color:#00e5ff">{sharpe}</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">SPY</span>
+    <span class="tb-stat-val" style="color:#00e5ff">{spy_latest}</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">QQQ</span>
+    <span class="tb-stat-val" style="color:#9400ff">{qqq_latest}</span>
+  </div>
 </div>
 
 <div class="nav-card">
@@ -1090,26 +1110,6 @@ body::after {{
   </div>
 </div>
 
-<div class="bottombar">
-  <div class="bm">
-    <span class="bm-label">Rolling Sharpe</span>
-    <span class="bm-val" style="color:#00e5ff">{sharpe}</span>
-  </div>
-  <div class="bm">
-    <span class="bm-label">Day P&amp;L</span>
-    <span class="bm-val" style="color:{'#00ff9d' if day_pnl >= 0 else '#ff3366'}">${abs(day_pnl):,.0f}</span>
-  </div>
-  <div class="bm">
-    <span class="bm-label">SPY price</span>
-    <span class="bm-val" style="color:#8060a0">{spy_latest}</span>
-  </div>
-  <div class="bm">
-    <span class="bm-label">QQQ price</span>
-    <span class="bm-val" style="color:#8060a0">{qqq_latest}</span>
-  </div>
-  <div class="spacer"></div>
-  <span class="hint">scroll · zoom &nbsp;|&nbsp; drag · pan</span>
-</div>
 
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script>
@@ -1534,3 +1534,11 @@ def render() -> None:
 
     html = _build_daw_html(data)
     components.html(html, height=960, scrolling=False)
+    # Bottom spacer — thin ruled line so the eye knows the page ends here
+    st.markdown(
+        '<div style="height:24px;border-top:1px solid #1a0028;margin-top:0;'
+        'background:#02000a;display:flex;align-items:center;padding:0 20px;">'
+        '<span style="font-size:7px;letter-spacing:.22em;color:#2a003d;font-family:monospace">EOF</span>'
+        '</div>',
+        unsafe_allow_html=True
+    )
