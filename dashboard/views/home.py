@@ -1557,31 +1557,35 @@ def render() -> None:
         function resize() {
             try {
                 var p = window.parent;
-                // Use the actual Streamlit main block container height if available,
-                // otherwise fall back to innerHeight minus a generous fixed offset.
-                var container = p.document.querySelector('[data-testid="stMainBlockContainer"]')
-                             || p.document.querySelector('[data-testid="stMain"]')
-                             || p.document.querySelector('.main');
-                var h = container
-                    ? Math.floor(container.getBoundingClientRect().height)
-                    : (p.innerHeight - 80);
-                // Find our sibling (the largest iframe)
+                var doc = p.document;
+                // Measure the Streamlit bottom toolbar (Manage app bar)
+                var bottomBar = doc.querySelector('[data-testid="stBottom"]')
+                             || doc.querySelector('[data-testid="stStatusWidget"]')
+                             || doc.querySelector('[data-testid="stToolbar"]')
+                             || doc.querySelector('[class*="StatusWidget"]')
+                             || doc.querySelector('[class*="toolbar"]');
+                var bottomH = bottomBar ? Math.ceil(bottomBar.getBoundingClientRect().height) : 0;
+                // Measure Streamlit top header if still present
+                var topBar = doc.querySelector('[data-testid="stHeader"]');
+                var topH = topBar ? Math.ceil(topBar.getBoundingClientRect().height) : 0;
+                // Available height = full viewport minus any chrome that survived our CSS
+                var h = p.innerHeight - topH - bottomH - 4;
+                if (h < 300) h = p.innerHeight - 50; // sanity fallback
+                // Resize the main chart iframe (the biggest one)
                 var biggest = null, biggestH = 0;
-                p.document.querySelectorAll('iframe').forEach(function(f) {
+                doc.querySelectorAll('iframe').forEach(function(f) {
                     if (f !== window.frameElement && f.offsetHeight > biggestH) {
                         biggest = f; biggestH = f.offsetHeight;
                     }
                 });
-                if (biggest && h > 100) {
+                if (biggest) {
                     biggest.setAttribute('height', h);
                     biggest.style.height = h + 'px';
                 }
             } catch(e) {}
         }
         resize();
-        setTimeout(resize, 200);
-        setTimeout(resize, 600);
-        setTimeout(resize, 1500);
+        [100, 400, 900, 2000].forEach(function(ms) { setTimeout(resize, ms); });
         window.parent.addEventListener('resize', resize);
     })();
     </script>
