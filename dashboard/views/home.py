@@ -1163,10 +1163,10 @@ window.addEventListener('resize', function() {{
 <!-- Terminal overlay — bottom third of chart -->
 <div id="term-overlay">
   <div id="term-hdr">
-    <div class="term-dot"></div><span style="font-size:11px;letter-spacing:.18em;color:#cc00aa">SYSTEM FEED</span>
+    <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#cc00aa">SYSTEM FEED</span>
     <span style="flex:1"></span>
-    <span style="font-size:11px;letter-spacing:.18em;color:#6a3a8a;width:220px;flex-shrink:0">QUEUED ACTIONS</span>
-    <span style="font-size:11px;letter-spacing:.18em;color:#6a3a8a;width:290px;flex-shrink:0">POSITIONS</span>
+    <span style="font-size:13px;letter-spacing:.18em;color:#b060d0;width:220px;flex-shrink:0">QUEUED ACTIONS</span>
+    <span style="font-size:13px;letter-spacing:.18em;color:#b060d0;width:290px;flex-shrink:0">POSITIONS</span>
   </div>
   <div id="term-cols">
     <div id="term-body">
