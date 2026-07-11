@@ -229,6 +229,54 @@ def _load_chart_data() -> dict:
     term_events.sort(key=lambda e: e["ts"] if e["ts"] else "")  # oldest first → newest at bottom
     term_events = term_events[-80:]
 
+    # Positions panel data
+    positions_data: list[dict] = []
+    with get_session() as s:
+        snap = s.execute(text("""
+            SELECT positions FROM portfolio_snapshots
+            ORDER BY snapshot_date DESC LIMIT 1
+        """)).fetchone()
+        if snap and snap.positions:
+            pos_map: dict = snap.positions  # {symbol: qty}
+            syms = list(pos_map.keys())
+            if syms:
+                # Latest prices
+                price_rows = s.execute(text("""
+                    SELECT DISTINCT ON (symbol) symbol, adj_close, date
+                    FROM price_bars
+                    WHERE symbol = ANY(:syms)
+                    ORDER BY symbol, date DESC
+                """), {"syms": syms}).fetchall()
+                prices_map = {r.symbol: float(r.adj_close) for r in price_rows}
+
+                # Latest signals to get score + rank for each symbol
+                sig_rows = s.execute(text("""
+                    SELECT symbol, score, as_of_date
+                    FROM signals
+                    WHERE as_of_date = (SELECT MAX(as_of_date) FROM signals)
+                    ORDER BY score DESC
+                """)).fetchall()
+                sig_date = sig_rows[0].as_of_date if sig_rows else None
+                sig_map = {r.symbol: {"score": float(r.score), "rank": i+1}
+                           for i, r in enumerate(sig_rows)}
+
+                for sym, qty in pos_map.items():
+                    price = prices_map.get(sym, 0.0)
+                    value = qty * price
+                    sig  = sig_map.get(sym)
+                    if sig:
+                        rank = sig["rank"]
+                        score = sig["score"]
+                        hold_text = f"ranked #{rank} of {len(sig_rows)} · holds while top 5"
+                    else:
+                        hold_text = "not in today's top-5 · exits next rebalance"
+                    positions_data.append({
+                        "sym": sym, "qty": qty, "price": price,
+                        "value": value, "hold_text": hold_text,
+                        "in_signal": bool(sig),
+                    })
+                positions_data.sort(key=lambda x: -x["value"])
+
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
         "spy":         {"dates": spy_dates,   "prices": spy_prices},
@@ -242,6 +290,7 @@ def _load_chart_data() -> dict:
         "cumulative_pnl": float(latest_pnl.cumulative_pnl) if latest_pnl else 0.0,
         "rolling_sharpe": None,
         "term_events": term_events,
+        "positions_data": positions_data,
     }
 
 
@@ -376,6 +425,25 @@ def _build_daw_html(data: dict) -> str:
             f'<span class="te-msg">{msg}</span>'
             f'</div>'
         )
+
+    # ── Positions panel HTML ──────────────────────────────────────────────────
+    pos_cards = ""
+    _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
+    for p in data.get("positions_data", []):
+        tcol = _TICKER_PAL[hash(p["sym"]) % len(_TICKER_PAL)]
+        hold_cls = "active" if p["in_signal"] else "exiting"
+        pos_cards += (
+            f'<div class="pos-card">'
+            f'<div class="pos-top">'
+            f'<span class="pos-sym" style="color:{tcol}">{p["sym"]}</span>'
+            f'<span class="pos-qty">{p["qty"]} sh</span>'
+            f'<span class="pos-val">${p["value"]:,.0f}</span>'
+            f'</div>'
+            f'<div class="pos-hold {hold_cls}">{p["hold_text"]}</div>'
+            f'</div>'
+        )
+    if not pos_cards:
+        pos_cards = '<div class="pos-hold" style="padding:8px 14px">no open positions</div>'
 
     # Normalize SPY and QQQ to $100K at portfolio start date
     # so all 3 lines are directly comparable on one axis
@@ -517,6 +585,10 @@ body::after {{
   background:#ff00cc; box-shadow:0 0 5px #ff00cc;
   animation:shimmer 2s ease-in-out infinite;
 }}
+/* two-column body */
+#term-cols {{
+  flex:1; display:flex; overflow:hidden;
+}}
 #term-body {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
@@ -533,7 +605,35 @@ body::after {{
 .te-date {{ padding:5px 16px 3px; flex-shrink:0;
             font-size:9px; letter-spacing:.18em; color:#2a003d;
             border-top:1px solid #1a0025; margin-top:2px; }}
-.ts {{ font-size:9px; color:#3a1a4a; margin-top:1px; letter-spacing:.04em; }}
+/* positions panel */
+#pos-panel {{
+  width:230px; flex-shrink:0;
+  border-left:1px solid #2a003d;
+  overflow-y:auto; padding:6px 0;
+  scrollbar-width:thin;
+  scrollbar-color:#2a003d transparent;
+}}
+#pos-panel .pos-hdr {{
+  font-size:7.5px; letter-spacing:.22em; color:#3a1a4a;
+  padding:0 14px 6px; text-transform:uppercase;
+}}
+.pos-card {{
+  padding:5px 14px 6px;
+  border-bottom:1px solid rgba(42,0,61,.35);
+}}
+.pos-top {{
+  display:flex; align-items:baseline; gap:6px;
+  font-size:12px; line-height:1.3;
+}}
+.pos-sym {{ font-weight:700; font-size:13px; }}
+.pos-qty {{ color:#8060a0; font-size:10.5px; }}
+.pos-val {{ color:#f0e0ff; font-size:11px; margin-left:auto; }}
+.pos-hold {{
+  font-size:9px; color:#3a1a4a;
+  margin-top:2px; letter-spacing:.02em;
+}}
+.pos-hold.active {{ color:#2a4a2a; }}
+.pos-hold.exiting {{ color:#4a1a1a; }}
 .ev-fill     {{ color:#ff00cc; }}
 .ev-signal   {{ color:#00e5ff; }}
 .ev-snapshot {{ color:#9400ff; }}
@@ -832,10 +932,20 @@ window.addEventListener('resize', function() {{
 
 <!-- Terminal overlay — bottom third of chart -->
 <div id="term-overlay">
-  <div id="term-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
-  <div id="term-body">
-    {term_rows}
-    <div class="term-cur">█</div>
+  <div id="term-hdr">
+    <div class="term-dot"></div>SYSTEM FEED
+    <span style="flex:1"></span>
+    <span style="letter-spacing:.22em;color:#3a1a4a">POSITIONS</span>
+    <span style="width:230px"></span>
+  </div>
+  <div id="term-cols">
+    <div id="term-body">
+      {term_rows}
+      <div class="term-cur">█</div>
+    </div>
+    <div id="pos-panel">
+      {pos_cards}
+    </div>
   </div>
 </div>
 <script>
