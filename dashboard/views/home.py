@@ -326,47 +326,112 @@ def _build_daw_html(data: dict) -> str:
     dpnl_str   = f'{day_pnl:+,.0f}'
 
     # ── Terminal feed rows ────────────────────────────────────────────────────
-    # verb colors keyed by event tag
-    _VERB_LABEL = {
-        "RUN": "Run",    "START": "Run",   "COMPLETE": "Run",
-        "DATA": "Data",  "INGEST": "Data",
-        "SIGNAL": "Signal",
-        "BUY": "Trade",  "SELL": "Trade",  "TRADE": "Trade",
-        "HOLD": "Hold",
-        "NAV": "Update", "UPDATE": "Update",
-        "PNL": "PnL",
-        "VETO": "Veto",  "RISK_VETO": "Veto",
-    }
-    _VERB_COLOR = {
-        "Run":    "#9400ff",
-        "Data":   "#5a3a7a",
-        "Signal": "#00e5ff",
-        "Trade":  "#ff00cc",   # the sauce
-        "Hold":   "#ff9900",
-        "Update": "#00ff9d",
-        "PnL":    "#5a3a7a",
-        "Veto":   "#ff3366",
-    }
-    # stable ticker color from symbol hash
+    import re as _re
+    from datetime import datetime as _dt
+
     _TICKER_PALETTE = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     _SYSTEM_SYMS = {"PIPELINE", "PORTFOLIO", "RUN", "INGEST", "SIGNAL", "HOLD",
                     "SNAPSHOT", "PNL", "NAV", "UPDATE", "DATA", "START", "COMPLETE", "VETO"}
 
-    def _sym_color(sym: str) -> str:
+    def _tc(sym: str) -> str:
         if not sym or sym.upper() in _SYSTEM_SYMS:
             return "#f0e0ff"
         return _TICKER_PALETTE[hash(sym) % len(_TICKER_PALETTE)]
 
-    def _format_message(msg: str, tag: str) -> str:
-        # Color "bought" green, "sold" red
-        msg = msg.replace("bought", '<span style="color:#00ff9d">bought</span>')
-        msg = msg.replace("sold",   '<span style="color:#ff3366">sold</span>')
-        return msg
+    def _ts(sym: str) -> str:
+        """Wrap a ticker symbol in its color span."""
+        return f'<span style="color:{_tc(sym)};font-weight:700">{sym}</span>'
 
-    # Collect NAV values in oldest-first order for up/down comparison
-    import re as _re
+    def _humanize(ev: dict, nav_col: str | None) -> str:
+        """Convert a pipeline event into natural inner-monologue prose."""
+        tag  = ev.get("tag", "")
+        sym  = ev.get("sym", "")
+        msg  = ev.get("line1", "")
+        det  = ev.get("line2", "")
+
+        # Parse numbers we'll reuse
+        dollar_m = _re.search(r'\$([\d,]+(?:\.\d+)?)', msg)
+        num_m    = _re.search(r'(\d[\d,]*)', msg)
+
+        if tag in ("START", "RUN") and "started" in msg:
+            d = msg.split("for ")[-1] if "for " in msg else msg
+            return f'<span style="color:#5a3a7a">waking up for {d}</span>'
+
+        if tag in ("RUN", "COMPLETE") and "complete" in msg:
+            nav = _re.search(r'\$([\d,]+)', msg)
+            nav_s = f'<span style="color:{nav_col or "#f0e0ff"}">${nav.group(1)}</span>' if nav else ""
+            return f'all done. book closed at {nav_s}'
+
+        if tag == "DATA":
+            bars_m = _re.search(r'(\d+) bars', msg)
+            sym_m  = _re.search(r'(\d+) symbols', msg)
+            bars = bars_m.group(1) if bars_m else "?"
+            syms = sym_m.group(1) if sym_m else "?"
+            return f'<span style="color:#5a3a7a">pulled {bars} bars across {syms} symbols. clean.</span>'
+
+        if tag == "SIGNAL":
+            # "universe scored · top pick: GOOGL (0.823)"
+            pick_m = _re.search(r'top pick[:\s]+(\w+)[^\d]*([\d.]+)', msg)
+            if pick_m:
+                ticker, score = pick_m.group(1), pick_m.group(2)
+                return f'scored the universe. {_ts(ticker)} leads at {score}'
+            return f'<span style="color:#5a3a7a">{msg}</span>'
+
+        if tag == "BUY":
+            qty_m   = _re.search(r'(\d+) shares', msg)
+            price_m = _re.search(r'\$([\d.]+)', msg)
+            qty   = qty_m.group(1)   if qty_m   else "?"
+            price = price_m.group(1) if price_m else "?"
+            slip_m = _re.search(r'slippage \$([\d.]+)', det)
+            slip_s = f' &nbsp;<span style="color:#3a1a4a">slip ${slip_m.group(1)}</span>' if slip_m else ""
+            return f'<span style="color:#ff00cc">bought</span> {qty} {_ts(sym)} @ ${price}{slip_s}'
+
+        if tag == "SELL":
+            qty_m   = _re.search(r'(\d+) shares', msg)
+            price_m = _re.search(r'\$([\d.]+)', msg)
+            qty   = qty_m.group(1)   if qty_m   else "?"
+            price = price_m.group(1) if price_m else "?"
+            return f'<span style="color:#ff3366">sold</span> {qty} {_ts(sym)} @ ${price}'
+
+        if tag == "HOLD":
+            # "holding AAPL, MSFT, GOOGL, NVDA, AMZN unchanged"
+            tickers_raw = _re.sub(r'\s*unchanged.*', '', msg.replace("holding ", ""))
+            tickers = [t.strip().rstrip(",") for t in tickers_raw.split(",") if t.strip()]
+            colored = "  ".join(_ts(t) for t in tickers)
+            return f'holding  {colored}'
+
+        if tag in ("NAV", "UPDATE", "SNAPSHOT"):
+            val_m = _re.search(r'\$([\d,]+)', msg)
+            if val_m:
+                val_s = f'<span style="color:{nav_col or "#f0e0ff"}">${val_m.group(1)}</span>'
+                return f'marked the book at {val_s}'
+            return msg
+
+        if tag == "PNL":
+            dpnl_m = _re.search(r'([+-]\$[\d,]+(?:\.\d+)?)', msg)
+            cpnl_m = _re.search(r'([+-]\$[\d,]+(?:\.\d+)?)', det) if det else None
+            dpnl_s = dpnl_m.group(1) if dpnl_m else msg
+            sign   = dpnl_s[0] if dpnl_s else "+"
+            dcol   = "#00ff9d" if sign == "+" else "#ff3366"
+            dpnl_colored = f'<span style="color:{dcol}">{dpnl_s}</span>'
+            cpnl_s = f'  <span style="color:#3a1a4a">({cpnl_m.group(1)} total)</span>' if cpnl_m else ""
+            return f'{dpnl_colored} on the day{cpnl_s}'
+
+        if tag == "RISK_VETO":
+            return f'<span style="color:#ff3366">blocked</span> {_ts(sym)}  —  {msg}'
+
+        if tag == "TRADE":
+            # legacy fill format
+            msg = msg.replace("bought", '<span style="color:#ff00cc">bought</span>')
+            msg = msg.replace("sold",   '<span style="color:#ff3366">sold</span>')
+            return msg
+
+        # fallback
+        return f'<span style="color:#5a3a7a">{msg}</span>'
+
+    # Collect NAV values oldest-first for up/down coloring
     _snap_vals: list[float] = []
-    for ev in data.get("term_events", []):   # already sorted oldest-first at this point
+    for ev in data.get("term_events", []):
         if ev["tag"] in ("NAV", "UPDATE", "SNAPSHOT"):
             _m = _re.search(r'\$([\d,]+)', ev.get("line1",""))
             if _m:
@@ -378,51 +443,33 @@ def _build_daw_html(data: dict) -> str:
 
     for ev in data.get("term_events", []):
         ts_raw = str(ev["ts"]) if ev.get("ts") else ""
-        # Date header when day changes (newest-first order, column-reverse renders bottom-up)
-        ev_date = ts_raw[:10]  # yyyy-mm-dd
+        ev_date = ts_raw[:10]
+
         if ev_date and ev_date != _last_date:
             _last_date = ev_date
             try:
-                from datetime import datetime as _dt
                 _d = _dt.strptime(ev_date, "%Y-%m-%d")
-                date_label = f"{_d.month}-{_d.day}-{str(_d.year)[2:]}"
+                date_label = f"{_d.month}/{_d.day}/{str(_d.year)[2:]}"
             except Exception:
                 date_label = ev_date
-            term_rows += (
-                f'<div class="te-date">{date_label}</div>'
-            )
+            term_rows += f'<div class="te-date">{date_label}</div>'
 
-        # hh:mm from timestamp
         hhmm = ts_raw[11:16] if len(ts_raw) >= 16 else ""
 
-        tag   = ev.get("tag", "RUN")
-        sym   = ev.get("sym", "")
-        verb  = _VERB_LABEL.get(tag, tag.capitalize())
-        vcol  = _VERB_COLOR.get(verb, "#8060a0")
-        scol  = _sym_color(sym)
-        msg   = _format_message(ev.get("line1",""), tag)
-
-        # Color the NAV value green/red based on direction vs prior snapshot
+        tag = ev.get("tag", "")
+        nav_col = None
         if tag in ("NAV", "UPDATE", "SNAPSHOT"):
             curr = _snap_vals[_snap_idx] if _snap_idx < len(_snap_vals) else None
             prev = _snap_vals[_snap_idx - 1] if _snap_idx > 0 else None
-            if curr is not None:
-                nav_col = "#00ff9d" if (prev is None or curr >= prev) else "#ff3366"
-                import re as _re2
-                msg = _re2.sub(
-                    r'(\$[\d,]+)',
-                    lambda m: f'<span style="color:{nav_col}">{m.group(1)}</span>',
-                    msg, count=1,
-                )
+            nav_col = "#00ff9d" if (prev is None or curr is None or curr >= prev) else "#ff3366"
             _snap_idx += 1
+
+        prose = _humanize(ev, nav_col)
 
         term_rows += (
             f'<div class="te">'
-            f'<span class="te-ts">{hhmm}:</span> '
-            f'<span style="color:{vcol};font-weight:700">{verb}</span> '
-            f'<span style="color:{scol}">{sym}</span>'
-            f'<span class="te-dash"> — </span>'
-            f'<span class="te-msg">{msg}</span>'
+            f'<span class="te-ts">{hhmm}&nbsp;&nbsp;</span>'
+            f'{prose}'
             f'</div>'
         )
 
@@ -597,14 +644,12 @@ body::after {{
   scrollbar-color:#2a003d transparent;
 }}
 .te {{ padding:1px 16px; flex-shrink:0;
-       font-size:11.5px; line-height:1.6;
+       font-size:11.5px; line-height:1.7; color:#c0a0d8;
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-.te-ts  {{ color:#6a4a8a; font-size:10.5px; }}
-.te-dash {{ color:#3a1a4a; }}
-.te-msg  {{ color:#c0a0d8; font-weight:400; }}
-.te-date {{ padding:10px 16px 4px; flex-shrink:0;
-            font-size:11px; font-weight:700; letter-spacing:.06em;
-            color:#f0e0ff; }}
+.te-ts  {{ color:#4a2a6a; font-size:10px; }}
+.te-date {{ padding:12px 16px 3px; flex-shrink:0;
+            font-size:10px; font-weight:700; letter-spacing:.14em;
+            color:#8060a0; text-transform:uppercase; }}
 /* positions panel */
 #pos-panel {{
   width:230px; flex-shrink:0;
