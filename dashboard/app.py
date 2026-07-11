@@ -223,9 +223,20 @@ section[data-testid="stSidebar"] {
 .ev-snapshot { color: #9400ff; }
 .ev-pipeline { color: var(--text-mid); }
 
+.tw-cursor {
+    color: var(--accent);
+    font-weight: 400;
+}
+.tw-cursor.blink {
+    animation: blink-cur 1s step-start infinite;
+}
+@keyframes blink-cur {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
 @keyframes term-in {
-    from { opacity: 0; transform: translateX(-6px); }
-    to   { opacity: 1; transform: translateX(0); }
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 /* ── Dividers ──────────────────────────────────────────────────────────── */
@@ -430,39 +441,98 @@ def _render_sidebar_terminal() -> None:
                                 "line1": f"valued at ${int(r.nav):,}",
                                 "line2": "end of day snapshot", "ts": r.ts})
 
-        events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
-        events = events[:18]
+        # oldest first so newest lands at bottom
+        events.sort(key=lambda e: e["ts"] if e["ts"] else "")
+        events = events[-16:]
 
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
         type_tag  = {"fill": "TRADE", "signal": "SIGNAL", "snapshot": "UPDATE"}
-        lines_html = ""
-        for i, ev in enumerate(events):
+
+        # Build data payload for JS typewriter — emit as JSON
+        import json as _json
+        entries = []
+        for ev in events:
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
             ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw
             cls    = css_class.get(ev["type"], "ev-pipeline")
-            tag    = type_tag.get(ev["type"], "EVT·")
-            delay  = i * 0.06
-            lines_html += (
-                f'<div class="term-entry" style="animation-delay:{delay:.2f}s;animation:term-in 0.3s ease {delay:.2f}s forwards;opacity:0">'
-                f'  <div class="term-main {cls}">'
-                f'    <span class="term-tag">{tag}</span>'
-                f'    <span class="term-sym">{ev["sym"]}</span>'
-                f'    <span class="term-val">{ev.get("line1","")}</span>'
-                f'  </div>'
-                f'  <div class="term-sub">{ts_str} · {ev.get("line2","")}</div>'
-                f'</div>\n'
-            )
+            tag    = type_tag.get(ev["type"], "EVT")
+            full   = f"{tag}  {ev['sym']}  —  {ev.get('line1','')}"
+            sub    = f"{ts_str}  {ev.get('line2','')}"
+            entries.append({"text": full, "sub": sub, "cls": cls})
+
+        entries_json = _json.dumps(entries)
 
         st.sidebar.markdown(f"""
 <div class="term-feed-wrap">
   <span class="term-feed-header">▶ SYSTEM FEED</span>
-  <div class="term-feed-body" id="sf-body">
-    {lines_html}
-  </div>
+  <div class="term-feed-body" id="sf-body"></div>
 </div>
 <script>
-  var b = document.getElementById('sf-body');
-  if (b) b.scrollTop = b.scrollHeight;
+(function(){{
+  var body  = document.getElementById('sf-body');
+  if (!body) return;
+  var entries = {entries_json};
+  var LINE_DELAY = 80;   // ms between lines starting
+  var CHAR_DELAY = 18;   // ms between characters
+
+  function makeEntry(e, cb) {{
+    var wrap = document.createElement('div');
+    wrap.className = 'term-entry';
+
+    var main = document.createElement('div');
+    main.className = 'term-main ' + e.cls;
+    wrap.appendChild(main);
+
+    var sub = document.createElement('div');
+    sub.className = 'term-sub';
+    sub.textContent = e.sub;
+    sub.style.opacity = '0';
+    wrap.appendChild(sub);
+
+    body.appendChild(wrap);
+    body.scrollTop = body.scrollHeight;
+
+    // typewriter
+    var i = 0;
+    var cursor = document.createElement('span');
+    cursor.className = 'tw-cursor';
+    cursor.textContent = '█';
+    main.appendChild(cursor);
+
+    var t = setInterval(function() {{
+      if (i < e.text.length) {{
+        main.insertBefore(document.createTextNode(e.text[i]), cursor);
+        i++;
+        body.scrollTop = body.scrollHeight;
+      }} else {{
+        clearInterval(t);
+        cursor.remove();
+        sub.style.opacity = '1';
+        body.scrollTop = body.scrollHeight;
+        if (cb) cb();
+      }}
+    }}, CHAR_DELAY);
+  }}
+
+  // add blinking cursor line at end
+  function addCursorLine() {{
+    var cl = document.createElement('div');
+    cl.className = 'term-entry term-cursor-line';
+    cl.innerHTML = '<span class="tw-cursor blink">█</span>';
+    body.appendChild(cl);
+    body.scrollTop = body.scrollHeight;
+  }}
+
+  // chain entries sequentially
+  function runChain(idx) {{
+    if (idx >= entries.length) {{ addCursorLine(); return; }}
+    setTimeout(function() {{
+      makeEntry(entries[idx], function() {{ runChain(idx + 1); }});
+    }}, idx === 0 ? 0 : LINE_DELAY);
+  }}
+
+  runChain(0);
+}})();
 </script>
 """, unsafe_allow_html=True)
 
