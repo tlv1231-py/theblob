@@ -276,14 +276,104 @@ def _build_daw_html(data: dict) -> str:
     day_pnl    = data["day_pnl"]
     dpnl_str   = f'{day_pnl:+,.0f}'
 
-    # Terminal feed rows (newest first → column-reverse shows newest at bottom)
-    term_rows = ""
+    # ── Terminal feed rows ────────────────────────────────────────────────────
+    # verb colors keyed by event tag
+    _VERB_LABEL = {
+        "RUN": "Run",    "START": "Run",   "COMPLETE": "Run",
+        "DATA": "Data",  "INGEST": "Data",
+        "SIGNAL": "Signal",
+        "BUY": "Trade",  "SELL": "Trade",  "TRADE": "Trade",
+        "HOLD": "Hold",
+        "NAV": "Update", "UPDATE": "Update",
+        "PNL": "PnL",
+        "VETO": "Veto",  "RISK_VETO": "Veto",
+    }
+    _VERB_COLOR = {
+        "Run":    "#ff00cc",
+        "Data":   "#8060a0",
+        "Signal": "#9400ff",
+        "Trade":  "#00e5ff",
+        "Hold":   "#ff9900",
+        "Update": "#00e5ff",
+        "PnL":    "#8060a0",
+        "Veto":   "#ff3366",
+    }
+    # stable ticker color from symbol hash
+    _TICKER_PALETTE = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
+    _SYSTEM_SYMS = {"PIPELINE", "PORTFOLIO", "RUN", "INGEST", "SIGNAL", "HOLD",
+                    "SNAPSHOT", "PNL", "NAV", "UPDATE", "DATA", "START", "COMPLETE", "VETO"}
+
+    def _sym_color(sym: str) -> str:
+        if not sym or sym.upper() in _SYSTEM_SYMS:
+            return "#f0e0ff"
+        return _TICKER_PALETTE[hash(sym) % len(_TICKER_PALETTE)]
+
+    def _format_message(msg: str, tag: str) -> str:
+        # Color "bought" green, "sold" red
+        msg = msg.replace("bought", '<span style="color:#00ff9d">bought</span>')
+        msg = msg.replace("sold",   '<span style="color:#ff3366">sold</span>')
+        return msg
+
+    # Track last snapshot NAV for up/down coloring
+    _last_snap_val: float | None = None
+    _snap_vals: list[float] = []
     for ev in data.get("term_events", []):
-        ts = str(ev["ts"])[5:16] if ev.get("ts") else ""
+        if ev["tag"] in ("NAV", "UPDATE", "SNAPSHOT"):
+            import re as _re
+            _m = _re.search(r'\$([\d,]+)', ev.get("line1",""))
+            if _m:
+                _snap_vals.append(float(_m.group(1).replace(",","")))
+
+    term_rows = ""
+    _last_date = None
+    _snap_idx  = 0
+
+    for ev in data.get("term_events", []):
+        ts_raw = str(ev["ts"]) if ev.get("ts") else ""
+        # Date header when day changes (newest-first order, column-reverse renders bottom-up)
+        ev_date = ts_raw[:10]  # yyyy-mm-dd
+        if ev_date and ev_date != _last_date:
+            _last_date = ev_date
+            try:
+                from datetime import datetime as _dt
+                _d = _dt.strptime(ev_date, "%Y-%m-%d")
+                date_label = f"{_d.month}-{_d.day}-{str(_d.year)[2:]}"
+            except Exception:
+                date_label = ev_date
+            term_rows += (
+                f'<div class="te-date">{date_label}</div>'
+            )
+
+        # hh:mm from timestamp
+        hhmm = ts_raw[11:16] if len(ts_raw) >= 16 else ""
+
+        tag   = ev.get("tag", "RUN")
+        sym   = ev.get("sym", "")
+        verb  = _VERB_LABEL.get(tag, tag.capitalize())
+        vcol  = _VERB_COLOR.get(verb, "#8060a0")
+        scol  = _sym_color(sym)
+        msg   = _format_message(ev.get("line1",""), tag)
+
+        # Color the NAV value green/red based on direction vs prior snapshot
+        if tag in ("NAV", "UPDATE", "SNAPSHOT") and len(_snap_vals) > _snap_idx + 1:
+            curr = _snap_vals[_snap_idx]
+            prev = _snap_vals[_snap_idx + 1]
+            nav_col = "#00ff9d" if curr >= prev else "#ff3366"
+            import re as _re2
+            msg = _re2.sub(
+                r'(\$[\d,]+)',
+                lambda m: f'<span style="color:{nav_col}">{m.group(1)}</span>',
+                msg, count=1,
+            )
+            _snap_idx += 1
+
         term_rows += (
             f'<div class="te">'
-            f'<div class="tm {ev["cls"]}">{ev["tag"]}  {ev["sym"]}  —  {ev["line1"]}</div>'
-            f'<div class="ts">{ts}  ·  {ev["line2"]}</div>'
+            f'<span class="te-ts">{hhmm}:</span> '
+            f'<span style="color:{vcol};font-weight:700">{verb}</span> '
+            f'<span style="color:{scol}">{sym}</span>'
+            f'<span class="te-dash"> — </span>'
+            f'<span class="te-msg">{msg}</span>'
             f'</div>'
         )
 
@@ -432,9 +522,15 @@ body::after {{
   display:flex; flex-direction:column-reverse;
   padding:4px 0;
 }}
-.te {{ padding:3px 20px 2px; border-top:1px solid rgba(42,0,61,.25); flex-shrink:0; }}
-.tm {{ font-size:12px; font-weight:600; line-height:1.4;
+.te {{ padding:2px 16px; flex-shrink:0;
+       font-size:11.5px; line-height:1.5;
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.te-ts  {{ color:#3a1a4a; font-size:10.5px; }}
+.te-dash {{ color:#2a003d; }}
+.te-msg  {{ color:#c0a0d8; font-weight:400; }}
+.te-date {{ padding:5px 16px 3px; flex-shrink:0;
+            font-size:9px; letter-spacing:.18em; color:#2a003d;
+            border-top:1px solid #1a0025; margin-top:2px; }}
 .ts {{ font-size:9px; color:#3a1a4a; margin-top:1px; letter-spacing:.04em; }}
 .ev-fill     {{ color:#ff00cc; }}
 .ev-signal   {{ color:#00e5ff; }}
