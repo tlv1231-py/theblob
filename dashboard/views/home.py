@@ -243,7 +243,7 @@ def _load_chart_data() -> dict:
             end_date=_today + _td(days=10),
         )
         _next_td = _sched.index[0].date() if len(_sched) else _today + _td(days=1)
-        _next_td_str = _next_td.strftime("%-m/%-d")
+        _next_td_str = f"{_next_td.month}/{_next_td.day}"
     except Exception:
         _next_td_str = "next close"
         _next_td = __import__("datetime").date.today() + _td(days=1)
