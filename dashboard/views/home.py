@@ -226,8 +226,8 @@ def _load_chart_data() -> dict:
                 term_events.append({"cls":"ev-snapshot","sym":"PORTFOLIO",
                     "line1":f"valued at ${int(r.nav):,}","line2":"end of day snapshot","ts":r.ts,"tag":"NAV"})
 
-    term_events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
-    term_events = term_events[:80]
+    term_events.sort(key=lambda e: e["ts"] if e["ts"] else "")  # oldest first → newest at bottom
+    term_events = term_events[-80:]
 
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
@@ -314,12 +314,11 @@ def _build_daw_html(data: dict) -> str:
         msg = msg.replace("sold",   '<span style="color:#ff3366">sold</span>')
         return msg
 
-    # Track last snapshot NAV for up/down coloring
-    _last_snap_val: float | None = None
+    # Collect NAV values in oldest-first order for up/down comparison
+    import re as _re
     _snap_vals: list[float] = []
-    for ev in data.get("term_events", []):
+    for ev in data.get("term_events", []):   # already sorted oldest-first at this point
         if ev["tag"] in ("NAV", "UPDATE", "SNAPSHOT"):
-            import re as _re
             _m = _re.search(r'\$([\d,]+)', ev.get("line1",""))
             if _m:
                 _snap_vals.append(float(_m.group(1).replace(",","")))
@@ -355,16 +354,17 @@ def _build_daw_html(data: dict) -> str:
         msg   = _format_message(ev.get("line1",""), tag)
 
         # Color the NAV value green/red based on direction vs prior snapshot
-        if tag in ("NAV", "UPDATE", "SNAPSHOT") and len(_snap_vals) > _snap_idx + 1:
-            curr = _snap_vals[_snap_idx]
-            prev = _snap_vals[_snap_idx + 1]
-            nav_col = "#00ff9d" if curr >= prev else "#ff3366"
-            import re as _re2
-            msg = _re2.sub(
-                r'(\$[\d,]+)',
-                lambda m: f'<span style="color:{nav_col}">{m.group(1)}</span>',
-                msg, count=1,
-            )
+        if tag in ("NAV", "UPDATE", "SNAPSHOT"):
+            curr = _snap_vals[_snap_idx] if _snap_idx < len(_snap_vals) else None
+            prev = _snap_vals[_snap_idx - 1] if _snap_idx > 0 else None
+            if curr is not None:
+                nav_col = "#00ff9d" if (prev is None or curr >= prev) else "#ff3366"
+                import re as _re2
+                msg = _re2.sub(
+                    r'(\$[\d,]+)',
+                    lambda m: f'<span style="color:{nav_col}">{m.group(1)}</span>',
+                    msg, count=1,
+                )
             _snap_idx += 1
 
         term_rows += (
@@ -502,7 +502,7 @@ body::after {{
   border-top:2px solid #ff00cc;
   backdrop-filter:blur(12px);
   display:flex; flex-direction:column;
-  z-index:20; pointer-events:none;
+  z-index:20; pointer-events:auto;
   overflow:hidden;
 }}
 #term-hdr {{
@@ -518,9 +518,11 @@ body::after {{
   animation:shimmer 2s ease-in-out infinite;
 }}
 #term-body {{
-  flex:1; overflow:hidden;
-  display:flex; flex-direction:column-reverse;
+  flex:1; overflow-y:auto;
+  display:flex; flex-direction:column;
   padding:4px 0;
+  scrollbar-width:thin;
+  scrollbar-color:#2a003d transparent;
 }}
 .te {{ padding:2px 16px; flex-shrink:0;
        font-size:11.5px; line-height:1.5;
@@ -832,10 +834,14 @@ window.addEventListener('resize', function() {{
 <div id="term-overlay">
   <div id="term-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
   <div id="term-body">
-    <div class="term-cur">█</div>
     {term_rows}
+    <div class="term-cur">█</div>
   </div>
 </div>
+<script>
+  var b = document.getElementById('term-body');
+  if (b) b.scrollTop = b.scrollHeight;
+</script>
 
 </body>
 </html>"""
