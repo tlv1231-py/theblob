@@ -873,7 +873,8 @@ body::after {{
 
 /* ── Terminal overlay — CRT retrowave ── */
 #term-overlay {{
-  height:36%; flex-shrink:0; min-height:160px; width:100%;
+  height:38%; flex-shrink:0; min-height:160px; width:100%;
+  border-bottom:2px solid #ff00cc;
   background:#03000a;
   border-top:2px solid #ff00cc;
   box-shadow:0 0 32px rgba(255,0,204,.18), inset 0 0 60px rgba(0,0,0,.6);
@@ -954,7 +955,7 @@ body::after {{
 @keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
 /* positions panel */
 #pos-panel {{
-  width:290px; flex-shrink:0;
+  flex:1; min-width:180px;
   border-left:none;
   overflow-y:auto; padding:6px 0;
   scrollbar-width:none;
@@ -991,7 +992,7 @@ body::after {{
 }}
 /* ── Queue panel ── */
 #queue-panel {{
-  width:360px; flex-shrink:0;
+  flex:1; min-width:180px;
   border-left:none;
   overflow-y:auto; padding:4px 0;
   scrollbar-width:none;
@@ -1350,11 +1351,11 @@ window.addEventListener('resize', function() {{
       <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
     </div>
     <div class="hdr-drag-ph"></div>
-    <div class="hdr-col" id="hdr-queue" style="width:360px">
+    <div class="hdr-col" id="hdr-queue" style="flex:1;min-width:180px">
       <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">QUEUED ACTIONS</span>
     </div>
     <div class="hdr-drag-ph"></div>
-    <div class="hdr-col" id="hdr-pos" style="width:290px">
+    <div class="hdr-col" id="hdr-pos" style="flex:1;min-width:180px">
       <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">POSITIONS</span>
     </div>
   </div>
