@@ -1507,6 +1507,12 @@ window.addEventListener('resize', function() {{
   }}
   tick();
   setInterval(tick, 1000);
+
+  // ── Page reload every 90s (data freshness) ─────────────────────────────────
+  // Controlled from inside the iframe so timing is reliable.
+  // Once real-time Supabase polling is wired in, this becomes the fallback only.
+  setTimeout(function() {{ window.parent.location.reload(); }}, 90000);
+
 </script>
 
 </body>
@@ -1538,9 +1544,6 @@ def render() -> None:
     iframe { display: block !important; border: none !important; }
     </style>
     """, unsafe_allow_html=True)
-
-    # Auto-refresh every 60s so terminal + queue stay live without manual reload
-    st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
 
     try:
         data = _load_chart_data()
