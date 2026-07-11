@@ -173,6 +173,19 @@ def run(as_of_date: date | None = None) -> None:
     logger.info("Step 6: Generating daily report...")
     write_report(strategy=STRATEGY, as_of_date=as_of_date, snapshot=snapshot, pnl=pnl)
 
+    # ── 7. Intraday bar cache (for daytrader replay) ─────────────────────────
+    try:
+        from strategies.daytrader.intraday_ingest import fetch_and_cache
+        intraday_results = fetch_and_cache(as_of=as_of_date)
+        total_intraday = sum(intraday_results.values())
+        if total_intraday:
+            logger.info(f"[intraday] Cached {total_intraday} 1m bars for {len(intraday_results)} symbols.")
+            log_event(as_of_date, "INTRADAY",
+                      f"cached {total_intraday} 1m bars across {len(intraday_results)} symbols",
+                      detail="available for daytrader replay")
+    except Exception as _e:
+        logger.warning(f"[intraday] Ingest skipped: {_e}")
+
     alert_system(f"Pipeline complete for {as_of_date}. Portfolio=${snapshot['total_value']:,.2f}")
     log_event(as_of_date, "COMPLETE",
               f"pipeline complete  ·  NAV ${snapshot['total_value']:,.0f}",

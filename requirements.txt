@@ -36,3 +36,6 @@ plotly>=5.22.0
 
 # Config / Utils
 pyyaml>=6.0
+
+# Intraday / Alpaca
+alpaca-py>=0.8.0
