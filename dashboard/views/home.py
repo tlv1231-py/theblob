@@ -793,10 +793,12 @@ def _build_daw_html(data: dict) -> str:
 <meta charset="utf-8">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
+html {{ height:100%; }}
 body {{
   background:#060008; overflow:hidden;
   font-family:Consolas,'Courier New',monospace;
   color:#f0e0ff; height:100%; width:100%;
+  display:flex; flex-direction:column;
 }}
 body::after {{
   content:''; position:fixed; inset:0;
@@ -815,13 +817,14 @@ body::after {{
   0%,100% {{ opacity:1; text-shadow:0 0 16px rgba(255,0,204,.5); }}
   50% {{ opacity:.85; text-shadow:0 0 24px rgba(255,0,204,.8); }}
 }}
-
+/* flex children */
+#main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
 #chart {{ position:absolute; inset:0; }}
 #pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
 
 /* ── Top bar ── */
 .topbar {{
-  position:absolute; top:0; left:0; right:0; height:44px;
+  height:44px; flex-shrink:0;
   background:rgba(6,0,8,.9); border-bottom:1px solid #2a003d;
   backdrop-filter:blur(12px);
   display:flex; align-items:center; padding:0 20px; gap:14px; z-index:10;
@@ -834,9 +837,9 @@ body::after {{
 .pill-c {{ color:#00e5ff; border-color:rgba(0,229,255,.3); }}
 .pill-d {{ color:#8060a0; border-color:rgba(128,96,160,.25); }}
 
-/* ── NAV card (top-left, under topbar) ── */
+/* ── NAV card (top-left of main-area) ── */
 .nav-card {{
-  position:absolute; top:54px; left:110px;
+  position:absolute; top:10px; left:110px;
   background:rgba(6,0,8,.82); border:1px solid #2a003d; border-top:2px solid #ff00cc;
   backdrop-filter:blur(10px); padding:10px 16px; z-index:10; min-width:160px;
 }}
@@ -845,9 +848,9 @@ body::after {{
 .nv-ret {{ font-size:11px; font-weight:700; display:block; margin-top:2px; }}
 .nv-dpnl {{ font-size:9px; color:#8060a0; display:block; margin-top:4px; letter-spacing:.04em; }}
 
-/* ── Legend chips (top-right) ── */
+/* ── Legend chips (top-right of main-area) ── */
 .legend-strip {{
-  position:absolute; top:54px; right:16px;
+  position:absolute; top:10px; right:16px;
   display:flex; flex-direction:column; gap:6px; z-index:10;
 }}
 .leg-item {{
@@ -871,8 +874,7 @@ body::after {{
 
 /* ── Terminal overlay — CRT retrowave ── */
 #term-overlay {{
-  position:absolute; bottom:0; left:0; right:0;
-  height:36vh; min-height:160px;
+  height:36%; flex-shrink:0; min-height:160px; width:100%;
   background:#03000a;
   border-top:2px solid #ff00cc;
   box-shadow:0 0 32px rgba(255,0,204,.18), inset 0 0 60px rgba(0,0,0,.6);
@@ -1043,9 +1045,7 @@ body::after {{
 </head>
 <body>
 
-<div id="chart"></div>
-<canvas id="pulse-canvas"></canvas>
-
+<!-- flex child 1: topbar -->
 <div class="topbar">
   <span class="wordmark">THE BLOB</span>
   <div class="pulse-dot"></div>
@@ -1084,30 +1084,34 @@ body::after {{
   </div>
 </div>
 
-<div class="nav-card">
-  <span class="nv-val">{nav_str}</span>
-  <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
-  <span class="nv-dpnl">today  {dpnl_str}</span>
-</div>
-
-<div class="legend-strip">
-  <div class="leg-item">
-    <div class="leg-dot" style="background:#ff00cc;box-shadow:0 0 6px rgba(255,0,204,.7);"></div>
-    <span class="leg-name">PORTFOLIO</span>
-    <span class="leg-val" style="color:#ff00cc">{nav_str}</span>
-    <span class="leg-ret" style="color:{ret_color}">{ret_str}</span>
+<!-- flex child 2: chart + floating overlays -->
+<div id="main-area">
+  <div id="chart"></div>
+  <canvas id="pulse-canvas"></canvas>
+  <div class="nav-card">
+    <span class="nv-val">{nav_str}</span>
+    <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
+    <span class="nv-dpnl">today  {dpnl_str}</span>
   </div>
-  <div class="leg-item">
-    <div class="leg-dot" style="background:#00e5ff;box-shadow:0 0 6px rgba(0,229,255,.7);"></div>
-    <span class="leg-name">SPY</span>
-    <span class="leg-val" style="color:#00e5ff">{spy_norm_latest}</span>
-    <span class="leg-ret" style="color:#00e5ff">{spy_ret}</span>
-  </div>
-  <div class="leg-item">
-    <div class="leg-dot" style="background:#9400ff;box-shadow:0 0 6px rgba(148,0,255,.7);"></div>
-    <span class="leg-name">QQQ</span>
-    <span class="leg-val" style="color:#9400ff">{qqq_norm_latest}</span>
-    <span class="leg-ret" style="color:#9400ff">{qqq_ret}</span>
+  <div class="legend-strip">
+    <div class="leg-item">
+      <div class="leg-dot" style="background:#ff00cc;box-shadow:0 0 6px rgba(255,0,204,.7);"></div>
+      <span class="leg-name">PORTFOLIO</span>
+      <span class="leg-val" style="color:#ff00cc">{nav_str}</span>
+      <span class="leg-ret" style="color:{ret_color}">{ret_str}</span>
+    </div>
+    <div class="leg-item">
+      <div class="leg-dot" style="background:#00e5ff;box-shadow:0 0 6px rgba(0,229,255,.7);"></div>
+      <span class="leg-name">SPY</span>
+      <span class="leg-val" style="color:#00e5ff">{spy_norm_latest}</span>
+      <span class="leg-ret" style="color:#00e5ff">{spy_ret}</span>
+    </div>
+    <div class="leg-item">
+      <div class="leg-dot" style="background:#9400ff;box-shadow:0 0 6px rgba(148,0,255,.7);"></div>
+      <span class="leg-name">QQQ</span>
+      <span class="leg-val" style="color:#9400ff">{qqq_norm_latest}</span>
+      <span class="leg-ret" style="color:#9400ff">{qqq_ret}</span>
+    </div>
   </div>
 </div>
 
@@ -1371,30 +1375,22 @@ window.addEventListener('resize', function() {{
   </div>
 </div>
 <script>
-  // ── Fit iframe to real browser window ──────────────────────────────────
+  // ── Tell Streamlit our desired height = full browser window ────────────
   (function() {{
-    function fitToWindow() {{
+    function reportHeight() {{
       try {{
         var h = window.parent.innerHeight;
-        var w = window.parent.innerWidth;
-        // Stamp height on the frameElement so the iframe's OWN viewport = h
-        // (style alone doesn't change the viewport; height attribute does)
-        if (window.frameElement) {{
-          window.frameElement.height = h;
-          window.frameElement.style.height = h + 'px';
-          window.frameElement.style.width  = '100%';
-        }}
-        // Now our own document knows its true dimensions
-        document.documentElement.style.height = h + 'px';
-        document.documentElement.style.width  = w + 'px';
-        document.documentElement.style.overflow = 'hidden';
-        document.body.style.height   = h + 'px';
-        document.body.style.width    = w + 'px';
-        document.body.style.overflow = 'hidden';
+        // Streamlit listens for this message and resizes the iframe accordingly,
+        // which also changes the iframe's own viewport height (not just CSS size)
+        window.parent.postMessage({{
+          isStreamlitMessage: true,
+          type: 'streamlit:setFrameHeight',
+          height: h
+        }}, '*');
       }} catch(e) {{}}
     }}
-    fitToWindow();
-    try {{ window.parent.addEventListener('resize', fitToWindow); }} catch(e) {{}}
+    reportHeight();
+    try {{ window.parent.addEventListener('resize', reportHeight); }} catch(e) {{}}
   }})();
   // ───────────────────────────────────────────────────────────────────────
 
