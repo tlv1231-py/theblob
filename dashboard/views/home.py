@@ -188,6 +188,7 @@ def _load_chart_data() -> dict:
             "SNAPSHOT":   ("ev-snapshot", "NAV"),
             "PNL":        ("ev-pipeline", "PNL"),
             "RISK_VETO":  ("ev-fill",     "VETO"),
+            "UPDATE":     ("ev-signal",   "UPDATE"),
         }
         try:
             pipe_rows = s.execute(text("""
@@ -245,6 +246,7 @@ def _load_chart_data() -> dict:
         _next_td_str = _next_td.strftime("%-m/%-d")
     except Exception:
         _next_td_str = "next close"
+        _next_td = __import__("datetime").date.today() + _td(days=1)
 
     # Positions panel data
     positions_data: list[dict] = []
@@ -316,6 +318,38 @@ def _load_chart_data() -> dict:
                     })
                 positions_data.sort(key=lambda x: -x["value"])
 
+    # Queued actions panel — computed from known schedule + current positions
+    from datetime import datetime as _dtt, time as _time_cls
+    _now_et     = _dtt.now(_ET)
+    _today_et   = _now_et.date()
+    _pipeline_dt = _dtt.combine(_next_td, _time_cls(16, 5), tzinfo=_ET)
+    _pipeline_ms = int(_pipeline_dt.timestamp() * 1000)
+    _open_dt  = _dtt.combine(_today_et, _time_cls(9, 30),  tzinfo=_ET)
+    _close_dt = _dtt.combine(_today_et, _time_cls(16, 0),  tzinfo=_ET)
+    if _now_et >= _close_dt:
+        _open_dt  = _dtt.combine(_next_td, _time_cls(9, 30),  tzinfo=_ET)
+        _close_dt = _dtt.combine(_next_td, _time_cls(16, 0),  tzinfo=_ET)
+    _open_ms  = int(_open_dt.timestamp() * 1000)
+    _close_ms = int(_close_dt.timestamp() * 1000)
+    _market_open = _open_dt <= _now_et < _close_dt
+
+    queued_actions: list[dict] = []
+    if _market_open:
+        queued_actions.append({"badge": "CLOSE", "label": "market closes",
+            "detail": "NYSE  4:00pm ET", "target_ms": _close_ms, "color": "#4a2a6a"})
+    else:
+        queued_actions.append({"badge": "OPEN", "label": "market opens",
+            "detail": "NYSE  9:30am ET", "target_ms": _open_ms, "color": "#00e5ff"})
+    queued_actions.append({"badge": "RUN", "label": "daily pipeline",
+        "detail": "ingest → signal → rebalance", "target_ms": _pipeline_ms, "color": "#ff00cc"})
+    for _p in [x for x in positions_data if not x["in_signal"]]:
+        queued_actions.append({"badge": "EXIT", "label": _p["sym"],
+            "detail": f"exits  {_next_td_str} close", "target_ms": _pipeline_ms, "color": "#ff9900"})
+    _hold_syms = [x["sym"] for x in positions_data if x["in_signal"]]
+    if _hold_syms:
+        queued_actions.append({"badge": "HOLD", "label": "  ·  ".join(_hold_syms),
+            "detail": "continuing  ·  still ranked top 5", "target_ms": _pipeline_ms, "color": "#00ff9d"})
+
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
         "spy":         {"dates": spy_dates,   "prices": spy_prices},
@@ -330,6 +364,7 @@ def _load_chart_data() -> dict:
         "rolling_sharpe": None,
         "term_events": term_events,
         "positions_data": positions_data,
+        "queued_actions": queued_actions,
     }
 
 
@@ -471,6 +506,9 @@ def _build_daw_html(data: dict) -> str:
         if tag == "RISK_VETO":
             return f'<span style="color:#ff3366">blocked</span> {_ts(sym)}  —  {msg}'
 
+        if tag == "UPDATE":
+            return f'<span style="color:#00e5ff">↑ deployed</span>  <span style="color:#7a5a9a">{msg}</span>'
+
         if tag == "TRADE":
             # legacy fill format
             msg = msg.replace("bought", '<span style="color:#00ff9d">bought</span>')
@@ -525,6 +563,18 @@ def _build_daw_html(data: dict) -> str:
         )
 
     # ── Positions panel HTML ──────────────────────────────────────────────────
+    # Queue panel items
+    q_items = ""
+    for qa in data.get("queued_actions", []):
+        q_items += (
+            f'<div class="q-item">'
+            f'<div class="q-badge" style="color:{qa["color"]}">{qa["badge"]}</div>'
+            f'<div class="q-label" style="color:{qa["color"]}">{qa["label"]}</div>'
+            f'<div class="q-detail">{qa["detail"]}</div>'
+            f'<div class="q-timer" data-target="{qa["target_ms"]}">—</div>'
+            f'</div>'
+        )
+
     pos_cards = ""
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     for p in data.get("positions_data", []):
@@ -744,7 +794,7 @@ body::after {{
 @keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
 /* positions panel */
 #pos-panel {{
-  width:340px; flex-shrink:0;
+  width:290px; flex-shrink:0;
   border-left:1px solid #1a0028;
   overflow-y:auto; padding:6px 0;
   scrollbar-width:none;
@@ -769,6 +819,45 @@ body::after {{
 }}
 .pos-hold.active  {{ color:#3a7a4a; }}
 .pos-hold.exiting {{ color:#a05020; }}
+/* ── Queue panel ── */
+#queue-panel {{
+  width:220px; flex-shrink:0;
+  border-left:1px solid #1a0028;
+  overflow-y:auto; padding:4px 0;
+  scrollbar-width:none;
+  background:#010006;
+}}
+#queue-panel::-webkit-scrollbar {{ display:none; }}
+.q-hdr {{
+  font-size:7.5px; letter-spacing:.28em; color:#2e1448;
+  padding:2px 14px 6px; text-transform:uppercase;
+}}
+.q-item {{
+  padding:7px 14px 9px;
+  border-top:1px solid rgba(26,0,40,.4);
+}}
+.q-badge {{
+  font-size:7px; letter-spacing:.2em; font-weight:700;
+  margin-bottom:3px;
+}}
+.q-label {{
+  font-size:11px; font-weight:700;
+  line-height:1.3; word-break:break-all;
+}}
+.q-detail {{
+  font-size:8.5px; color:#3a2a5a;
+  margin-top:1px; letter-spacing:.02em;
+}}
+.q-timer {{
+  font-size:12px; font-weight:700; letter-spacing:.04em;
+  margin-top:5px; color:#6a4a8a;
+  font-variant-numeric:tabular-nums;
+}}
+.q-timer.urgent {{ color:#ff9900; }}
+@keyframes q-pulse {{
+  0%,100% {{ opacity:1; }} 50% {{ opacity:.5; }}
+}}
+.q-timer.imminent {{ color:#ff3366; animation:q-pulse .6s ease-in-out infinite; }}
 .pos-tip {{
   display:none;
   position:absolute; left:0; bottom:100%;
@@ -1075,13 +1164,16 @@ window.addEventListener('resize', function() {{
   <div id="term-hdr">
     <div class="term-dot"></div>SYSTEM FEED
     <span style="flex:1"></span>
-    <span style="letter-spacing:.22em;color:#3a1a4a">POSITIONS</span>
-    <span style="width:340px"></span>
+    <span style="letter-spacing:.22em;color:#3a1a4a;width:220px;flex-shrink:0">QUEUED ACTIONS</span>
+    <span style="letter-spacing:.22em;color:#3a1a4a;width:290px;flex-shrink:0">POSITIONS</span>
   </div>
   <div id="term-cols">
     <div id="term-body">
       {term_rows}
       <div id="clock-line"><span id="live-clock"></span><span id="blink-cur">█</span></div>
+    </div>
+    <div id="queue-panel">
+      {q_items}
     </div>
     <div id="pos-panel">
       {pos_cards}
@@ -1092,7 +1184,18 @@ window.addEventListener('resize', function() {{
   var b = document.getElementById('term-body');
   if (b) b.scrollTop = b.scrollHeight;
 
+  function fmtCountdown(diff) {{
+    if (diff <= 0) return 'now';
+    var h = Math.floor(diff / 3600000);
+    var m = Math.floor((diff % 3600000) / 60000);
+    var s = Math.floor((diff % 60000) / 1000);
+    if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm ' + String(s).padStart(2,'0') + 's';
+    if (m > 0) return m + 'm ' + String(s).padStart(2,'0') + 's';
+    return s + 's';
+  }}
+
   function tick() {{
+    var now = Date.now();
     var n = new Date();
     var mo = n.getMonth()+1, d = n.getDate(), y = String(n.getFullYear()).slice(2);
     var hh = String(n.getHours()).padStart(2,'0');
@@ -1100,6 +1203,16 @@ window.addEventListener('resize', function() {{
     var ss = String(n.getSeconds()).padStart(2,'0');
     var el = document.getElementById('live-clock');
     if (el) el.textContent = mo+'/'+d+'/'+y+'  '+hh+':'+mm+':'+ss+'  ';
+
+    document.querySelectorAll('.q-timer').forEach(function(el) {{
+      var target = parseInt(el.getAttribute('data-target'), 10);
+      var diff = target - now;
+      el.textContent = fmtCountdown(diff);
+      el.classList.remove('urgent','imminent');
+      if (diff <= 0) el.classList.add('imminent');
+      else if (diff < 300000) el.classList.add('imminent');   /* < 5 min */
+      else if (diff < 3600000) el.classList.add('urgent');    /* < 1 hr */
+    }});
   }}
   tick();
   setInterval(tick, 1000);
