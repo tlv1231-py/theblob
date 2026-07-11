@@ -177,18 +177,6 @@ section[data-testid="stSidebar"],
     background: var(--accent);
     box-shadow: 0 0 8px rgba(255,0,204,0.6);
 }
-#icon-rail a.ir-run {
-    color: var(--accent);
-    font-size: 0.9rem;
-    border-top: 1px solid var(--border);
-    width: 52px;
-    height: 48px;
-    flex-shrink: 0;
-}
-#icon-rail a.ir-run:hover {
-    background: rgba(255,0,204,0.08);
-    color: var(--accent);
-}
 
 /* ── Shift main content right of icon rail ─────────────────────────────── */
 [data-testid="stAppViewContainer"],
@@ -431,39 +419,6 @@ _qp_page = st.query_params.get("page", "Command Center")
 if _qp_page not in PAGES:
     _qp_page = "Command Center"
 
-# ── Pipeline runner ────────────────────────────────────────────────────────────
-import subprocess as _sp, sys as _sys
-
-if "pipeline_proc" not in st.session_state:
-    st.session_state.pipeline_proc    = None
-    st.session_state.pipeline_output  = []
-    st.session_state.pipeline_running = False
-
-_run_requested = st.query_params.get("run", "") == "1"
-if _run_requested:
-    st.query_params.pop("run", None)
-    if not st.session_state.pipeline_running:
-        _proc = _sp.Popen(
-            [_sys.executable, str(_ROOT / "run_pipeline.py")],
-            stdout=_sp.PIPE, stderr=_sp.STDOUT,
-            text=True, bufsize=1, cwd=str(_ROOT),
-            encoding="utf-8", errors="replace",
-        )
-        st.session_state.pipeline_proc    = _proc
-        st.session_state.pipeline_running = True
-        st.session_state.pipeline_output  = []
-
-if st.session_state.pipeline_running and st.session_state.pipeline_proc:
-    _proc = st.session_state.pipeline_proc
-    try:
-        for _line in iter(_proc.stdout.readline, ""):
-            if not _line: break
-            st.session_state.pipeline_output.append(_line.rstrip())
-    except Exception:
-        pass
-    if _proc.poll() is not None:
-        st.session_state.pipeline_running = False
-
 # ── Icon rail ──────────────────────────────────────────────────────────────────
 _PAGE_ICONS = {
     "Command Center": ("◈", "Command Center"),
@@ -481,28 +436,14 @@ for _pg, (_icon, _label) in _PAGE_ICONS.items():
     _href = f"?page={_pg.replace(' ', '+')}"
     _rail_items += f'<a href="{_href}" class="ir-item{_active_cls}" title="{_label}">{_icon}</a>\n'
 
-_run_icon = "◼" if st.session_state.pipeline_running else "▶"
-_run_title = "Stop Pipeline" if st.session_state.pipeline_running else "Run Pipeline"
-_run_href = f"?page={_qp_page.replace(' ', '+')}" if st.session_state.pipeline_running else f"?page={_qp_page.replace(' ', '+')}&run=1"
-
 st.markdown(f"""
 <div id="icon-rail">
   <div class="ir-logo">◈</div>
   <div class="ir-divider"></div>
   {_rail_items}
   <div class="ir-spacer"></div>
-  <a href="{_run_href}" class="ir-item ir-run" title="{_run_title}">{_run_icon}</a>
 </div>
 """, unsafe_allow_html=True)
-
-# ── Pipeline status banner ─────────────────────────────────────────────────────
-if st.session_state.pipeline_running:
-    st.markdown(
-        '<div style="position:fixed;top:0;left:52px;right:0;height:3px;'
-        'background:linear-gradient(90deg,#ff00cc,#9400ff,#00e5ff);z-index:999;'
-        'animation:dot-pulse 1.2s ease-in-out infinite"></div>',
-        unsafe_allow_html=True,
-    )
 
 # ── Render page ────────────────────────────────────────────────────────────────
 PAGES[_qp_page]()

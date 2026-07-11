@@ -176,7 +176,7 @@ def _load_chart_data() -> dict:
         fills = s.execute(text("""
             SELECT symbol, UPPER(side) as side, quantity,
                    ROUND(fill_price::numeric,2) as price, filled_at as ts
-            FROM fills ORDER BY filled_at DESC LIMIT 10
+            FROM fills ORDER BY filled_at DESC LIMIT 60
         """)).fetchall()
         for r in fills:
             action = "bought" if r.side == "BUY" else "sold"
@@ -184,20 +184,31 @@ def _load_chart_data() -> dict:
                 "line1":f"{action} {r.quantity} shares","line2":f"filled at ${r.price}","ts":r.ts,"tag":"TRADE"})
         sigs = s.execute(text("""
             SELECT symbol, ROUND(score::numeric,3) as score, as_of_date::timestamp as ts
-            FROM signals ORDER BY as_of_date DESC LIMIT 10
+            FROM signals ORDER BY as_of_date DESC LIMIT 50
         """)).fetchall()
         for r in sigs:
             term_events.append({"cls":"ev-signal","sym":r.symbol,
                 "line1":"flagged for entry","line2":f"momentum score {r.score}","ts":r.ts,"tag":"SIGNAL"})
         snaps = s.execute(text("""
             SELECT ROUND(total_value::numeric,0) as nav, snapshot_date::timestamp as ts
-            FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 3
+            FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 30
         """)).fetchall()
         for r in snaps:
             term_events.append({"cls":"ev-snapshot","sym":"PORTFOLIO",
                 "line1":f"valued at ${int(r.nav):,}","line2":"end of day snapshot","ts":r.ts,"tag":"UPDATE"})
+        pnl_rows = s.execute(text("""
+            SELECT ROUND(daily_pnl::numeric,2) as dpnl,
+                   ROUND(cumulative_pnl::numeric,2) as cpnl,
+                   date::timestamp as ts
+            FROM pnl ORDER BY date DESC LIMIT 30
+        """)).fetchall()
+        for r in pnl_rows:
+            sign = "+" if r.dpnl >= 0 else ""
+            term_events.append({"cls":"ev-pipeline","sym":"PIPELINE",
+                "line1":f"daily run complete  ·  P&L {sign}${r.dpnl:,.2f}",
+                "line2":f"cumulative {'+' if r.cpnl >= 0 else ''}${r.cpnl:,.2f}","ts":r.ts,"tag":"RUN"})
     term_events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
-    term_events = term_events[:20]
+    term_events = term_events[:60]
 
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
@@ -577,7 +588,7 @@ var annotations = latestDate ? [{{
 var layout = {{
   paper_bgcolor:'#060008',
   plot_bgcolor:'#060008',
-  margin:{{ t:44, b:46, l:72, r:16 }},
+  margin:{{ t:44, b:310, l:72, r:16 }},
   width: window.innerWidth,
   height: window.innerHeight,
 
@@ -739,4 +750,4 @@ def render() -> None:
         return
 
     html = _build_daw_html(data)
-    components.html(html, height=860, scrolling=False)
+    components.html(html, height=960, scrolling=False)
