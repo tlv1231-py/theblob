@@ -871,7 +871,7 @@ body::after {{
 /* ── Terminal overlay — CRT retrowave ── */
 #term-overlay {{
   position:absolute; bottom:0; left:0; right:0;
-  height:calc(33vh - 44px); max-height:260px; min-height:140px;
+  height:36vh; min-height:160px;
   background:#03000a;
   border-top:2px solid #ff00cc;
   box-shadow:0 0 32px rgba(255,0,204,.18), inset 0 0 60px rgba(0,0,0,.6);
@@ -1511,6 +1511,13 @@ window.addEventListener('resize', function() {{
 def render() -> None:
     st.markdown("""
     <style>
+    /* Hide Streamlit chrome so the iframe fills true 100vh */
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    footer { display: none !important; }
+
+    /* Zero out all container padding */
     section[data-testid="stMain"] > div,
     [data-testid="stMainBlockContainer"],
     [data-testid="block-container"],
@@ -1518,8 +1525,15 @@ def render() -> None:
     .main .block-container {
         padding: 0 !important;
         max-width: 100% !important;
+        overflow: hidden !important;
     }
-    iframe { display: block !important; }
+    /* Stretch iframe to full viewport */
+    iframe {
+        display: block !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        border: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1533,12 +1547,5 @@ def render() -> None:
         return
 
     html = _build_daw_html(data)
-    components.html(html, height=960, scrolling=False)
-    # Bottom spacer — thin ruled line so the eye knows the page ends here
-    st.markdown(
-        '<div style="height:24px;border-top:1px solid #1a0028;margin-top:0;'
-        'background:#02000a;display:flex;align-items:center;padding:0 20px;">'
-        '<span style="font-size:7px;letter-spacing:.22em;color:#2a003d;font-family:monospace">EOF</span>'
-        '</div>',
-        unsafe_allow_html=True
-    )
+    # height=10000 so the CSS (100vh) drives actual height, not this pixel cap
+    components.html(html, height=10000, scrolling=False)
