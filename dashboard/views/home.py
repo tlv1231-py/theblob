@@ -259,6 +259,8 @@ def _load_chart_data() -> dict:
 
     # Positions panel data
     positions_data: list[dict] = []
+    _pos_map_outer: dict = {}
+    _predicted_entries: list[str] = []
     with get_session() as s:
         snap = s.execute(text("""
             SELECT positions FROM portfolio_snapshots
@@ -297,6 +299,10 @@ def _load_chart_data() -> dict:
                 """)).fetchall()
                 sig_map = {r.symbol: {"score": float(r.score), "rank": i+1}
                            for i, r in enumerate(sig_rows)}
+
+                # Predicted entries: top-5 signals not currently held
+                _pos_map_outer = pos_map
+                _predicted_entries = [r.symbol for r in sig_rows[:5] if r.symbol not in pos_map]
 
                 for sym, qty in pos_map.items():
                     price = prices_map.get(sym, 0.0)
@@ -384,17 +390,57 @@ def _load_chart_data() -> dict:
     ]
     queued_actions: list[dict] = [q for q in _seq if q is not None]
 
-    # Position-level actions (always show until next pipeline confirms them)
+    # Position-level actions — sourced from morning ACTION_PREVIEW when available,
+    # otherwise derived from live signal/position diff at render time.
+    _action_exits: list[str] = []
+    _action_entries: list[str] = []
+    _action_holds: list[str] = []
+    _from_preview = False
+
     if "COMPLETE" not in _done_today:
-        for _p in [x for x in positions_data if not x["in_signal"]]:
-            queued_actions.append({"badge": "EXIT", "label": _p["sym"],
-                "detail": f"exits at {_next_td_str} close  ·  fell out of top-5",
+        # Try to read morning signal preview results from pipeline_events
+        try:
+            with get_session() as _qs:
+                _ap_rows = _qs.execute(text("""
+                    SELECT message FROM pipeline_events
+                    WHERE run_date = :today AND event_type = 'ACTION_PREVIEW'
+                    ORDER BY created_at ASC
+                """), {"today": _today_et}).fetchall()
+            for _ap in _ap_rows:
+                _msg = (_ap.message or "").strip()
+                if _msg.startswith("expected exits at close:"):
+                    _action_exits = [x.strip() for x in _msg.split(":", 1)[1].split(",") if x.strip()]
+                    _from_preview = True
+                elif _msg.startswith("expected entries at close:"):
+                    _action_entries = [x.strip() for x in _msg.split(":", 1)[1].split(",") if x.strip()]
+                    _from_preview = True
+                elif _msg.startswith("holding:"):
+                    _action_holds = [x.strip() for x in _msg.split(":", 1)[1].split(",") if x.strip()]
+                    _from_preview = True
+        except Exception:
+            pass
+
+        # Fall back: derive from live positions vs latest signal scores
+        if not _from_preview:
+            _action_exits   = [p["sym"] for p in positions_data if not p["in_signal"]]
+            _action_holds   = [p["sym"] for p in positions_data if p["in_signal"]]
+            _action_entries = _predicted_entries
+
+        _src = "preview confirmed" if _from_preview else "fell out of top-5"
+        _src_e = "preview confirmed" if _from_preview else "entering top-5"
+
+        for _sym in _action_exits:
+            queued_actions.append({"badge": "EXIT", "label": _sym,
+                "detail": f"exits at {_next_td_str} close  ·  {_src}",
                 "target_ms": _pipeline_ms, "color": "#ff9900"})
-        _hold_syms = [x["sym"] for x in positions_data if x["in_signal"]]
-        if _hold_syms:
-            queued_actions.append({"badge": "HOLD", "label": "  ·  ".join(_hold_syms),
-                "detail": "continuing  ·  still ranked top 5",
+        for _sym in _action_entries:
+            queued_actions.append({"badge": "ENTRY", "label": _sym,
+                "detail": f"enters at {_next_td_str} close  ·  {_src_e}",
                 "target_ms": _pipeline_ms, "color": "#00ff9d"})
+        if _action_holds:
+            queued_actions.append({"badge": "HOLD", "label": "  ·  ".join(_action_holds),
+                "detail": "continuing  ·  still ranked top 5",
+                "target_ms": _pipeline_ms, "color": "#40c4ff"})
 
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
