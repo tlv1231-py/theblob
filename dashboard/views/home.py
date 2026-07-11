@@ -609,27 +609,39 @@ body::after {{
 .spacer {{ flex:1; }}
 .hint {{ font-size:8px; letter-spacing:.1em; color:#2a003d; white-space:nowrap; }}
 
-/* ── Terminal overlay (bottom third) ── */
+/* ── Terminal overlay — CRT retrowave ── */
 #term-overlay {{
   position:absolute; bottom:44px; left:0; right:0;
   height:calc(33vh - 44px); max-height:260px; min-height:140px;
-  background:rgba(4,0,6,.88);
+  background:#03000a;
   border-top:2px solid #ff00cc;
-  backdrop-filter:blur(12px);
+  box-shadow:0 0 32px rgba(255,0,204,.18), inset 0 0 60px rgba(0,0,0,.6);
   display:flex; flex-direction:column;
   z-index:20; pointer-events:auto;
   overflow:hidden;
 }}
+/* CRT scanlines inside terminal */
+#term-overlay::before {{
+  content:'';
+  position:absolute; inset:0;
+  background:repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,.18) 2px, rgba(0,0,0,.18) 3px
+  );
+  pointer-events:none; z-index:100;
+}}
 #term-hdr {{
-  flex-shrink:0; padding:5px 18px;
-  border-bottom:1px solid #2a003d;
-  font-size:8px; letter-spacing:.22em; color:#ff00cc;
-  text-shadow:0 0 8px rgba(255,0,204,.5);
+  flex-shrink:0; padding:4px 16px;
+  border-bottom:1px solid #1a0028;
+  font-size:8px; letter-spacing:.28em; color:#ff00cc;
+  text-shadow:0 0 12px rgba(255,0,204,.9), 0 0 30px rgba(255,0,204,.4);
   display:flex; align-items:center; gap:10px;
+  background:#02000a;
 }}
 .term-dot {{
   width:5px; height:5px; border-radius:50%;
-  background:#ff00cc; box-shadow:0 0 5px #ff00cc;
+  background:#ff00cc;
+  box-shadow:0 0 8px #ff00cc, 0 0 20px rgba(255,0,204,.5);
   animation:shimmer 2s ease-in-out infinite;
 }}
 /* two-column body */
@@ -639,51 +651,59 @@ body::after {{
 #term-body {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
-  padding:4px 0;
-  scrollbar-width:thin;
-  scrollbar-color:#2a003d transparent;
+  padding:4px 0 2px;
+  scrollbar-width:none;
 }}
-.te {{ padding:1px 16px; flex-shrink:0;
-       font-size:11.5px; line-height:1.7; color:#c0a0d8;
+#term-body::-webkit-scrollbar {{ display:none; }}
+.te {{ padding:0 16px; flex-shrink:0;
+       font-size:11px; line-height:1.75; color:#9060b8;
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-.te-ts  {{ color:#4a2a6a; font-size:10px; }}
-.te-date {{ padding:12px 16px 3px; flex-shrink:0;
-            font-size:10px; font-weight:700; letter-spacing:.14em;
-            color:#8060a0; text-transform:uppercase; }}
+.te-ts  {{ color:#2e1448; font-size:10px; }}
+.te-date {{ padding:10px 16px 1px; flex-shrink:0;
+            font-size:9px; font-weight:700; letter-spacing:.3em;
+            color:#4a2a6a; text-transform:uppercase; }}
+/* clock line */
+#clock-line {{
+  flex-shrink:0; padding:2px 16px 4px;
+  font-size:11.5px; color:#ff00cc;
+  text-shadow:0 0 10px rgba(255,0,204,.8), 0 0 24px rgba(255,0,204,.3);
+  letter-spacing:.04em;
+  display:flex; align-items:center; gap:0;
+}}
+#live-clock {{ margin-right:6px; }}
+#blink-cur {{
+  display:inline-block; color:#ff00cc;
+  text-shadow:0 0 10px rgba(255,0,204,.9);
+  animation:blink-c 1s step-start infinite;
+}}
+@keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
 /* positions panel */
 #pos-panel {{
-  width:230px; flex-shrink:0;
-  border-left:1px solid #2a003d;
+  width:280px; flex-shrink:0;
+  border-left:1px solid #1a0028;
   overflow-y:auto; padding:6px 0;
-  scrollbar-width:thin;
-  scrollbar-color:#2a003d transparent;
+  scrollbar-width:none;
+  background:#020008;
 }}
+#pos-panel::-webkit-scrollbar {{ display:none; }}
 #pos-panel .pos-hdr {{
-  font-size:7.5px; letter-spacing:.22em; color:#3a1a4a;
+  font-size:7.5px; letter-spacing:.28em; color:#2e1448;
   padding:0 14px 6px; text-transform:uppercase;
 }}
-.pos-card {{
-  padding:5px 14px 8px;
-}}
+.pos-card {{ padding:5px 14px 8px; }}
 .pos-top {{
   display:flex; align-items:baseline; gap:6px;
   font-size:12px; line-height:1.3;
 }}
 .pos-sym {{ font-weight:700; font-size:13px; }}
-.pos-qty {{ color:#8060a0; font-size:10.5px; }}
-.pos-val {{ color:#f0e0ff; font-size:11px; margin-left:auto; }}
+.pos-qty {{ color:#4a2a6a; font-size:10.5px; }}
+.pos-val {{ color:#9060b8; font-size:11px; margin-left:auto; }}
 .pos-hold {{
-  font-size:9px; color:#3a1a4a;
+  font-size:9px; color:#2e1448;
   margin-top:2px; letter-spacing:.02em;
 }}
-.pos-hold.active {{ color:#2a4a2a; }}
-.pos-hold.exiting {{ color:#4a1a1a; }}
-.ev-fill     {{ color:#ff00cc; }}
-.ev-signal   {{ color:#00e5ff; }}
-.ev-snapshot {{ color:#9400ff; }}
-.term-cur    {{ padding:3px 20px; flex-shrink:0; color:#ff00cc;
-                animation:blink-c 1s step-start infinite; }}
-@keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
+.pos-hold.active  {{ color:#1a3a1a; }}
+.pos-hold.exiting {{ color:#3a1010; }}
 </style>
 </head>
 <body>
@@ -985,7 +1005,7 @@ window.addEventListener('resize', function() {{
   <div id="term-cols">
     <div id="term-body">
       {term_rows}
-      <div class="term-cur">█</div>
+      <div id="clock-line"><span id="live-clock"></span><span id="blink-cur">█</span></div>
     </div>
     <div id="pos-panel">
       {pos_cards}
@@ -995,6 +1015,18 @@ window.addEventListener('resize', function() {{
 <script>
   var b = document.getElementById('term-body');
   if (b) b.scrollTop = b.scrollHeight;
+
+  function tick() {{
+    var n = new Date();
+    var mo = n.getMonth()+1, d = n.getDate(), y = String(n.getFullYear()).slice(2);
+    var hh = String(n.getHours()).padStart(2,'0');
+    var mm = String(n.getMinutes()).padStart(2,'0');
+    var ss = String(n.getSeconds()).padStart(2,'0');
+    var el = document.getElementById('live-clock');
+    if (el) el.textContent = mo+'/'+d+'/'+y+'  '+hh+':'+mm+':'+ss+'  ';
+  }}
+  tick();
+  setInterval(tick, 1000);
 </script>
 
 </body>
