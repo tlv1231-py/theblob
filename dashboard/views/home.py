@@ -1526,10 +1526,12 @@ def render() -> None:
     #MainMenu, footer { display: none !important; }
 
     /* Zero padding on all containers */
+    section[data-testid="stMain"],
     section[data-testid="stMain"] > div,
     [data-testid="stMainBlockContainer"],
     div[class*="block-container"] {
         padding: 0 !important;
+        margin: 0 !important;
         max-width: 100% !important;
     }
     iframe { display: block !important; border: none !important; }
@@ -1558,13 +1560,15 @@ def render() -> None:
             try {
                 var p = window.parent;
                 var doc = p.document;
-                // Manage app button is exactly 44px per measurement
+                // Bottom: manage-app-button (44px) + generous buffer so nothing clips
                 var manageBtn = doc.querySelector('[data-testid="manage-app-button"]');
-                var bottomH = manageBtn ? Math.ceil(manageBtn.getBoundingClientRect().height) + 4 : 48;
-                var topBar = doc.querySelector('[data-testid="stHeader"]');
-                var topH = topBar ? Math.ceil(topBar.getBoundingClientRect().height) : 0;
+                var bottomH = manageBtn ? Math.ceil(manageBtn.getBoundingClientRect().height) + 64 : 112;
+                // Top: stHeader is hidden so topH=0; stMain may add a few px of padding
+                var stMain = doc.querySelector('[data-testid="stMain"]');
+                var topH = stMain ? Math.ceil(stMain.getBoundingClientRect().top) : 0;
+                if (topH < 0) topH = 0;
                 var h = p.innerHeight - topH - bottomH;
-                if (h < 300) h = p.innerHeight - 52;
+                if (h < 300) h = p.innerHeight - 116;
                 // Resize the main chart iframe (the biggest one)
                 var biggest = null, biggestH = 0;
                 doc.querySelectorAll('iframe').forEach(function(f) {
