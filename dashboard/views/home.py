@@ -949,7 +949,7 @@ body::after {{
 /* positions panel */
 #pos-panel {{
   width:290px; flex-shrink:0;
-  border-left:1px solid #1a0028;
+  border-left:none;
   overflow-y:auto; padding:6px 0;
   scrollbar-width:none;
   background:#020008;
@@ -973,10 +973,20 @@ body::after {{
 }}
 .pos-hold.active  {{ color:#3a7a4a; }}
 .pos-hold.exiting {{ color:#a05020; }}
+/* ── Drag handles ── */
+.col-drag {{
+  width:5px; flex-shrink:0; cursor:col-resize;
+  background:transparent;
+  transition:background .15s;
+  position:relative; z-index:10;
+}}
+.col-drag:hover, .col-drag.dragging {{
+  background:rgba(255,0,204,.25);
+}}
 /* ── Queue panel ── */
 #queue-panel {{
   width:360px; flex-shrink:0;
-  border-left:1px solid #1a0028;
+  border-left:none;
   overflow-y:auto; padding:4px 0;
   scrollbar-width:none;
   background:#010006;
@@ -1317,19 +1327,21 @@ window.addEventListener('resize', function() {{
 <!-- Terminal overlay — bottom third of chart -->
 <div id="term-overlay">
   <div id="term-hdr">
-    <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
+    <div class="term-dot"></div><span id="hdr-feed" style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
     <span style="flex:1"></span>
-    <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc;width:360px;flex-shrink:0">QUEUED ACTIONS</span>
-    <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc;width:290px;flex-shrink:0">POSITIONS</span>
+    <div class="term-dot"></div><span id="hdr-queue" style="font-size:13px;letter-spacing:.18em;color:#ff00cc;display:inline-block;width:360px;flex-shrink:0">QUEUED ACTIONS</span>
+    <div class="term-dot"></div><span id="hdr-pos" style="font-size:13px;letter-spacing:.18em;color:#ff00cc;display:inline-block;width:290px;flex-shrink:0">POSITIONS</span>
   </div>
   <div id="term-cols">
     <div id="term-body">
       {term_rows}
       <div id="clock-line"><span id="live-clock"></span><span id="blink-cur">█</span></div>
     </div>
+    <div class="col-drag" id="drag-q" title="drag to resize"></div>
     <div id="queue-panel">
       {q_items}
     </div>
+    <div class="col-drag" id="drag-p" title="drag to resize"></div>
     <div id="pos-panel">
       {pos_cards}
     </div>
@@ -1338,6 +1350,79 @@ window.addEventListener('resize', function() {{
 <script>
   var b = document.getElementById('term-body');
   if (b) b.scrollTop = b.scrollHeight;
+
+  // ── Panel drag-to-resize ────────────────────────────────────────────────
+  (function() {{
+    function makeDraggable(handle, leftPanel, rightPanel, leftHdr, rightHdr) {{
+      var dragging = false, startX = 0, startLeft = 0, startRight = 0;
+      handle.addEventListener('mousedown', function(e) {{
+        dragging = true;
+        startX     = e.clientX;
+        startLeft  = leftPanel.offsetWidth;
+        startRight = rightPanel.offsetWidth;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      }});
+      document.addEventListener('mousemove', function(e) {{
+        if (!dragging) return;
+        var delta = e.clientX - startX;
+        var newLeft  = Math.max(120, startLeft  + delta);
+        var newRight = Math.max(120, startRight - delta);
+        leftPanel.style.width  = newLeft  + 'px';
+        rightPanel.style.width = newRight + 'px';
+        leftPanel.style.flexShrink  = '0';
+        rightPanel.style.flexShrink = '0';
+        if (leftHdr)  leftHdr.style.width  = newLeft  + 'px';
+        if (rightHdr) rightHdr.style.width = newRight + 'px';
+      }});
+      document.addEventListener('mouseup', function() {{
+        if (dragging) {{
+          dragging = false;
+          handle.classList.remove('dragging');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }}
+      }});
+      // touch support
+      handle.addEventListener('touchstart', function(e) {{
+        dragging = true;
+        startX     = e.touches[0].clientX;
+        startLeft  = leftPanel.offsetWidth;
+        startRight = rightPanel.offsetWidth;
+        handle.classList.add('dragging');
+      }}, {{passive:true}});
+      document.addEventListener('touchmove', function(e) {{
+        if (!dragging) return;
+        var delta = e.touches[0].clientX - startX;
+        var newLeft  = Math.max(120, startLeft  + delta);
+        var newRight = Math.max(120, startRight - delta);
+        leftPanel.style.width  = newLeft  + 'px';
+        rightPanel.style.width = newRight + 'px';
+        leftPanel.style.flexShrink  = '0';
+        rightPanel.style.flexShrink = '0';
+        if (leftHdr)  leftHdr.style.width  = newLeft  + 'px';
+        if (rightHdr) rightHdr.style.width = newRight + 'px';
+      }}, {{passive:true}});
+      document.addEventListener('touchend', function() {{
+        dragging = false;
+        handle.classList.remove('dragging');
+      }});
+    }}
+
+    var feedPanel  = document.getElementById('term-body');
+    var qPanel     = document.getElementById('queue-panel');
+    var posPanel   = document.getElementById('pos-panel');
+    var dragQ      = document.getElementById('drag-q');
+    var dragP      = document.getElementById('drag-p');
+    var hdrQueue   = document.getElementById('hdr-queue');
+    var hdrPos     = document.getElementById('hdr-pos');
+
+    if (dragQ && feedPanel && qPanel)  makeDraggable(dragQ, feedPanel, qPanel,  null, hdrQueue);
+    if (dragP && qPanel   && posPanel) makeDraggable(dragP, qPanel,   posPanel, hdrQueue, hdrPos);
+  }})();
+  // ── end drag-resize ─────────────────────────────────────────────────────
 
   function fmtCountdown(diff) {{
     if (diff <= 0) return 'now';
