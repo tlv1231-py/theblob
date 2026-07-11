@@ -899,14 +899,28 @@ body::after {{
   );
   pointer-events:none; z-index:100;
 }}
+/* vertical resize handle at top of overlay */
+#vert-drag {{
+  height:6px; flex-shrink:0; cursor:ns-resize;
+  background:transparent; transition:background .15s; z-index:10;
+}}
+#vert-drag:hover, #vert-drag.dragging {{
+  background:rgba(255,0,204,.22);
+}}
 #term-hdr {{
-  flex-shrink:0; padding:4px 16px;
+  flex-shrink:0; padding:0;
   border-bottom:1px solid #1a0028;
   font-size:8px; letter-spacing:.28em; color:#ff00cc;
   text-shadow:0 0 12px rgba(255,0,204,.9), 0 0 30px rgba(255,0,204,.4);
-  display:flex; align-items:center; gap:10px;
+  display:flex; align-items:center; gap:0;
   background:#02000a;
 }}
+.hdr-col {{
+  display:flex; align-items:center; gap:8px;
+  padding:5px 14px; overflow:hidden; flex-shrink:0;
+}}
+#hdr-feed {{ flex:1; flex-shrink:1; }}
+.hdr-drag-ph {{ width:5px; flex-shrink:0; }}
 .term-dot {{
   width:5px; height:5px; border-radius:50%;
   background:#ff00cc;
@@ -1326,11 +1340,19 @@ window.addEventListener('resize', function() {{
 
 <!-- Terminal overlay — bottom third of chart -->
 <div id="term-overlay">
+  <div id="vert-drag"></div>
   <div id="term-hdr">
-    <div class="term-dot"></div><span id="hdr-feed" style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
-    <span style="flex:1"></span>
-    <div class="term-dot"></div><span id="hdr-queue" style="font-size:13px;letter-spacing:.18em;color:#ff00cc;display:inline-block;width:360px;flex-shrink:0">QUEUED ACTIONS</span>
-    <div class="term-dot"></div><span id="hdr-pos" style="font-size:13px;letter-spacing:.18em;color:#ff00cc;display:inline-block;width:290px;flex-shrink:0">POSITIONS</span>
+    <div class="hdr-col" id="hdr-feed">
+      <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
+    </div>
+    <div class="hdr-drag-ph"></div>
+    <div class="hdr-col" id="hdr-queue" style="width:360px">
+      <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">QUEUED ACTIONS</span>
+    </div>
+    <div class="hdr-drag-ph"></div>
+    <div class="hdr-col" id="hdr-pos" style="width:290px">
+      <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">POSITIONS</span>
+    </div>
   </div>
   <div id="term-cols">
     <div id="term-body">
@@ -1351,78 +1373,83 @@ window.addEventListener('resize', function() {{
   var b = document.getElementById('term-body');
   if (b) b.scrollTop = b.scrollHeight;
 
-  // ── Panel drag-to-resize ────────────────────────────────────────────────
+  // ── Panel resize (horizontal + vertical) ───────────────────────────────
   (function() {{
-    function makeDraggable(handle, leftPanel, rightPanel, leftHdr, rightHdr) {{
+    // Horizontal column drag
+    function makeColDrag(handle, leftPanel, rightPanel, leftHdr, rightHdr) {{
       var dragging = false, startX = 0, startLeft = 0, startRight = 0;
-      handle.addEventListener('mousedown', function(e) {{
-        dragging = true;
-        startX     = e.clientX;
-        startLeft  = leftPanel.offsetWidth;
-        startRight = rightPanel.offsetWidth;
+      function begin(clientX) {{
+        dragging = true; startX = clientX;
+        startLeft = leftPanel.offsetWidth; startRight = rightPanel.offsetWidth;
         handle.classList.add('dragging');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
-        e.preventDefault();
-      }});
-      document.addEventListener('mousemove', function(e) {{
+      }}
+      function move(clientX) {{
         if (!dragging) return;
-        var delta = e.clientX - startX;
-        var newLeft  = Math.max(120, startLeft  + delta);
-        var newRight = Math.max(120, startRight - delta);
-        leftPanel.style.width  = newLeft  + 'px';
-        rightPanel.style.width = newRight + 'px';
-        leftPanel.style.flexShrink  = '0';
-        rightPanel.style.flexShrink = '0';
-        if (leftHdr)  leftHdr.style.width  = newLeft  + 'px';
-        if (rightHdr) rightHdr.style.width = newRight + 'px';
-      }});
-      document.addEventListener('mouseup', function() {{
-        if (dragging) {{
-          dragging = false;
-          handle.classList.remove('dragging');
-          document.body.style.cursor = '';
-          document.body.style.userSelect = '';
-        }}
-      }});
-      // touch support
-      handle.addEventListener('touchstart', function(e) {{
-        dragging = true;
-        startX     = e.touches[0].clientX;
-        startLeft  = leftPanel.offsetWidth;
-        startRight = rightPanel.offsetWidth;
-        handle.classList.add('dragging');
-      }}, {{passive:true}});
-      document.addEventListener('touchmove', function(e) {{
+        var delta = clientX - startX;
+        var nL = Math.max(120, startLeft + delta);
+        var nR = Math.max(120, startRight - delta);
+        leftPanel.style.width = nL + 'px'; leftPanel.style.flexShrink = '0';
+        rightPanel.style.width = nR + 'px'; rightPanel.style.flexShrink = '0';
+        if (leftHdr)  {{ leftHdr.style.width = nL + 'px';  leftHdr.style.flex = 'none'; }}
+        if (rightHdr) {{ rightHdr.style.width = nR + 'px'; rightHdr.style.flex = 'none'; }}
+      }}
+      function end() {{
         if (!dragging) return;
-        var delta = e.touches[0].clientX - startX;
-        var newLeft  = Math.max(120, startLeft  + delta);
-        var newRight = Math.max(120, startRight - delta);
-        leftPanel.style.width  = newLeft  + 'px';
-        rightPanel.style.width = newRight + 'px';
-        leftPanel.style.flexShrink  = '0';
-        rightPanel.style.flexShrink = '0';
-        if (leftHdr)  leftHdr.style.width  = newLeft  + 'px';
-        if (rightHdr) rightHdr.style.width = newRight + 'px';
-      }}, {{passive:true}});
-      document.addEventListener('touchend', function() {{
-        dragging = false;
-        handle.classList.remove('dragging');
-      }});
+        dragging = false; handle.classList.remove('dragging');
+        document.body.style.cursor = ''; document.body.style.userSelect = '';
+      }}
+      handle.addEventListener('mousedown', function(e) {{ begin(e.clientX); e.preventDefault(); }});
+      document.addEventListener('mousemove', function(e) {{ move(e.clientX); }});
+      document.addEventListener('mouseup', end);
+      handle.addEventListener('touchstart', function(e) {{ begin(e.touches[0].clientX); }}, {{passive:true}});
+      document.addEventListener('touchmove', function(e) {{ move(e.touches[0].clientX); }}, {{passive:true}});
+      document.addEventListener('touchend', end);
     }}
 
-    var feedPanel  = document.getElementById('term-body');
-    var qPanel     = document.getElementById('queue-panel');
-    var posPanel   = document.getElementById('pos-panel');
-    var dragQ      = document.getElementById('drag-q');
-    var dragP      = document.getElementById('drag-p');
-    var hdrQueue   = document.getElementById('hdr-queue');
-    var hdrPos     = document.getElementById('hdr-pos');
+    var feedPanel = document.getElementById('term-body');
+    var qPanel    = document.getElementById('queue-panel');
+    var posPanel  = document.getElementById('pos-panel');
+    var hdrFeed   = document.getElementById('hdr-feed');
+    var hdrQueue  = document.getElementById('hdr-queue');
+    var hdrPos    = document.getElementById('hdr-pos');
 
-    if (dragQ && feedPanel && qPanel)  makeDraggable(dragQ, feedPanel, qPanel,  null, hdrQueue);
-    if (dragP && qPanel   && posPanel) makeDraggable(dragP, qPanel,   posPanel, hdrQueue, hdrPos);
+    makeColDrag(document.getElementById('drag-q'), feedPanel, qPanel,  hdrFeed, hdrQueue);
+    makeColDrag(document.getElementById('drag-p'), qPanel,   posPanel, hdrQueue, hdrPos);
+
+    // Vertical overlay drag (drag the top edge to resize height)
+    var overlay  = document.getElementById('term-overlay');
+    var vertDrag = document.getElementById('vert-drag');
+    if (overlay && vertDrag) {{
+      var vDragging = false, vStartY = 0, vStartH = 0;
+      function vBegin(clientY) {{
+        vDragging = true; vStartY = clientY; vStartH = overlay.offsetHeight;
+        vertDrag.classList.add('dragging');
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+      }}
+      function vMove(clientY) {{
+        if (!vDragging) return;
+        var delta = vStartY - clientY;   // drag up → taller
+        var newH = Math.max(80, Math.min(window.innerHeight * 0.75, vStartH + delta));
+        overlay.style.height = newH + 'px';
+        overlay.style.maxHeight = 'none';
+      }}
+      function vEnd() {{
+        if (!vDragging) return;
+        vDragging = false; vertDrag.classList.remove('dragging');
+        document.body.style.cursor = ''; document.body.style.userSelect = '';
+      }}
+      vertDrag.addEventListener('mousedown', function(e) {{ vBegin(e.clientY); e.preventDefault(); }});
+      document.addEventListener('mousemove', function(e) {{ vMove(e.clientY); }});
+      document.addEventListener('mouseup', vEnd);
+      vertDrag.addEventListener('touchstart', function(e) {{ vBegin(e.touches[0].clientY); }}, {{passive:true}});
+      document.addEventListener('touchmove', function(e) {{ vMove(e.touches[0].clientY); }}, {{passive:true}});
+      document.addEventListener('touchend', vEnd);
+    }}
   }})();
-  // ── end drag-resize ─────────────────────────────────────────────────────
+  // ── end resize ──────────────────────────────────────────────────────────
 
   function fmtCountdown(diff) {{
     if (diff <= 0) return 'now';
