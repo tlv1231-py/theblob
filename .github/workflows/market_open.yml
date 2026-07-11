@@ -9,7 +9,7 @@ on:
 jobs:
   log-open:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -24,8 +24,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Log market open
+      - name: Market open intelligence check
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           ENV: production
-        run: python scripts/log_market_event.py open
+        run: python scripts/market_open_check.py

@@ -189,8 +189,11 @@ def _load_chart_data() -> dict:
             "PNL":        ("ev-pipeline", "PNL"),
             "RISK_VETO":  ("ev-fill",     "VETO"),
             "UPDATE":       ("ev-signal",   "UPDATE"),
-            "MARKET_OPEN":  ("ev-signal",   "MARKET_OPEN"),
-            "MARKET_CLOSE": ("ev-pipeline", "MARKET_CLOSE"),
+            "MARKET_OPEN":    ("ev-signal",   "MARKET_OPEN"),
+            "MARKET_CLOSE":   ("ev-pipeline", "MARKET_CLOSE"),
+            "OPEN_PRICE":     ("ev-fill",     "OPEN_PRICE"),
+            "GAP_ALERT":      ("ev-fill",     "GAP_ALERT"),
+            "OPEN_SNAPSHOT":  ("ev-snapshot", "OPEN_SNAPSHOT"),
         }
         try:
             pipe_rows = s.execute(text("""
@@ -512,10 +515,31 @@ def _build_daw_html(data: dict) -> str:
             return f'<span style="color:#00e5ff">↑ deployed</span>  <span style="color:#7a5a9a">{msg}</span>'
 
         if tag == "MARKET_OPEN":
-            return f'<span style="color:#00e5ff">market open</span>  <span style="color:#3a2a5a">NYSE  9:30am ET  ·  watching</span>'
+            return f'<span style="color:#00e5ff">market open</span>  <span style="color:#3a2a5a">NYSE  9:30am ET  ·  pricing positions</span>'
 
         if tag == "MARKET_CLOSE":
             return f'<span style="color:#4a2a6a">market closed</span>  <span style="color:#2a1a3a">NYSE  4:00pm ET  ·  pipeline incoming</span>'
+
+        if tag == "OPEN_PRICE":
+            price_m = _re.search(r'\$([\d.]+)', msg)
+            gap_m   = _re.search(r'([+-][\d.]+%)', msg)
+            price_s = f'${price_m.group(1)}' if price_m else "?"
+            gap_s   = gap_m.group(1) if gap_m else ""
+            gap_col = "#00ff9d" if gap_s.startswith("+") else "#ff9900" if gap_s else "#9060b8"
+            gap_fmt = f'  <span style="color:{gap_col}">{gap_s}</span>' if gap_s else ""
+            return f'{_ts(sym)}  opened {price_s}{gap_fmt}'
+
+        if tag == "GAP_ALERT":
+            gap_m = _re.search(r'([+-][\d.]+%)', msg)
+            gap_s = gap_m.group(1) if gap_m else msg
+            gap_col = "#00ff9d" if gap_s.startswith("+") else "#ff3366"
+            return (f'<span style="color:#ff3366">gap alert</span>  {_ts(sym)}  '
+                    f'<span style="color:{gap_col}">{gap_s}</span>  overnight')
+
+        if tag == "OPEN_SNAPSHOT":
+            val_m = _re.search(r'\$([\d,]+)', msg)
+            val_s = f'<span style="color:#9060b8">${val_m.group(1)}</span>' if val_m else ""
+            return f'portfolio est. {val_s} at open'
 
         if tag == "TRADE":
             verb = "bought" if "bought" in msg else "sold"
