@@ -796,7 +796,7 @@ def _build_daw_html(data: dict) -> str:
 body {{
   background:#060008; overflow:hidden;
   font-family:Consolas,'Courier New',monospace;
-  color:#f0e0ff; height:100vh; width:100vw;
+  color:#f0e0ff; height:100%; width:100%;
 }}
 body::after {{
   content:''; position:fixed; inset:0;
@@ -825,6 +825,7 @@ body::after {{
   background:rgba(6,0,8,.9); border-bottom:1px solid #2a003d;
   backdrop-filter:blur(12px);
   display:flex; align-items:center; padding:0 20px; gap:14px; z-index:10;
+  overflow:hidden;
 }}
 .wordmark {{ font-size:15px; font-weight:700; letter-spacing:-.02em; color:#ff00cc; animation:chroma-shift 6s ease-in-out infinite; white-space:nowrap; }}
 .pulse-dot {{ width:6px; height:6px; border-radius:50%; background:#ff00cc; box-shadow:0 0 8px rgba(255,0,204,.9); animation:pdot 1.3s ease-in-out infinite; flex-shrink:0; }}
@@ -1370,6 +1371,29 @@ window.addEventListener('resize', function() {{
   </div>
 </div>
 <script>
+  // ── Fit iframe to real browser window ──────────────────────────────────
+  (function() {{
+    function fitToWindow() {{
+      try {{
+        var h = window.parent.innerHeight;
+        var w = window.parent.innerWidth;
+        document.documentElement.style.height = h + 'px';
+        document.body.style.height = h + 'px';
+        document.body.style.width  = w + 'px';
+        document.body.style.overflow = 'hidden';
+        if (window.frameElement) {{
+          window.frameElement.style.height = h + 'px';
+          window.frameElement.style.width  = '100%';
+        }}
+      }} catch(e) {{
+        // cross-origin fallback — body already 100vh from CSS
+      }}
+    }}
+    fitToWindow();
+    window.parent.addEventListener('resize', fitToWindow);
+  }})();
+  // ───────────────────────────────────────────────────────────────────────
+
   var b = document.getElementById('term-body');
   if (b) b.scrollTop = b.scrollHeight;
 
@@ -1511,13 +1535,22 @@ window.addEventListener('resize', function() {{
 def render() -> None:
     st.markdown("""
     <style>
-    /* Hide Streamlit chrome so the iframe fills true 100vh */
+    /* Hide ALL Streamlit chrome — header, sidebar, toolbar, footer */
     [data-testid="stHeader"],
     [data-testid="stToolbar"],
     [data-testid="stDecoration"],
-    footer { display: none !important; }
+    [data-testid="stSidebar"],
+    [data-testid="collapsedControl"],
+    #MainMenu, footer { display: none !important; }
 
+    /* Full-bleed body */
+    html, body, [data-testid="stApp"] {
+        height: 100vh !important;
+        overflow: hidden !important;
+        background: #060008 !important;
+    }
     /* Zero out all container padding */
+    section[data-testid="stMain"],
     section[data-testid="stMain"] > div,
     [data-testid="stMainBlockContainer"],
     [data-testid="block-container"],
@@ -1526,13 +1559,14 @@ def render() -> None:
         padding: 0 !important;
         max-width: 100% !important;
         overflow: hidden !important;
+        height: 100vh !important;
     }
-    /* Stretch iframe to full viewport */
+    /* iframe fills exactly the window — height driven by JS inside iframe */
     iframe {
         display: block !important;
-        width: 100vw !important;
-        height: 100vh !important;
+        width: 100% !important;
         border: none !important;
+        overflow: hidden !important;
     }
     </style>
     """, unsafe_allow_html=True)
