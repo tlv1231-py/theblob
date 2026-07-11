@@ -961,18 +961,27 @@ body::after {{
   letter-spacing:.04em;
   display:flex; align-items:center; gap:0;
 }}
-#live-clock {{ margin-right:6px; }}
+#live-clock {{ margin-right:8px; color:#3a1a5a; font-size:10px; letter-spacing:.06em; }}
+#prompt-sym {{
+  color:#4a1a6a; margin-right:5px; font-size:12px; flex-shrink:0;
+  text-shadow:none; user-select:none;
+}}
+#type-preview {{
+  color:#ff00cc; font-size:11px; letter-spacing:.04em;
+  text-shadow:0 0 8px rgba(255,0,204,.8), 0 0 20px rgba(255,0,204,.3);
+  white-space:nowrap; flex:1; overflow:hidden;
+}}
 #blink-cur {{
-  display:inline-block; color:#ff00cc;
+  display:inline-block; color:#ff00cc; flex-shrink:0;
   text-shadow:0 0 10px rgba(255,0,204,.9);
   animation:blink-c 1s step-start infinite;
 }}
 @keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
-#type-preview {{
-  color:#ff00cc; letter-spacing:.04em; font-size:11px;
-  text-shadow:0 0 8px rgba(255,0,204,.7);
-  white-space:nowrap; overflow:hidden; flex:1;
+@keyframes enter-flash {{
+  0%   {{ background:rgba(255,0,204,.18); }}
+  100% {{ background:transparent; }}
 }}
+.enter-flash {{ animation:enter-flash 220ms ease-out forwards; }}
 /* positions panel */
 #pos-panel {{
   flex:1; min-width:180px;
@@ -1382,7 +1391,7 @@ window.addEventListener('resize', function() {{
   <div id="term-cols">
     <div id="term-body">
       {term_rows}
-      <div id="clock-line"><span id="live-clock"></span><span id="blink-cur">█</span><span id="type-preview"></span></div>
+      <div id="clock-line"><span id="live-clock"></span><span id="prompt-sym">&gt;</span><span id="type-preview"></span><span id="blink-cur">█</span></div>
     </div>
     <div class="col-drag" id="drag-q" title="drag to resize"></div>
     <div id="queue-panel">
@@ -1563,27 +1572,38 @@ window.addEventListener('resize', function() {{
       setTimeout(tick, 16);
     }}
 
-    // Type text into #type-preview at the clock-line cursor,
-    // then call onDone when finished. Hides the block cursor while typing.
+    // Machine-types text into #type-preview at the terminal prompt,
+    // then fires an "Enter" commit: flash + clear → onDone.
     function typeAtCursor(text, onDone) {{
-      var preview = document.getElementById('type-preview');
+      var preview  = document.getElementById('type-preview');
       var blinkCur = document.getElementById('blink-cur');
+      var clockLine = document.getElementById('clock-line');
       if (!preview) {{ if (onDone) onDone(); return; }}
-      if (blinkCur) blinkCur.style.display = 'none';
+
+      // Hide blinking cursor while typing (it sits at end of preview text)
+      if (blinkCur) blinkCur.style.animation = 'none';
       preview.textContent = '';
       var i = 0;
+
       function tick() {{
         if (i < text.length) {{
           preview.textContent += text[i];
           i++;
-          setTimeout(tick, PREVIEW_MS);
+          // Machine speed: uniform 12ms, tiny jitter so it sounds real
+          setTimeout(tick, 12 + (Math.random() < 0.08 ? 60 : 0));
         }} else {{
-          // Hold for a beat, then clear and restore cursor
+          // Finger over Enter — very brief pause
           setTimeout(function() {{
+            // ENTER: flash the whole clock-line pink, clear text
+            if (clockLine) {{
+              clockLine.classList.add('enter-flash');
+              setTimeout(function() {{ clockLine.classList.remove('enter-flash'); }}, 240);
+            }}
             preview.textContent = '';
-            if (blinkCur) blinkCur.style.display = '';
+            // Restore cursor blink
+            if (blinkCur) blinkCur.style.animation = '';
             if (onDone) onDone();
-          }}, 420);
+          }}, 180);
         }}
       }}
       tick();
