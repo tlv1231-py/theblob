@@ -793,11 +793,10 @@ def _build_daw_html(data: dict) -> str:
 <meta charset="utf-8">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
-html {{ height:100%; }}
-body {{
+html, body {{
   background:#060008; overflow:hidden;
   font-family:Consolas,'Courier New',monospace;
-  color:#f0e0ff; height:100%; width:100%;
+  color:#f0e0ff; height:100vh; width:100vw;
   display:flex; flex-direction:column;
 }}
 body::after {{
@@ -1375,24 +1374,6 @@ window.addEventListener('resize', function() {{
   </div>
 </div>
 <script>
-  // ── Tell Streamlit our desired height = full browser window ────────────
-  (function() {{
-    function reportHeight() {{
-      try {{
-        var h = window.parent.innerHeight;
-        // Streamlit listens for this message and resizes the iframe accordingly,
-        // which also changes the iframe's own viewport height (not just CSS size)
-        window.parent.postMessage({{
-          isStreamlitMessage: true,
-          type: 'streamlit:setFrameHeight',
-          height: h
-        }}, '*');
-      }} catch(e) {{}}
-    }}
-    reportHeight();
-    try {{ window.parent.addEventListener('resize', reportHeight); }} catch(e) {{}}
-  }})();
-  // ───────────────────────────────────────────────────────────────────────
 
   var b = document.getElementById('term-body');
   if (b) b.scrollTop = b.scrollHeight;
@@ -1535,7 +1516,7 @@ window.addEventListener('resize', function() {{
 def render() -> None:
     st.markdown("""
     <style>
-    /* Hide ALL Streamlit chrome — header, sidebar, toolbar, footer */
+    /* Hide Streamlit chrome */
     [data-testid="stHeader"],
     [data-testid="stToolbar"],
     [data-testid="stDecoration"],
@@ -1543,31 +1524,14 @@ def render() -> None:
     [data-testid="collapsedControl"],
     #MainMenu, footer { display: none !important; }
 
-    /* Full-bleed body */
-    html, body, [data-testid="stApp"] {
-        height: 100vh !important;
-        overflow: hidden !important;
-        background: #060008 !important;
-    }
-    /* Zero out all container padding */
-    section[data-testid="stMain"],
+    /* Zero padding on all containers */
     section[data-testid="stMain"] > div,
     [data-testid="stMainBlockContainer"],
-    [data-testid="block-container"],
-    div[class*="block-container"],
-    .main .block-container {
+    div[class*="block-container"] {
         padding: 0 !important;
         max-width: 100% !important;
-        overflow: hidden !important;
-        height: 100vh !important;
     }
-    /* iframe fills exactly the window — height driven by JS inside iframe */
-    iframe {
-        display: block !important;
-        width: 100% !important;
-        border: none !important;
-        overflow: hidden !important;
-    }
+    iframe { display: block !important; border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1581,5 +1545,34 @@ def render() -> None:
         return
 
     html = _build_daw_html(data)
-    # 900 is the baseline; JS inside the iframe expands frameElement to true vh
     components.html(html, height=900, scrolling=False)
+
+    # 0-height shim: runs in a sibling iframe, finds the main chart iframe in
+    # the parent Streamlit page, and sets its height attribute to the true
+    # browser window height — same-origin so no cross-origin restriction.
+    _resizer = """
+    <script>
+    (function() {
+        function resize() {
+            try {
+                var h = window.parent.innerHeight;
+                var iframes = window.parent.document.querySelectorAll('iframe');
+                var biggest = null, biggestH = 0;
+                iframes.forEach(function(f) {
+                    if (f !== window.frameElement && f.offsetHeight > biggestH) {
+                        biggest = f; biggestH = f.offsetHeight;
+                    }
+                });
+                if (biggest) {
+                    biggest.setAttribute('height', h);
+                    biggest.style.height = h + 'px';
+                }
+            } catch(e) {}
+        }
+        resize();
+        setTimeout(resize, 300);
+        window.parent.addEventListener('resize', resize);
+    })();
+    </script>
+    """
+    components.html(_resizer, height=0, scrolling=False)
