@@ -204,7 +204,7 @@ body::after {{
 
 /* ── NAV card (top-left, under topbar) ── */
 .nav-card {{
-  position:absolute; top:54px; left:68px;
+  position:absolute; top:54px; left:110px;
   background:rgba(6,0,8,.82); border:1px solid #2a003d; border-top:2px solid #ff00cc;
   backdrop-filter:blur(10px); padding:10px 16px; z-index:10; min-width:160px;
 }}
