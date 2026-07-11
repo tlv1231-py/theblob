@@ -448,72 +448,56 @@ def _render_bottom_terminal() -> None:
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
         type_tag  = {"fill": "TRADE", "signal": "SIGNAL", "snapshot": "UPDATE"}
 
-        CHAR_MS  = 14
-        LINE_GAP = 80
         lines_html = ""
-        # animate newest-last (visually bottom) with shortest delay so it types first
-        for idx, ev in enumerate(reversed(events)):
+        for ev in events:  # newest first → column-reverse puts them at bottom
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
             ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw
             cls    = css_class.get(ev["type"], "ev-pipeline")
             tag    = type_tag.get(ev["type"], "EVT")
             text   = f"{tag}  {ev['sym']}  —  {ev.get('line1','')}"
             sub    = f"{ts_str}  ·  {ev.get('line2','')}"
-            n      = max(len(text), 1)
-            dur    = n * CHAR_MS
-            delay  = idx * (LINE_GAP / 1000)
-
             lines_html += f"""
 <div class="te">
-  <div class="tm {cls}" style="animation:tw {dur}ms steps({n},end) {delay:.2f}s forwards">{text}</div>
-  <div class="ts" style="animation:fi 0.2s ease {delay + dur/1000:.2f}s forwards">{sub}</div>
+  <div class="tm {cls}">{text}</div>
+  <div class="ts">{sub}</div>
 </div>"""
-
-        blink_delay = len(events) * LINE_GAP / 1000
 
         st.markdown(f"""
 <style>
 #blob-term{{
-  position:fixed; bottom:0; left:0; right:0; height:220px; z-index:9000;
-  background:rgba(4,0,6,.97); border-top:2px solid #ff00cc;
-  font-family:Consolas,'Courier New',monospace;
-  display:flex; flex-direction:column;
+  position:fixed;bottom:0;left:0;right:0;height:220px;z-index:9000;
+  background:rgba(4,0,6,.97);border-top:2px solid #ff00cc;
+  font-family:Consolas,'Courier New',monospace;display:flex;flex-direction:column;
 }}
 #blob-term-hdr{{
-  flex-shrink:0; padding:5px 16px; border-bottom:1px solid #2a003d;
-  font-size:8px; letter-spacing:.22em; color:#ff00cc;
+  flex-shrink:0;padding:5px 16px;border-bottom:1px solid #2a003d;
+  font-size:8px;letter-spacing:.22em;color:#ff00cc;
   text-shadow:0 0 8px rgba(255,0,204,.5);
-  display:flex; align-items:center; gap:10px;
+  display:flex;align-items:center;gap:10px;
 }}
-#blob-term-hdr span.live{{
+.live-dot{{
   width:6px;height:6px;border-radius:50%;background:#ff00cc;
-  box-shadow:0 0 6px #ff00cc;
+  box-shadow:0 0 6px #ff00cc;flex-shrink:0;
   animation:blink-c 2s ease-in-out infinite;
-  flex-shrink:0;
 }}
 #blob-term-body{{
-  flex:1; overflow:hidden;
-  display:flex; flex-direction:column-reverse;
-  padding:6px 0 4px;
+  flex:1;overflow:hidden;
+  display:flex;flex-direction:column-reverse;
+  padding:4px 0;
 }}
 .te{{padding:3px 18px 2px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
-.tm{{font-size:13px;font-weight:600;line-height:1.4;
-     overflow:hidden;white-space:nowrap;width:0;max-width:100%}}
-.ts{{font-size:9px;color:#3a1a4a;margin-top:1px;letter-spacing:.04em;opacity:0}}
+.tm{{font-size:13px;font-weight:600;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.ts{{font-size:9px;color:#3a1a4a;margin-top:1px;letter-spacing:.04em}}
 .ev-fill{{color:#ff00cc}}.ev-signal{{color:#00e5ff}}.ev-snapshot{{color:#9400ff}}
-#blob-cursor{{padding:4px 18px;flex-shrink:0;
-  opacity:0;animation:fi 0s {blink_delay:.2f}s forwards}}
-#blob-cursor span{{color:#ff00cc;animation:blink-c 1s step-start {blink_delay:.2f}s infinite}}
-@keyframes tw    {{from{{width:0}}to{{width:100%}}}}
-@keyframes fi    {{from{{opacity:0}}to{{opacity:1}}}}
+.blob-cursor{{padding:4px 18px;flex-shrink:0;color:#ff00cc;
+  animation:blink-c 1s step-start infinite}}
 @keyframes blink-c{{0%,100%{{opacity:1}}50%{{opacity:0}}}}
-/* push page content up so it's not hidden behind terminal */
 section[data-testid="stMain"] .block-container{{padding-bottom:240px!important}}
 </style>
 <div id="blob-term">
-  <div id="blob-term-hdr"><span class="live"></span>SYSTEM FEED</div>
+  <div id="blob-term-hdr"><div class="live-dot"></div>SYSTEM FEED</div>
   <div id="blob-term-body">
-    <div id="blob-cursor"><span>█</span></div>
+    <div class="blob-cursor">█</div>
     {lines_html}
   </div>
 </div>
