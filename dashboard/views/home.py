@@ -170,6 +170,35 @@ def _load_chart_data() -> dict:
             ORDER BY date DESC LIMIT 1
         """)).fetchone()
 
+    # Terminal feed events
+    with get_session() as s:
+        term_events: list[dict] = []
+        fills = s.execute(text("""
+            SELECT symbol, UPPER(side) as side, quantity,
+                   ROUND(fill_price::numeric,2) as price, filled_at as ts
+            FROM fills ORDER BY filled_at DESC LIMIT 10
+        """)).fetchall()
+        for r in fills:
+            action = "bought" if r.side == "BUY" else "sold"
+            term_events.append({"cls":"ev-fill","sym":r.symbol,
+                "line1":f"{action} {r.quantity} shares","line2":f"filled at ${r.price}","ts":r.ts,"tag":"TRADE"})
+        sigs = s.execute(text("""
+            SELECT symbol, ROUND(score::numeric,3) as score, as_of_date::timestamp as ts
+            FROM signals ORDER BY as_of_date DESC LIMIT 10
+        """)).fetchall()
+        for r in sigs:
+            term_events.append({"cls":"ev-signal","sym":r.symbol,
+                "line1":"flagged for entry","line2":f"momentum score {r.score}","ts":r.ts,"tag":"SIGNAL"})
+        snaps = s.execute(text("""
+            SELECT ROUND(total_value::numeric,0) as nav, snapshot_date::timestamp as ts
+            FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 3
+        """)).fetchall()
+        for r in snaps:
+            term_events.append({"cls":"ev-snapshot","sym":"PORTFOLIO",
+                "line1":f"valued at ${int(r.nav):,}","line2":"end of day snapshot","ts":r.ts,"tag":"UPDATE"})
+    term_events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
+    term_events = term_events[:20]
+
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
         "spy":         {"dates": spy_dates,   "prices": spy_prices},
@@ -182,6 +211,7 @@ def _load_chart_data() -> dict:
         "day_pnl":        float(latest_pnl.daily_pnl)      if latest_pnl else 0.0,
         "cumulative_pnl": float(latest_pnl.cumulative_pnl) if latest_pnl else 0.0,
         "rolling_sharpe": None,
+        "term_events": term_events,
     }
 
 
@@ -215,6 +245,17 @@ def _build_daw_html(data: dict) -> str:
     last_run   = data["last_run"][:10] if data["last_run"] else "—"
     day_pnl    = data["day_pnl"]
     dpnl_str   = f'{day_pnl:+,.0f}'
+
+    # Terminal feed rows (newest first → column-reverse shows newest at bottom)
+    term_rows = ""
+    for ev in data.get("term_events", []):
+        ts = str(ev["ts"])[5:16] if ev.get("ts") else ""
+        term_rows += (
+            f'<div class="te">'
+            f'<div class="tm {ev["cls"]}">{ev["tag"]}  {ev["sym"]}  —  {ev["line1"]}</div>'
+            f'<div class="ts">{ts}  ·  {ev["line2"]}</div>'
+            f'</div>'
+        )
 
     # Normalize SPY and QQQ to $100K at portfolio start date
     # so all 3 lines are directly comparable on one axis
@@ -332,6 +373,43 @@ body::after {{
 .bm-val {{ font-size:13px; font-weight:700; letter-spacing:-.02em; line-height:1.3; }}
 .spacer {{ flex:1; }}
 .hint {{ font-size:8px; letter-spacing:.1em; color:#2a003d; white-space:nowrap; }}
+
+/* ── Terminal overlay (bottom third) ── */
+#term-overlay {{
+  position:absolute; bottom:44px; left:0; right:0; height:33%;
+  background:rgba(4,0,6,.88);
+  border-top:2px solid #ff00cc;
+  backdrop-filter:blur(12px);
+  display:flex; flex-direction:column;
+  z-index:20; pointer-events:none;
+}}
+#term-hdr {{
+  flex-shrink:0; padding:5px 18px;
+  border-bottom:1px solid #2a003d;
+  font-size:8px; letter-spacing:.22em; color:#ff00cc;
+  text-shadow:0 0 8px rgba(255,0,204,.5);
+  display:flex; align-items:center; gap:10px;
+}}
+.term-dot {{
+  width:5px; height:5px; border-radius:50%;
+  background:#ff00cc; box-shadow:0 0 5px #ff00cc;
+  animation:shimmer 2s ease-in-out infinite;
+}}
+#term-body {{
+  flex:1; overflow:hidden;
+  display:flex; flex-direction:column-reverse;
+  padding:4px 0;
+}}
+.te {{ padding:3px 20px 2px; border-top:1px solid rgba(42,0,61,.25); flex-shrink:0; }}
+.tm {{ font-size:12px; font-weight:600; line-height:1.4;
+       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.ts {{ font-size:9px; color:#3a1a4a; margin-top:1px; letter-spacing:.04em; }}
+.ev-fill     {{ color:#ff00cc; }}
+.ev-signal   {{ color:#00e5ff; }}
+.ev-snapshot {{ color:#9400ff; }}
+.term-cur    {{ padding:3px 20px; flex-shrink:0; color:#ff00cc;
+                animation:blink-c 1s step-start infinite; }}
+@keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
 </style>
 </head>
 <body>
@@ -621,6 +699,16 @@ window.addEventListener('resize', function() {{
   resizeCanvas();
 }});
 </script>
+
+<!-- Terminal overlay — bottom third of chart -->
+<div id="term-overlay">
+  <div id="term-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
+  <div id="term-body">
+    <div class="term-cur">█</div>
+    {term_rows}
+  </div>
+</div>
+
 </body>
 </html>"""
 
@@ -650,5 +738,3 @@ def render() -> None:
 
     html = _build_daw_html(data)
     components.html(html, height=860, scrolling=False)
-
-    _render_terminal()
