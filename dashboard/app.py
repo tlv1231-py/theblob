@@ -399,8 +399,8 @@ st.sidebar.divider()
 selection = st.sidebar.radio("nav", list(PAGES.keys()), label_visibility="collapsed")
 st.sidebar.divider()
 
-# ── Sidebar terminal feed ──────────────────────────────────────────────────────
-def _render_sidebar_terminal() -> None:
+# ── Bottom terminal feed (full-width fixed panel) ─────────────────────────────
+def _render_bottom_terminal() -> None:
     try:
         from sqlalchemy import text as _text
         from dashboard.db import get_session
@@ -412,7 +412,7 @@ def _render_sidebar_terminal() -> None:
                 SELECT symbol, UPPER(side) as side, quantity,
                        ROUND(fill_price::numeric,2) as price,
                        filled_at as ts
-                FROM fills ORDER BY filled_at DESC LIMIT 8
+                FROM fills ORDER BY filled_at DESC LIMIT 10
             """)).fetchall()
             for r in fills:
                 action = "bought" if r.side == "BUY" else "sold"
@@ -424,7 +424,7 @@ def _render_sidebar_terminal() -> None:
                 SELECT symbol, UPPER(direction) as direction,
                        ROUND(score::numeric,3) as score,
                        as_of_date::timestamp as ts
-                FROM signals ORDER BY as_of_date DESC LIMIT 8
+                FROM signals ORDER BY as_of_date DESC LIMIT 10
             """)).fetchall()
             for r in sigs:
                 events.append({"type": "signal", "sym": r.symbol,
@@ -441,20 +441,18 @@ def _render_sidebar_terminal() -> None:
                                 "line1": f"valued at ${int(r.nav):,}",
                                 "line2": "end of day snapshot", "ts": r.ts})
 
-        # oldest first so newest lands at bottom
-        events.sort(key=lambda e: e["ts"] if e["ts"] else "")
-        events = events[-14:]
+        # newest first in HTML — column-reverse makes newest appear at bottom
+        events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)
+        events = events[:20]
 
         css_class = {"fill": "ev-fill", "signal": "ev-signal", "snapshot": "ev-snapshot"}
         type_tag  = {"fill": "TRADE", "signal": "SIGNAL", "snapshot": "UPDATE"}
 
-        # Build lines — CSS typewriter using steps() per character count
-        CHAR_MS   = 20   # ms per character
-        LINE_GAP  = 120  # ms gap between lines starting
+        CHAR_MS  = 14
+        LINE_GAP = 80
         lines_html = ""
-        cursor_delay = 0.0
-
-        for idx, ev in enumerate(events):
+        # animate newest-last (visually bottom) with shortest delay so it types first
+        for idx, ev in enumerate(reversed(events)):
             ts_raw = str(ev["ts"]) if ev["ts"] else ""
             ts_str = ts_raw[5:16] if len(ts_raw) >= 16 else ts_raw
             cls    = css_class.get(ev["type"], "ev-pipeline")
@@ -462,67 +460,69 @@ def _render_sidebar_terminal() -> None:
             text   = f"{tag}  {ev['sym']}  —  {ev.get('line1','')}"
             sub    = f"{ts_str}  ·  {ev.get('line2','')}"
             n      = max(len(text), 1)
-            dur    = n * CHAR_MS        # ms to type this line
-            delay  = cursor_delay / 1000  # convert to seconds for CSS
+            dur    = n * CHAR_MS
+            delay  = idx * (LINE_GAP / 1000)
 
             lines_html += f"""
-<div class="term-entry" style="animation-delay:{delay:.2f}s">
-  <div class="term-main {cls}" style="
-    overflow:hidden; white-space:nowrap;
-    width:0; max-width:100%;
-    animation: tw {dur}ms steps({n},end) {delay:.2f}s forwards;
-  ">{text}</div>
-  <div class="term-sub" style="
-    opacity:0;
-    animation: fadein 0.2s ease {delay + dur/1000:.2f}s forwards;
-  ">{sub}</div>
+<div class="te">
+  <div class="tm {cls}" style="animation:tw {dur}ms steps({n},end) {delay:.2f}s forwards">{text}</div>
+  <div class="ts" style="animation:fi 0.2s ease {delay + dur/1000:.2f}s forwards">{sub}</div>
 </div>"""
-            cursor_delay += dur + LINE_GAP
 
-        # blinking cursor after last line
-        blink_delay = cursor_delay / 1000
+        blink_delay = len(events) * LINE_GAP / 1000
 
-        import streamlit.components.v1 as _cv1
-        total_ms = cursor_delay + 200
-        feed_html = f"""<!DOCTYPE html><html><head><style>
-*{{margin:0;padding:0;box-sizing:border-box}}
-body{{background:#060008;font-family:Consolas,monospace;overflow:hidden}}
-#wrap{{border:1px solid #2a003d;border-left:2px solid #ff00cc;background:rgba(6,0,8,.95);height:100vh;display:flex;flex-direction:column}}
-#hdr{{font-size:8px;letter-spacing:.22em;color:#ff00cc;text-shadow:0 0 8px rgba(255,0,204,.5);padding:6px 10px;border-bottom:1px solid #2a003d;flex-shrink:0}}
-#body{{padding:4px 0;overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:#2a003d transparent}}
-.term-entry{{padding:5px 10px 4px;border-bottom:1px solid rgba(42,0,61,.4)}}
-.term-entry:last-child{{border-bottom:none}}
-.term-main{{font-size:12px;font-weight:600;line-height:1.3;overflow:hidden;white-space:nowrap;width:0;max-width:100%}}
-.term-sub{{font-size:9px;color:#3a1a4a;margin-top:2px;letter-spacing:.04em;opacity:0}}
+        st.markdown(f"""
+<style>
+#blob-term{{
+  position:fixed; bottom:0; left:0; right:0; height:220px; z-index:9000;
+  background:rgba(4,0,6,.97); border-top:2px solid #ff00cc;
+  font-family:Consolas,'Courier New',monospace;
+  display:flex; flex-direction:column;
+}}
+#blob-term-hdr{{
+  flex-shrink:0; padding:5px 16px; border-bottom:1px solid #2a003d;
+  font-size:8px; letter-spacing:.22em; color:#ff00cc;
+  text-shadow:0 0 8px rgba(255,0,204,.5);
+  display:flex; align-items:center; gap:10px;
+}}
+#blob-term-hdr span.live{{
+  width:6px;height:6px;border-radius:50%;background:#ff00cc;
+  box-shadow:0 0 6px #ff00cc;
+  animation:blink-c 2s ease-in-out infinite;
+  flex-shrink:0;
+}}
+#blob-term-body{{
+  flex:1; overflow:hidden;
+  display:flex; flex-direction:column-reverse;
+  padding:6px 0 4px;
+}}
+.te{{padding:3px 18px 2px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
+.tm{{font-size:13px;font-weight:600;line-height:1.4;
+     overflow:hidden;white-space:nowrap;width:0;max-width:100%}}
+.ts{{font-size:9px;color:#3a1a4a;margin-top:1px;letter-spacing:.04em;opacity:0}}
 .ev-fill{{color:#ff00cc}}.ev-signal{{color:#00e5ff}}.ev-snapshot{{color:#9400ff}}
-@keyframes tw     {{from{{width:0}}to{{width:100%}}}}
-@keyframes fadein {{from{{opacity:0}}to{{opacity:1}}}}
+#blob-cursor{{padding:4px 18px;flex-shrink:0;
+  opacity:0;animation:fi 0s {blink_delay:.2f}s forwards}}
+#blob-cursor span{{color:#ff00cc;animation:blink-c 1s step-start {blink_delay:.2f}s infinite}}
+@keyframes tw    {{from{{width:0}}to{{width:100%}}}}
+@keyframes fi    {{from{{opacity:0}}to{{opacity:1}}}}
 @keyframes blink-c{{0%,100%{{opacity:1}}50%{{opacity:0}}}}
-</style></head><body>
-<div id="wrap">
-  <div id="hdr">▶ SYSTEM FEED</div>
-  <div id="body">
+/* push page content up so it's not hidden behind terminal */
+section[data-testid="stMain"] .block-container{{padding-bottom:240px!important}}
+</style>
+<div id="blob-term">
+  <div id="blob-term-hdr"><span class="live"></span>SYSTEM FEED</div>
+  <div id="blob-term-body">
+    <div id="blob-cursor"><span>█</span></div>
     {lines_html}
-    <div class="term-entry" style="opacity:0;animation:fadein 0s {blink_delay:.2f}s forwards">
-      <span style="color:#ff00cc;animation:blink-c 1s step-start {blink_delay:.2f}s infinite">█</span>
-    </div>
   </div>
 </div>
-<script>
-var b = document.getElementById('body');
-setTimeout(function(){{ b.scrollTop = b.scrollHeight; }}, {total_ms});
-// also scroll progressively as lines appear
-var t = setInterval(function(){{ b.scrollTop = b.scrollHeight; }}, 200);
-setTimeout(function(){{ clearInterval(t); }}, {total_ms + 500});
-</script>
-</body></html>"""
-        with st.sidebar:
-            _cv1.html(feed_html, height=340, scrolling=False)
+""", unsafe_allow_html=True)
 
     except Exception:
-        st.sidebar.caption("feed offline")
+        pass  # terminal offline — fail silently
 
-_render_sidebar_terminal()
+_render_bottom_terminal()
 
 # ── Sidebar pipeline runner ────────────────────────────────────────────────────
 st.sidebar.divider()
