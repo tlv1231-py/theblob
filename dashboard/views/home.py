@@ -683,7 +683,6 @@ def _build_daw_html(data: dict) -> str:
     term_rows = ""
     _last_date = None
     _snap_idx  = 0
-    _tw_count  = 0  # typewrite the 8 most recent feed entries
 
     for ev in data.get("term_events", []):
         ts_raw = str(ev["ts"]) if ev.get("ts") else ""
@@ -711,10 +710,8 @@ def _build_daw_html(data: dict) -> str:
 
         prose = _humanize(ev, nav_col)
 
-        tw_attr = ' data-tw="1"' if _tw_count < 8 else ''
-        _tw_count += 1
         term_rows += (
-            f'<div class="te"{tw_attr}>'
+            f'<div class="te" data-tw="1">'
             f'<span class="te-ts">{hhmm}&nbsp;&nbsp;</span>'
             f'{prose}'
             f'</div>'
@@ -971,6 +968,11 @@ body::after {{
   animation:blink-c 1s step-start infinite;
 }}
 @keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
+#type-preview {{
+  color:#ff00cc; letter-spacing:.04em; font-size:11px;
+  text-shadow:0 0 8px rgba(255,0,204,.7);
+  white-space:nowrap; overflow:hidden; flex:1;
+}}
 /* positions panel */
 #pos-panel {{
   flex:1; min-width:180px;
@@ -1380,7 +1382,7 @@ window.addEventListener('resize', function() {{
   <div id="term-cols">
     <div id="term-body">
       {term_rows}
-      <div id="clock-line"><span id="live-clock"></span><span id="blink-cur">█</span></div>
+      <div id="clock-line"><span id="live-clock"></span><span id="blink-cur">█</span><span id="type-preview"></span></div>
     </div>
     <div class="col-drag" id="drag-q" title="drag to resize"></div>
     <div id="queue-panel">
@@ -1525,27 +1527,27 @@ window.addEventListener('resize', function() {{
   tick();
   setInterval(tick, 1000);
 
-  // ── Typewriter curtain reveal ───────────────────────────────────────────────
+  // ── Typewriter system ────────────────────────────────────────────────────────
   (function() {{
-    // Slide a dark curtain off each marked element left-to-right,
-    // revealing styled HTML underneath. Cursor glows at the leading edge.
+    var FEED_MS = 13;   // ms per char in feed reveal
+    var PANEL_MS = 15;  // ms per char in queue/pos panels
+    var PREVIEW_MS = 28; // ms per char at cursor (slower = more readable)
+
+    // Curtain-reveal: slide a dark panel off left→right, glowing cursor at edge.
+    // Preserves all HTML/colours underneath.
     function revealEl(el, charMs, onDone) {{
       el.style.overflow = 'hidden';
       var curtain = document.createElement('div');
       curtain.className = 'tw-curtain';
-      var cursor = document.createElement('div');
-      cursor.className = 'tw-cur';
-      curtain.appendChild(cursor);
+      var cur = document.createElement('div');
+      cur.className = 'tw-cur';
+      curtain.appendChild(cur);
       el.appendChild(curtain);
-
-      // measure after appending so layout is complete
       var totalW = el.scrollWidth;
       curtain.style.width = totalW + 'px';
-
-      var chars  = Math.max(10, el.textContent.replace(/\s+/g,' ').trim().length);
+      var chars = Math.max(8, el.textContent.replace(/\s+/g,' ').trim().length);
       var stepPx = totalW / chars;
-      var curW   = totalW;
-
+      var curW = totalW;
       function tick() {{
         curW -= stepPx;
         if (curW <= 0) {{
@@ -1561,24 +1563,81 @@ window.addEventListener('resize', function() {{
       setTimeout(tick, 16);
     }}
 
-    // System Feed — most recent 8 items, reveal oldest→newest in sequence
-    // DOM order is newest-first (column-reverse layout), so reverse before animating
-    var feedItems = Array.from(document.querySelectorAll('#body .te[data-tw]'));
-    feedItems.reverse();
-    function nextFeed(i) {{
-      if (i >= feedItems.length) return;
-      revealEl(feedItems[i], 14, function() {{ nextFeed(i + 1); }});
+    // Type text into #type-preview at the clock-line cursor,
+    // then call onDone when finished. Hides the block cursor while typing.
+    function typeAtCursor(text, onDone) {{
+      var preview = document.getElementById('type-preview');
+      var blinkCur = document.getElementById('blink-cur');
+      if (!preview) {{ if (onDone) onDone(); return; }}
+      if (blinkCur) blinkCur.style.display = 'none';
+      preview.textContent = '';
+      var i = 0;
+      function tick() {{
+        if (i < text.length) {{
+          preview.textContent += text[i];
+          i++;
+          setTimeout(tick, PREVIEW_MS);
+        }} else {{
+          // Hold for a beat, then clear and restore cursor
+          setTimeout(function() {{
+            preview.textContent = '';
+            if (blinkCur) blinkCur.style.display = '';
+            if (onDone) onDone();
+          }}, 420);
+        }}
+      }}
+      tick();
     }}
-    nextFeed(0);
 
-    // Queue items — stagger slightly, parallel
+    // ── System Feed ───────────────────────────────────────────────────────────
+    // All .te items are in DOM oldest→newest (#term-body is flex-direction:column).
+    // We want to: instantly show all but the last 8, then curtain-reveal the last
+    // 7 oldest→newest, and type the most recent one at the cursor first.
+    var allFeed = Array.from(document.querySelectorAll('#term-body .te[data-tw]'));
+    var REVEAL_N = 8;
+    var revealStart = Math.max(0, allFeed.length - REVEAL_N);
+
+    // Instantly reveal everything before the animation window
+    for (var k = 0; k < revealStart; k++) {{
+      allFeed[k].removeAttribute('data-tw');
+    }}
+
+    // The most recent entry (last in DOM) gets typed at cursor first
+    var newest = allFeed[allFeed.length - 1];
+    // Items to curtain-reveal (second-newest → 8th-newest, oldest first)
+    var curtainItems = allFeed.slice(revealStart, allFeed.length - 1);
+
+    function runCurtains(i) {{
+      if (i >= curtainItems.length) return;
+      revealEl(curtainItems[i], FEED_MS, function() {{ runCurtains(i + 1); }});
+    }}
+
+    if (newest) {{
+      // Scroll term-body to bottom so cursor is visible
+      var tb = document.getElementById('term-body');
+      if (tb) tb.scrollTop = tb.scrollHeight;
+
+      // Type the newest entry's plain text at the cursor line
+      var previewText = newest.textContent.replace(/\s+/g,' ').trim();
+      typeAtCursor(previewText, function() {{
+        // Instantly reveal the newest .te entry
+        newest.removeAttribute('data-tw');
+        if (tb) tb.scrollTop = tb.scrollHeight;
+        // Then curtain-reveal the 7 older entries in the window
+        runCurtains(0);
+      }});
+    }} else {{
+      runCurtains(0);
+    }}
+
+    // ── Queue items ───────────────────────────────────────────────────────────
     document.querySelectorAll('.q-item[data-tw]').forEach(function(el, i) {{
-      setTimeout(function() {{ revealEl(el, 16); }}, i * 80);
+      setTimeout(function() {{ revealEl(el, PANEL_MS); }}, i * 90);
     }});
 
-    // Position cards — stagger slightly, parallel
+    // ── Position cards ────────────────────────────────────────────────────────
     document.querySelectorAll('.pos-card[data-tw]').forEach(function(el, i) {{
-      setTimeout(function() {{ revealEl(el, 16); }}, i * 80);
+      setTimeout(function() {{ revealEl(el, PANEL_MS); }}, i * 90);
     }});
   }})();
 
