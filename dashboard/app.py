@@ -553,7 +553,7 @@ body{{margin:0;background:transparent}}
 </script>
 </body></html>"""
 
-        _cv1.html(inject_html, height=0, scrolling=False)
+        _cv1.html(inject_html, height=1, scrolling=False)
 
     except Exception:
         pass  # terminal offline — fail silently
