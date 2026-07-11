@@ -699,11 +699,11 @@ body::after {{
 .pos-qty {{ color:#4a2a6a; font-size:10.5px; }}
 .pos-val {{ color:#9060b8; font-size:11px; margin-left:auto; }}
 .pos-hold {{
-  font-size:9px; color:#2e1448;
+  font-size:9px; color:#6a4a8a;
   margin-top:2px; letter-spacing:.02em;
 }}
-.pos-hold.active  {{ color:#1a3a1a; }}
-.pos-hold.exiting {{ color:#3a1010; }}
+.pos-hold.active  {{ color:#3a7a4a; }}
+.pos-hold.exiting {{ color:#a05020; }}
 </style>
 </head>
 <body>
