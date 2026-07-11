@@ -384,14 +384,14 @@ def _build_daw_html(data: dict) -> str:
             price = price_m.group(1) if price_m else "?"
             slip_m = _re.search(r'slippage \$([\d.]+)', det)
             slip_s = f' &nbsp;<span style="color:#3a1a4a">slip ${slip_m.group(1)}</span>' if slip_m else ""
-            return f'<span style="color:#ff00cc">bought</span> {qty} {_ts(sym)} @ ${price}{slip_s}'
+            return f'<span style="color:#00ff9d">bought</span> {qty} shares of {_ts(sym)} @ ${price}{slip_s}'
 
         if tag == "SELL":
             qty_m   = _re.search(r'(\d+) shares', msg)
             price_m = _re.search(r'\$([\d.]+)', msg)
             qty   = qty_m.group(1)   if qty_m   else "?"
             price = price_m.group(1) if price_m else "?"
-            return f'<span style="color:#ff3366">sold</span> {qty} {_ts(sym)} @ ${price}'
+            return f'<span style="color:#ff9900">sold</span> {qty} shares of {_ts(sym)} @ ${price}'
 
         if tag == "HOLD":
             # "holding AAPL, MSFT, GOOGL, NVDA, AMZN unchanged"
@@ -422,8 +422,8 @@ def _build_daw_html(data: dict) -> str:
 
         if tag == "TRADE":
             # legacy fill format
-            msg = msg.replace("bought", '<span style="color:#ff00cc">bought</span>')
-            msg = msg.replace("sold",   '<span style="color:#ff3366">sold</span>')
+            msg = msg.replace("bought", '<span style="color:#00ff9d">bought</span>')
+            msg = msg.replace("sold",   '<span style="color:#ff9900">sold</span>')
             return msg
 
         # fallback
@@ -679,7 +679,7 @@ body::after {{
 @keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
 /* positions panel */
 #pos-panel {{
-  width:280px; flex-shrink:0;
+  width:340px; flex-shrink:0;
   border-left:1px solid #1a0028;
   overflow-y:auto; padding:6px 0;
   scrollbar-width:none;
@@ -1000,7 +1000,7 @@ window.addEventListener('resize', function() {{
     <div class="term-dot"></div>SYSTEM FEED
     <span style="flex:1"></span>
     <span style="letter-spacing:.22em;color:#3a1a4a">POSITIONS</span>
-    <span style="width:230px"></span>
+    <span style="width:340px"></span>
   </div>
   <div id="term-cols">
     <div id="term-body">
