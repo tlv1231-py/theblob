@@ -1377,20 +1377,24 @@ window.addEventListener('resize', function() {{
       try {{
         var h = window.parent.innerHeight;
         var w = window.parent.innerWidth;
-        document.documentElement.style.height = h + 'px';
-        document.body.style.height = h + 'px';
-        document.body.style.width  = w + 'px';
-        document.body.style.overflow = 'hidden';
+        // Stamp height on the frameElement so the iframe's OWN viewport = h
+        // (style alone doesn't change the viewport; height attribute does)
         if (window.frameElement) {{
+          window.frameElement.height = h;
           window.frameElement.style.height = h + 'px';
           window.frameElement.style.width  = '100%';
         }}
-      }} catch(e) {{
-        // cross-origin fallback — body already 100vh from CSS
-      }}
+        // Now our own document knows its true dimensions
+        document.documentElement.style.height = h + 'px';
+        document.documentElement.style.width  = w + 'px';
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.height   = h + 'px';
+        document.body.style.width    = w + 'px';
+        document.body.style.overflow = 'hidden';
+      }} catch(e) {{}}
     }}
     fitToWindow();
-    window.parent.addEventListener('resize', fitToWindow);
+    try {{ window.parent.addEventListener('resize', fitToWindow); }} catch(e) {{}}
   }})();
   // ───────────────────────────────────────────────────────────────────────
 
@@ -1581,5 +1585,5 @@ def render() -> None:
         return
 
     html = _build_daw_html(data)
-    # height=10000 so the CSS (100vh) drives actual height, not this pixel cap
-    components.html(html, height=10000, scrolling=False)
+    # 900 is the baseline; JS inside the iframe expands frameElement to true vh
+    components.html(html, height=900, scrolling=False)
