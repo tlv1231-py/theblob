@@ -683,6 +683,7 @@ def _build_daw_html(data: dict) -> str:
     term_rows = ""
     _last_date = None
     _snap_idx  = 0
+    _tw_count  = 0  # typewrite the 8 most recent feed entries
 
     for ev in data.get("term_events", []):
         ts_raw = str(ev["ts"]) if ev.get("ts") else ""
@@ -710,8 +711,10 @@ def _build_daw_html(data: dict) -> str:
 
         prose = _humanize(ev, nav_col)
 
+        tw_attr = ' data-tw="1"' if _tw_count < 8 else ''
+        _tw_count += 1
         term_rows += (
-            f'<div class="te">'
+            f'<div class="te"{tw_attr}>'
             f'<span class="te-ts">{hhmm}&nbsp;&nbsp;</span>'
             f'{prose}'
             f'</div>'
@@ -722,7 +725,7 @@ def _build_daw_html(data: dict) -> str:
     q_items = ""
     for qa in data.get("queued_actions", []):
         q_items += (
-            f'<div class="q-item">'
+            f'<div class="q-item" data-tw="1">'
             f'<div class="q-badge" style="color:{qa["color"]}">{qa["badge"]}</div>'
             f'<div class="q-label" style="color:{qa["color"]}">{qa["label"]}</div>'
             f'<div class="q-detail">{qa["detail"]}</div>'
@@ -749,7 +752,7 @@ def _build_daw_html(data: dict) -> str:
             f'</div>'
         ) if ep else ""
         pos_cards += (
-            f'<div class="pos-card">'
+            f'<div class="pos-card" data-tw="1">'
             f'{tip}'
             f'<div class="pos-top">'
             f'<span class="pos-sym" style="color:{tcol}">{p["sym"]}</span>'
@@ -934,8 +937,22 @@ body::after {{
 #term-body::-webkit-scrollbar {{ display:none; }}
 .te {{ padding:0 16px; flex-shrink:0;
        font-size:11px; line-height:1.75; color:#9060b8;
-       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+       position:relative; }}
 .te-ts  {{ color:#2e1448; font-size:10px; }}
+/* typewriter curtain */
+.tw-curtain {{
+  position:absolute; top:0; right:0; bottom:0;
+  background:#060008; pointer-events:none; z-index:4;
+  display:flex; align-items:stretch;
+}}
+.tw-cur {{
+  width:2px; flex-shrink:0; align-self:stretch;
+  background:#ff00cc;
+  box-shadow:0 0 6px rgba(255,0,204,.9), 0 0 14px rgba(255,0,204,.4);
+}}
+/* queue items need relative + clip for curtain */
+.q-item {{ position:relative; overflow:hidden; }}
 .te-date {{ padding:10px 16px 1px; flex-shrink:0;
             font-size:9px; font-weight:700; letter-spacing:.3em;
             color:#4a2a6a; text-transform:uppercase; }}
@@ -1508,9 +1525,64 @@ window.addEventListener('resize', function() {{
   tick();
   setInterval(tick, 1000);
 
+  // ── Typewriter curtain reveal ───────────────────────────────────────────────
+  (function() {{
+    // Slide a dark curtain off each marked element left-to-right,
+    // revealing styled HTML underneath. Cursor glows at the leading edge.
+    function revealEl(el, charMs, onDone) {{
+      el.style.overflow = 'hidden';
+      var curtain = document.createElement('div');
+      curtain.className = 'tw-curtain';
+      var cursor = document.createElement('div');
+      cursor.className = 'tw-cur';
+      curtain.appendChild(cursor);
+      el.appendChild(curtain);
+
+      // measure after appending so layout is complete
+      var totalW = el.scrollWidth;
+      curtain.style.width = totalW + 'px';
+
+      var chars  = Math.max(10, el.textContent.replace(/\s+/g,' ').trim().length);
+      var stepPx = totalW / chars;
+      var curW   = totalW;
+
+      function tick() {{
+        curW -= stepPx;
+        if (curW <= 0) {{
+          curtain.remove();
+          el.style.overflow = '';
+          el.removeAttribute('data-tw');
+          if (onDone) onDone();
+          return;
+        }}
+        curtain.style.width = Math.max(curW, 0) + 'px';
+        setTimeout(tick, charMs);
+      }}
+      setTimeout(tick, 16);
+    }}
+
+    // System Feed — most recent 8 items, reveal oldest→newest in sequence
+    // DOM order is newest-first (column-reverse layout), so reverse before animating
+    var feedItems = Array.from(document.querySelectorAll('#body .te[data-tw]'));
+    feedItems.reverse();
+    function nextFeed(i) {{
+      if (i >= feedItems.length) return;
+      revealEl(feedItems[i], 14, function() {{ nextFeed(i + 1); }});
+    }}
+    nextFeed(0);
+
+    // Queue items — stagger slightly, parallel
+    document.querySelectorAll('.q-item[data-tw]').forEach(function(el, i) {{
+      setTimeout(function() {{ revealEl(el, 16); }}, i * 80);
+    }});
+
+    // Position cards — stagger slightly, parallel
+    document.querySelectorAll('.pos-card[data-tw]').forEach(function(el, i) {{
+      setTimeout(function() {{ revealEl(el, 16); }}, i * 80);
+    }});
+  }})();
+
   // ── Page reload every 90s (data freshness) ─────────────────────────────────
-  // Controlled from inside the iframe so timing is reliable.
-  // Once real-time Supabase polling is wired in, this becomes the fallback only.
   setTimeout(function() {{ window.parent.location.reload(); }}, 90000);
 
 </script>
