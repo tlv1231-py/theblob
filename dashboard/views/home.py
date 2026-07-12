@@ -1907,8 +1907,53 @@ window.addEventListener('resize', function() {{
     if (window._postToFeed) window._postToFeed(feedMsg);
   }}
 
-  // ── Page reload every 10 min (pipeline runs once daily; 90s was needless churn) ──
-  setTimeout(function() {{ window.parent.location.reload(); }}, 600000);
+  // ── Live feed poller — Supabase REST, no page reload ────────────────────────
+  (function() {{
+    var SUPA_URL  = 'https://seeevuklabvhkawawtxn.supabase.co';
+    var SUPA_KEY  = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
+    var _lastSeen = new Date().toISOString();   // only show events from now on
+
+    function _labelFor(eventType) {{
+      var m = {{
+        'TRADE':'TRADE','ENTRY':'BUY','EXIT':'SELL','SIGNAL':'SIGNAL',
+        'SNAPSHOT':'NAV','START':'RUN','COMPLETE':'RUN','RISK_VETO':'VETO',
+        'UPDATE':'UPDATE','INGEST':'DATA'
+      }};
+      return m[eventType] || eventType;
+    }}
+
+    function _poll() {{
+      var url = SUPA_URL + '/rest/v1/pipeline_events'
+        + '?select=event_type,symbol,message,recorded_at'
+        + '&recorded_at=gt.' + encodeURIComponent(_lastSeen)
+        + '&order=recorded_at.asc'
+        + '&limit=20';
+      fetch(url, {{
+        headers: {{
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY
+        }}
+      }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows) || !rows.length) return;
+        rows.forEach(function(row) {{
+          _lastSeen = row.recorded_at;
+          var label = _labelFor(row.event_type);
+          var sym   = row.symbol ? ' · ' + row.symbol : '';
+          var msg   = row.message || (label + sym);
+          if (window._postToFeed) window._postToFeed(msg, new Date(row.recorded_at));
+        }});
+      }})
+      .catch(function() {{}}); // silent — offline or auth issue
+    }}
+
+    // Wait for feed to initialise then start polling every 5s
+    setTimeout(function() {{
+      _poll();
+      setInterval(_poll, 5000);
+    }}, 3000);
+  }})();
 
 </script>
 
@@ -1919,12 +1964,6 @@ window.addEventListener('resize', function() {{
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def render() -> None:
-    try:
-        from streamlit_autorefresh import st_autorefresh
-        st_autorefresh(interval=30_000, key="home_refresh")
-    except ImportError:
-        pass
-
     st.markdown("""
     <style>
     /* Hide Streamlit chrome */
