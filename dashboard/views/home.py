@@ -939,6 +939,23 @@ body::after {{
 #status-label {{ display:none; }}
 #status-divider {{ display:none; }}
 .con-dot {{ display:inline-block; vertical-align:middle; margin-right:5px; }}
+#run-progress-wrap {{
+  display:inline-flex; align-items:center; gap:5px;
+  margin-left:auto; flex-shrink:0;
+}}
+#run-progress-bar {{
+  width:120px; height:3px; background:#1a003a; border-radius:2px; overflow:hidden; position:relative;
+}}
+#run-progress-bar::after {{
+  content:''; position:absolute; left:0; top:0; height:100%;
+  width:var(--run-pct,0%);
+  background:linear-gradient(90deg,#3a0060,#cc00ff);
+  box-shadow:0 0 6px rgba(204,0,255,.5);
+  transition:width .8s linear;
+}}
+#run-progress-label {{
+  font-size:8px; letter-spacing:.12em; color:#3a0060; white-space:nowrap;
+}}
 /* all status bar children are inline — text wraps like a real terminal */
 #live-clock {{ display:inline; color:#006622; font-size:8.5px; letter-spacing:.04em; }}
 #prompt-sym {{ display:inline; color:#004d18; font-size:10px; user-select:none; margin:0 2px; }}
@@ -1496,12 +1513,14 @@ window.addEventListener('resize', function() {{
   <!-- Status bar — full width below all four columns -->
   <div id="status-bar">
     <div class="con-dot"></div>
-    <span id="status-label">STATUS</span>
-    <span id="status-divider">|</span>
     <span id="live-clock"></span>
     <span id="prompt-sym">&gt;</span>
     <span id="type-preview"></span>
     <span id="blink-cur">█</span>
+    <div id="run-progress-wrap">
+      <div id="run-progress-bar"></div>
+      <span id="run-progress-label">next run</span>
+    </div>
   </div>
 
 </div>
@@ -1677,58 +1696,33 @@ window.addEventListener('resize', function() {{
 
     var _busy      = false;
     var _feedQueue = [];
-    var _idleIdx   = 0;
-    var _idleTimer = null;
+    // ── Next-run progress bar (replaces idle phrase cycling) ─────────────────
+    var _RUN_INTERVAL = 120; // seconds (GitHub Actions cron */2)
+    var _lastRunAt    = Date.now();
+    var _progTimer    = null;
 
-    // Each phrase mirrors an actual step the crypto runner executes every minute
-    var _idlePhrases = [
-      'fetching 1-min bars · 15 pairs',
-      'BTC/USD · testing 10-bar high breakout',
-      'ETH/USD · checking vwap alignment',
-      'SOL/USD · relative volume below threshold',
-      'scanning for entries · 5 slots open',
-      'AVAX/USD · breakout confirmed · checking rvol',
-      'monitoring open positions',
-      'BTC/USD · stop $67,240 · target $68,100',
-      'ETH/USD · age 14m of 30m max hold',
-      'checking daily loss limit · nominal',
-      'LINK/USD · no signal this bar',
-      'persisting positions to db',
-      'DOT/USD · 10-bar low breakdown · vwap below',
-      'risk limits nominal · all clear',
-      'next bar in ~45s',
-    ];
-
-    function startIdle() {{
-      if (_busy) return;
-      if (_idleTimer) clearTimeout(_idleTimer);
-      _idleTimer = setTimeout(_idleLoop, 1400);
+    function _resetRunTimer() {{
+      _lastRunAt = Date.now();
+      _tickProgress();
     }}
 
-    function _idleLoop() {{
-      if (_busy) return;
-      var phrase  = _idlePhrases[_idleIdx % _idlePhrases.length];
-      _idleIdx++;
-      var preview = document.getElementById('type-preview');
-      var blink   = document.getElementById('blink-cur');
-      if (!preview) return;
-      if (blink) blink.style.animation = 'none';
-      preview.textContent = '';
-      var i = 0;
-      (function tick() {{
-        if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
-        if (i < phrase.length) {{
-          preview.textContent += phrase[i++];
-          setTimeout(tick, 13 + (Math.random() < 0.05 ? 55 : 0));
-        }} else {{
-          setTimeout(function() {{
-            if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
-            preview.textContent = '';
-            if (blink) blink.style.animation = '';
-            _idleTimer = setTimeout(_idleLoop, 2600);
-          }}, 1800);
+    function _tickProgress() {{
+      if (_progTimer) clearInterval(_progTimer);
+      _progTimer = setInterval(function() {{
+        var elapsed = (Date.now() - _lastRunAt) / 1000;
+        var pct     = Math.min(elapsed / _RUN_INTERVAL * 100, 100);
+        var bar     = document.getElementById('run-progress-bar');
+        var lbl     = document.getElementById('run-progress-label');
+        if (bar) bar.style.setProperty('--run-pct', pct.toFixed(1) + '%');
+        if (lbl) {{
+          var remaining = Math.max(0, Math.round(_RUN_INTERVAL - elapsed));
+          lbl.textContent = pct >= 100 ? 'running…' : remaining + 's';
         }}
-      }})();
+      }}, 1000);
+    }}
+
+    function startIdle() {{
+      // no-op — progress bar replaced idle phrases
     }}
 
     // ── postToFeed: THE single gateway for all System Feed entries ────────────
@@ -1800,6 +1794,9 @@ window.addEventListener('resize', function() {{
     }}
 
   }})();
+
+  // Start progress bar ticking immediately on page load
+  _tickProgress();
 
   // ── Crosshair on portfolio dot ───────────────────────────────────────────────
   function showCrosshair() {{
@@ -1948,6 +1945,7 @@ window.addEventListener('resize', function() {{
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
         if (!Array.isArray(rows) || !rows.length) return;
+        _resetRunTimer(); // runner just fired — reset progress bar
         rows.forEach(function(row) {{
           _lastSeen = row.recorded_at;
           var raw = row.message || '';
