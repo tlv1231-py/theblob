@@ -1,0 +1,29 @@
+name: crypto_momentum runner
+
+on:
+  schedule:
+    - cron: '* * * * *'   # every minute, 24/7
+  workflow_dispatch:       # manual trigger for testing
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2     # kill if hung — next cron picks up
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt --quiet
+
+      - name: Run crypto_momentum
+        env:
+          ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          DATABASE_URL:      ${{ secrets.DATABASE_URL }}
+        run: python -m strategies.crypto.runner

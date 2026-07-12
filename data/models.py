@@ -133,6 +133,22 @@ class PipelineEvent(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class CryptoPosition(Base):
+    """Open crypto_momentum positions — persists between GitHub Actions runs."""
+    __tablename__ = "crypto_positions"
+
+    id:           Mapped[int]   = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol:       Mapped[str]   = mapped_column(String(20), nullable=False, unique=True)
+    direction:    Mapped[str]   = mapped_column(String(10), nullable=False)  # long | short
+    qty:          Mapped[float] = mapped_column(Float, nullable=False)
+    entry_price:  Mapped[float] = mapped_column(Float, nullable=False)
+    stop_price:   Mapped[float] = mapped_column(Float, nullable=False)
+    target_price: Mapped[float] = mapped_column(Float, nullable=False)
+    entered_at:   Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    order_id:     Mapped[str | None] = mapped_column(String(100), nullable=True)
+    strategy:     Mapped[str]  = mapped_column(String(50), default="crypto_momentum")
+
+
 class ExperimentRecord(Base):
     __tablename__ = "experiments"
 
