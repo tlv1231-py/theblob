@@ -1114,14 +1114,22 @@ body::after {{
 .q-timer.imminent {{ color:#ff3366; animation:q-pulse .6s ease-in-out infinite; }}
 /* ── Positions panel (gamified scorecard) ── */
 #pos-panel {{
-  flex:1; min-width:160px;
-  overflow-y:auto; scrollbar-width:none;
+  flex:1; min-width:240px;
+  overflow:hidden; scrollbar-width:none;
   background:#010008;
   display:flex; flex-direction:column;
 }}
 #pos-panel::-webkit-scrollbar {{ display:none; }}
-#pos-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:0 0 6px; }}
-#pos-body::-webkit-scrollbar {{ display:none; }}
+#pos-body {{
+  flex:1; overflow:hidden;
+  display:flex; flex-direction:row; gap:0;
+}}
+#pos-left, #pos-right {{
+  flex:1; overflow-y:auto; scrollbar-width:none;
+  display:flex; flex-direction:column; padding-bottom:6px;
+}}
+#pos-left {{ border-right:1px solid #0d0020; }}
+#pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ display:none; }}
 /* ── Floating P&L tooltip above portfolio orb ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
@@ -1154,15 +1162,25 @@ body::after {{
 .pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
-/* ── Deposit / Withdraw panel ── */
-#deposit-panel {{
-  flex:1; min-width:160px;
-  overflow:hidden; scrollbar-width:none;
-  background:#00000a;
-  display:flex; flex-direction:column;
-  border-left:1px solid #0a0018;
+/* ── Capital floating popup ── */
+#capital-fab {{
+  position:fixed; bottom:52px; right:16px; z-index:300;
+  background:rgba(6,0,8,.92); border:1px solid #2a003d; border-top:2px solid #ff00cc;
+  color:#ff00cc; font:700 8px Consolas,monospace; letter-spacing:.2em;
+  padding:6px 10px; cursor:pointer;
+  text-shadow:0 0 8px rgba(255,0,204,.5);
+  transition:all .2s; user-select:none;
 }}
-#deposit-panel::-webkit-scrollbar {{ display:none; }}
+#capital-fab:hover {{ background:rgba(255,0,204,.1); box-shadow:0 0 16px rgba(255,0,204,.25); }}
+#capital-popup {{
+  position:fixed; bottom:84px; right:16px; z-index:299;
+  width:240px; background:#00000a; border:1px solid #1a0028; border-top:2px solid #ff00cc;
+  display:flex; flex-direction:column; overflow:hidden;
+  transform:translateY(20px); opacity:0; pointer-events:none;
+  transition:transform .35s cubic-bezier(.22,1,.36,1), opacity .25s ease;
+  box-shadow:0 -8px 40px rgba(255,0,204,.15);
+}}
+#capital-popup.open {{ transform:translateY(0); opacity:1; pointer-events:all; }}
 #dep-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:8px 12px; display:flex; flex-direction:column; gap:8px; }}
 #dep-body::-webkit-scrollbar {{ display:none; }}
 .dep-tabs {{ display:flex; gap:0; }}
@@ -1192,6 +1210,37 @@ body::after {{
 .dep-hist-item {{ font-size:10px; color:#4a2a6a; display:flex; gap:6px; }}
 .dep-hist-amt {{ font-weight:700; }}
 .dep-hist-date {{ color:#1a0028; font-size:9px; margin-left:auto; }}
+/* ── Position card enter/exit animations ── */
+@keyframes card-enter {{
+  0%   {{ opacity:0; transform:translateX(-18px); filter:brightness(2) saturate(3); }}
+  40%  {{ filter:brightness(1.4) saturate(2); }}
+  100% {{ opacity:1; transform:translateX(0);  filter:brightness(1) saturate(1); }}
+}}
+@keyframes card-exit {{
+  0%   {{ opacity:1; transform:translateX(0);   max-height:80px; }}
+  40%  {{ filter:brightness(1.6); border-color:#ff3366; }}
+  100% {{ opacity:0; transform:translateX(22px); max-height:0; padding-top:0; padding-bottom:0; }}
+}}
+.pos-card-entering {{ animation:card-enter .45s cubic-bezier(.22,1,.36,1) forwards; }}
+.pos-card-exiting  {{ animation:card-exit  .38s ease-in forwards; overflow:hidden; }}
+/* ── Ambient canvas (behind chart content) ── */
+#ambient-canvas {{
+  position:absolute; inset:0; pointer-events:none; z-index:4;
+}}
+/* ── CRT scanlines over chart ── */
+#main-area::before {{
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:9;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 3px,
+    rgba(0,0,20,.018) 4px
+  );
+  animation:scan-drift 12s linear infinite;
+}}
+@keyframes scan-drift {{
+  from {{ background-position:0 0; }}
+  to   {{ background-position:0 -16px; }}
+}}
 /* ── Crosshair overlay ── */
 #crosshair-overlay {{
   position:absolute; inset:0; pointer-events:none; z-index:15;
@@ -1292,6 +1341,7 @@ body::after {{
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
+  <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
@@ -1480,6 +1530,46 @@ var layout = {{
 var config = {{ scrollZoom:true, displayModeBar:false, responsive:true }};
 var gd = document.getElementById('chart');
 
+// ── Ambient canvas — drifting cyberpunk blobs ─────────
+var ambCanvas = document.getElementById('ambient-canvas');
+(function() {{
+  function resizeAmb() {{ ambCanvas.width=window.innerWidth; ambCanvas.height=window.innerHeight; }}
+  resizeAmb();
+  window.addEventListener('resize', resizeAmb);
+  var t = 0;
+  var blobs = [
+    {{ rx:.18, ry:.55, cr:148, cg:0,   cb:255, a:.055, sx:.00017, sy:.00011 }},
+    {{ rx:.78, ry:.28, cr:0,   cg:229, cb:255, a:.04,  sx:-.00013,sy:.00009 }},
+    {{ rx:.45, ry:.80, cr:255, cg:0,   cb:204, a:.03,  sx:.00009, sy:-.00015}},
+    {{ rx:.88, ry:.65, cr:0,   cg:255, cb:157, a:.025, sx:-.00011,sy:.00007 }},
+  ];
+  var phases = blobs.map(function(_,i){{ return i * 1.57; }});
+  function drawAmb() {{
+    var ctx = ambCanvas.getContext('2d');
+    var W = ambCanvas.width, H = ambCanvas.height;
+    ctx.clearRect(0,0,W,H);
+    t += 0.005;
+    blobs.forEach(function(b,i) {{
+      var px = (b.rx + Math.sin(t * b.sx * 1000 + phases[i]) * .15) * W;
+      var py = (b.ry + Math.cos(t * b.sy * 1000 + phases[i]) * .12) * H;
+      var rr = Math.min(W,H) * (.22 + .06 * Math.sin(t + i));
+      var g  = ctx.createRadialGradient(px,py,0,px,py,rr);
+      g.addColorStop(0, 'rgba('+b.cr+','+b.cg+','+b.cb+','+b.a+')');
+      g.addColorStop(1, 'rgba('+b.cr+','+b.cg+','+b.cb+',0)');
+      ctx.beginPath();
+      ctx.arc(px,py,rr,0,Math.PI*2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    }});
+    requestAnimationFrame(drawAmb);
+  }}
+  drawAmb();
+}})();
+
+function toggleCapital() {{
+  document.getElementById('capital-popup').classList.toggle('open');
+}}
+
 // ── Pulsing canvas dots ────────────────────────────────
 var canvas = document.getElementById('pulse-canvas');
 function resizeCanvas() {{ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }}
@@ -1667,37 +1757,42 @@ window.addEventListener('resize', function() {{
 
     <div class="col-drag" id="drag-q"></div>
 
-    <!-- Positions scorecard -->
+    <!-- Positions scorecard — two columns: crypto | equity -->
     <div id="pos-panel">
       <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
       <div id="pos-body">
-        <div id="pos-crypto-section"></div>
-        <div id="pos-equity-section">{pos_cards}</div>
-      </div>
-    </div>
-
-    <div class="col-drag" id="drag-p"></div>
-
-    <!-- Capital / Deposit / Withdraw -->
-    <div id="deposit-panel">
-      <div class="panel-hdr"><div class="term-dot"></div>CAPITAL</div>
-      <div id="dep-body">
-        <div class="dep-tabs">
-          <div class="dep-tab active" id="tab-dep" onclick="setDepMode('deposit')">DEPOSIT</div>
-          <div class="dep-tab" id="tab-wdw" onclick="setDepMode('withdraw')">WITHDRAW</div>
+        <div id="pos-left">
+          <div class="pos-section-label">crypto</div>
+          <div id="pos-crypto-section"></div>
         </div>
-        <div class="dep-amt-row">
-          <input class="dep-input" id="dep-amount" type="number" placeholder="0.00" min="0" step="100">
-          <button class="dep-btn" onclick="submitTransfer()">TRANSFER</button>
-        </div>
-        <div class="dep-note" id="dep-note">ACH · free · 1-3 business days to settle</div>
-        <div class="dep-hist-hdr">history</div>
-        <div id="dep-hist">
-          <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
+        <div id="pos-right">
+          <div class="pos-section-label">equity</div>
+          <div id="pos-equity-section">{pos_cards}</div>
         </div>
       </div>
     </div>
 
+  </div>
+
+  <!-- Capital FAB + popup (fixed, outside lower-panels flow) -->
+  <div id="capital-fab" onclick="toggleCapital()">◈ CAPITAL</div>
+  <div id="capital-popup">
+    <div class="panel-hdr" style="cursor:pointer" onclick="toggleCapital()"><div class="term-dot"></div>CAPITAL <span style="margin-left:auto;font-size:8px;opacity:.5">✕</span></div>
+    <div id="dep-body">
+      <div class="dep-tabs">
+        <div class="dep-tab active" id="tab-dep" onclick="setDepMode('deposit')">DEPOSIT</div>
+        <div class="dep-tab" id="tab-wdw" onclick="setDepMode('withdraw')">WITHDRAW</div>
+      </div>
+      <div class="dep-amt-row">
+        <input class="dep-input" id="dep-amount" type="number" placeholder="0.00" min="0" step="100">
+        <button class="dep-btn" onclick="submitTransfer()">TRANSFER</button>
+      </div>
+      <div class="dep-note" id="dep-note">ACH · free · 1-3 business days to settle</div>
+      <div class="dep-hist-hdr">history</div>
+      <div id="dep-hist">
+        <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
+      </div>
+    </div>
   </div>
 
   <!-- Status bar — full width below all four columns -->
@@ -1757,11 +1852,9 @@ window.addEventListener('resize', function() {{
     var qPanel   = document.getElementById('queue-panel');
     var feedPanel = document.getElementById('feed-panel');
     var posPanel  = document.getElementById('pos-panel');
-    var depPanel  = document.getElementById('deposit-panel');
 
     makeColDrag(document.getElementById('drag-f'), feedPanel, qPanel,   null, null);
     makeColDrag(document.getElementById('drag-q'), qPanel,    posPanel, null, null);
-    makeColDrag(document.getElementById('drag-p'), posPanel,  depPanel, null, null);
 
     // Vertical overlay drag (drag the top edge to resize height)
     var overlay  = document.getElementById('term-overlay');
@@ -2344,12 +2437,55 @@ window.addEventListener('resize', function() {{
       setInterval(_pollNav, 5000);
     }}, 4000);
 
-    // ── Live positions poller — crypto_positions table ────────────────────────
+    // ── Live positions poller — DOM-diffing with enter/exit animations ───────
     var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
     function _symCol(sym) {{
       var h = 0;
       for (var i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) & 0xffff;
       return _TICKER_COLS[h % _TICKER_COLS.length];
+    }}
+
+    var _cryptoCardEls = {{}}; // symbol → DOM element
+
+    function _makeCard(p) {{
+      var col   = _symCol(p.symbol);
+      var entry = parseFloat(p.entry_price);
+      var stop  = parseFloat(p.stop_price);
+      var qty   = parseFloat(p.qty);
+      var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
+      var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
+      var qtyStr  = qty > 1000 ? qty.toFixed(0) : qty < 0.001 ? qty.toExponential(2) : qty.toFixed(4);
+      var wr = window._winRates && window._winRates[p.symbol];
+      var wrHtml = '';
+      if (wr && wr.t >= 3) {{
+        var wrPct = Math.round(wr.w / wr.t * 100);
+        var wrCol = wrPct >= 55 ? '#00ff9d' : wrPct >= 40 ? '#ff9900' : '#ff3366';
+        var wrBg  = wrPct >= 55 ? 'rgba(0,255,157,.1)' : wrPct >= 40 ? 'rgba(255,153,0,.1)' : 'rgba(255,51,102,.1)';
+        wrHtml = '<span class="win-badge" style="color:' + wrCol + ';background:' + wrBg + '">' + wrPct + '% W</span>';
+      }}
+      var el = document.createElement('div');
+      el.className = 'pos-card';
+      el.setAttribute('data-sym', p.symbol);
+      el.style.borderLeft = '3px solid ' + col;
+      el.innerHTML = '<div class="pos-top">'
+        + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
+        + '<span class="pos-qty">' + qtyStr + '</span>'
+        + '<span class="pos-val" style="color:#cc00ff;font-size:10px">▲ LONG</span>'
+        + wrHtml
+        + '</div>'
+        + '<div class="pos-hold active">$' + entry.toFixed(entry < 0.01 ? 6 : 4)
+        + ' · stop ' + stopPct + '% · ' + age + 'm</div>';
+      return el;
+    }}
+
+    function _updateCard(el, p) {{
+      var entry = parseFloat(p.entry_price);
+      var stop  = parseFloat(p.stop_price);
+      var qty   = parseFloat(p.qty);
+      var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
+      var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
+      var hold = el.querySelector('.pos-hold');
+      if (hold) hold.textContent = '$' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '% · ' + age + 'm';
     }}
 
     function _pollPositions() {{
@@ -2363,39 +2499,52 @@ window.addEventListener('resize', function() {{
       .then(function(rows) {{
         var section = document.getElementById('pos-crypto-section');
         if (!section) return;
-        var label = '<div class="pos-section-label">crypto</div>';
+        var flat = document.getElementById('pos-crypto-flat');
+
         if (!Array.isArray(rows) || !rows.length) {{
-          section.innerHTML = label + '<div class="pos-hold" style="padding:4px 14px 6px">flat</div>';
+          // Exit all existing cards
+          Object.keys(_cryptoCardEls).forEach(function(sym) {{
+            var el = _cryptoCardEls[sym];
+            el.classList.add('pos-card-exiting');
+            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 400);
+          }});
+          _cryptoCardEls = {{}};
+          if (!flat) {{
+            var f = document.createElement('div');
+            f.id = 'pos-crypto-flat'; f.className = 'pos-hold';
+            f.style.padding = '4px 14px 6px'; f.textContent = 'flat';
+            section.appendChild(f);
+          }}
           return;
         }}
-        var html = label;
-        rows.forEach(function(p) {{
-          var col   = _symCol(p.symbol);
-          var entry = parseFloat(p.entry_price);
-          var stop  = parseFloat(p.stop_price);
-          var qty   = parseFloat(p.qty);
-          var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
-          var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
-          var qtyStr = qty > 1000 ? qty.toFixed(0) : qty < 0.001 ? qty.toExponential(2) : qty.toFixed(4);
-          var wr = window._winRates && window._winRates[p.symbol];
-          var wrHtml = '';
-          if (wr && wr.t >= 3) {{
-            var wrPct = Math.round(wr.w / wr.t * 100);
-            var wrCol = wrPct >= 55 ? '#00ff9d' : wrPct >= 40 ? '#ff9900' : '#ff3366';
-            var wrBg  = wrPct >= 55 ? 'rgba(0,255,157,.1)' : wrPct >= 40 ? 'rgba(255,153,0,.1)' : 'rgba(255,51,102,.1)';
-            wrHtml = '<span class="win-badge" style="color:' + wrCol + ';background:' + wrBg + '">' + wrPct + '% W</span>';
+
+        // Remove "flat" placeholder
+        if (flat) flat.parentNode.removeChild(flat);
+
+        var newSyms = {{}};
+        rows.forEach(function(p) {{ newSyms[p.symbol] = p; }});
+
+        // Exit cards no longer in data
+        Object.keys(_cryptoCardEls).forEach(function(sym) {{
+          if (!newSyms[sym]) {{
+            var el = _cryptoCardEls[sym];
+            el.classList.add('pos-card-exiting');
+            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 400);
+            delete _cryptoCardEls[sym];
           }}
-          html += '<div class="pos-card" style="border-left:3px solid ' + col + '">'
-            + '<div class="pos-top">'
-            + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
-            + '<span class="pos-qty">' + qtyStr + '</span>'
-            + '<span class="pos-val" style="color:#cc00ff;font-size:10px">▲ LONG</span>'
-            + wrHtml
-            + '</div>'
-            + '<div class="pos-hold active">entry $' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '% · ' + age + 'm</div>'
-            + '</div>';
         }});
-        section.innerHTML = html;
+
+        // Add or update
+        rows.forEach(function(p) {{
+          if (_cryptoCardEls[p.symbol]) {{
+            _updateCard(_cryptoCardEls[p.symbol], p);
+          }} else {{
+            var el = _makeCard(p);
+            el.classList.add('pos-card-entering');
+            section.appendChild(el);
+            _cryptoCardEls[p.symbol] = el;
+          }}
+        }});
       }})
       .catch(function() {{}});
     }}
