@@ -1449,12 +1449,14 @@ body::after {{
   display:flex; flex-direction:column; padding-bottom:6px; min-height:0;
 }}
 #pos-left {{ border-right:none; }}
-/* Crypto cards in horizontal row — each is a narrow transparent column */
+/* Crypto cards — narrow floating tiles, left accent only */
 #pos-left .pos-card {{
   min-width:118px; max-width:118px; flex-shrink:0;
-  border-left:3px solid; border-right:1px solid rgba(13,0,32,.6); border-bottom:none;
-  height:100%; box-sizing:border-box; display:flex; flex-direction:column; justify-content:flex-start;
+  border-left:3px solid; border-right:none; border-top:none; border-bottom:none;
+  height:auto; align-self:flex-start; box-sizing:border-box;
+  display:flex; flex-direction:column; justify-content:flex-start;
   background:transparent !important; backdrop-filter:none !important;
+  padding:6px 10px 8px;
 }}
 #pos-overlay {{ transition:width .4s cubic-bezier(.22,1,.36,1); }}
 #pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ width:2px; }}
@@ -3570,7 +3572,7 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
     el.textContent = (cryptoCount + equityCount) || '0';
   }}
 }}
-setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 3000);
+setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 
 // ── Chart re-center on latest point ──────────────────────────────────────────
 function _recenterOnLatest(latestIsoTs) {{
@@ -5266,10 +5268,14 @@ window.addEventListener('resize', function() {{
         if (sv) {{
           if (streakSign === null) {{ sv.textContent = '—'; sv.style.color = '#3a1a5a'; }}
           else {{
-            var ico = streakSign > 0 ? '🔥' : '☠';
+            var ico = streakSign > 0 ? '&#128293;' : '&#9760;';
             sv.textContent = ico + ' ' + streak + (streakSign > 0 ? 'W' : 'L');
             sv.style.color = streakSign > 0 ? '#00ff9d' : '#ff3366';
           }}
+        }}
+        // Sync window._streak so orb tooltip STREAK field stays current
+        if (streakSign !== null) {{
+          window._streak = {{ count: streak, win: streakSign > 0 }};
         }}
         // Win rate per symbol → store as map for _pollPositions to use
         window._winRates = {{}};
