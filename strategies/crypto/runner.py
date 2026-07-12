@@ -208,34 +208,43 @@ def _submit_order(symbol: str, side: str, qty: float) -> str | None:
 
 # ── Signal computation ────────────────────────────────────────────────────────
 
-def _compute_signal(min_bars: list[dict], hour_bars: list[dict], sym: str = "") -> str | None:
-    """Returns 'long', 'short', or None."""
-    if len(min_bars) < _SIG["breakout_bars"] + 21:
-        logger.info(f"  {sym}: insufficient bars ({len(min_bars)})")
+def _ema(values: list[float], period: int) -> float:
+    """Exponential moving average of last N values."""
+    k = 2 / (period + 1)
+    e = values[0]
+    for v in values[1:]:
+        e = v * k + e * (1 - k)
+    return e
+
+
+def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
+    """EMA(5) / EMA(13) crossover on 1-min closes.
+    Long when fast crosses above slow, short when fast crosses below.
+    Requires 14+ bars for a reliable slow EMA seed.
+    """
+    fast_period = _SIG["ema_fast"]   # 5
+    slow_period = _SIG["ema_slow"]   # 13
+    min_bars_needed = slow_period + 1  # 14
+
+    if len(min_bars) < min_bars_needed:
         return None
 
-    closes  = [b["close"]  for b in min_bars]
-    volumes = [b["volume"] for b in min_bars]
-    highs   = [b["high"]   for b in min_bars]
-    lows    = [b["low"]    for b in min_bars]
+    closes = [b["close"] for b in min_bars]
 
-    close = closes[-1]
+    # Current bar EMAs
+    fast_now = _ema(closes, fast_period)
+    slow_now = _ema(closes, slow_period)
 
-    # VWAP from hourly bars (24h window)
-    if hour_bars:
-        tp_vol  = sum(((b["high"]+b["low"]+b["close"])/3) * b["volume"] for b in hour_bars)
-        tot_vol = sum(b["volume"] for b in hour_bars)
-        vwap    = tp_vol / tot_vol if tot_vol > 0 else close
-    else:
-        vwap = close
+    # Previous bar EMAs (drop last close)
+    fast_prev = _ema(closes[:-1], fast_period)
+    slow_prev = _ema(closes[:-1], slow_period)
 
-    n = _SIG["breakout_bars"]
-    prior_highs = highs[-(n+1):-1]
-    prior_lows  = lows[ -(n+1):-1]
+    crossed_up   = fast_prev <= slow_prev and fast_now > slow_now
+    crossed_down = fast_prev >= slow_prev and fast_now < slow_now
 
-    if close > max(prior_highs) and close > vwap:
+    if crossed_up:
         return "long"
-    if close < min(prior_lows) and close < vwap:
+    if crossed_down:
         return "short"
     return None
 
@@ -310,7 +319,7 @@ def run() -> None:
 
             m_bars = min_bars.get(sym, [])
             h_bars = hour_bars.get(sym, [])
-            signal = _compute_signal(m_bars, h_bars, sym)
+            signal = _compute_signal(m_bars, h_bars)
             if not signal:
                 continue
 

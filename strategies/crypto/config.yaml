@@ -20,9 +20,9 @@ universe:
   - XTZ/USD
 
 signals:
-  breakout_bars: 10          # N-bar high/low for breakout
-  rvol_min: 1.2              # min relative volume to confirm
-  vwap_window_hours: 24      # rolling VWAP window
+  ema_fast: 5                # fast EMA period (1-min bars)
+  ema_slow: 13               # slow EMA period (1-min bars)
+  # crossover fires when fast crosses above/below slow
 
 position:
   risk_pct: 1.0              # % of account value per position (THE dial)
