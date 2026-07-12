@@ -1235,69 +1235,68 @@ body::after {{
 .pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
-/* ── Scan popup ── */
-#scan-popup {{
-  position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(30px);
-  width:320px; background:#00000d; border:1px solid #0d0025;
-  border-top:2px solid #00e5ff;
-  padding:10px 12px 12px; z-index:350;
-  opacity:0; pointer-events:none;
-  transition:opacity .25s ease, transform .25s ease;
-  font-family:Consolas,monospace;
+/* ── VHS Scan bar ── */
+#vhs-scan-bar {{
+  display:inline-flex; align-items:center; gap:9px;
+  margin-left:18px; opacity:0; pointer-events:none;
+  transition:opacity .2s;
+  flex-shrink:0;
 }}
-#scan-popup.scan-visible {{
-  opacity:1; pointer-events:auto;
-  transform:translateX(-50%) translateY(0);
+#vhs-scan-bar.active {{ opacity:1; }}
+#vhs-scan-label {{
+  font-size:11px; font-weight:900; letter-spacing:.32em;
+  font-stretch:condensed;
+  color:#00e5ff;
+  text-shadow:0 0 6px rgba(0,229,255,.9), 2px 0 0 rgba(255,0,204,.35), -1px 0 0 rgba(255,0,204,.2);
+  white-space:nowrap;
+  /* VHS horizontal smear */
+  transform:scaleX(1.08) scaleY(.94);
+  transform-origin:left center;
 }}
-#scan-popup.scan-done {{ border-top-color:#00ff9d; }}
-#scan-header {{
-  display:flex; align-items:center; gap:8px; margin-bottom:7px;
+#vhs-track {{
+  width:160px; height:8px;
+  background:#080014;
+  border:1px solid #1a0030;
+  overflow:hidden; position:relative;
+  /* vertical stripe grid mimicking VHS tape */
+  background-image:repeating-linear-gradient(
+    90deg,
+    transparent 0px, transparent 5px,
+    rgba(0,229,255,.04) 5px, rgba(0,229,255,.04) 6px
+  );
 }}
-#scan-title {{
-  font-size:8px; letter-spacing:.22em; color:#00e5ff; text-transform:uppercase;
-  flex:1;
+#vhs-fill {{
+  height:100%; width:0%;
+  background:linear-gradient(90deg, rgba(0,229,255,.9) 0%, #00ff9d 70%, #fff 100%);
+  box-shadow:0 0 8px rgba(0,229,255,.8), 0 0 2px #fff;
+  position:relative;
 }}
-#scan-count {{
-  font-size:7px; letter-spacing:.1em; color:#2a1a4a;
+/* Horizontal scanline shimmer over fill */
+#vhs-fill::after {{
+  content:'';
+  position:absolute; inset:0;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 1px,
+    rgba(0,0,0,.45) 1px, rgba(0,0,0,.45) 2px
+  );
+  animation:vhs-lines 1.2s linear infinite;
 }}
-@keyframes scan-blip {{
-  0%,100% {{ transform:scale(1); opacity:.8; box-shadow:0 0 4px #00e5ff; }}
-  50%      {{ transform:scale(1.6); opacity:1; box-shadow:0 0 12px #00e5ff,0 0 24px rgba(0,229,255,.4); }}
+@keyframes vhs-lines {{
+  from {{ background-position:0 0; }}
+  to   {{ background-position:0 8px; }}
 }}
-#scan-blip {{
-  width:6px; height:6px; border-radius:50%; background:#00e5ff; flex-shrink:0;
-  animation:scan-blip .9s ease-in-out infinite;
+/* Leading edge noise blip */
+#vhs-fill::before {{
+  content:'';
+  position:absolute; right:-1px; top:0; bottom:0; width:3px;
+  background:rgba(255,255,255,.85);
+  box-shadow:0 0 4px #fff, 0 0 8px rgba(0,229,255,.9);
+  animation:vhs-blip .08s steps(1) infinite;
 }}
-#scan-popup.scan-done #scan-blip {{ background:#00ff9d; animation:none; box-shadow:0 0 8px #00ff9d; }}
-#scan-progress-bar {{
-  height:2px; background:#0d0020; border-radius:1px; overflow:hidden; margin-bottom:9px;
-}}
-#scan-progress-fill {{
-  height:100%; width:0%; background:linear-gradient(90deg,#00e5ff,#00ff9d);
-  transition:width .15s ease; border-radius:1px;
-}}
-#scan-ticker-grid {{
-  display:flex; flex-wrap:wrap; gap:4px 5px;
-}}
-.scan-tick {{
-  font-size:8px; letter-spacing:.08em; color:#1a0a2a;
-  padding:2px 5px; border:1px solid #0d0020; border-radius:2px;
-  transition:color .15s, border-color .15s, box-shadow .15s;
-  text-transform:uppercase;
-}}
-@keyframes tick-flash {{
-  0%   {{ color:#fff; border-color:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.8); }}
-  40%  {{ color:#00e5ff; border-color:#00e5ff; box-shadow:0 0 4px rgba(0,229,255,.4); }}
-  100% {{ color:#00e5ff; border-color:#0d0040; box-shadow:none; }}
-}}
-.scan-tick.scanned {{
-  animation:tick-flash .5s ease-out forwards;
-  color:#00e5ff; border-color:#0d0040;
-}}
-#scan-complete-line {{
-  font-size:8px; letter-spacing:.18em; color:#00ff9d; text-transform:uppercase;
-  margin-top:8px; min-height:14px;
-  text-shadow:0 0 8px rgba(0,255,157,.6);
+@keyframes vhs-blip {{
+  0%,100% {{ opacity:1; height:100%; top:0; }}
+  50%      {{ opacity:.7; height:60%; top:20%; }}
 }}
 /* ── Capital floating popup ── */
 #capital-fab {{
@@ -2186,18 +2185,6 @@ window.addEventListener('resize', function() {{
     </div>
   </div>
 
-  <!-- Scan popup -->
-  <div id="scan-popup">
-    <div id="scan-header">
-      <div id="scan-blip"></div>
-      <span id="scan-title">SCANNING POSITIONS</span>
-      <span id="scan-count"></span>
-    </div>
-    <div id="scan-progress-bar"><div id="scan-progress-fill"></div></div>
-    <div id="scan-ticker-grid"></div>
-    <div id="scan-complete-line"></div>
-  </div>
-
   <!-- Status bar — full width below all four columns -->
   <div id="status-bar">
     <div class="con-dot"></div>
@@ -2209,6 +2196,10 @@ window.addEventListener('resize', function() {{
       <span style="font:700 6px Consolas,monospace;letter-spacing:.18em;color:#3a1a5a;text-transform:uppercase;margin-right:2px">CYCLE</span>
       <div id="run-progress-track"><div id="run-progress-fill"></div></div>
       <span id="run-progress-label">075s</span>
+    </div>
+    <div id="vhs-scan-bar">
+      <span id="vhs-scan-label">SCAN</span>
+      <div id="vhs-track"><div id="vhs-fill"></div></div>
     </div>
   </div>
 
@@ -2796,16 +2787,6 @@ window.addEventListener('resize', function() {{
               var symList = symMatch
                 ? symMatch[1].split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean)
                 : [];
-              // Callback: post "Scan complete." to terminal only when popup finishes
-              var _ts = _parseTs(row.recorded_at);
-              window._scanCompleteCallback = function(n) {{
-                if (window._postToFeed) window._postToFeed(
-                  'Scan complete.',
-                  _ts,
-                  'Scan complete. <span style="color:#3a1a4a">·</span> ' +
-                  '<span style="color:#2a1a3a">' + n + ' positions</span>'
-                );
-              }};
               if (window._triggerScan) window._triggerScan(symList);
             }}
           }} else {{
@@ -3050,65 +3031,29 @@ window.addEventListener('resize', function() {{
         }}, i * 90);
       }});
 
-      // Popup
-      var popup   = document.getElementById('scan-popup');
-      var grid    = document.getElementById('scan-ticker-grid');
-      var fill    = document.getElementById('scan-progress-fill');
-      var countEl = document.getElementById('scan-count');
-      var compEl  = document.getElementById('scan-complete-line');
-      if (!popup || !grid) return;
+      // ── VHS tracking bar ──────────────────────────────────────────────────────
+      var vhsBar  = document.getElementById('vhs-scan-bar');
+      var vhsFill = document.getElementById('vhs-fill');
+      if (!vhsBar || !vhsFill) return;
 
-      var syms = symbols && symbols.length ? symbols
-               : Object.keys(_cryptoCardEls);
-      if (!syms.length) return;
+      // Reset to left edge and show
+      vhsFill.style.transition = 'none';
+      vhsFill.style.width = '0%';
+      vhsBar.classList.add('active');
 
-      // Reset
-      popup.classList.remove('scan-done');
-      grid.innerHTML = '';
-      fill.style.width = '0%';
-      compEl.textContent = '';
-      countEl.textContent = '0 / ' + syms.length;
-
-      // Build ticker chips
-      var tickEls = syms.map(function(s) {{
-        var d = document.createElement('div');
-        d.className = 'scan-tick';
-        d.textContent = s.replace('/USD','');
-        grid.appendChild(d);
-        return d;
+      // Fill across over ~1.4s then hold briefly and fade
+      requestAnimationFrame(function() {{
+        requestAnimationFrame(function() {{
+          vhsFill.style.transition = 'width 1.35s cubic-bezier(.15,.8,.35,1)';
+          vhsFill.style.width = '100%';
+        }});
       }});
 
-      popup.classList.add('scan-visible');
-
-      // Stagger each ticker lighting up
-      var interval = Math.min(120, 1200 / syms.length);
-      syms.forEach(function(s, i) {{
-        setTimeout(function() {{
-          if (tickEls[i]) tickEls[i].classList.add('scanned');
-          fill.style.width = ((i + 1) / syms.length * 100) + '%';
-          countEl.textContent = (i + 1) + ' / ' + syms.length;
-        }}, i * interval);
-      }});
-
-      // Complete
-      var totalMs = syms.length * interval + 300;
       setTimeout(function() {{
-        popup.classList.add('scan-done');
-        // Type "SCAN COMPLETE · N POSITIONS"
-        var msg = 'SCAN COMPLETE · ' + syms.length + ' POSITIONS';
-        var j = 0;
-        var typ = setInterval(function() {{
-          compEl.textContent = msg.slice(0, ++j);
-          if (j >= msg.length) clearInterval(typ);
-        }}, 28);
-        // Signal terminal to append "Complete."
-        if (window._scanCompleteCallback) window._scanCompleteCallback(syms.length);
-      }}, totalMs);
-
-      // Auto-dismiss
-      setTimeout(function() {{
-        popup.classList.remove('scan-visible','scan-done');
-      }}, totalMs + 2800);
+        vhsFill.style.transition = 'width .18s ease-in';
+        vhsFill.style.width = '0%';
+        setTimeout(function() {{ vhsBar.classList.remove('active'); }}, 220);
+      }}, 1600);
     }};
 
     // ── Reason-aware card exit ──────────────────────────────────────────────────
