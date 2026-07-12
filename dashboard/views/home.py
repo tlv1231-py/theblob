@@ -986,7 +986,7 @@ body::after {{
 }}
 #run-progress-fill {{
   height:100%; width:0%;
-  background:linear-gradient(90deg, #ff006e 0%, #cc00ff 50%, #00e5ff 100%);
+  background:linear-gradient(90deg, #cc00ff 0%, #ff006e 60%, #00e5ff 100%);
   box-shadow:0 0 10px rgba(204,0,255,.7), 0 0 3px rgba(0,229,255,.5);
   transition:width .9s linear;
   position:relative;
@@ -1006,6 +1006,11 @@ body::after {{
   from {{ background-position:0 0; }}
   to   {{ background-position:0 8px; }}
 }}
+@keyframes fill-fire {{
+  0%,100% {{ box-shadow:0 0 10px rgba(204,0,255,.7),0 0 3px rgba(0,229,255,.5); }}
+  50%      {{ box-shadow:0 0 22px rgba(255,0,110,1),0 0 8px rgba(0,229,255,.9); }}
+}}
+#run-progress-fill.firing {{ animation:fill-fire .4s ease-in-out infinite; }}
 #run-progress-label {{
   font-size:9px; letter-spacing:.18em; white-space:nowrap;
   font-family:Consolas,monospace;
@@ -1830,8 +1835,9 @@ window.addEventListener('resize', function() {{
     <span id="type-preview"></span>
     <span id="blink-cur">█</span>
     <div id="run-progress-wrap">
+      <span style="font:700 6px Consolas,monospace;letter-spacing:.18em;color:#3a1a5a;text-transform:uppercase;margin-right:2px">CYCLE</span>
       <div id="run-progress-track"><div id="run-progress-fill"></div></div>
-      <span id="run-progress-label">--s</span>
+      <span id="run-progress-label">075s</span>
     </div>
   </div>
 
@@ -2005,7 +2011,7 @@ window.addEventListener('resize', function() {{
     var _busy      = false;
     var _feedQueue = [];
     // ── Next-run progress bar ─────────────────────────────────────────────────
-    var _RUN_INTERVAL = 120; // seconds — GitHub Actions cron */2
+    var _RUN_INTERVAL = 75;  // seconds — 60s sleep + ~15s execution = loop cycle
     var _lastRunAt    = Date.now();
     var _progTimer    = null;
 
@@ -2021,21 +2027,25 @@ window.addEventListener('resize', function() {{
         var fill      = document.getElementById('run-progress-fill');
         var lbl       = document.getElementById('run-progress-label');
         var wrap      = document.getElementById('run-progress-wrap');
-        if (fill) fill.style.width = pct.toFixed(1) + '%';
+        if (fill) {{
+          fill.style.width = pct.toFixed(1) + '%';
+          fill.classList.toggle('firing', pct >= 95);
+        }}
         if (lbl) {{
           var rem = Math.max(0, Math.round(_RUN_INTERVAL - elapsed));
           if (pct >= 100) {{
-            lbl.textContent = '···';
+            lbl.textContent = '▸▸▸';
             lbl.style.color = '#00e5ff';
-            lbl.style.textShadow = '0 0 8px rgba(0,229,255,.9)';
+            lbl.style.textShadow = '0 0 12px rgba(0,229,255,1)';
           }} else {{
-            lbl.textContent = String(rem).padStart(3,'0');
-            // fade from cyan → magenta as timer runs out
-            var heat = rem < 30 ? 1 : 0;
-            lbl.style.color = heat ? '#ff006e' : '#cc00ff';
-            lbl.style.textShadow = heat
-              ? '0 0 10px rgba(255,0,110,.9)'
-              : '0 0 8px rgba(204,0,255,.8)';
+            lbl.textContent = String(rem).padStart(3,'0') + 's';
+            // cyan → magenta → hot pink in last 15s
+            var heat = Math.max(0, (15 - rem) / 15);
+            var r = Math.round(204 + heat * 51);
+            var g = Math.round(0);
+            var b = Math.round(255 - heat * 145);
+            lbl.style.color = 'rgb(' + r + ',' + g + ',' + b + ')';
+            lbl.style.textShadow = '0 0 ' + (8 + heat * 8) + 'px rgba(' + r + ',0,' + b + ',.9)';
           }}
         }}
         // hide bar while a message is typing through status
