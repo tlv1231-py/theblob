@@ -672,9 +672,12 @@ def _build_daw_html(data: dict) -> str:
         # fallback
         return f'<span style="color:#5a3a7a">{msg}</span>'
 
+    _term_evs  = data.get("term_events", [])
+    _last_ev_i = len(_term_evs) - 1
+
     # Collect NAV values oldest-first for up/down coloring
     _snap_vals: list[float] = []
-    for _ev_i, ev in enumerate(_term_evs):
+    for ev in _term_evs:
         if ev["tag"] in ("NAV", "UPDATE", "SNAPSHOT"):
             _m = _re.search(r'\$([\d,]+)', ev.get("line1",""))
             if _m:
@@ -683,8 +686,6 @@ def _build_daw_html(data: dict) -> str:
     term_rows = ""
     _last_date = None
     _snap_idx  = 0
-    _term_evs  = data.get("term_events", [])
-    _last_ev_i = len(_term_evs) - 1
 
     for _ev_i, ev in enumerate(_term_evs):
         ts_raw = str(ev["ts"]) if ev.get("ts") else ""
