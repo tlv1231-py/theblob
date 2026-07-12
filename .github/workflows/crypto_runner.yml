@@ -2,7 +2,7 @@ name: crypto_momentum runner
 
 on:
   schedule:
-    - cron: '* * * * *'   # every minute, 24/7
+    - cron: '*/2 * * * *'  # every 2 minutes, 24/7
   workflow_dispatch:       # manual trigger for testing
 
 jobs:

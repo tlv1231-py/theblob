@@ -220,7 +220,6 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict], sym: str = "") 
     lows    = [b["low"]    for b in min_bars]
 
     close = closes[-1]
-    logger.info(f"  {sym}: bars={len(min_bars)} close={close:.4f}")
 
     # VWAP from hourly bars (24h window)
     if hour_bars:
