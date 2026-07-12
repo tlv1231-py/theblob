@@ -909,15 +909,14 @@ body::after {{
 }}
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
-/* ── Status bar — bottom of System Feed panel ── */
+/* ── Status bar — pinned to bottom of feed panel, never shifts content ── */
 #status-bar {{
-  flex-shrink:0;
-  height:42px;
+  position:absolute; bottom:0; left:0; right:0;
   background:#000;
   border-top:1px solid #003311;
-  padding:3px 10px 0;
+  padding:4px 10px 5px;
   line-height:1.65;
-  overflow:hidden;
+  z-index:5;
 }}
 .con-dot {{
   width:5px; height:5px; border-radius:50%; flex-shrink:0;
@@ -954,11 +953,12 @@ body::after {{
   background:#010006;
   display:flex; flex-direction:column;
   overflow:hidden;
+  position:relative;
 }}
 #term-body {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
-  padding:2px 0;
+  padding:2px 0 50px;   /* bottom pad keeps last entry above status bar */
   scrollbar-width:none; background:#010006;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
