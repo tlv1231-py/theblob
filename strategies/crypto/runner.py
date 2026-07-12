@@ -208,9 +208,10 @@ def _submit_order(symbol: str, side: str, qty: float) -> str | None:
 
 # ── Signal computation ────────────────────────────────────────────────────────
 
-def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
+def _compute_signal(min_bars: list[dict], hour_bars: list[dict], sym: str = "") -> str | None:
     """Returns 'long', 'short', or None."""
     if len(min_bars) < _SIG["breakout_bars"] + 21:
+        logger.info(f"  {sym}: insufficient bars ({len(min_bars)})")
         return None
 
     closes  = [b["close"]  for b in min_bars]
@@ -222,6 +223,7 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
     vol     = volumes[-1]
     avg_vol = sum(volumes[-21:-1]) / 20
     rvol    = (vol / avg_vol) if avg_vol > 0 else 0.0
+    logger.info(f"  {sym}: bars={len(min_bars)} rvol={rvol:.2f} close={close:.4f}")
     if rvol < _SIG["rvol_min"]:
         return None
 
@@ -314,7 +316,7 @@ def run() -> None:
 
             m_bars = min_bars.get(sym, [])
             h_bars = hour_bars.get(sym, [])
-            signal = _compute_signal(m_bars, h_bars)
+            signal = _compute_signal(m_bars, h_bars, sym)
             if not signal:
                 continue
 
