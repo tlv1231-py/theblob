@@ -1198,6 +1198,28 @@ body::after {{
   opacity:0;
 }}
 #xhair-canvas {{ position:absolute; inset:0; }}
+/* ── Yellow aurora shimmer over gridlines ── */
+#grid-shimmer {{
+  position:absolute; inset:0; pointer-events:none; z-index:6;
+  background:linear-gradient(115deg,
+    transparent 0%, transparent 30%,
+    rgba(255,210,0,.045) 42%, rgba(255,170,0,.07) 50%, rgba(255,210,0,.045) 58%,
+    transparent 70%, transparent 100%
+  );
+  background-size:300% 300%;
+  animation:grid-aurora 18s ease-in-out infinite;
+}}
+@keyframes grid-aurora {{
+  0%   {{ background-position:0% 50%; }}
+  50%  {{ background-position:100% 50%; }}
+  100% {{ background-position:0% 50%; }}
+}}
+/* ── Portfolio line oscillating glow ── */
+@keyframes port-glow {{
+  0%,100% {{ filter:drop-shadow(0 0 2px #ff00cc) drop-shadow(0 0 6px rgba(255,0,204,.4)); }}
+  50%      {{ filter:drop-shadow(0 0 10px #ff00cc) drop-shadow(0 0 28px rgba(255,0,204,.65)) drop-shadow(0 0 50px rgba(255,0,204,.25)); }}
+}}
+.portfolio-glow {{ animation:port-glow 2.4s ease-in-out infinite; }}
 </style>
 </head>
 <body>
@@ -1244,6 +1266,7 @@ body::after {{
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
+  <div id="grid-shimmer"></div>
   <canvas id="pulse-canvas"></canvas>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
@@ -1334,7 +1357,7 @@ var traces = [
     x: [portDates[0]||xStart, latestDate],
     y: [100000, 100000],
     type:'scatter', mode:'lines',
-    line:{{ color:'rgba(58,26,74,0.6)', width:1, dash:'dot' }},
+    line:{{ color:'rgba(255,0,204,0.55)', width:1.5, dash:'dot' }},
     name:'$100K baseline',
     hoverinfo:'skip',
   }},
@@ -1490,16 +1513,26 @@ function drawPulse() {{
   rafId = requestAnimationFrame(drawPulse);
 }}
 
+function applyPortfolioGlow() {{
+  // Portfolio trace is index 3 — its line path sits inside the 4th .scatter group
+  var scatters = gd.querySelectorAll('.scatter');
+  if (scatters[3]) {{
+    var lp = scatters[3].querySelector('path.js-line');
+    if (lp) lp.classList.add('portfolio-glow');
+  }}
+}}
+
 // Start everything once Plotly has rendered
 Plotly.newPlot(gd, traces, layout, config).then(function() {{
   buildTargets();
+  applyPortfolioGlow();
   if (rafId) cancelAnimationFrame(rafId);
   drawPulse();
   // Crosshair on load: show → zoom in after crosshair fades
   setTimeout(showCrosshair, 1500);
 }});
 
-gd.on('plotly_afterplot', buildTargets);
+gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
 
 // Dynamically tighten Y as user pans/zooms
 gd.on('plotly_relayout', function(update) {{
