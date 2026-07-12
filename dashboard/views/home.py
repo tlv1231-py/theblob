@@ -1658,59 +1658,10 @@ window.addEventListener('resize', function() {{
       tick();
     }}
 
-    // ── Idle status phrases ───────────────────────────────────────────────────
-    var _idlePhrases = [
-      'monitoring universe · 94 symbols',
-      'next rebalance: market open',
-      'risk limits nominal · all clear',
-      'scanning momentum signals',
-      'portfolio mark-to-market · live',
-      'awaiting next trading session',
-      'all systems operational',
-      'tracking 5 open positions',
-      'sharpe ratio: stable',
-      'drawdown within limits',
-    ];
-    var _idleIdx    = 0;
-    var _idleTimer  = null;
-    var _busy       = false;  // true while a real event is typing
-    var _feedQueue  = [];     // real events waiting to type through Status
+    var _busy      = false;
+    var _feedQueue = [];
 
-    function _clearIdleTimer() {{
-      if (_idleTimer) {{ clearTimeout(_idleTimer); _idleTimer = null; }}
-    }}
-
-    function _idleLoop() {{
-      if (_busy) return;
-      var phrase  = _idlePhrases[_idleIdx % _idlePhrases.length];
-      _idleIdx++;
-      var preview = document.getElementById('type-preview');
-      var blink   = document.getElementById('blink-cur');
-      if (!preview) return;
-      if (blink) blink.style.animation = 'none';
-      preview.textContent = '';
-      var i = 0;
-      (function tick() {{
-        if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
-        if (i < phrase.length) {{
-          preview.textContent += phrase[i++];
-          setTimeout(tick, 14 + (Math.random() < 0.05 ? 60 : 0));
-        }} else {{
-          setTimeout(function() {{
-            if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
-            preview.textContent = '';
-            if (blink) blink.style.animation = '';
-            _idleTimer = setTimeout(_idleLoop, 3000);
-          }}, 2200);
-        }}
-      }})();
-    }}
-
-    function startIdle() {{
-      if (_busy) return;
-      _clearIdleTimer();
-      _idleTimer = setTimeout(_idleLoop, 1600);
-    }}
+    function startIdle() {{ /* no-op until crypto feed is live */ }}
 
     // ── postToFeed: THE single gateway for all System Feed entries ────────────
     // Every trade, fill, deposit, withdraw, pipeline event goes through here.
@@ -1723,7 +1674,6 @@ window.addEventListener('resize', function() {{
     function _drainQueue() {{
       if (_busy || !_feedQueue.length) return;
       _busy = true;
-      _clearIdleTimer();
       var item = _feedQueue.shift();
       typeAtCursor(item.text, function() {{
         // Append new row to System Feed
