@@ -74,8 +74,9 @@ def _fetch_bars(timeframe: str, limit: int) -> dict[str, list]:
         limit             = limit,
     )
     resp = client.get_crypto_bars(req)
+    raw = resp.data if hasattr(resp, "data") else resp
     result = {}
-    for sym, bars in resp.items():
+    for sym, bars in raw.items():
         result[sym] = [
             {
                 "open":      float(b.open),
