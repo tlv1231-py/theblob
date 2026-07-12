@@ -1210,6 +1210,25 @@ body::after {{
 .dep-hist-item {{ font-size:10px; color:#4a2a6a; display:flex; gap:6px; }}
 .dep-hist-amt {{ font-weight:700; }}
 .dep-hist-date {{ color:#1a0028; font-size:9px; margin-left:auto; }}
+/* ── Runner health chip ── */
+#runner-health {{
+  display:flex; align-items:center; gap:5px; padding:0 10px; flex-shrink:0;
+}}
+#runner-dot {{
+  width:6px; height:6px; border-radius:50%; flex-shrink:0;
+  transition:background .4s, box-shadow .4s;
+}}
+#runner-dot.ok  {{ background:#00ff9d; box-shadow:0 0 8px rgba(0,255,157,.8); animation:pdot 1.6s ease-in-out infinite; }}
+#runner-dot.warn {{ background:#ff9900; box-shadow:0 0 8px rgba(255,153,0,.8); animation:pdot .8s ease-in-out infinite; }}
+#runner-dot.dead {{ background:#ff3366; box-shadow:0 0 8px rgba(255,51,102,.8); animation:pdot .4s ease-in-out infinite; }}
+#runner-age {{ font:700 9px Consolas,monospace; letter-spacing:.04em; transition:color .4s; }}
+#runner-trades {{ font-size:6.5px; color:#3a1a4a; letter-spacing:.18em; text-transform:uppercase; }}
+/* ── Position age bar ── */
+.pos-age-bar {{ height:2px; margin-top:4px; border-radius:1px; overflow:hidden; background:#0d0020; }}
+.pos-age-fill {{
+  height:100%; border-radius:1px;
+  transition:width .8s linear, background .8s;
+}}
 /* ── Position card enter/exit animations ── */
 @keyframes card-enter {{
   0%   {{ opacity:0; transform:translateX(-18px); filter:brightness(2) saturate(3); }}
@@ -1225,21 +1244,21 @@ body::after {{
 .pos-card-exiting  {{ animation:card-exit  .38s ease-in forwards; overflow:hidden; }}
 /* ── Ambient canvas (behind chart content) ── */
 #ambient-canvas {{
-  position:absolute; inset:0; pointer-events:none; z-index:4;
+  position:absolute; inset:0; pointer-events:none; z-index:10;
 }}
 /* ── CRT scanlines over chart ── */
 #main-area::before {{
-  content:''; position:absolute; inset:0; pointer-events:none; z-index:9;
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:11;
   background:repeating-linear-gradient(
     0deg,
-    transparent 0px, transparent 3px,
-    rgba(0,0,20,.018) 4px
+    transparent 0px, transparent 2px,
+    rgba(30,0,50,.028) 3px
   );
-  animation:scan-drift 12s linear infinite;
+  animation:scan-drift 8s linear infinite;
 }}
 @keyframes scan-drift {{
   from {{ background-position:0 0; }}
-  to   {{ background-position:0 -16px; }}
+  to   {{ background-position:0 -12px; }}
 }}
 /* ── Crosshair overlay ── */
 #crosshair-overlay {{
@@ -1331,6 +1350,14 @@ body::after {{
   <div id="streak-chip">
     <span class="streak-label">streak</span>
     <span id="streak-val" class="streak-val" style="color:#3a1a5a">—</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div id="runner-health">
+    <div id="runner-dot" class="warn"></div>
+    <div>
+      <div id="runner-age" style="color:#3a1a5a">—</div>
+      <div id="runner-trades" class="runner-trades">0 trades today</div>
+    </div>
   </div>
 </div>
 <div id="daily-bar">
@@ -1538,10 +1565,10 @@ var ambCanvas = document.getElementById('ambient-canvas');
   window.addEventListener('resize', resizeAmb);
   var t = 0;
   var blobs = [
-    {{ rx:.18, ry:.55, cr:148, cg:0,   cb:255, a:.055, sx:.00017, sy:.00011 }},
-    {{ rx:.78, ry:.28, cr:0,   cg:229, cb:255, a:.04,  sx:-.00013,sy:.00009 }},
-    {{ rx:.45, ry:.80, cr:255, cg:0,   cb:204, a:.03,  sx:.00009, sy:-.00015}},
-    {{ rx:.88, ry:.65, cr:0,   cg:255, cb:157, a:.025, sx:-.00011,sy:.00007 }},
+    {{ rx:.18, ry:.55, cr:148, cg:0,   cb:255, a:.11,  sx:.00017, sy:.00011 }},
+    {{ rx:.78, ry:.28, cr:0,   cg:229, cb:255, a:.08,  sx:-.00013,sy:.00009 }},
+    {{ rx:.45, ry:.80, cr:255, cg:0,   cb:204, a:.065, sx:.00009, sy:-.00015}},
+    {{ rx:.88, ry:.65, cr:0,   cg:255, cb:157, a:.05,  sx:-.00011,sy:.00007 }},
   ];
   var phases = blobs.map(function(_,i){{ return i * 1.57; }});
   function drawAmb() {{
@@ -2409,7 +2436,7 @@ window.addEventListener('resize', function() {{
       var gd = document.getElementById('chart');
       if (gd && gd.data && gd.data.length > 0) {{
         var isoTs = ts || new Date().toISOString();
-        Plotly.extendTraces(gd, {{x: [[isoTs]], y: [[nav]]}}, [0]);
+        Plotly.extendTraces(gd, {{x: [[isoTs]], y: [[nav]]}}, [3]); // trace 3 = PORTFOLIO
       }}
     }}
 
@@ -2466,7 +2493,10 @@ window.addEventListener('resize', function() {{
       var el = document.createElement('div');
       el.className = 'pos-card';
       el.setAttribute('data-sym', p.symbol);
+      el.setAttribute('data-entered', p.entered_at || '');
       el.style.borderLeft = '3px solid ' + col;
+      var agePct  = Math.min(age / 12 * 100, 100);
+      var ageBg   = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
       el.innerHTML = '<div class="pos-top">'
         + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
         + '<span class="pos-qty">' + qtyStr + '</span>'
@@ -2474,18 +2504,24 @@ window.addEventListener('resize', function() {{
         + wrHtml
         + '</div>'
         + '<div class="pos-hold active">$' + entry.toFixed(entry < 0.01 ? 6 : 4)
-        + ' · stop ' + stopPct + '% · ' + age + 'm</div>';
+        + ' · stop ' + stopPct + '%</div>'
+        + '<div class="pos-age-bar"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
       return el;
     }}
 
     function _updateCard(el, p) {{
-      var entry = parseFloat(p.entry_price);
-      var stop  = parseFloat(p.stop_price);
-      var qty   = parseFloat(p.qty);
-      var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
+      var entry   = parseFloat(p.entry_price);
+      var stop    = parseFloat(p.stop_price);
+      var age     = p.entered_at ? (Date.now() - new Date(p.entered_at)) / 60000 : 0;
       var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
       var hold = el.querySelector('.pos-hold');
-      if (hold) hold.textContent = '$' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '% · ' + age + 'm';
+      if (hold) hold.textContent = '$' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '%';
+      var fill = el.querySelector('.pos-age-fill');
+      if (fill) {{
+        var agePct = Math.min(age / 12 * 100, 100);
+        fill.style.width  = agePct + '%';
+        fill.style.background = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+      }}
     }}
 
     function _pollPositions() {{
@@ -2597,6 +2633,33 @@ window.addEventListener('resize', function() {{
         }});
       }}).catch(function() {{}});
 
+      // Runner health — fetch most recent UPDATE event (heartbeat) and compute age
+      var urlHb = SUPA_URL + '/rest/v1/pipeline_events'
+        + '?select=recorded_at&event_type=eq.UPDATE&order=recorded_at.desc&limit=1';
+      fetch(urlHb, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        var dot = document.getElementById('runner-dot');
+        var age = document.getElementById('runner-age');
+        if (!dot || !age || !Array.isArray(rows) || !rows.length) return;
+        var mins = (Date.now() - new Date(rows[0].recorded_at)) / 60000;
+        var cls  = mins < 6 ? 'ok' : mins < 20 ? 'warn' : 'dead';
+        dot.className = cls;
+        age.textContent = mins < 1 ? '<1m' : Math.round(mins) + 'm ago';
+        age.style.color = cls === 'ok' ? '#00ff9d' : cls === 'warn' ? '#ff9900' : '#ff3366';
+      }}).catch(function() {{}});
+
+      // Trade count today
+      var todayStr = new Date().toISOString().split('T')[0];
+      var urlTc = SUPA_URL + '/rest/v1/pipeline_events'
+        + '?select=id&event_type=eq.TRADE&recorded_at=gte.' + todayStr + 'T00:00:00Z';
+      fetch(urlTc + '&limit=500', {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        var el = document.getElementById('runner-trades');
+        if (el && Array.isArray(rows)) el.textContent = rows.length + ' trades today';
+      }}).catch(function() {{}});
+
       // Daily bar: today's fills pnl proxy — compare earliest vs latest portfolio snapshot today
       var today = new Date().toISOString().split('T')[0];
       var urlSnap = SUPA_URL + '/rest/v1/portfolio_snapshots'
@@ -2629,6 +2692,23 @@ window.addEventListener('resize', function() {{
       }}).catch(function() {{}});
     }}
     setTimeout(function() {{ _pollStats(); setInterval(_pollStats, 15000); }}, 6000);
+
+    // Tick age bars every 30s without a network call
+    setInterval(function() {{
+      Object.keys(_cryptoCardEls).forEach(function(sym) {{
+        var el = _cryptoCardEls[sym];
+        if (!el) return;
+        var enteredAt = el.getAttribute('data-entered');
+        if (!enteredAt) return;
+        var age = (Date.now() - new Date(enteredAt)) / 60000;
+        var fill = el.querySelector('.pos-age-fill');
+        if (fill) {{
+          var agePct = Math.min(age / 12 * 100, 100);
+          fill.style.width = agePct + '%';
+          fill.style.background = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+        }}
+      }});
+    }}, 30000);
 
   }})();
 

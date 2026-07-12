@@ -2,7 +2,7 @@ name: crypto_momentum runner
 
 on:
   schedule:
-    - cron: '*/2 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
