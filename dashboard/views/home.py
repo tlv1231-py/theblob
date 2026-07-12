@@ -1863,10 +1863,12 @@ var latestDate = portDates.length ? portDates[portDates.length-1] : null;
 var _xNow = new Date();
 var xEndDate = new Date(_xNow.getTime() + 6*3600*1000).toISOString();
 
-// Default left edge: 7 days back from now (tight window, realtime feel)
+// Left edge: earliest portfolio data minus a small pad, so nothing is hidden on load.
+// The "live" feel comes from the real-time right-edge advance + trade markers, not zoom level.
 var firstDate = portDates.length ? portDates[0] : null;
-var xStartDefault = new Date(_xNow.getTime() - 7*24*3600*1000).toISOString();
-if (firstDate && xStartDefault.slice(0,10) < firstDate) xStartDefault = firstDate + 'T00:00:00Z';
+var xStartDefault = firstDate
+  ? new Date(new Date(firstDate+'T00:00:00Z').getTime() - 2*24*3600*1000).toISOString()
+  : new Date(_xNow.getTime() - 30*24*3600*1000).toISOString();
 
 var xEnd   = xEndDate;
 var xStart = xStartDefault;
@@ -2747,12 +2749,12 @@ gd.on('plotly_relayout', function(u) {{
 }});
 var _rtAdvancing = false;
 setInterval(function() {{
-  if (_userPanned) return; // don't fight user pan
+  if (_userPanned) return;
   _rtAdvancing = true;
   var now = new Date();
   var newEnd = new Date(now.getTime() + 6*3600*1000).toISOString();
-  var newStart = new Date(now.getTime() - 7*24*3600*1000).toISOString();
-  Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }});
+  // Keep left edge fixed at xStart — only slide the right edge forward
+  Plotly.relayout(gd, {{ 'xaxis.range[1]': newEnd }});
   _rtAdvancing = false;
 }}, 30000);
 
@@ -3422,27 +3424,35 @@ window.addEventListener('resize', function() {{
         var now  = item.ts ? new Date(item.ts) : new Date();
         var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
         var row  = document.createElement('div');
-        var isTrade = item.html.indexOf('enter') !== -1 || item.html.indexOf('exit') !== -1 || item.html.indexOf('ENTER') !== -1 || item.html.indexOf('EXIT') !== -1;
+        var _h = item.html;
+        // Only flag as trade if it has the colored enter/exit spans (not just the word)
+        var isTrade = (_h.indexOf('>enter<') !== -1 || _h.indexOf('>exit<') !== -1 ||
+                       _h.indexOf('ENTER') !== -1 || _h.indexOf('EXIT') !== -1) &&
+                      (_h.indexOf('@') !== -1); // must have a price
         if (isTrade) {{
           row.className = 'te te-trade';
+          // Trade entries: flash bright, then dim to readable green after 3s
           row.style.color = '#00ff9d';
+          setTimeout(function() {{
+            row.style.transition = 'color 1.5s ease, text-shadow 1.5s ease';
+            row.style.color = 'rgba(0,200,120,.45)';
+            row.style.textShadow = 'none';
+          }}, 3200);
         }} else {{
           row.className = 'te';
           row.style.color = '#00ff41';
-          row.style.textShadow = '0 0 8px rgba(0,255,65,.6)';
-          row.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
-        }}
-        row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + item.html;
-        if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
-        // Fade non-trade entries to dim color after flash
-        if (!isTrade) {{
+          row.style.textShadow = '0 0 6px rgba(0,255,65,.5)';
+          row.style.transition = 'color 1200ms ease, text-shadow 1200ms ease';
+          // Fade to dim purple after flash
           requestAnimationFrame(function() {{
             requestAnimationFrame(function() {{
-              row.style.color = '#9060b8';
+              row.style.color = '#6a4a8a';
               row.style.textShadow = 'none';
             }});
           }});
         }}
+        row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + _h;
+        if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
         _busy = false;
         if (_feedQueue.length) {{
           setTimeout(_drainQueue, 400);
