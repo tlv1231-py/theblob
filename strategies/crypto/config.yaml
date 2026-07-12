@@ -26,9 +26,9 @@ signals:
 position:
   risk_pct: 1.0              # % of account value per position
   max_positions: 15          # all pairs eligible simultaneously
-  stop_pct: 0.004            # 0.4% hard stop
-  target_pct: 0.002          # 0.2% profit target — snap it and re-enter
-  max_hold_minutes: 12       # force re-evaluation every 12 min
+  stop_pct: 0.002            # 0.2% hard stop — exit fast when wrong
+  target_pct: 0.004          # 0.4% profit target — 2:1 R:R, need only 34% win rate
+  max_hold_minutes: 8        # cut stalled positions faster
 
 risk:
   max_daily_loss_pct: 0.10

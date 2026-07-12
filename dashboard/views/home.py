@@ -1158,7 +1158,21 @@ body::after {{
   padding:4px 12px 2px; text-transform:uppercase; border-bottom:1px solid #0d0020;
 }}
 #pos-equity-section .pos-section-label {{ border-top:1px solid #0d0020; margin-top:2px; }}
-.pos-card {{ padding:6px 12px 7px; cursor:default; }}
+.pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden; }}
+/* scan sweep */
+@keyframes card-scan-sweep {{
+  0%   {{ top:-3px; opacity:0; }}
+  8%   {{ opacity:1; }}
+  92%  {{ opacity:1; }}
+  100% {{ top:calc(100% + 3px); opacity:0; }}
+}}
+.pos-card-scanning::after {{
+  content:''; position:absolute; pointer-events:none; z-index:20;
+  left:-5%; right:-5%; height:2px; top:-3px;
+  background:linear-gradient(90deg,transparent 0%,rgba(0,255,157,.65) 20%,#00e5ff 50%,rgba(0,255,157,.65) 80%,transparent 100%);
+  box-shadow:0 0 6px #00ff9d,0 0 16px rgba(0,229,255,.7);
+  animation:card-scan-sweep .65s ease-in-out forwards;
+}}
 .pos-top {{ display:flex; align-items:baseline; gap:6px; line-height:1.3; }}
 .pos-sym {{ font-weight:700; font-size:15px; }}
 .pos-qty {{ color:#3a1a5a; font-size:10px; }}
@@ -1167,6 +1181,70 @@ body::after {{
 .pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
+/* ── Scan popup ── */
+#scan-popup {{
+  position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(30px);
+  width:320px; background:#00000d; border:1px solid #0d0025;
+  border-top:2px solid #00e5ff;
+  padding:10px 12px 12px; z-index:350;
+  opacity:0; pointer-events:none;
+  transition:opacity .25s ease, transform .25s ease;
+  font-family:Consolas,monospace;
+}}
+#scan-popup.scan-visible {{
+  opacity:1; pointer-events:auto;
+  transform:translateX(-50%) translateY(0);
+}}
+#scan-popup.scan-done {{ border-top-color:#00ff9d; }}
+#scan-header {{
+  display:flex; align-items:center; gap:8px; margin-bottom:7px;
+}}
+#scan-title {{
+  font-size:8px; letter-spacing:.22em; color:#00e5ff; text-transform:uppercase;
+  flex:1;
+}}
+#scan-count {{
+  font-size:7px; letter-spacing:.1em; color:#2a1a4a;
+}}
+@keyframes scan-blip {{
+  0%,100% {{ transform:scale(1); opacity:.8; box-shadow:0 0 4px #00e5ff; }}
+  50%      {{ transform:scale(1.6); opacity:1; box-shadow:0 0 12px #00e5ff,0 0 24px rgba(0,229,255,.4); }}
+}}
+#scan-blip {{
+  width:6px; height:6px; border-radius:50%; background:#00e5ff; flex-shrink:0;
+  animation:scan-blip .9s ease-in-out infinite;
+}}
+#scan-popup.scan-done #scan-blip {{ background:#00ff9d; animation:none; box-shadow:0 0 8px #00ff9d; }}
+#scan-progress-bar {{
+  height:2px; background:#0d0020; border-radius:1px; overflow:hidden; margin-bottom:9px;
+}}
+#scan-progress-fill {{
+  height:100%; width:0%; background:linear-gradient(90deg,#00e5ff,#00ff9d);
+  transition:width .15s ease; border-radius:1px;
+}}
+#scan-ticker-grid {{
+  display:flex; flex-wrap:wrap; gap:4px 5px;
+}}
+.scan-tick {{
+  font-size:8px; letter-spacing:.08em; color:#1a0a2a;
+  padding:2px 5px; border:1px solid #0d0020; border-radius:2px;
+  transition:color .15s, border-color .15s, box-shadow .15s;
+  text-transform:uppercase;
+}}
+@keyframes tick-flash {{
+  0%   {{ color:#fff; border-color:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.8); }}
+  40%  {{ color:#00e5ff; border-color:#00e5ff; box-shadow:0 0 4px rgba(0,229,255,.4); }}
+  100% {{ color:#00e5ff; border-color:#0d0040; box-shadow:none; }}
+}}
+.scan-tick.scanned {{
+  animation:tick-flash .5s ease-out forwards;
+  color:#00e5ff; border-color:#0d0040;
+}}
+#scan-complete-line {{
+  font-size:8px; letter-spacing:.18em; color:#00ff9d; text-transform:uppercase;
+  margin-top:8px; min-height:14px;
+  text-shadow:0 0 8px rgba(0,255,157,.6);
+}}
 /* ── Capital floating popup ── */
 #capital-fab {{
   position:fixed; bottom:52px; right:16px; z-index:300;
@@ -1233,6 +1311,44 @@ body::after {{
 .pos-age-fill {{
   height:100%; border-radius:1px;
   transition:width .8s linear, background .8s;
+/* ── Stop / Target range bar ── */
+}}
+.pos-range-bar {{
+  height:3px; margin-top:3px; display:flex; overflow:hidden; border-radius:1px;
+}}
+.pos-range-stop   {{ background:rgba(255,51,102,.38); }}
+.pos-range-marker {{ width:1px; background:rgba(255,255,255,.4); flex-shrink:0; }}
+.pos-range-target {{ background:rgba(0,255,157,.28); }}
+.pos-range-labels {{
+  display:flex; justify-content:space-between;
+  font-size:6.5px; color:#2a1a4a; letter-spacing:.03em; margin-top:1px;
+}}
+/* ── Equity pipeline countdown ── */
+#equity-countdown {{
+  padding:6px 12px 4px; font-size:7px; letter-spacing:.18em;
+  text-transform:uppercase; color:#2a1a4a; border-top:1px solid #0d0020;
+  display:flex; align-items:center; gap:6px; margin-top:auto;
+}}
+#equity-countdown .eq-pip-bar {{
+  flex:1; height:2px; background:#0d0020; border-radius:1px; overflow:hidden;
+}}
+#equity-countdown .eq-pip-fill {{
+  height:100%; border-radius:1px; background:#9060b8;
+  transition:width 1s linear;
+}}
+.eq-pip-label {{ white-space:nowrap; }}
+/* ── Crypto cycle label in pos-left ── */
+#crypto-cycle-chip {{
+  padding:4px 12px; font-size:7px; letter-spacing:.18em;
+  text-transform:uppercase; color:#2a1a4a; border-top:1px solid #0d0020;
+  display:flex; align-items:center; gap:6px; margin-top:auto;
+}}
+#crypto-cycle-chip .cc-bar {{
+  flex:1; height:2px; background:#0d0020; border-radius:1px; overflow:hidden;
+}}
+#crypto-cycle-chip .cc-fill {{
+  height:100%; border-radius:1px; background:#00e5ff;
+  transition:width .25s linear;
 }}
 /* ── Position card enter/exit animations ── */
 @keyframes card-enter {{
@@ -1796,10 +1912,20 @@ window.addEventListener('resize', function() {{
         <div id="pos-left">
           <div class="pos-section-label">crypto</div>
           <div id="pos-crypto-section"></div>
+          <div id="crypto-cycle-chip">
+            <span class="eq-pip-label" id="crypto-cycle-label">next scan</span>
+            <div class="cc-bar"><div class="cc-fill" id="crypto-cycle-fill" style="width:0%"></div></div>
+            <span id="crypto-cycle-eta" style="font-size:7px;color:#2a1a4a;letter-spacing:.04em">—</span>
+          </div>
         </div>
         <div id="pos-right">
           <div class="pos-section-label">equity</div>
           <div id="pos-equity-section">{pos_cards}</div>
+          <div id="equity-countdown">
+            <span class="eq-pip-label" id="eq-pip-label">equity pipeline</span>
+            <div class="eq-pip-bar"><div class="eq-pip-fill" id="eq-pip-fill" style="width:0%"></div></div>
+            <span id="eq-pip-eta" style="font-size:7px;color:#2a1a4a;letter-spacing:.04em">—</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1825,6 +1951,18 @@ window.addEventListener('resize', function() {{
         <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
       </div>
     </div>
+  </div>
+
+  <!-- Scan popup -->
+  <div id="scan-popup">
+    <div id="scan-header">
+      <div id="scan-blip"></div>
+      <span id="scan-title">SCANNING POSITIONS</span>
+      <span id="scan-count"></span>
+    </div>
+    <div id="scan-progress-bar"><div id="scan-progress-fill"></div></div>
+    <div id="scan-ticker-grid"></div>
+    <div id="scan-complete-line"></div>
   </div>
 
   <!-- Status bar — full width below all four columns -->
@@ -2055,6 +2193,19 @@ window.addEventListener('resize', function() {{
 
     // Expose globally so the feed poller (separate IIFE) can reset it
     window._resetRunTimer = _resetRunTimer;
+
+    // Wire the crypto-cycle chip bar to _lastRunAt
+    setInterval(function() {{
+      var fill  = document.getElementById('crypto-cycle-fill');
+      var eta   = document.getElementById('crypto-cycle-eta');
+      if (!fill || !eta) return;
+      var elapsed = (Date.now() - _lastRunAt) / 1000;
+      var pct     = Math.min(elapsed / _RUN_INTERVAL * 100, 100);
+      var rem     = Math.max(Math.round(_RUN_INTERVAL - elapsed), 0);
+      fill.style.width = pct + '%';
+      fill.style.background = pct > 90 ? '#00ff9d' : '#00e5ff';
+      eta.textContent = rem + 's';
+    }}, 500);
 
     function startIdle() {{
       // no-op — progress bar replaced idle phrases
@@ -2329,6 +2480,31 @@ window.addEventListener('resize', function() {{
             var plain     = verbPlain + ' ' + sym;
             var html      = verbHtml + ' ' + sym + priceS + pnlHtml;
             if (window._postToFeed) window._postToFeed(plain, _parseTs(row.recorded_at), html);
+          }} else if (row.event_type === 'UPDATE') {{
+            if (!isHistory) {{
+              // Parse open symbols from "... N open (SYM, SYM, ...)"
+              var symMatch = raw.match(/\(([^)]+)\)/);
+              var symList = symMatch
+                ? symMatch[1].split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean)
+                : [];
+              // Terminal: brief line with typing dots, "Complete." appended by popup callback
+              var ts = _parseTs(row.recorded_at);
+              if (window._postToFeed) window._postToFeed(
+                '[runner] scan initiated', ts,
+                '[runner] scan initiated<span id="scan-dots">...</span>'
+              );
+              // Register callback so popup can append "Complete." to the last feed line
+              window._scanCompleteCallback = function(n) {{
+                var dots = document.getElementById('scan-dots');
+                if (dots) {{
+                  dots.style.opacity = '0';
+                  dots.insertAdjacentHTML('afterend',
+                    ' <span style="color:#00ff9d">complete.</span>'
+                  );
+                }}
+              }};
+              if (window._triggerScan) window._triggerScan(symList);
+            }}
           }} else {{
             var label = _labelFor(row.event_type);
             var txt   = raw || (label + (sym ? ' · ' + sym : ''));
@@ -2492,6 +2668,81 @@ window.addEventListener('resize', function() {{
 
     var _cryptoCardEls = {{}}; // symbol → DOM element
 
+    // Scan sweep + popup — expose globally so feed poller can call it
+    window._triggerScan = function(symbols) {{
+      // symbols: optional array e.g. ['ETH/USD','SOL/USD',...]
+      // Card sweep animations
+      var cardEls = Object.values(_cryptoCardEls);
+      cardEls.forEach(function(el, i) {{
+        setTimeout(function() {{
+          el.classList.remove('pos-card-scanning');
+          void el.offsetWidth;
+          el.classList.add('pos-card-scanning');
+          setTimeout(function() {{ el.classList.remove('pos-card-scanning'); }}, 800);
+        }}, i * 90);
+      }});
+
+      // Popup
+      var popup   = document.getElementById('scan-popup');
+      var grid    = document.getElementById('scan-ticker-grid');
+      var fill    = document.getElementById('scan-progress-fill');
+      var countEl = document.getElementById('scan-count');
+      var compEl  = document.getElementById('scan-complete-line');
+      if (!popup || !grid) return;
+
+      var syms = symbols && symbols.length ? symbols
+               : Object.keys(_cryptoCardEls);
+      if (!syms.length) return;
+
+      // Reset
+      popup.classList.remove('scan-done');
+      grid.innerHTML = '';
+      fill.style.width = '0%';
+      compEl.textContent = '';
+      countEl.textContent = '0 / ' + syms.length;
+
+      // Build ticker chips
+      var tickEls = syms.map(function(s) {{
+        var d = document.createElement('div');
+        d.className = 'scan-tick';
+        d.textContent = s.replace('/USD','');
+        grid.appendChild(d);
+        return d;
+      }});
+
+      popup.classList.add('scan-visible');
+
+      // Stagger each ticker lighting up
+      var interval = Math.min(120, 1200 / syms.length);
+      syms.forEach(function(s, i) {{
+        setTimeout(function() {{
+          if (tickEls[i]) tickEls[i].classList.add('scanned');
+          fill.style.width = ((i + 1) / syms.length * 100) + '%';
+          countEl.textContent = (i + 1) + ' / ' + syms.length;
+        }}, i * interval);
+      }});
+
+      // Complete
+      var totalMs = syms.length * interval + 300;
+      setTimeout(function() {{
+        popup.classList.add('scan-done');
+        // Type "SCAN COMPLETE · N POSITIONS"
+        var msg = 'SCAN COMPLETE · ' + syms.length + ' POSITIONS';
+        var j = 0;
+        var typ = setInterval(function() {{
+          compEl.textContent = msg.slice(0, ++j);
+          if (j >= msg.length) clearInterval(typ);
+        }}, 28);
+        // Signal terminal to append "Complete."
+        if (window._scanCompleteCallback) window._scanCompleteCallback(syms.length);
+      }}, totalMs);
+
+      // Auto-dismiss
+      setTimeout(function() {{
+        popup.classList.remove('scan-visible','scan-done');
+      }}, totalMs + 2800);
+    }};
+
     function _makeCard(p) {{
       var col   = _symCol(p.symbol);
       var entry = parseFloat(p.entry_price);
@@ -2515,6 +2766,22 @@ window.addEventListener('resize', function() {{
       el.style.borderLeft = '3px solid ' + col;
       var agePct  = Math.min(age / 12 * 100, 100);
       var ageBg   = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+      // stop / target range bar
+      var tgt = parseFloat(p.target_price || 0);
+      var rangeHtml = '';
+      if (tgt > 0 && entry > 0 && stop > 0) {{
+        var stopDist   = Math.abs(entry - stop);
+        var targetDist = Math.abs(tgt - entry);
+        rangeHtml = '<div class="pos-range-bar">'
+          + '<div class="pos-range-stop" style="flex:' + stopDist.toFixed(6) + '"></div>'
+          + '<div class="pos-range-marker"></div>'
+          + '<div class="pos-range-target" style="flex:' + targetDist.toFixed(6) + '"></div>'
+          + '</div>'
+          + '<div class="pos-range-labels">'
+          + '<span>stop ' + stopPct + '%</span>'
+          + '<span>+' + (entry > 0 ? ((tgt - entry)/entry*100).toFixed(1) : '—') + '% tgt</span>'
+          + '</div>';
+      }}
       el.innerHTML = '<div class="pos-top">'
         + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
         + '<span class="pos-qty">' + qtyStr + '</span>'
@@ -2523,6 +2790,7 @@ window.addEventListener('resize', function() {{
         + '</div>'
         + '<div class="pos-hold active">$' + entry.toFixed(entry < 0.01 ? 6 : 4)
         + ' · stop ' + stopPct + '%</div>'
+        + rangeHtml
         + '<div class="pos-age-bar"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
       return el;
     }}
@@ -2544,7 +2812,7 @@ window.addEventListener('resize', function() {{
 
     function _pollPositions() {{
       var url = SUPA_URL + '/rest/v1/crypto_positions'
-        + '?select=symbol,direction,qty,entry_price,stop_price,entered_at'
+        + '?select=symbol,direction,qty,entry_price,stop_price,target_price,entered_at'
         + '&order=entered_at.asc';
       fetch(url, {{
         headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }}
@@ -2607,6 +2875,32 @@ window.addEventListener('resize', function() {{
       _pollPositions();
       setInterval(_pollPositions, 5000);
     }}, 2000);
+
+    // ── Equity pipeline countdown (daily 4:05pm ET) ───────────────────────────
+    (function() {{
+      var _PIPELINE_WINDOW = 24 * 60 * 60 * 1000; // 24h in ms
+      function _nextPipelineMs() {{
+        var now = new Date();
+        var etOffset = -5 * 60; // EST minutes offset
+        var etNow = new Date(now.getTime() + (now.getTimezoneOffset() + etOffset) * 60000);
+        var target = new Date(etNow);
+        target.setHours(16, 5, 0, 0);
+        if (etNow >= target) target.setDate(target.getDate() + 1);
+        return target - etNow;
+      }}
+      function _updatePipeline() {{
+        var fill = document.getElementById('eq-pip-fill');
+        var eta  = document.getElementById('eq-pip-eta');
+        if (!fill || !eta) return;
+        var rem = _nextPipelineMs();
+        fill.style.width = Math.max(0, Math.min(100, (1 - rem / _PIPELINE_WINDOW) * 100)) + '%';
+        var h = Math.floor(rem / 3600000);
+        var m = Math.floor((rem % 3600000) / 60000);
+        eta.textContent = h + 'h ' + m + 'm';
+      }}
+      _updatePipeline();
+      setInterval(_updatePipeline, 10000);
+    }})();
 
     // ── Stats poller: streak + daily bar (every 15s) ─────────────────────────
     function _pollStats() {{
