@@ -924,16 +924,16 @@ body::after {{
   animation:gdot 1.4s ease-in-out infinite;
 }}
 @keyframes gdot {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
-#status-label {{ font-size:7px; letter-spacing:.28em; color:#00661a; flex-shrink:0; }}
-#status-divider {{ color:#002208; flex-shrink:0; }}
+#status-label {{ display:none; }} /* removed — space goes to typing text */
+#status-divider {{ display:none; }}
 /* clock + cursor in status bar */
-#live-clock {{ color:#006622; font-size:9px; letter-spacing:.06em; flex-shrink:0; }}
-#prompt-sym {{ color:#004d18; font-size:10px; flex-shrink:0; user-select:none; }}
+#live-clock {{ color:#006622; font-size:8.5px; letter-spacing:.04em; flex-shrink:0; }}
+#prompt-sym {{ color:#004d18; font-size:10px; flex-shrink:0; user-select:none; margin-left:2px; }}
 #type-preview {{
   color:#00ff41; font-size:10px; letter-spacing:.04em;
   text-shadow:0 0 8px rgba(0,255,65,.9);
   white-space:nowrap; overflow:hidden;
-  flex:0 1 auto; max-width:60%;
+  flex:1; min-width:0;
 }}
 #blink-cur {{
   display:inline-block; color:#00ff41; flex-shrink:0;
