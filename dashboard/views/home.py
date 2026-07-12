@@ -1307,6 +1307,28 @@ body::after {{
   font-size:6px; letter-spacing:.35em; color:rgba(255,255,255,.18);
   font-family:Consolas,monospace; text-transform:uppercase;
 }}
+/* ── Speedometer gauge ── */
+#gauge-wrap {{
+  width:100%; display:flex; flex-direction:column; align-items:center;
+  gap:2px; margin-bottom:6px;
+}}
+#speed-gauge {{ width:min(150px,70%); overflow:visible; }}
+#gauge-label {{
+  font-family:'Orbitron',Consolas,monospace;
+  font-size:11px; font-weight:700; letter-spacing:.04em; font-variant-numeric:tabular-nums;
+  color:#00e5ff; text-shadow:0 0 10px rgba(0,229,255,.55);
+  transition:color .6s ease, text-shadow .6s ease;
+}}
+#gauge-sub {{
+  font-size:5.5px; letter-spacing:.4em; color:rgba(255,255,255,.15);
+  font-family:Consolas,monospace; text-transform:uppercase;
+}}
+#gauge-needle {{ transition:transform 2.8s cubic-bezier(.23,.95,.49,1), stroke .8s ease; }}
+/* ── Streak chip ── */
+#wallet-streak {{
+  font-size:8px; letter-spacing:.16em; font-family:Consolas,monospace;
+  min-height:13px; text-align:center; transition:color .4s ease;
+}}
 /* event ticker — latest action */
 #wallet-event-ticker {{
   font-size:8.5px; letter-spacing:.08em; color:rgba(255,255,255,.25);
@@ -2064,7 +2086,7 @@ var annotations = latestDate ? [{{
 var layout = {{
   paper_bgcolor:'#060008',
   plot_bgcolor:'#060008',
-  margin:{{ t:44, b:310, l:72, r:16 }},
+  margin:{{ t:30, b:50, l:60, r:16 }},
 
   xaxis:{{
     range: xStart ? [xStart, xEnd] : undefined,
@@ -3016,6 +3038,36 @@ window.addEventListener('resize', function() {{
       <div id="wallet-block">
         <div id="wallet-noise"></div>
         <div id="wallet-label">ALPACA WALLET</div>
+
+        <!-- Speedometer gauge — avg trades per hour -->
+        <div id="gauge-wrap">
+          <svg id="speed-gauge" viewBox="0 0 200 116" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#00ff9d"/>
+                <stop offset="48%" stop-color="#ffcc00"/>
+                <stop offset="100%" stop-color="#ff3366"/>
+              </linearGradient>
+            </defs>
+            <!-- Track -->
+            <path d="M 22 108 A 78 78 0 0 1 178 108" stroke="rgba(255,255,255,0.05)" stroke-width="12" fill="none" stroke-linecap="round"/>
+            <!-- Gradient arc -->
+            <path d="M 22 108 A 78 78 0 0 1 178 108" stroke="url(#gGrad)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.2"/>
+            <!-- Active arc overlay (will be updated by JS via stroke-dashoffset) -->
+            <path id="gauge-arc" d="M 22 108 A 78 78 0 0 1 178 108" stroke="#00e5ff" stroke-width="7" fill="none" stroke-linecap="round" opacity="0" style="transition:opacity .6s ease"/>
+            <!-- Needle -->
+            <line id="gauge-needle"
+                  x1="100" y1="108" x2="100" y2="35"
+                  stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round"
+                  style="transform-origin:100px 108px; transform:rotate(-90deg);"/>
+            <!-- Hub -->
+            <circle cx="100" cy="108" r="8" fill="#000308"/>
+            <circle cx="100" cy="108" r="4" fill="#00e5ff" style="filter:drop-shadow(0 0 5px #00e5ff)"/>
+          </svg>
+          <div id="gauge-label">0.0 <span style="font-size:7px;opacity:.5">tr/hr</span></div>
+          <div id="gauge-sub">avg trades · live</div>
+        </div>
+
         <div id="wallet-nav" data-val="{last_nav_fmt}" class="glitch-active">{last_nav_fmt}</div>
         <div id="wallet-pnl" style="color:{_pnl_col}">{_pnl_str}</div>
         <div id="wallet-sub">paper trading · {_pnl_pct_str}</div>
@@ -3023,6 +3075,7 @@ window.addEventListener('resize', function() {{
           <div id="wallet-vel-track"><div id="wallet-vel-fill"></div></div>
           <div id="wallet-vel-label">MOMENTUM</div>
         </div>
+        <div id="wallet-streak"></div>
         <div id="wallet-event-ticker"></div>
       </div>
     </div>
@@ -3088,6 +3141,82 @@ window.addEventListener('resize', function() {{
 
 </div>
 <script>
+
+  // ── Gauge — avg trades per hour ───────────────────────────────────────────
+  var _tradeTs = [];
+  var _GAUGE_MAX = 8;
+  var _gaugeRate = 0;
+
+  function _updateGauge(rate) {{
+    _gaugeRate = rate;
+    var needle = document.getElementById('gauge-needle');
+    var label  = document.getElementById('gauge-label');
+    if (!needle) return;
+    var pct = Math.min(1, rate / _GAUGE_MAX);
+    var deg = -90 + pct * 180;
+    needle.style.transform = 'rotate(' + deg + 'deg)';
+    var col = pct < 0.4 ? '#00ff9d' : pct < 0.75 ? '#ffcc00' : '#ff3366';
+    needle.style.stroke = col;
+    if (label) {{
+      label.style.color = col;
+      label.style.textShadow = '0 0 10px ' + col;
+      label.innerHTML = rate.toFixed(1) + ' <span style="font-size:7px;opacity:.5">tr/hr</span>';
+    }}
+  }}
+
+  window._recordTradeForGauge = function() {{
+    var now = Date.now();
+    _tradeTs.push(now);
+    var cutoff = now - 60 * 60 * 1000;
+    _tradeTs = _tradeTs.filter(function(t) {{ return t >= cutoff; }});
+    _updateGauge(_tradeTs.length);
+  }};
+
+  // Decay gauge every 30s when idle
+  setInterval(function() {{
+    var now = Date.now(), cutoff = now - 60 * 60 * 1000;
+    _tradeTs = _tradeTs.filter(function(t) {{ return t >= cutoff; }});
+    _updateGauge(_tradeTs.length);
+  }}, 30000);
+
+  // ── Streak tracker ────────────────────────────────────────────────────────
+  var _streak = {{ count: 0, win: null }};
+
+  window._recordStreakResult = function(isWin) {{
+    if (_streak.win === null || _streak.win === isWin) {{
+      _streak.count++; _streak.win = isWin;
+    }} else {{
+      _streak.count = 1; _streak.win = isWin;
+    }}
+    var el = document.getElementById('wallet-streak');
+    if (!el) return;
+    var col  = isWin ? '#00ff9d' : '#ff3366';
+    var icon = isWin ? '▲' : '▼';
+    var n    = _streak.count;
+    el.innerHTML = '<span style="color:' + col + ';text-shadow:0 0 8px ' + col + '">' + icon + '&nbsp;' + n + (n === 1 ? ' WIN' : n < 3 ? ' STREAK' : ' STREAK 🔥') + '</span>';
+  }};
+
+  // ── Wallet NAV animated counter ───────────────────────────────────────────
+  var _navAnimRaf = null;
+  window._animateWalletNav = function(el, toStr) {{
+    if (!el) return;
+    var fromNum = parseFloat((el.textContent || '$0').replace(/[^0-9.-]/g,'')) || 0;
+    var toNum   = parseFloat(toStr.replace(/[^0-9.-]/g,'')) || 0;
+    if (Math.abs(fromNum - toNum) < 1) {{ el.textContent = toStr; el.setAttribute('data-val', toStr); return; }}
+    if (_navAnimRaf) cancelAnimationFrame(_navAnimRaf);
+    var start = null, dur = 750;
+    function step(ts) {{
+      if (!start) start = ts;
+      var p = Math.min(1, (ts - start) / dur);
+      var e = 1 - Math.pow(1 - p, 3);
+      var cur = Math.round(fromNum + (toNum - fromNum) * e);
+      var s = '$' + cur.toLocaleString('en-US');
+      el.textContent = s; el.setAttribute('data-val', s);
+      if (p < 1) {{ _navAnimRaf = requestAnimationFrame(step); }}
+      else {{ el.textContent = toStr; el.setAttribute('data-val', toStr); _navAnimRaf = null; }}
+    }}
+    _navAnimRaf = requestAnimationFrame(step);
+  }};
 
   var b = document.getElementById('term-body');
   if (b) {{ b.scrollTop = b.scrollHeight; }}
@@ -3736,6 +3865,13 @@ window.addEventListener('resize', function() {{
               var isWinTrade = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : true);
               window._triggerHeartbeat(isWinTrade);
             }}
+            // Gauge + streak on live trades
+            if (!isHistory) {{
+              if (window._recordTradeForGauge) window._recordTradeForGauge();
+              if (!isEntry && pnlM && window._recordStreakResult) {{
+                window._recordStreakResult(pnlM[1][0] === '+');
+              }}
+            }}
             // Wallet canvas trade burst
             if (!isHistory && window._walletTrade) {{
               var isWinW = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : false);
@@ -3821,8 +3957,8 @@ window.addEventListener('resize', function() {{
       if (wNav) {{
         var newVal = _fmt(nav);
         if (wNav.textContent !== newVal) {{
-          wNav.textContent = newVal;
-          wNav.setAttribute('data-val', newVal);
+          if (window._animateWalletNav) {{ window._animateWalletNav(wNav, newVal); }}
+          else {{ wNav.textContent = newVal; wNav.setAttribute('data-val', newVal); }}
           if (wNoise) {{
             wNoise.classList.remove('sweep'); void wNoise.offsetWidth;
             wNoise.classList.add('sweep');
