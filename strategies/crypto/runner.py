@@ -255,9 +255,12 @@ def _ema(values: list[float], period: int) -> float:
 
 
 def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
-    """EMA(5) / EMA(13) trend state on 1-min closes.
-    Long when fast > slow, None (flat) when fast < slow.
-    Alpaca paper crypto is long-only — no shorting.
+    """Two-layer trend filter: 1-min EMA crossover gated by 1-hour trend.
+
+    Entry requires ALL of:
+    1. 1-min fast EMA > slow EMA  (momentum present)
+    2. Separation >= 0.02%        (not a marginal/noisy crossover)
+    3. 1-hour EMA(3) > EMA(8)     (macro trend confirms — don't fight the tide)
     """
     fast_period = _SIG["ema_fast"]
     slow_period = _SIG["ema_slow"]
@@ -265,10 +268,28 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
     if len(min_bars) < slow_period + 1:
         return None
 
+    # Layer 1: 1-min momentum
     closes = [b["close"] for b in min_bars]
     fast   = _ema(closes, fast_period)
     slow   = _ema(closes, slow_period)
-    return "long" if fast > slow else None
+
+    if fast <= slow:
+        return None
+
+    # Layer 2: signal must be meaningful, not a dust-level crossover
+    strength = (fast - slow) / slow
+    if strength < 0.0002:          # < 0.02% separation → skip
+        return None
+
+    # Layer 3: 1-hour trend must agree — only long when hourly is bullish
+    if len(hour_bars) >= 8:
+        h_closes = [b["close"] for b in hour_bars]
+        h_fast = _ema(h_closes, 3)
+        h_slow = _ema(h_closes, 8)
+        if h_fast < h_slow:
+            return None            # hourly trend is down — skip long
+
+    return "long"
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────

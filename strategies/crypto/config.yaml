@@ -20,15 +20,15 @@ universe:
   - XTZ/USD
 
 signals:
-  ema_fast: 2                # fastest possible EMA — flips on every bar shift
-  ema_slow: 5                # tight slow — captures micro-momentum, not macro trend
+  ema_fast: 3                # 1-min fast EMA
+  ema_slow: 8                # 1-min slow EMA — cleaner crossovers than 2/5
 
 position:
   risk_pct: 1.0              # % of account value per position
   max_positions: 15          # all pairs eligible simultaneously
-  stop_pct: 0.002            # 0.2% hard stop
-  target_pct: 0.003          # 0.3% target — 1.5:1 R:R, hits faster, re-enters sooner
-  max_hold_minutes: 4        # force exit after 4 min — keeps capital cycling
+  stop_pct: 0.0015           # 0.15% stop — tighter, cut losers faster
+  target_pct: 0.003          # 0.3% target — 2:1 R:R, need only 34% win rate
+  max_hold_minutes: 3        # force exit after 3 min — keeps capital cycling
 
 risk:
   max_daily_loss_pct: 0.10
