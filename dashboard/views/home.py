@@ -941,17 +941,17 @@ body::after {{
 .con-dot {{ display:inline-block; vertical-align:middle; margin-right:5px; }}
 #run-progress-wrap {{
   display:inline-flex; align-items:center; gap:5px;
-  margin-left:auto; flex-shrink:0;
+  margin-left:auto; flex-shrink:0; transition:opacity .3s;
 }}
-#run-progress-bar {{
-  width:120px; height:3px; background:#1a003a; border-radius:2px; overflow:hidden; position:relative;
+#run-progress-wrap.hidden {{ opacity:0; pointer-events:none; }}
+#run-progress-track {{
+  width:120px; height:3px; background:#1a003a; border-radius:2px; overflow:hidden;
 }}
-#run-progress-bar::after {{
-  content:''; position:absolute; left:0; top:0; height:100%;
-  width:var(--run-pct,0%);
+#run-progress-fill {{
+  height:100%; width:0%; border-radius:2px;
   background:linear-gradient(90deg,#3a0060,#cc00ff);
   box-shadow:0 0 6px rgba(204,0,255,.5);
-  transition:width .8s linear;
+  transition:width .9s linear;
 }}
 #run-progress-label {{
   font-size:8px; letter-spacing:.12em; color:#3a0060; white-space:nowrap;
@@ -1518,8 +1518,8 @@ window.addEventListener('resize', function() {{
     <span id="type-preview"></span>
     <span id="blink-cur">█</span>
     <div id="run-progress-wrap">
-      <div id="run-progress-bar"></div>
-      <span id="run-progress-label">next run</span>
+      <div id="run-progress-track"><div id="run-progress-fill"></div></div>
+      <span id="run-progress-label">--s</span>
     </div>
   </div>
 
@@ -1696,30 +1696,35 @@ window.addEventListener('resize', function() {{
 
     var _busy      = false;
     var _feedQueue = [];
-    // ── Next-run progress bar (replaces idle phrase cycling) ─────────────────
-    var _RUN_INTERVAL = 120; // seconds (GitHub Actions cron */2)
+    // ── Next-run progress bar ─────────────────────────────────────────────────
+    var _RUN_INTERVAL = 120; // seconds — GitHub Actions cron */2
     var _lastRunAt    = Date.now();
     var _progTimer    = null;
 
     function _resetRunTimer() {{
       _lastRunAt = Date.now();
-      _tickProgress();
     }}
 
     function _tickProgress() {{
       if (_progTimer) clearInterval(_progTimer);
       _progTimer = setInterval(function() {{
-        var elapsed = (Date.now() - _lastRunAt) / 1000;
-        var pct     = Math.min(elapsed / _RUN_INTERVAL * 100, 100);
-        var bar     = document.getElementById('run-progress-bar');
-        var lbl     = document.getElementById('run-progress-label');
-        if (bar) bar.style.setProperty('--run-pct', pct.toFixed(1) + '%');
+        var elapsed   = (Date.now() - _lastRunAt) / 1000;
+        var pct       = Math.min(elapsed / _RUN_INTERVAL * 100, 100);
+        var fill      = document.getElementById('run-progress-fill');
+        var lbl       = document.getElementById('run-progress-label');
+        var wrap      = document.getElementById('run-progress-wrap');
+        if (fill) fill.style.width = pct.toFixed(1) + '%';
         if (lbl) {{
-          var remaining = Math.max(0, Math.round(_RUN_INTERVAL - elapsed));
-          lbl.textContent = pct >= 100 ? 'running…' : remaining + 's';
+          var rem = Math.max(0, Math.round(_RUN_INTERVAL - elapsed));
+          lbl.textContent = pct >= 100 ? 'running…' : rem + 's';
         }}
+        // hide bar while a message is typing through status
+        if (wrap) wrap.classList.toggle('hidden', _busy);
       }}, 1000);
     }}
+
+    // Expose globally so the feed poller (separate IIFE) can reset it
+    window._resetRunTimer = _resetRunTimer;
 
     function startIdle() {{
       // no-op — progress bar replaced idle phrases
@@ -1793,10 +1798,10 @@ window.addEventListener('resize', function() {{
       startIdle();
     }}
 
-  }})();
+    // Kick off the progress bar — inside IIFE where _tickProgress is in scope
+    _tickProgress();
 
-  // Start progress bar ticking immediately on page load
-  _tickProgress();
+  }})();
 
   // ── Crosshair on portfolio dot ───────────────────────────────────────────────
   function showCrosshair() {{
@@ -1945,7 +1950,7 @@ window.addEventListener('resize', function() {{
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
         if (!Array.isArray(rows) || !rows.length) return;
-        _resetRunTimer(); // runner just fired — reset progress bar
+        if (window._resetRunTimer) window._resetRunTimer(); // runner just fired — reset progress bar
         rows.forEach(function(row) {{
           _lastSeen = row.recorded_at;
           var raw = row.message || '';
