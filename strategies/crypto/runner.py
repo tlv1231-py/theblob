@@ -219,14 +219,8 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict], sym: str = "") 
     highs   = [b["high"]   for b in min_bars]
     lows    = [b["low"]    for b in min_bars]
 
-    close       = closes[-1]
-    vol         = volumes[-1]
-    recent_vols = [v for v in volumes[-21:-1] if v > 0]
-    avg_vol     = sum(recent_vols) / len(recent_vols) if recent_vols else 0.0
-    rvol        = (vol / avg_vol) if avg_vol > 0 and vol > 0 else 0.0
-    logger.info(f"  {sym}: bars={len(min_bars)} rvol={rvol:.2f} close={close:.4f}")
-    if rvol < _SIG["rvol_min"]:
-        return None
+    close = closes[-1]
+    logger.info(f"  {sym}: bars={len(min_bars)} close={close:.4f}")
 
     # VWAP from hourly bars (24h window)
     if hour_bars:
