@@ -944,6 +944,26 @@ body::after {{
 .pill-c {{ color:#00e5ff; border-color:rgba(0,229,255,.3); }}
 .pill-d {{ color:#8060a0; border-color:rgba(128,96,160,.25); }}
 
+/* ── Wallet selector ── */
+#wallet-selector {{
+  display:inline-flex; align-items:center; gap:6px;
+  background:rgba(255,0,204,.08); border:1px solid rgba(255,0,204,.3);
+  border-radius:2px; padding:4px 10px; cursor:pointer;
+  transition:background .2s, border-color .2s; user-select:none;
+}}
+#wallet-selector:hover {{ background:rgba(255,0,204,.16); border-color:rgba(255,0,204,.6); }}
+#wallet-mode-icon {{ font-size:11px; color:#ff00cc; text-shadow:0 0 8px rgba(255,0,204,.7); }}
+#wallet-mode-label {{
+  font:700 9px Consolas,monospace; letter-spacing:.22em; color:#ff00cc;
+  text-transform:uppercase; text-shadow:0 0 8px rgba(255,0,204,.5);
+}}
+#wallet-mode-chevron {{ font-size:8px; color:#4a2a6a; }}
+#wallet-selector.live {{
+  background:rgba(0,229,100,.08); border-color:rgba(0,229,100,.4);
+}}
+#wallet-selector.live #wallet-mode-icon,
+#wallet-selector.live #wallet-mode-label {{ color:#00e564; text-shadow:0 0 8px rgba(0,229,100,.7); }}
+
 /* ── NAV card (top-left of main-area) ── */
 .nav-card {{
   position:absolute; top:10px; left:110px;
@@ -1845,9 +1865,11 @@ body::after {{
 <div class="topbar">
   <span class="wordmark">THE BLOB</span>
   <div class="pulse-dot"></div>
-  <span class="pill pill-m">MOMENTUM · {status}</span>
-  <span class="pill pill-c">▸ DAY {mon}/{_MONITOR_TARGET}</span>
-  <span class="pill pill-d">LAST RUN {last_run}</span>
+  <div id="wallet-selector" onclick="_cycleWallet()" title="Switch portfolio">
+    <span id="wallet-mode-icon">◈</span>
+    <span id="wallet-mode-label">PAPER</span>
+    <span id="wallet-mode-chevron">▾</span>
+  </div>
   <div class="spacer"></div>
   <div class="tb-stat">
     <span class="tb-stat-label">NAV</span>
@@ -3140,6 +3162,8 @@ function _fetchIntradayMarks() {{
     if (gd && gd.data && gd.data.length >= 7) {{
       Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]);
     }}
+    // Recenter chart on actual latest point (intraday or daily snapshot)
+    _recenterOnLatest(xs.length > 0 ? xs[xs.length - 1] : null);
     // Update metrics panel
     _updateOrbMetrics(tradeCountToday, wins, losses);
   }}).catch(function() {{}});
@@ -3180,6 +3204,44 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
   }}
 }}
 setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 5000);
+
+// ── Chart re-center on latest point ──────────────────────────────────────────
+function _recenterOnLatest(latestIsoTs) {{
+  if (_userInteracting) return;
+  // Use provided timestamp or fall back to latest portfolio date
+  var anchor = latestIsoTs ? latestIsoTs.slice(0,10) : (portDates.length ? portDates[portDates.length-1] : null);
+  if (!anchor) return;
+  var newStart = _dateMinus(anchor, _CENTER_DAYS);
+  var newEnd   = _datePlus_from(anchor, _CENTER_DAYS);
+  // Only update if range actually changed by more than 1 day
+  if (newEnd !== _defaultXRange[1]) {{
+    _defaultXRange = [newStart, newEnd];
+    _programmaticRelayout = true;
+    Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
+      _programmaticRelayout = false;
+    }});
+  }}
+}}
+
+// ── Wallet selector ───────────────────────────────────────────────────────────
+var _walletModes = ['PAPER', 'LIVE ●'];
+var _walletIdx = 0;
+function _cycleWallet() {{
+  _walletIdx = (_walletIdx + 1) % _walletModes.length;
+  var lbl = document.getElementById('wallet-mode-label');
+  var sel = document.getElementById('wallet-selector');
+  var ico = document.getElementById('wallet-mode-icon');
+  if (!lbl || !sel) return;
+  var mode = _walletModes[_walletIdx];
+  lbl.textContent = mode;
+  if (_walletIdx === 1) {{
+    sel.classList.add('live');
+    ico.textContent = '◉';
+  }} else {{
+    sel.classList.remove('live');
+    ico.textContent = '◈';
+  }}
+}}
 
 // ── Auto-reset chart to default view after 10s idle ──────────────────────────
 var _defaultXRange = [xStart, xEnd];
