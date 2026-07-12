@@ -27,9 +27,8 @@ signals:
 position:
   risk_pct: 1.0              # % of account value per position (THE dial)
   max_positions: 5           # max concurrent open positions
-  stop_pct: 0.005            # 0.5% stop from entry
-  target_pct: 0.010          # 1.0% target (2:1 R/R)
-  max_hold_minutes: 30       # hard exit after N minutes
+  stop_pct: 0.005            # 0.5% stop — only hard exit besides EMA reversal
+  max_hold_minutes: 240      # 4hr safety net (EMA reversal is primary exit)
 
 risk:
   max_daily_loss_pct: 0.10   # halt all trading if down 10% on the day

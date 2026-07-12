@@ -218,35 +218,20 @@ def _ema(values: list[float], period: int) -> float:
 
 
 def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
-    """EMA(5) / EMA(13) crossover on 1-min closes.
-    Long when fast crosses above slow, short when fast crosses below.
-    Requires 14+ bars for a reliable slow EMA seed.
+    """EMA(5) / EMA(13) trend state on 1-min closes.
+    Returns current desired direction — long when fast > slow, short when fast < slow.
+    Always in market: every run enters or stays positioned.
     """
-    fast_period = _SIG["ema_fast"]   # 5
-    slow_period = _SIG["ema_slow"]   # 13
-    min_bars_needed = slow_period + 1  # 14
+    fast_period = _SIG["ema_fast"]
+    slow_period = _SIG["ema_slow"]
 
-    if len(min_bars) < min_bars_needed:
+    if len(min_bars) < slow_period + 1:
         return None
 
-    closes = [b["close"] for b in min_bars]
-
-    # Current bar EMAs
-    fast_now = _ema(closes, fast_period)
-    slow_now = _ema(closes, slow_period)
-
-    # Previous bar EMAs (drop last close)
-    fast_prev = _ema(closes[:-1], fast_period)
-    slow_prev = _ema(closes[:-1], slow_period)
-
-    crossed_up   = fast_prev <= slow_prev and fast_now > slow_now
-    crossed_down = fast_prev >= slow_prev and fast_now < slow_now
-
-    if crossed_up:
-        return "long"
-    if crossed_down:
-        return "short"
-    return None
+    closes   = [b["close"] for b in min_bars]
+    fast     = _ema(closes, fast_period)
+    slow     = _ema(closes, slow_period)
+    return "long" if fast > slow else "short"
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────
@@ -256,7 +241,6 @@ def run() -> None:
     nav     = _account_value()
     risk_pc = _POS["risk_pct"] / 100.0
     stop_pc = _POS["stop_pct"]
-    tgt_pc  = _POS["target_pct"]
     max_pos = _POS["max_positions"]
     max_hold= _POS["max_hold_minutes"]
 
@@ -278,20 +262,19 @@ def run() -> None:
         bars = min_bars.get(sym, [])
         if not bars:
             continue
-        close = bars[-1]["close"]
-        age   = (now - pos["entered_at"].replace(tzinfo=timezone.utc)).total_seconds() / 60
-        d     = pos["direction"]
-        reason= None
+        close  = bars[-1]["close"]
+        age    = (now - pos["entered_at"].replace(tzinfo=timezone.utc)).total_seconds() / 60
+        d      = pos["direction"]
+        signal = _compute_signal(bars, hour_bars.get(sym, []))
+        reason = None
 
-        if d == "long":
-            if close <= pos["stop_price"]:    reason = "stop"
-            elif close >= pos["target_price"]: reason = "target"
-        else:
-            if close >= pos["stop_price"]:    reason = "stop"
-            elif close <= pos["target_price"]: reason = "target"
+        # Stop loss
+        if d == "long"  and close <= pos["stop_price"]: reason = "stop"
+        if d == "short" and close >= pos["stop_price"]: reason = "stop"
 
-        if reason is None and age >= max_hold:
-            reason = "max_hold"
+        # EMA flipped — exit and let entry loop reverse
+        if reason is None and signal and signal != d:
+            reason = "reversal"
 
         if reason:
             exit_price = close * (1 - _SLIPPAGE) if d == "long" else close * (1 + _SLIPPAGE)
@@ -302,6 +285,7 @@ def run() -> None:
             _submit_order(sym, side, pos["qty"])
             _log_fill(sym, pos["order_id"] or "", "exit", pos["qty"], exit_price, pnl, reason)
             _delete_position(sym)
+            del positions[sym]
 
             emoji = "✓" if pnl >= 0 else "✗"
             _post_event("TRADE", sym,
@@ -330,7 +314,6 @@ def run() -> None:
             qty    = round((nav * risk_pc) / price, 8)
             filled = price * (1 + _SLIPPAGE) if signal == "long" else price * (1 - _SLIPPAGE)
             stop   = filled * (1 - stop_pc)  if signal == "long" else filled * (1 + stop_pc)
-            target = filled * (1 + tgt_pc)   if signal == "long" else filled * (1 - tgt_pc)
 
             order_id = _submit_order(sym, "buy" if signal == "long" else "sell", qty)
             _log_fill(sym, order_id or "", "entry", qty, filled, None, "signal")
@@ -341,7 +324,7 @@ def run() -> None:
                 "qty":          qty,
                 "entry_price":  filled,
                 "stop_price":   stop,
-                "target_price": target,
+                "target_price": 0.0,
                 "entered_at":   now,
                 "order_id":     order_id,
             }
