@@ -782,8 +782,11 @@ def _build_daw_html(data: dict) -> str:
             f'<div class="pos-hold {hold_cls}">{p["hold_text"]}</div>'
             f'</div>'
         )
+    equity_label = '<div class="pos-section-label">equity</div>'
     if not pos_cards:
-        pos_cards = '<div class="pos-hold" style="padding:8px 14px">no open positions</div>'
+        pos_cards = equity_label + '<div class="pos-hold" style="padding:8px 14px">no equity positions</div>'
+    else:
+        pos_cards = equity_label + pos_cards
 
     # Normalize SPY and QQQ to $100K at portfolio start date
     # so all 3 lines are directly comparable on one axis
@@ -1117,6 +1120,11 @@ body::after {{
 .pnl-float-val {{ font-size:22px; font-weight:700; letter-spacing:-.02em; display:block; line-height:1.1; }}
 .pnl-float-sub {{ font-size:8.5px; color:#4a2a6a; margin-top:3px; display:block; }}
 /* pos-cards */
+.pos-section-label {{
+  font-size:7px; letter-spacing:.22em; color:#2a1a3a;
+  padding:4px 12px 2px; text-transform:uppercase; border-bottom:1px solid #0d0020;
+}}
+#pos-equity-section .pos-section-label {{ border-top:1px solid #0d0020; margin-top:2px; }}
 .pos-card {{ padding:6px 12px 7px; cursor:default; }}
 .pos-top {{ display:flex; align-items:baseline; gap:6px; line-height:1.3; }}
 .pos-sym {{ font-weight:700; font-size:15px; }}
@@ -1523,7 +1531,10 @@ window.addEventListener('resize', function() {{
     <!-- Positions scorecard -->
     <div id="pos-panel">
       <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
-      <div id="pos-body">{pos_cards}</div>
+      <div id="pos-body">
+        <div id="pos-crypto-section"></div>
+        <div id="pos-equity-section">{pos_cards}</div>
+      </div>
     </div>
 
     <div class="col-drag" id="drag-p"></div>
@@ -2141,13 +2152,14 @@ window.addEventListener('resize', function() {{
       }})
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
-        var body = document.getElementById('pos-body');
-        if (!body) return;
+        var section = document.getElementById('pos-crypto-section');
+        if (!section) return;
+        var label = '<div class="pos-section-label">crypto</div>';
         if (!Array.isArray(rows) || !rows.length) {{
-          body.innerHTML = '<div class="pos-hold" style="padding:8px 14px">flat · no open positions</div>';
+          section.innerHTML = label + '<div class="pos-hold" style="padding:4px 14px 6px">flat</div>';
           return;
         }}
-        var html = '';
+        var html = label;
         rows.forEach(function(p) {{
           var col   = _symCol(p.symbol);
           var entry = parseFloat(p.entry_price);
@@ -2155,16 +2167,17 @@ window.addEventListener('resize', function() {{
           var qty   = parseFloat(p.qty);
           var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
           var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
+          var qtyStr = qty > 1000 ? qty.toFixed(0) : qty < 0.001 ? qty.toExponential(2) : qty.toFixed(4);
           html += '<div class="pos-card" style="border-left:3px solid ' + col + '">'
             + '<div class="pos-top">'
             + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
-            + '<span class="pos-qty">' + qty.toFixed(4) + '</span>'
-            + '<span class="pos-val" style="color:#cc00ff">▲ LONG</span>'
+            + '<span class="pos-qty">' + qtyStr + '</span>'
+            + '<span class="pos-val" style="color:#cc00ff;font-size:10px">▲ LONG</span>'
             + '</div>'
-            + '<div class="pos-hold active">entry $' + entry.toFixed(4) + ' · stop ' + stopPct + '% · ' + age + 'm</div>'
+            + '<div class="pos-hold active">entry $' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '% · ' + age + 'm</div>'
             + '</div>';
         }});
-        body.innerHTML = html;
+        section.innerHTML = html;
       }})
       .catch(function() {{}});
     }}
