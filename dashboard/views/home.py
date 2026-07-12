@@ -1859,19 +1859,20 @@ var qqqNorm    = {qqq_norm_j};
 
 var latestDate = portDates.length ? portDates[portDates.length-1] : null;
 
-// Right edge: now + 6h buffer (realtime clock drives this)
-var _xNow = new Date();
-var xEndDate = new Date(_xNow.getTime() + 6*3600*1000).toISOString();
+// Right edge: tomorrow as date string (Plotly date axis uses date-only strings throughout)
+function _datePlus(days) {{
+  var d = new Date(); d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}}
+function _dateMinus(isoDateStr, days) {{
+  var d = new Date(isoDateStr + 'T00:00:00Z');
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0,10);
+}}
 
-// Left edge: earliest portfolio data minus a small pad, so nothing is hidden on load.
-// The "live" feel comes from the real-time right-edge advance + trade markers, not zoom level.
 var firstDate = portDates.length ? portDates[0] : null;
-var xStartDefault = firstDate
-  ? new Date(new Date(firstDate+'T00:00:00Z').getTime() - 2*24*3600*1000).toISOString()
-  : new Date(_xNow.getTime() - 30*24*3600*1000).toISOString();
-
-var xEnd   = xEndDate;
-var xStart = xStartDefault;
+var xEnd   = _datePlus(2);   // today + 2 days buffer
+var xStart = firstDate ? _dateMinus(firstDate, 2) : _datePlus(-30);
 
 // Tight Y range for the visible window
 function yRange(x0, x1) {{
@@ -2737,6 +2738,8 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   }}
   // Crosshair on load: show → zoom in after crosshair fades
   setTimeout(showCrosshair, 1500);
+  // Mark initial layout complete so the pan tracker ignores programmatic events
+  setTimeout(function() {{ _initLayoutDone = true; }}, 500);
 }});
 
 gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
@@ -2744,17 +2747,17 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 // ── Real-time x-axis advance ─────────────────────────────────────────────────
 // Slides the right edge forward every 30s so the chart feels live
 var _userPanned = false;
+var _initLayoutDone = false;
 gd.on('plotly_relayout', function(u) {{
-  if (u['xaxis.range[0]'] !== undefined && !_rtAdvancing) _userPanned = true;
+  // Ignore the initial render relayout and programmatic advances
+  if (!_initLayoutDone || _rtAdvancing) return;
+  if (u['xaxis.range[0]'] !== undefined) _userPanned = true;
 }});
 var _rtAdvancing = false;
 setInterval(function() {{
   if (_userPanned) return;
   _rtAdvancing = true;
-  var now = new Date();
-  var newEnd = new Date(now.getTime() + 6*3600*1000).toISOString();
-  // Keep left edge fixed at xStart — only slide the right edge forward
-  Plotly.relayout(gd, {{ 'xaxis.range[1]': newEnd }});
+  Plotly.relayout(gd, {{ 'xaxis.range[1]': _datePlus(2) }});
   _rtAdvancing = false;
 }}, 30000);
 
@@ -2890,11 +2893,12 @@ function _fetchTradeEvents() {{
     }});
 
     // Rebuild traces 6 + 7
-    if (gd && gd.data) {{
+    if (gd && gd.data && gd.data.length >= 8) {{
       Plotly.restyle(gd, {{ x:[enterXs], y:[enterYs], text:[enterTexts] }}, [6]);
       Plotly.restyle(gd, {{ x:[exitXs],  y:[exitYs],  text:[exitTexts]  }}, [7]);
-      // Merge drop lines with existing shapes (milestone lines etc.)
-      var baseShapes = shapes.filter(function(s) {{ return !s._trade; }});
+      // Merge drop lines with current layout shapes (preserves ATH shape etc.)
+      var curShapes = (gd.layout && gd.layout.shapes) ? gd.layout.shapes.slice() : shapes.slice();
+      var baseShapes = curShapes.filter(function(s) {{ return !s._trade; }});
       newShapes.forEach(function(s) {{ s._trade = true; }});
       Plotly.relayout(gd, {{ shapes: baseShapes.concat(newShapes) }});
     }}
@@ -2909,16 +2913,8 @@ setInterval(_fetchTradeEvents, 10000);
 // Also trigger on live TRADE events from feed poller
 window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 
-// Dynamically tighten Y as user pans/zooms
-gd.on('plotly_relayout', function(update) {{
-  if (update['xaxis.range[0]'] !== undefined) {{
-    var x0 = (update['xaxis.range[0]']||'').split('T')[0];
-    var x1 = (update['xaxis.range[1]']||'').split('T')[0];
-    var r = yRange(x0||null, x1||null);
-    if (r[0] !== null) Plotly.relayout(gd, {{'yaxis.range': r}});
-  }}
-  buildTargets();
-}});
+// Rebuild pulse targets after any re-render
+gd.on('plotly_relayout', function() {{ buildTargets(); }});
 
 window.addEventListener('load', function() {{
   Plotly.relayout(gd, {{ width:window.innerWidth, height:window.innerHeight }});
