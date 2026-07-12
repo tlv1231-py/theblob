@@ -1829,17 +1829,14 @@ var qqqNorm    = {qqq_norm_j};
 
 var latestDate = portDates.length ? portDates[portDates.length-1] : null;
 
-// Right edge: latest data + 3-day buffer so the pulsing dot isn't pinned to the wall
-var xEndDate = latestDate
-  ? new Date(new Date(latestDate).getTime() + 3*24*3600*1000).toISOString().split('T')[0]
-  : null;
+// Right edge: now + 6h buffer (realtime clock drives this)
+var _xNow = new Date();
+var xEndDate = new Date(_xNow.getTime() + 6*3600*1000).toISOString();
 
-// Default left edge: 60 days back, but never before first data point
+// Default left edge: 7 days back from now (tight window, realtime feel)
 var firstDate = portDates.length ? portDates[0] : null;
-var xStartDefault = latestDate
-  ? new Date(new Date(latestDate).getTime() - 60*24*3600*1000).toISOString().split('T')[0]
-  : null;
-if (firstDate && xStartDefault && xStartDefault < firstDate) xStartDefault = firstDate;
+var xStartDefault = new Date(_xNow.getTime() - 7*24*3600*1000).toISOString();
+if (firstDate && xStartDefault.slice(0,10) < firstDate) xStartDefault = firstDate + 'T00:00:00Z';
 
 var xEnd   = xEndDate;
 var xStart = xStartDefault;
@@ -1933,6 +1930,25 @@ var traces = [
     name:'HYSA 4.8%',
     hovertemplate:'<b style="color:#ffc800">HYSA $%{{y:,.0f}}</b><extra></extra>',
   }},
+  // Trade event markers — ENTER (index 6), EXIT (index 7)
+  {{
+    x:[], y:[], text:[], name:'ENTER',
+    type:'scatter', mode:'markers+text',
+    marker:{{ symbol:'triangle-up', size:12, color:'#00ff9d',
+              line:{{ color:'rgba(0,255,157,.3)', width:2 }} }},
+    textposition:'top center',
+    textfont:{{ family:'Consolas', size:7.5, color:'rgba(0,255,157,.8)' }},
+    hovertemplate:'<b style="color:#00ff9d">ENTER %{{text}}</b><extra></extra>',
+  }},
+  {{
+    x:[], y:[], text:[], name:'EXIT',
+    type:'scatter', mode:'markers+text',
+    marker:{{ symbol:'triangle-down', size:12, color:'#ff3366',
+              line:{{ color:'rgba(255,51,102,.3)', width:2 }} }},
+    textposition:'bottom center',
+    textfont:{{ family:'Consolas', size:7.5, color:'rgba(255,51,102,.8)' }},
+    hovertemplate:'<b style="color:#ff3366">EXIT %{{text}}</b><extra></extra>',
+  }},
 ];
 
 // Milestone y-levels
@@ -1977,7 +1993,7 @@ var layout = {{
     range: xStart ? [xStart, xEnd] : undefined,
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
-    tickformat:'%b %d', zeroline:false, showline:false, type:'date', fixedrange:false,
+    tickformat:'%b %d\n%H:%M', zeroline:false, showline:false, type:'date', fixedrange:false,
   }},
   yaxis:{{
     range: yr[0] !== null ? yr : undefined,
@@ -2439,6 +2455,174 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
 }});
 
 gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
+
+// ── Real-time x-axis advance ─────────────────────────────────────────────────
+// Slides the right edge forward every 30s so the chart feels live
+var _userPanned = false;
+gd.on('plotly_relayout', function(u) {{
+  if (u['xaxis.range[0]'] !== undefined && !_rtAdvancing) _userPanned = true;
+}});
+var _rtAdvancing = false;
+setInterval(function() {{
+  if (_userPanned) return; // don't fight user pan
+  _rtAdvancing = true;
+  var now = new Date();
+  var newEnd = new Date(now.getTime() + 6*3600*1000).toISOString();
+  var newStart = new Date(now.getTime() - 7*24*3600*1000).toISOString();
+  Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }});
+  _rtAdvancing = false;
+}}, 30000);
+
+// ── Trade event markers ───────────────────────────────────────────────────────
+var _tradeEventIds = new Set(); // track seen event IDs to avoid re-adding
+var _tradeDropLines = []; // shapes for vertical drop lines
+
+function _navAtTime(isoTs) {{
+  // Find the closest portfolio value by date
+  if (!portDates.length) return null;
+  var d = isoTs.slice(0,10);
+  var best = null, bestDiff = Infinity;
+  for (var i=0; i<portDates.length; i++) {{
+    var diff = Math.abs(new Date(portDates[i]).getTime() - new Date(d).getTime());
+    if (diff < bestDiff) {{ bestDiff = diff; best = portValues[i]; }}
+  }}
+  // If we have a live NAV that's more recent, prefer it for today
+  if (window._lastKnownNav && d >= (portDates[portDates.length-1]||'')) best = window._lastKnownNav;
+  return best;
+}}
+
+function _spawnTradeChip(isoTs, sym, isEntry, price) {{
+  // Floating animated chip on the chart area
+  var gRect = gd.getBoundingClientRect();
+  var xaxis = gd._fullLayout.xaxis;
+  var yaxis = gd._fullLayout.yaxis;
+  if (!xaxis || !yaxis) return;
+
+  var chip = document.createElement('div');
+  chip.style.cssText = [
+    'position:fixed',
+    'pointer-events:none',
+    'z-index:290',
+    'font-family:Consolas,monospace',
+    'font-size:9px',
+    'font-weight:700',
+    'letter-spacing:.08em',
+    'padding:3px 7px 3px 5px',
+    'border-radius:2px',
+    'white-space:nowrap',
+    isEntry
+      ? 'color:#00ff9d;background:rgba(0,255,157,.1);border:1px solid rgba(0,255,157,.3);box-shadow:0 0 12px rgba(0,255,157,.25)'
+      : 'color:#ff3366;background:rgba(255,51,102,.1);border:1px solid rgba(255,51,102,.3);box-shadow:0 0 12px rgba(255,51,102,.25)',
+    'opacity:0',
+    'transform:translateY(0px)',
+    'transition:opacity .25s ease, transform 1.4s cubic-bezier(.22,1,.36,1)',
+  ].join(';');
+  chip.textContent = (isEntry ? '▲ ' : '▼ ') + sym.replace('/USD','') + '  $' + parseFloat(price||0).toFixed(sym.indexOf('USD')!==-1?4:2);
+  document.body.appendChild(chip);
+
+  // Position near chart right edge / current time
+  var pxX = gRect.left + gRect.width * 0.78;
+  var pxY = gRect.top  + gRect.height * (isEntry ? 0.45 : 0.55);
+  chip.style.left = pxX + 'px';
+  chip.style.top  = pxY + 'px';
+
+  requestAnimationFrame(function() {{
+    requestAnimationFrame(function() {{
+      chip.style.opacity = '1';
+      chip.style.transform = 'translateY(' + (isEntry ? -28 : 28) + 'px)';
+    }});
+  }});
+
+  setTimeout(function() {{
+    chip.style.transition = 'opacity .6s ease';
+    chip.style.opacity = '0';
+    setTimeout(function() {{ if (chip.parentNode) chip.parentNode.removeChild(chip); }}, 700);
+  }}, 3500);
+}}
+
+function _fetchTradeEvents() {{
+  var url = SUPA_URL + '/rest/v1/pipeline_events'
+    + '?event_type=eq.TRADE'
+    + '&order=recorded_at.asc'
+    + '&limit=200';
+  fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(rows) {{
+    if (!Array.isArray(rows) || !rows.data) {{
+      // rows is the array directly from PostgREST
+      if (!Array.isArray(rows)) return;
+    }}
+    var enterXs=[], enterYs=[], enterTexts=[];
+    var exitXs=[],  exitYs=[],  exitTexts=[];
+    var newShapes = []; // vertical drop lines
+
+    rows.forEach(function(row) {{
+      var id = row.id;
+      var msg = row.message || '';
+      var ts  = row.recorded_at;
+      if (!ts) return;
+
+      var isEntry = msg.indexOf('ENTER') !== -1 || msg.indexOf('enter') !== -1;
+      var isExit  = msg.indexOf('EXIT')  !== -1 || msg.indexOf('exit')  !== -1;
+      if (!isEntry && !isExit) return;
+
+      // Parse symbol
+      var symM = msg.match(/(?:ENTER|EXIT|enter|exit)\s+([A-Z\/]+)/);
+      var sym  = symM ? symM[1] : '';
+      // Parse price
+      var priceM = msg.match(/@\s*\$([\d,.]+)/);
+      var price  = priceM ? priceM[1] : '';
+
+      var navY = _navAtTime(ts);
+      if (!navY) return;
+
+      var isoTs = new Date(ts).toISOString();
+
+      if (isEntry) {{
+        enterXs.push(isoTs); enterYs.push(navY);
+        enterTexts.push(sym.replace('/USD',''));
+      }} else {{
+        exitXs.push(isoTs);  exitYs.push(navY);
+        exitTexts.push(sym.replace('/USD',''));
+      }}
+
+      // Vertical drop line
+      newShapes.push({{
+        type:'line', xref:'x', yref:'paper',
+        x0:isoTs, x1:isoTs, y0:0, y1:1,
+        line:{{ color: isEntry ? 'rgba(0,255,157,.12)' : 'rgba(255,51,102,.12)', width:1, dash:'dot' }},
+        layer:'below',
+      }});
+
+      // Spawn animated chip for NEW events only
+      if (id && !_tradeEventIds.has(id)) {{
+        _tradeEventIds.add(id);
+        // Only animate events from the last 5 minutes (live)
+        if (Date.now() - new Date(ts).getTime() < 300000) {{
+          _spawnTradeChip(isoTs, sym, isEntry, price);
+        }}
+      }}
+    }});
+
+    // Rebuild traces 6 + 7
+    if (gd && gd.data) {{
+      Plotly.restyle(gd, {{ x:[enterXs], y:[enterYs], text:[enterTexts] }}, [6]);
+      Plotly.restyle(gd, {{ x:[exitXs],  y:[exitYs],  text:[exitTexts]  }}, [7]);
+      // Merge drop lines with existing shapes (milestone lines etc.)
+      var baseShapes = shapes.filter(function(s) {{ return !s._trade; }});
+      newShapes.forEach(function(s) {{ s._trade = true; }});
+      Plotly.relayout(gd, {{ shapes: baseShapes.concat(newShapes) }});
+    }}
+  }})
+  .catch(function() {{}});
+}}
+
+// Fetch on load + every 10s
+setTimeout(_fetchTradeEvents, 2000);
+setInterval(_fetchTradeEvents, 10000);
+
+// Also trigger on live TRADE events from feed poller
+window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 
 // Dynamically tighten Y as user pans/zooms
 gd.on('plotly_relayout', function(update) {{
@@ -3217,6 +3401,8 @@ window.addEventListener('resize', function() {{
               var isWinTrade = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : true);
               window._triggerHeartbeat(isWinTrade);
             }}
+            // Trigger chart trade marker refresh
+            if (!isHistory && window._onLiveTrade) window._onLiveTrade();
           }} else if (row.event_type === 'UPDATE') {{
             if (!isHistory) {{
               // Parse open symbols
