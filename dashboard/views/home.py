@@ -912,7 +912,7 @@ body::after {{
 /* ── Status bar — bottom of System Feed panel ── */
 #status-bar {{
   flex-shrink:0;
-  height:36px;
+  height:42px;
   background:#000;
   border-top:1px solid #003311;
   padding:3px 10px 0;
