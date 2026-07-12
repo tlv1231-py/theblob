@@ -901,16 +901,17 @@ body::after {{
 
 /* ── Left feed overlay ── */
 #feed-overlay {{
-  position:absolute; left:0; top:0; bottom:0; width:200px; z-index:15;
+  position:absolute; left:0; top:0; bottom:0; width:165px; z-index:15;
   display:flex; flex-direction:column;
-  background:linear-gradient(90deg,rgba(1,0,6,.88) 0%,rgba(1,0,6,.6) 80%,transparent 100%);
+  background:linear-gradient(90deg,rgba(1,0,6,.9) 0%,rgba(1,0,6,.55) 75%,transparent 100%);
   pointer-events:none;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 18%,black 82%,transparent 100%);
-  mask-image:linear-gradient(to bottom,transparent 0%,black 18%,black 82%,transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 14%,black 84%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0%,black 14%,black 84%,transparent 100%);
 }}
-#feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; }}
+#feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
 #feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:2px 0 4px; scrollbar-width:none; background:transparent; }}
 #feed-overlay #term-body::-webkit-scrollbar {{ display:none; }}
+#feed-overlay .te {{ padding:2px 6px; font-size:10px; }}
 #feed-bottom-bar {{ flex-shrink:0; padding:4px 8px; pointer-events:auto; display:flex; align-items:center; }}
 #mute-btn {{ background:none; border:none; cursor:pointer; font-size:12px; opacity:.45; padding:2px 4px; transition:opacity .2s; }}
 #mute-btn:hover {{ opacity:.9; }}
@@ -953,11 +954,8 @@ body::after {{
 .nv-ret {{ font-size:11px; font-weight:700; display:block; margin-top:2px; }}
 .nv-dpnl {{ font-size:9px; color:#8060a0; display:block; margin-top:4px; letter-spacing:.04em; }}
 
-/* ── Legend chips (top-right of main-area) ── */
-.legend-strip {{
-  position:absolute; top:10px; right:16px;
-  display:flex; flex-direction:column; gap:6px; z-index:10;
-}}
+/* ── Legend chips (top-right of main-area) — hidden, redundant with pos overlay ── */
+.legend-strip {{ display:none; }}
 .leg-item {{
   display:flex; align-items:center; gap:8px;
   background:rgba(6,0,8,.82); border:1px solid #2a003d;
@@ -1010,15 +1008,14 @@ body::after {{
 }}
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
-/* ── Status bar — solid row spanning all four columns ── */
-/* ── Tracker bar (between chart and panels) ── */
+/* ── Tracker bar — orange bar between header and chart ── */
 #tracker-bar {{
   flex-shrink:0;
-  background:#000;
-  border-top:1px solid #0a0018;
-  border-bottom:1px solid #0a0018;
+  background:rgba(8,3,0,.95);
+  border-top:1px solid #2a1000;
+  border-bottom:1px solid #ff6600;
   padding:0 16px;
-  height:26px;
+  height:24px;
   display:flex;
   align-items:center;
   gap:20px;
@@ -1031,20 +1028,20 @@ body::after {{
 }}
 #run-progress-wrap.hidden {{ opacity:0; pointer-events:none; }}
 #run-progress-track {{
-  width:140px; height:8px; background:#080014;
-  border:1px solid #2a004a;
+  width:140px; height:6px; background:#0a0500;
+  border:1px solid #3a1800;
   overflow:hidden; position:relative;
   /* vertical scanlines — the grid */
   background-image:repeating-linear-gradient(
     90deg,
     transparent 0px, transparent 7px,
-    rgba(255,0,200,.08) 7px, rgba(255,0,200,.08) 8px
+    rgba(255,102,0,.08) 7px, rgba(255,102,0,.08) 8px
   );
 }}
 #run-progress-fill {{
   height:100%; width:0%;
-  background:linear-gradient(90deg, #cc00ff 0%, #ff006e 60%, #00e5ff 100%);
-  box-shadow:0 0 10px rgba(204,0,255,.7), 0 0 3px rgba(0,229,255,.5);
+  background:linear-gradient(90deg, #ff3300 0%, #ff6600 55%, #ffaa00 100%);
+  box-shadow:0 0 10px rgba(255,102,0,.8), 0 0 3px rgba(255,180,0,.5);
   transition:width .9s linear;
   position:relative;
 }}
@@ -1064,15 +1061,15 @@ body::after {{
   to   {{ background-position:0 8px; }}
 }}
 @keyframes fill-fire {{
-  0%,100% {{ box-shadow:0 0 10px rgba(204,0,255,.7),0 0 3px rgba(0,229,255,.5); }}
-  50%      {{ box-shadow:0 0 22px rgba(255,0,110,1),0 0 8px rgba(0,229,255,.9); }}
+  0%,100% {{ box-shadow:0 0 10px rgba(255,102,0,.8),0 0 3px rgba(255,180,0,.5); }}
+  50%      {{ box-shadow:0 0 22px rgba(255,60,0,1),0 0 8px rgba(255,200,0,.9); }}
 }}
 #run-progress-fill.firing {{ animation:fill-fire .4s ease-in-out infinite; }}
 #run-progress-label {{
   font-size:9px; letter-spacing:.18em; white-space:nowrap;
   font-family:Consolas,monospace;
-  color:#cc00ff;
-  text-shadow:0 0 8px rgba(204,0,255,.8);
+  color:#ff6600;
+  text-shadow:0 0 8px rgba(255,102,0,.8);
   min-width:28px; text-align:right;
 }}
 /* ── Status bar (clock / cursor only) ── */
@@ -1884,7 +1881,20 @@ body::after {{
     </div>
   </div>
 </div>
-<div id="daily-bar">
+<!-- Cyberpunk cycle bar — orange, sits between header and chart -->
+<div id="tracker-bar">
+  <div id="run-progress-wrap">
+    <span style="font:700 7px Consolas,monospace;letter-spacing:.22em;color:#ff6600;text-transform:uppercase;text-shadow:0 0 6px rgba(255,102,0,.6)">CYCLE</span>
+    <div id="run-progress-track"><div id="run-progress-fill"></div></div>
+    <span id="run-progress-label">—</span>
+  </div>
+  <div id="vhs-scan-bar">
+    <span id="vhs-scan-label">SCAN:</span>
+    <div id="vhs-track"><div id="vhs-fill"></div></div>
+  </div>
+</div>
+
+<div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
   <span id="daily-bar-label"></span>
 </div>
@@ -3076,15 +3086,6 @@ window.addEventListener('resize', function() {{
   <div id="feed-panel" style="display:none"></div>
   <!-- Pos panel stub -->
   <div id="pos-panel" style="display:none"></div>
-  <div id="tracker-bar" style="display:none">
-    <div id="run-progress-wrap">
-      <div id="run-progress-track"><div id="run-progress-fill"></div></div>
-      <span id="run-progress-label">075s</span>
-    </div>
-    <div id="vhs-scan-bar">
-      <div id="vhs-track"><div id="vhs-fill"></div></div>
-    </div>
-  </div>
 </div>
 
 <!-- Capital FAB + popup (fixed position, outside term-overlay) -->
