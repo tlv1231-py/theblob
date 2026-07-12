@@ -2,13 +2,13 @@ name: crypto_momentum runner
 
 on:
   schedule:
-    - cron: '*/2 * * * *'  # every 2 minutes, 24/7
-  workflow_dispatch:       # manual trigger for testing
+    - cron: '*/2 * * * *'  # fallback if self-trigger ever stops
+  workflow_dispatch:        # manual trigger + self-trigger
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 2     # kill if hung — next cron picks up
+    timeout-minutes: 2
 
     steps:
       - uses: actions/checkout@v4
@@ -27,3 +27,10 @@ jobs:
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           DATABASE_URL:      ${{ secrets.DATABASE_URL }}
         run: python -m strategies.crypto.runner
+
+      - name: Schedule next run in 2 minutes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 120
+          gh workflow run crypto_runner.yml --repo ${{ github.repository }}
