@@ -1404,19 +1404,55 @@ body::after {{
   height:100%; border-radius:1px; background:#00e5ff;
   transition:width .25s linear;
 }}
+/* ── Position card corner brackets ── */
+.pos-corner {{ position:absolute; width:10px; height:10px; border-style:solid; pointer-events:none; z-index:5; opacity:0; transition:opacity .2s; }}
+.pos-corner.tl {{ top:-1px; left:-1px; border-width:2px 0 0 2px; }}
+.pos-corner.tr {{ top:-1px; right:-1px; border-width:2px 2px 0 0; }}
+.pos-corner.bl {{ bottom:-1px; left:-1px; border-width:0 0 2px 2px; }}
+.pos-corner.br {{ bottom:-1px; right:-1px; border-width:0 2px 2px 0; }}
+.pos-card:hover .pos-corner, .pos-card.pos-card-active .pos-corner {{ opacity:1; }}
+/* ── Acquired flash ── */
+.pos-acq-flash {{ position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:7px;letter-spacing:.28em;text-transform:uppercase;font-weight:700;pointer-events:none;z-index:10;opacity:0; }}
+@keyframes acq-flash {{ 0%{{opacity:1}} 50%{{opacity:.7}} 100%{{opacity:0}} }}
+.pos-acq-flash.show {{ animation:acq-flash .7s ease-out forwards; }}
+/* ── Active breathing glow ── */
+@keyframes pos-breathe {{ 0%,100%{{box-shadow:none}} 50%{{box-shadow:0 0 10px rgba(0,229,255,.12)}} }}
+.pos-card.pos-card-active {{ animation:pos-breathe 3s ease-in-out infinite; }}
 /* ── Position card enter/exit animations ── */
 @keyframes card-enter {{
-  0%   {{ opacity:0; transform:translateX(-18px); filter:brightness(2) saturate(3); }}
-  40%  {{ filter:brightness(1.4) saturate(2); }}
-  100% {{ opacity:1; transform:translateX(0);  filter:brightness(1) saturate(1); }}
+  0%   {{ opacity:0; transform:scaleY(0); filter:brightness(5) saturate(0); }}
+  20%  {{ opacity:1; transform:scaleY(1); filter:brightness(3) saturate(0); }}
+  60%  {{ filter:brightness(2) saturate(2); }}
+  100% {{ filter:brightness(1) saturate(1); }}
 }}
-@keyframes card-exit {{
-  0%   {{ opacity:1; transform:translateX(0);   max-height:80px; }}
-  40%  {{ filter:brightness(1.6); border-color:#ff3366; }}
-  100% {{ opacity:0; transform:translateX(22px); max-height:0; padding-top:0; padding-bottom:0; }}
+@keyframes card-exit-target {{
+  0%   {{ transform:translateX(0); filter:brightness(1); background:transparent; }}
+  20%  {{ filter:brightness(4); background:rgba(0,255,157,.1); }}
+  100% {{ transform:translateX(110%); opacity:0; filter:brightness(2); }}
 }}
-.pos-card-entering {{ animation:card-enter .45s cubic-bezier(.22,1,.36,1) forwards; }}
-.pos-card-exiting  {{ animation:card-exit  .38s ease-in forwards; overflow:hidden; }}
+@keyframes card-exit-stop {{
+  0%   {{ transform:scale(1); filter:brightness(1); }}
+  20%  {{ filter:brightness(5); background:rgba(255,51,102,.15); }}
+  100% {{ transform:scale(0); opacity:0; max-height:0; padding:0; }}
+}}
+@keyframes card-exit-timeout {{
+  0%   {{ transform:translateY(0); opacity:1; }}
+  20%  {{ background:rgba(255,153,0,.08); filter:brightness(2); }}
+  100% {{ transform:translateY(-28px); opacity:0; max-height:0; padding:0; }}
+}}
+@keyframes card-exit-rev {{
+  0%   {{ opacity:1; filter:brightness(1); }}
+  30%  {{ filter:brightness(3) hue-rotate(180deg); background:rgba(0,229,255,.08); }}
+  100% {{ opacity:0; max-height:0; padding:0; }}
+}}
+.pos-card-entering {{ animation:card-enter .45s cubic-bezier(.22,1,.36,1) forwards; transform-origin:center top; }}
+.pos-card-exiting  {{ animation:card-exit-stop .42s ease-in forwards; overflow:hidden; }}
+.pos-card-exit-target  {{ animation:card-exit-target  .52s cubic-bezier(.55,0,1,.45) forwards; overflow:hidden; }}
+.pos-card-exit-stop    {{ animation:card-exit-stop    .42s ease-in forwards; overflow:hidden; }}
+.pos-card-exit-timeout {{ animation:card-exit-timeout .48s ease-in forwards; overflow:hidden; }}
+.pos-card-exit-rev     {{ animation:card-exit-rev     .48s ease-out forwards; overflow:hidden; }}
+/* ── PnL ghost ── */
+.pnl-ghost {{ position:fixed; pointer-events:none; z-index:9999; font-size:18px; font-weight:700; font-family:Consolas,monospace; text-shadow:0 0 10px currentColor; transition:transform .9s cubic-bezier(.22,1,.36,1), opacity .9s ease; opacity:1; }}
 /* ── Ambient canvas (behind chart content) ── */
 #ambient-canvas {{
   position:absolute; inset:0; pointer-events:none; z-index:10;
@@ -2746,6 +2782,13 @@ window.addEventListener('resize', function() {{
             var plain     = verbPlain + ' ' + sym;
             var html      = verbHtml + ' ' + sym + priceS + pnlHtml;
             if (window._postToFeed) window._postToFeed(plain, _parseTs(row.recorded_at), html);
+            // Trigger reason-aware exit animation on live events
+            if (!isHistory && !isEntry && window._triggerCardExit) {{
+              var reasonM = raw.match(/·\s*(target|stop|timeout|reversal|signal)\s*$/i);
+              var exitReason = reasonM ? reasonM[1].toLowerCase() : (pnlM && pnlM[1][0] === '+' ? 'target' : 'stop');
+              var pnlVal = pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null;
+              window._triggerCardExit(sym, exitReason, pnlVal);
+            }}
           }} else if (row.event_type === 'UPDATE') {{
             if (!isHistory) {{
               // Parse open symbols
@@ -3068,6 +3111,46 @@ window.addEventListener('resize', function() {{
       }}, totalMs + 2800);
     }};
 
+    // ── Reason-aware card exit ──────────────────────────────────────────────────
+    function _spawnPnlGhost(el, pnl) {{
+      if (!el || pnl === null) return;
+      var r = el.getBoundingClientRect();
+      var g = document.createElement('div');
+      g.className = 'pnl-ghost';
+      var sign = pnl >= 0 ? '+' : '-';
+      g.textContent = sign + '$' + Math.abs(pnl).toFixed(2);
+      g.style.color = pnl >= 0 ? '#00ff9d' : '#ff3366';
+      g.style.left = (r.left + r.width / 2 - 40) + 'px';
+      g.style.top  = (r.top  + r.height / 2 - 10) + 'px';
+      document.body.appendChild(g);
+      requestAnimationFrame(function() {{
+        g.style.transform = pnl >= 0 ? 'translateY(-70px)' : 'translateY(70px)';
+        g.style.opacity = '0';
+      }});
+      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1050);
+    }}
+    var _EXIT_CLASS = {{
+      'target':   'pos-card-exit-target',
+      'stop':     'pos-card-exit-stop',
+      'timeout':  'pos-card-exit-timeout',
+      'reversal': 'pos-card-exit-rev',
+      'signal':   'pos-card-exit-rev'
+    }};
+    var _EXIT_DUR = {{ 'target':540, 'stop':430, 'timeout':500, 'reversal':510, 'signal':510 }};
+    window._triggerCardExit = function(fullSym, reason, pnl) {{
+      // fullSym may be "BTC/USD" or just "BTC" — try both
+      var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD'];
+      if (!el) return;
+      var sym = Object.keys(_cryptoCardEls).find(function(k) {{ return _cryptoCardEls[k] === el; }});
+      if (sym) delete _cryptoCardEls[sym];
+      el.classList.remove('pos-card-active');
+      _spawnPnlGhost(el, pnl);
+      var cls = _EXIT_CLASS[reason] || 'pos-card-exit-stop';
+      el.classList.add(cls);
+      var dur = _EXIT_DUR[reason] || 500;
+      setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, dur);
+    }};
+
     function _makeCard(p) {{
       var col   = _symCol(p.symbol);
       var entry = parseFloat(p.entry_price);
@@ -3089,8 +3172,24 @@ window.addEventListener('resize', function() {{
       el.setAttribute('data-sym', p.symbol);
       el.setAttribute('data-entered', p.entered_at || '');
       el.style.borderLeft = '3px solid ' + col;
+      el.style.position = 'relative';
+      el.style.overflow = 'hidden';
+      el.style.transformOrigin = 'center top';
       var agePct  = Math.min(age / 12 * 100, 100);
       var ageBg   = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+      // Corner brackets
+      ['tl','tr','bl','br'].forEach(function(pos) {{
+        var c = document.createElement('span');
+        c.className = 'pos-corner ' + pos;
+        c.style.borderColor = col;
+        el.appendChild(c);
+      }});
+      // Acquired flash overlay
+      var flash = document.createElement('div');
+      flash.className = 'pos-acq-flash';
+      flash.textContent = '⌐ ACQUIRED ¬';
+      flash.style.color = col;
+      el.appendChild(flash);
       // stop / target range bar
       var tgt = parseFloat(p.target_price || 0);
       var rangeHtml = '';
@@ -3107,16 +3206,40 @@ window.addEventListener('resize', function() {{
           + '<span>+' + (entry > 0 ? ((tgt - entry)/entry*100).toFixed(1) : '—') + '% tgt</span>'
           + '</div>';
       }}
-      el.innerHTML = '<div class="pos-top">'
-        + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
+      var inner = document.createElement('div');
+      inner.innerHTML = '<div class="pos-top">'
+        + '<span class="pos-sym" style="color:' + col + '">···</span>'
         + '<span class="pos-qty">' + qtyStr + '</span>'
         + '<span class="pos-val" style="color:#cc00ff;font-size:10px">▲ LONG</span>'
         + wrHtml
         + '</div>'
-        + '<div class="pos-hold active">$' + entry.toFixed(entry < 0.01 ? 6 : 4)
-        + ' · stop ' + stopPct + '%</div>'
+        + '<div class="pos-hold active">··········</div>'
         + rangeHtml
         + '<div class="pos-age-bar"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
+      el.appendChild(inner);
+      // Orchestrate entry: flash → scramble sym → resolve price
+      var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
+      function _scramble(domEl, target, ms) {{
+        var steps = Math.ceil(ms/30); var f = 0;
+        var iv = setInterval(function() {{
+          f++;
+          var out = '';
+          for (var i = 0; i < target.length; i++) {{
+            out += i / target.length < f / steps ? target[i] : CHARS[Math.floor(Math.random()*CHARS.length)];
+          }}
+          domEl.textContent = out;
+          if (f >= steps) {{ domEl.textContent = target; clearInterval(iv); }}
+        }}, 30);
+      }}
+      setTimeout(function() {{
+        flash.classList.add('show');
+        el.classList.add('pos-card-active');
+        var symEl = inner.querySelector('.pos-sym');
+        _scramble(symEl, p.symbol.replace('/USD',''), 280);
+        var holdEl = inner.querySelector('.pos-hold');
+        var holdTarget = '$' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '%';
+        setTimeout(function() {{ _scramble(holdEl, holdTarget, 220); }}, 150);
+      }}, 90);
       return el;
     }}
 
@@ -3159,11 +3282,16 @@ window.addEventListener('resize', function() {{
         }}
 
         if (!Array.isArray(rows) || !rows.length) {{
-          // Exit all existing cards
+          // Exit all existing cards (poll fallback — event-driven already fired for live exits)
           Object.keys(_cryptoCardEls).forEach(function(sym) {{
             var el = _cryptoCardEls[sym];
-            el.classList.add('pos-card-exiting');
-            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 400);
+            if (!el.classList.contains('pos-card-exit-target') &&
+                !el.classList.contains('pos-card-exit-stop') &&
+                !el.classList.contains('pos-card-exit-timeout') &&
+                !el.classList.contains('pos-card-exit-rev')) {{
+              el.classList.add('pos-card-exit-stop');
+            }}
+            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 450);
           }});
           _cryptoCardEls = {{}};
           if (!flat) {{
@@ -3181,12 +3309,17 @@ window.addEventListener('resize', function() {{
         var newSyms = {{}};
         rows.forEach(function(p) {{ newSyms[p.symbol] = p; }});
 
-        // Exit cards no longer in data
+        // Exit cards no longer in data (poll fallback — event-driven already fired for live exits)
         Object.keys(_cryptoCardEls).forEach(function(sym) {{
           if (!newSyms[sym]) {{
             var el = _cryptoCardEls[sym];
-            el.classList.add('pos-card-exiting');
-            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 400);
+            if (!el.classList.contains('pos-card-exit-target') &&
+                !el.classList.contains('pos-card-exit-stop') &&
+                !el.classList.contains('pos-card-exit-timeout') &&
+                !el.classList.contains('pos-card-exit-rev')) {{
+              el.classList.add('pos-card-exit-stop'); // fallback
+            }}
+            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 450);
             delete _cryptoCardEls[sym];
           }}
         }});
