@@ -1198,28 +1198,45 @@ body::after {{
   opacity:0;
 }}
 #xhair-canvas {{ position:absolute; inset:0; }}
-/* ── Yellow aurora shimmer over gridlines ── */
-#grid-shimmer {{
-  position:absolute; inset:0; pointer-events:none; z-index:6;
-  background:linear-gradient(115deg,
-    transparent 0%, transparent 30%,
-    rgba(255,210,0,.045) 42%, rgba(255,170,0,.07) 50%, rgba(255,210,0,.045) 58%,
-    transparent 70%, transparent 100%
-  );
-  background-size:300% 300%;
-  animation:grid-aurora 18s ease-in-out infinite;
-}}
-@keyframes grid-aurora {{
-  0%   {{ background-position:0% 50%; }}
-  50%  {{ background-position:100% 50%; }}
-  100% {{ background-position:0% 50%; }}
-}}
 /* ── Portfolio line oscillating glow ── */
 @keyframes port-glow {{
   0%,100% {{ filter:drop-shadow(0 0 2px #ff00cc) drop-shadow(0 0 6px rgba(255,0,204,.4)); }}
   50%      {{ filter:drop-shadow(0 0 10px #ff00cc) drop-shadow(0 0 28px rgba(255,0,204,.65)) drop-shadow(0 0 50px rgba(255,0,204,.25)); }}
 }}
 .portfolio-glow {{ animation:port-glow 2.4s ease-in-out infinite; }}
+/* ── Daily PnL bar ── */
+#daily-bar {{
+  height:3px; flex-shrink:0; background:#0a0018; position:relative; overflow:visible; z-index:20;
+}}
+#daily-bar-fill {{
+  position:absolute; top:0; left:0; height:100%;
+  transition:width .8s cubic-bezier(.22,1,.36,1), background .4s;
+  background:linear-gradient(90deg,#00ff9d,#00e5ff);
+}}
+#daily-bar-label {{
+  position:absolute; right:10px; top:-12px;
+  font:700 8px Consolas,monospace; letter-spacing:.08em;
+  color:#3a1a5a; white-space:nowrap;
+}}
+/* ── Streak chip ── */
+#streak-chip {{
+  display:flex; align-items:center; gap:5px; padding:0 10px;
+  flex-shrink:0;
+}}
+.streak-val {{
+  font:700 11px Consolas,monospace; letter-spacing:.04em;
+}}
+.streak-label {{ font-size:6.5px; color:#3a1a4a; letter-spacing:.22em; text-transform:uppercase; }}
+/* ── Win rate badge on position cards ── */
+.win-badge {{
+  font-size:8px; font-weight:700; letter-spacing:.06em;
+  padding:1px 4px; border-radius:2px; margin-left:auto; flex-shrink:0;
+}}
+/* ── Projected return label ── */
+.nv-proj {{
+  font-size:8px; color:#3a1a5a; display:block; margin-top:5px; letter-spacing:.04em;
+  border-top:1px solid #1a0028; padding-top:4px;
+}}
 </style>
 </head>
 <body>
@@ -1261,12 +1278,20 @@ body::after {{
     <span class="tb-stat-label">QQQ</span>
     <span class="tb-stat-val" style="color:#9400ff">{qqq_latest}</span>
   </div>
+  <div class="tb-sep"></div>
+  <div id="streak-chip">
+    <span class="streak-label">streak</span>
+    <span id="streak-val" class="streak-val" style="color:#3a1a5a">—</span>
+  </div>
+</div>
+<div id="daily-bar">
+  <div id="daily-bar-fill" style="width:0%"></div>
+  <span id="daily-bar-label"></span>
 </div>
 
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
-  <div id="grid-shimmer"></div>
   <canvas id="pulse-canvas"></canvas>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
@@ -1277,6 +1302,7 @@ body::after {{
     <span class="nv-val">{nav_str}</span>
     <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
     <span class="nv-dpnl">today  {dpnl_str}</span>
+    <span class="nv-proj" id="nv-proj">pace: computing…</span>
   </div>
   <div class="legend-strip">
     <div class="leg-item">
@@ -1351,6 +1377,20 @@ function yRange(x0, x1) {{
 
 var yr = yRange(xStart, xEnd);
 
+// ── HYSA comparison line ─────────────────────────────────────────────────
+var _hysaStart = portDates.length ? new Date(portDates[0]+'T00:00:00Z') : new Date('2026-05-29T00:00:00Z');
+var _hysaEnd   = new Date();
+var _hysaDates = [], _hysaVals = [];
+(function() {{
+  var d = new Date(_hysaStart);
+  var msPerYear = 365.25 * 24 * 3600 * 1000;
+  while (d <= _hysaEnd) {{
+    _hysaDates.push(d.toISOString().split('T')[0]);
+    _hysaVals.push(100000 * Math.pow(1.048, (d - _hysaStart) / msPerYear));
+    d.setDate(d.getDate() + 1);
+  }}
+}})();
+
 var traces = [
   // $100K baseline reference
   {{
@@ -1382,6 +1422,14 @@ var traces = [
     line:{{ color:'#ff00cc', width:2.5 }},
     name:'PORTFOLIO',
     hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
+  }},
+  // HYSA 4.8% benchmark
+  {{
+    x: _hysaDates, y: _hysaVals,
+    type:'scatter', mode:'lines',
+    line:{{ color:'rgba(255,200,0,0.3)', width:1, dash:'dash' }},
+    name:'HYSA 4.8%',
+    hovertemplate:'<b style="color:#ffc800">HYSA $%{{y:,.0f}}</b><extra></extra>',
   }},
 ];
 
@@ -1513,6 +1561,32 @@ function drawPulse() {{
   rafId = requestAnimationFrame(drawPulse);
 }}
 
+// ── Sound system ─────────────────────────────────────────────────────────
+var _audioCtx = null;
+function _getAudio() {{
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}}
+function _playTones(freqs, dur, type) {{
+  try {{
+    var ctx = _getAudio();
+    freqs.forEach(function(f, i) {{
+      var osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = type || 'sine';
+      osc.frequency.value = f;
+      var t0 = ctx.currentTime + i * 0.09;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.12, t0 + 0.01);
+      g.gain.linearRampToValueAtTime(0, t0 + dur);
+      osc.start(t0); osc.stop(t0 + dur + 0.05);
+    }});
+  }} catch(e) {{}}
+}}
+window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
+window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
+window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
+
 function applyPortfolioGlow() {{
   // Portfolio trace is index 3 — its line path sits inside the 4th .scatter group
   var scatters = gd.querySelectorAll('.scatter');
@@ -1520,6 +1594,18 @@ function applyPortfolioGlow() {{
     var lp = scatters[3].querySelector('path.js-line');
     if (lp) lp.classList.add('portfolio-glow');
   }}
+  // Gridline shimmer — inject CSS animation into the Plotly SVG so it only hits the lines
+  var svg = gd.querySelector('svg.main-svg');
+  if (svg && !svg.querySelector('#gl-anim')) {{
+    var st = document.createElementNS('http://www.w3.org/2000/svg','style');
+    st.id = 'gl-anim';
+    st.textContent = '@keyframes gl-sw{{0%,100%{{stroke:rgba(42,0,61,.5)}}50%{{stroke:rgba(190,160,230,.38)}}}}' +
+      '.gridlayer .crisp line{{animation:gl-sw 14s ease-in-out infinite}}';
+    svg.prepend(st);
+  }}
+  // Stagger each gridline so it sweeps like a wash
+  var lines = gd.querySelectorAll('.gridlayer .crisp line');
+  lines.forEach(function(l, i) {{ l.style.animationDelay = -(i * 1.1) % 14 + 's'; }});
 }}
 
 // Start everything once Plotly has rendered
@@ -2041,7 +2127,7 @@ window.addEventListener('resize', function() {{
   (function() {{
     var SUPA_URL  = 'https://seeevuklabvhkawawtxn.supabase.co';
     var SUPA_KEY  = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
-    var _lastSeen = new Date().toISOString();   // only show events from now on
+    var _lastSeen = null;   // null = load history first, then switch to live
 
     function _labelFor(eventType) {{
       var m = {{
@@ -2055,9 +2141,10 @@ window.addEventListener('resize', function() {{
     function _poll() {{
       var url = SUPA_URL + '/rest/v1/pipeline_events'
         + '?select=event_type,symbol,message,recorded_at'
-        + '&recorded_at=gt.' + encodeURIComponent(_lastSeen)
-        + '&order=recorded_at.asc'
-        + '&limit=20';
+        + (_lastSeen
+            ? '&recorded_at=gt.' + encodeURIComponent(_lastSeen)
+            : '&order=recorded_at.desc&limit=50')
+        + (_lastSeen ? '&order=recorded_at.asc&limit=20' : '');
       fetch(url, {{
         headers: {{
           'apikey': SUPA_KEY,
@@ -2066,8 +2153,10 @@ window.addEventListener('resize', function() {{
       }})
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
-        if (!Array.isArray(rows) || !rows.length) return;
-        if (window._resetRunTimer) window._resetRunTimer(); // runner just fired — reset progress bar
+        if (!Array.isArray(rows) || !rows.length) {{ _lastSeen = _lastSeen || new Date().toISOString(); return; }}
+        var isHistory = !_lastSeen;
+        if (isHistory) rows = rows.slice().reverse(); // DESC → chronological
+        if (window._resetRunTimer) window._resetRunTimer();
         rows.forEach(function(row) {{
           _lastSeen = row.recorded_at;
           var raw = row.message || '';
@@ -2075,6 +2164,15 @@ window.addEventListener('resize', function() {{
           var display;
           if (row.event_type === 'TRADE' && (raw.indexOf('ENTER') !== -1 || raw.indexOf('EXIT') !== -1)) {{
             var isEntry = raw.indexOf('ENTER') !== -1;
+            // Sound — only on live events (not history replay)
+            if (!isHistory) {{
+              if (isEntry) {{ if (window._soundEntry) window._soundEntry(); }}
+              else {{
+                var pnlMsnd = raw.match(/pnl\s*([+-][\d,.]+)/);
+                if (pnlMsnd && pnlMsnd[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
+                else {{ if (window._soundLoss) window._soundLoss(); }}
+              }}
+            }}
             // Flash the terminal border
             var ovl = document.getElementById('term-overlay');
             if (ovl) {{
@@ -2129,6 +2227,7 @@ window.addEventListener('resize', function() {{
     }}
 
     function _updateNavDisplays(nav, ts) {{
+      window._lastKnownNav = nav;
       var col = _retColor(nav, START_NAV);
       var ret = _fmtRet(nav, START_NAV);
       var pnl = nav - START_NAV;
@@ -2182,7 +2281,30 @@ window.addEventListener('resize', function() {{
           setTimeout(function() {{ pnlBox.classList.remove('nudge-up','nudge-down'); }}, 700);
         }}
       }}
-      if (pnlSub) {{ pnlSub.textContent = ret + ' since $100K start'; }}
+      if (pnlSub) {{
+        if (pnl < 0) {{
+          pnlSub.textContent = 'need +$' + Math.abs(Math.round(pnl)).toLocaleString('en-US') + ' to recover';
+        }} else {{
+          pnlSub.textContent = ret + ' since $100K start';
+        }}
+      }}
+
+      // Projected annual return (rolling pace from portValues)
+      var proj = document.getElementById('nv-proj');
+      if (proj && portValues.length >= 2) {{
+        var n = Math.min(portValues.length, 30);
+        var vS = portValues[portValues.length - n], vE = nav;
+        var dS = new Date(portDates[portDates.length - n] + 'T00:00:00Z');
+        var days = Math.max(1, (Date.now() - dS) / 86400000);
+        var dailyR = Math.pow(vE / vS, 1/days) - 1;
+        var dec31 = new Date(new Date().getFullYear(), 11, 31);
+        var dLeft = Math.max(0, (dec31 - Date.now()) / 86400000);
+        var eoy = vE * Math.pow(1 + dailyR, dLeft);
+        var gain = eoy - 100000;
+        var gainSign = gain >= 0 ? '+' : '-';
+        proj.textContent = 'pace: ' + gainSign + '$' + Math.round(Math.abs(gain)).toLocaleString('en-US') + ' by Dec 31';
+        proj.style.color = gain >= 0 ? '#00ff9d' : '#ff3366';
+      }}
 
       // legend-strip PORTFOLIO
       var legVals = document.querySelectorAll('.leg-val');
@@ -2255,11 +2377,20 @@ window.addEventListener('resize', function() {{
           var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
           var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
           var qtyStr = qty > 1000 ? qty.toFixed(0) : qty < 0.001 ? qty.toExponential(2) : qty.toFixed(4);
+          var wr = window._winRates && window._winRates[p.symbol];
+          var wrHtml = '';
+          if (wr && wr.t >= 3) {{
+            var wrPct = Math.round(wr.w / wr.t * 100);
+            var wrCol = wrPct >= 55 ? '#00ff9d' : wrPct >= 40 ? '#ff9900' : '#ff3366';
+            var wrBg  = wrPct >= 55 ? 'rgba(0,255,157,.1)' : wrPct >= 40 ? 'rgba(255,153,0,.1)' : 'rgba(255,51,102,.1)';
+            wrHtml = '<span class="win-badge" style="color:' + wrCol + ';background:' + wrBg + '">' + wrPct + '% W</span>';
+          }}
           html += '<div class="pos-card" style="border-left:3px solid ' + col + '">'
             + '<div class="pos-top">'
             + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
             + '<span class="pos-qty">' + qtyStr + '</span>'
             + '<span class="pos-val" style="color:#cc00ff;font-size:10px">▲ LONG</span>'
+            + wrHtml
             + '</div>'
             + '<div class="pos-hold active">entry $' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '% · ' + age + 'm</div>'
             + '</div>';
@@ -2273,6 +2404,82 @@ window.addEventListener('resize', function() {{
       _pollPositions();
       setInterval(_pollPositions, 5000);
     }}, 2000);
+
+    // ── Stats poller: streak + daily bar (every 15s) ─────────────────────────
+    function _pollStats() {{
+      // Fetch last 60 TRADE events that have EXIT to compute streak + per-symbol win rate
+      var url = SUPA_URL + '/rest/v1/pipeline_events'
+        + '?select=symbol,message,recorded_at'
+        + '&event_type=eq.TRADE'
+        + '&message=like.*EXIT*'
+        + '&order=recorded_at.desc&limit=60';
+      fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows)) return;
+        // Streak: count consecutive ✓ or ✗ from top (most recent)
+        var streak = 0, streakSign = null;
+        for (var i = 0; i < rows.length; i++) {{
+          var m = rows[i].message;
+          var isWin = m.indexOf('✓') !== -1;
+          var isLoss = m.indexOf('✗') !== -1;
+          if (!isWin && !isLoss) continue;
+          var s = isWin ? 1 : -1;
+          if (streakSign === null) {{ streakSign = s; streak = 1; }}
+          else if (s === streakSign) {{ streak++; }}
+          else {{ break; }}
+        }}
+        var sv = document.getElementById('streak-val');
+        if (sv) {{
+          if (streakSign === null) {{ sv.textContent = '—'; sv.style.color = '#3a1a5a'; }}
+          else {{
+            var ico = streakSign > 0 ? '🔥' : '☠';
+            sv.textContent = ico + ' ' + streak + (streakSign > 0 ? 'W' : 'L');
+            sv.style.color = streakSign > 0 ? '#00ff9d' : '#ff3366';
+          }}
+        }}
+        // Win rate per symbol → store as map for _pollPositions to use
+        window._winRates = {{}};
+        rows.forEach(function(row) {{
+          var sym = row.symbol || '';
+          if (!window._winRates[sym]) window._winRates[sym] = {{w:0,t:0}};
+          window._winRates[sym].t++;
+          if (row.message.indexOf('✓') !== -1) window._winRates[sym].w++;
+        }});
+      }}).catch(function() {{}});
+
+      // Daily bar: today's fills pnl proxy — compare earliest vs latest portfolio snapshot today
+      var today = new Date().toISOString().split('T')[0];
+      var urlSnap = SUPA_URL + '/rest/v1/portfolio_snapshots'
+        + '?select=total_value,recorded_at&strategy=eq.crypto_momentum'
+        + '&recorded_at=gte.' + today + 'T00:00:00Z&order=recorded_at.asc&limit=1';
+      fetch(urlSnap, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows) || !rows.length) return;
+        var sodNav = parseFloat(rows[0].total_value);
+        var latestNav = parseFloat(document.querySelector('.tb-stat-val')?.textContent?.replace(/[$,]/g,'')) || sodNav;
+        // use the nav from the last known update if possible
+        if (window._lastKnownNav) latestNav = window._lastKnownNav;
+        var dayPnl = latestNav - sodNav;
+        var dailyLimit = 10000; // $10K = 10% of $100K
+        var pct = Math.min(Math.abs(dayPnl) / dailyLimit, 1);
+        var fill = document.getElementById('daily-bar-fill');
+        var lbl  = document.getElementById('daily-bar-label');
+        if (fill) {{
+          fill.style.width = (pct * 100) + '%';
+          fill.style.background = dayPnl >= 0
+            ? 'linear-gradient(90deg,#00ff9d,#00e5ff)'
+            : 'linear-gradient(90deg,#ff3366,#ff9900)';
+        }}
+        if (lbl) {{
+          var sign = dayPnl >= 0 ? '+' : '-';
+          lbl.textContent = 'today ' + sign + '$' + Math.round(Math.abs(dayPnl)).toLocaleString('en-US');
+          lbl.style.color = dayPnl >= 0 ? '#00ff9d' : '#ff3366';
+        }}
+      }}).catch(function() {{}});
+    }}
+    setTimeout(function() {{ _pollStats(); setInterval(_pollStats, 15000); }}, 6000);
 
   }})();
 
