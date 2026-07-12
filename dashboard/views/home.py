@@ -3270,6 +3270,13 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   setTimeout(showCrosshair, 1500);
   // Mark initial layout complete so the pan tracker ignores programmatic events
   setTimeout(function() {{ _initLayoutDone = true; }}, 500);
+  // Force intraday zoom — Plotly may autorange if no data falls in today's window
+  setTimeout(function() {{
+    _programmaticRelayout = true;
+    Plotly.relayout(gd, {{ 'xaxis.range': [xStart, xEnd] }}).then(function() {{
+      _programmaticRelayout = false;
+    }});
+  }}, 600);
 }});
 
 gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
@@ -3570,14 +3577,11 @@ function _recenterOnLatest(latestIsoTs) {{
   if (!anchor) return;
   var newStart = _dateMinus(anchor, _CENTER_DAYS);
   var newEnd   = _datePlus_from(anchor, _CENTER_DAYS);
-  // Only update if range actually changed by more than 1 day
-  if (newEnd !== _defaultXRange[1]) {{
-    _defaultXRange = [newStart, newEnd];
-    _programmaticRelayout = true;
-    Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
-      _programmaticRelayout = false;
-    }});
-  }}
+  _defaultXRange = [newStart, newEnd];
+  _programmaticRelayout = true;
+  Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
+    _programmaticRelayout = false;
+  }});
 }}
 
 // ── Wallet selector ───────────────────────────────────────────────────────────
