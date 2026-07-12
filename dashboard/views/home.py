@@ -919,7 +919,7 @@ body::after {{
 
 /* ── Right positions overlay ── */
 #pos-overlay {{
-  position:absolute; right:0; top:0; bottom:0; width:260px; z-index:15;
+  position:absolute; right:0; top:0; bottom:0; width:130px; z-index:15;
   display:flex; flex-direction:column;
   background:linear-gradient(270deg,rgba(1,0,8,.88) 0%,rgba(1,0,8,.6) 80%,transparent 100%);
   -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
@@ -927,6 +927,8 @@ body::after {{
 }}
 #pos-overlay .panel-hdr {{ flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; }}
 #pos-overlay #pos-body {{ flex:1; overflow:hidden; display:flex; flex-direction:row; gap:0; }}
+#pos-left {{ flex-direction:row !important; overflow-x:hidden; overflow-y:hidden !important; flex:0 0 auto !important; width:0; transition:width .4s cubic-bezier(.22,1,.36,1); }}
+#pos-left .pos-section-label {{ display:none; }}
 #pos-overlay #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
 /* ── Top bar ── */
@@ -1444,6 +1446,13 @@ body::after {{
   display:flex; flex-direction:column; padding-bottom:6px; min-height:0;
 }}
 #pos-left {{ border-right:1px solid #0d0020; }}
+/* Crypto cards in horizontal row — each is a narrow column */
+#pos-left .pos-card {{
+  min-width:118px; max-width:118px; flex-shrink:0;
+  border-left:3px solid; border-right:1px solid #0d0020; border-bottom:none;
+  height:100%; box-sizing:border-box; display:flex; flex-direction:column; justify-content:flex-start;
+}}
+#pos-overlay {{ transition:width .4s cubic-bezier(.22,1,.36,1); }}
 #pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ width:2px; }}
 #pos-left::-webkit-scrollbar-thumb, #pos-right::-webkit-scrollbar-thumb {{ background:rgba(148,0,255,.3); border-radius:1px; }}
 /* position count badge */
@@ -3294,15 +3303,18 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
   if (wins   > 0) _orbWins   = wins;
   if (losses > 0) _orbLosses = losses;
 
-  // _tradeTs is defined in script block 2 — access via window or direct (same scope)
-  var tph = (typeof _tradeTs !== 'undefined') ? _tradeTs.length : 0;
+  // Block 2 exposes these via window.*
+  var trTs = window._tradeTs || [];
+  var now  = Date.now();
+  var cutoff = now - 3600000;
+  var tph  = trTs.filter(function(t){{ return t > cutoff; }}).length;
   var el;
 
   el = document.getElementById('om-tph');
-  if (el) el.textContent = tph.toFixed(1);
+  if (el) el.textContent = tph > 0 ? tph.toFixed(0) : '0';
 
   el = document.getElementById('om-today');
-  if (el) el.textContent = _orbTodayTrades + ' trades';
+  if (el) el.textContent = _orbTodayTrades > 0 ? _orbTodayTrades + ' trades' : '0';
 
   var total = _orbWins + _orbLosses;
   el = document.getElementById('om-winrate');
@@ -3310,23 +3322,33 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
 
   el = document.getElementById('om-streak-orb');
   if (el) {{
-    var s = (typeof _streak !== 'undefined') ? _streak : null;
+    var s = window._streak || null;
     if (s && s.count > 0) {{
       var col = s.win ? '#00ff9d' : '#ff3366';
       el.textContent = (s.win ? '+' : '-') + s.count;
       el.style.color = col;
     }} else {{
       el.textContent = '—';
+      el.style.color = '';
     }}
   }}
+
+  // Update open position count from live card state
+  el = document.getElementById('om-openpos');
+  if (el) {{
+    var cryptoCount = Object.keys(window._cryptoPositionsMap || {{}}).length;
+    var equityCount = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
+    el.textContent = (cryptoCount + equityCount) || '0';
+  }}
 }}
-setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 5000);
+setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 3000);
 
 // ── Chart re-center on latest point ──────────────────────────────────────────
 function _recenterOnLatest(latestIsoTs) {{
   if (_userInteracting) return;
-  // Use provided timestamp or fall back to latest portfolio date
-  var anchor = latestIsoTs ? latestIsoTs.slice(0,10) : (portDates.length ? portDates[portDates.length-1] : null);
+  // Prefer intraday mark → today → last portfolio snapshot (in that priority order)
+  var today = new Date().toISOString().slice(0,10);
+  var anchor = latestIsoTs ? latestIsoTs.slice(0,10) : today;
   if (!anchor) return;
   var newStart = _dateMinus(anchor, _CENTER_DAYS);
   var newEnd   = _datePlus_from(anchor, _CENTER_DAYS);
@@ -4604,9 +4626,22 @@ window.addEventListener('resize', function() {{
       setTimeout(function() {{
         el.style.animation = '';  // clear flash so exit CSS can take over
         el.classList.add(cls);
-        setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, dur);
+        setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); _updateOverlayWidth(); }}, dur);
       }}, 260);
     }};
+
+    var _CARD_W = 118; // px per crypto card
+    var _EQ_W   = 130; // px for equity column
+    function _updateOverlayWidth() {{
+      var overlay = document.getElementById('pos-overlay');
+      var posLeft = document.getElementById('pos-left');
+      if (!overlay || !posLeft) return;
+      var count = Object.keys(_cryptoCardEls).length;
+      var leftW = count > 0 ? count * _CARD_W : 0;
+      var totalW = leftW + _EQ_W;
+      posLeft.style.width = leftW + 'px';
+      overlay.style.width = Math.min(totalW, 650) + 'px';
+    }}
 
     function _makeCard(p) {{
       var col   = _symCol(p.symbol);
@@ -4649,9 +4684,12 @@ window.addEventListener('resize', function() {{
       el.appendChild(flash);
       // Live proximity meter (stop → current → target)
       var tgt = parseFloat(p.target_price || 0);
+      // Synthetic target from config (0.8%) if DB value is null/zero
+      if ((!tgt || tgt <= 0) && entry > 0) tgt = entry * 1.008;
       var rangeHtml = '';
-      if (tgt > 0 && entry > 0 && stop > 0) {{
+      if (entry > 0 && stop > 0) {{
         var tgtPct = ((tgt - entry)/entry*100).toFixed(1);
+        var proxId = 'prox-live-' + p.symbol.replace(/[^A-Za-z0-9]/g,'_');
         rangeHtml = '<div class="pos-prox-wrap"'
           + ' data-entry="' + entry + '" data-stop="' + stop + '" data-target="' + tgt + '">'
           + '<div class="pos-prox-track">'
@@ -4659,9 +4697,9 @@ window.addEventListener('resize', function() {{
           + '<div class="pos-prox-cursor" style="left:50%"></div>'
           + '</div>'
           + '<div class="pos-prox-labels">'
-          + '<span style="color:#ff3366">&#x25B6; stop ' + stopPct + '%</span>'
-          + '<span class="pos-prox-live" id="prox-live-' + p.symbol.replace(/\//g,'-') + '">——</span>'
-          + '<span style="color:#00ff9d">tgt +' + tgtPct + '% &#x25C0;</span>'
+          + '<span style="color:#ff3366">S ' + stopPct + '%</span>'
+          + '<span class="pos-prox-live" id="' + proxId + '">——</span>'
+          + '<span style="color:#00ff9d">T +' + tgtPct + '%</span>'
           + '</div>'
           + '</div>';
       }}
@@ -4794,6 +4832,7 @@ window.addEventListener('resize', function() {{
             _cryptoCardEls[p.symbol] = el;
           }}
         }});
+        _updateOverlayWidth();
 
         // Mirror into report panel rp-crypto-section
         var rpSection = document.getElementById('rp-crypto-section');
@@ -4903,7 +4942,12 @@ window.addEventListener('resize', function() {{
       }});
     }}
     function _pollCryptoPrices() {{
-      var openSyms = Object.keys(window._cryptoPositionsMap || {{}});
+      // Collect open symbols from DOM (works even if _cryptoPositionsMap not yet populated)
+      var openSyms = [];
+      document.querySelectorAll('.pos-prox-wrap[data-entry]').forEach(function(w) {{
+        var card = w.closest('.pos-card[data-sym]');
+        if (card) openSyms.push(card.getAttribute('data-sym'));
+      }});
       if (!openSyms.length) return;
       var bSyms = openSyms.map(function(s) {{ return _BINANCE_SYM_MAP[s] || s.replace('/',''); }})
                           .filter(Boolean);
