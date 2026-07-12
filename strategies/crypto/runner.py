@@ -262,6 +262,10 @@ def run() -> None:
         logger.error(f"[crypto] Bar fetch failed: {e}")
         return
 
+    logger.info(f"[crypto] bars received: {len(min_bars)} syms (1min) · {len(hour_bars)} syms (1hr)")
+    for sym in list(min_bars.keys())[:3]:
+        logger.info(f"  {sym}: {len(min_bars[sym])} 1min bars · {len(hour_bars.get(sym,[]))} 1hr bars")
+
     positions = _load_positions()
     daily_pnl = 0.0
 
