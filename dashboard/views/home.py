@@ -1029,8 +1029,8 @@ body::after {{
   font-size:10px;
   line-height:1.4;
 }}
-#live-clock {{ display:inline; color:#1a0830; font-size:8px; letter-spacing:.06em; }}
-#prompt-sym {{ display:inline; color:#120620; font-size:10px; user-select:none; margin:0 2px; }}
+#live-clock {{ display:inline; color:#006622; font-size:8.5px; letter-spacing:.04em; }}
+#prompt-sym {{ display:inline; color:#004d18; font-size:10px; user-select:none; margin:0 2px; }}
 #type-preview {{
   display:inline; color:#00ff41; font-size:10px; letter-spacing:.04em;
   text-shadow:0 0 8px rgba(0,255,65,.9);
@@ -1248,8 +1248,10 @@ body::after {{
 /* ── VHS Scan bar ── */
 #vhs-scan-bar {{
   display:inline-flex; align-items:center; gap:9px;
-  flex-shrink:0;
+  flex-shrink:0; opacity:0; pointer-events:none;
+  transition:opacity .15s;
 }}
+#vhs-scan-bar.active {{ opacity:1; pointer-events:auto; }}
 #vhs-scan-label {{
   font-size:11px; font-weight:900; letter-spacing:.32em;
   font-stretch:condensed;
@@ -1926,20 +1928,35 @@ function drawPulse() {{
 
 // ── Sound system ─────────────────────────────────────────────────────────
 var _audioCtx = null;
-function _getAudio() {{
-  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return _audioCtx;
-}}
-function _playTones(freqs, dur, type) {{
+var _audioReady = false;
+function _unlockAudio() {{
+  if (_audioReady) return;
   try {{
-    var ctx = _getAudio();
-    if (ctx.state === 'suspended') ctx.resume();
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Play a silent buffer to fully unlock
+    var buf = _audioCtx.createBuffer(1, 1, 22050);
+    var src = _audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(_audioCtx.destination); src.start(0);
+    _audioCtx.resume().then(function() {{ _audioReady = true; }});
+  }} catch(e) {{}}
+}}
+// Unlock on any gesture
+['click','keydown','touchstart'].forEach(function(ev) {{
+  document.addEventListener(ev, function _u() {{
+    _unlockAudio();
+    document.removeEventListener(ev, _u);
+  }});
+}});
+function _playTones(freqs, dur, type) {{
+  if (!_audioReady || !_audioCtx) return;
+  try {{
+    if (_audioCtx.state === 'suspended') {{ _audioCtx.resume(); return; }}
     freqs.forEach(function(f, i) {{
-      var osc = ctx.createOscillator(), g = ctx.createGain();
-      osc.connect(g); g.connect(ctx.destination);
+      var osc = _audioCtx.createOscillator(), g = _audioCtx.createGain();
+      osc.connect(g); g.connect(_audioCtx.destination);
       osc.type = type || 'sine';
       osc.frequency.value = f;
-      var t0 = ctx.currentTime + i * 0.09;
+      var t0 = _audioCtx.currentTime + i * 0.09;
       g.gain.setValueAtTime(0, t0);
       g.gain.linearRampToValueAtTime(0.12, t0 + 0.01);
       g.gain.linearRampToValueAtTime(0, t0 + dur);
@@ -1950,12 +1967,6 @@ function _playTones(freqs, dur, type) {{
 window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
 window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
 window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
-// Unlock AudioContext on first user gesture (browser autoplay policy)
-document.addEventListener('click', function _unlock() {{
-  if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume();
-  if (!_audioCtx) {{ _getAudio(); }}
-  document.removeEventListener('click', _unlock);
-}}, {{ once: true }});
 
 // ── ATH tracking ─────────────────────────────────────────────────────────────
 var _athNav = Math.max.apply(null, portValues.length ? portValues : [100000]);
@@ -3056,7 +3067,8 @@ window.addEventListener('resize', function() {{
       var vhsFill = document.getElementById('vhs-fill');
       if (!vhsBar || !vhsFill) return;
 
-      // Reset to left edge then fill across
+      // Show, reset, fill, hide
+      vhsBar.classList.add('active');
       vhsFill.style.transition = 'none';
       vhsFill.style.width = '0%';
 
@@ -3070,6 +3082,7 @@ window.addEventListener('resize', function() {{
       setTimeout(function() {{
         vhsFill.style.transition = 'width .22s ease-in';
         vhsFill.style.width = '0%';
+        setTimeout(function() {{ vhsBar.classList.remove('active'); }}, 240);
       }}, 1650);
     }};
 
