@@ -133,10 +133,8 @@ def _load_chart_data() -> dict:
                 ORDER BY date
             """), {"start": _STARTING_CAPITAL}).fetchall()
 
-        # Filter out outlier rows from double-run artifacts (initial $197K inflated value)
-        _OUTLIER_CAP = _STARTING_CAPITAL * 1.5
-        port_dates  = [r.d     for r in port_rows if float(r.total_value) <= _OUTLIER_CAP]
-        port_values = [float(r.total_value) for r in port_rows if float(r.total_value) <= _OUTLIER_CAP]
+        port_dates  = [r.d              for r in port_rows]
+        port_values = [float(r.total_value) for r in port_rows]
 
         # Benchmark tracks — SPY / QQQ
         start_cutoff = port_dates[0] if port_dates else "2026-01-01"
@@ -843,13 +841,13 @@ def _build_daw_html(data: dict) -> str:
     # Normalize SPY and QQQ to $100K at portfolio start date
     # so all 3 lines are directly comparable on one axis
     spy_norm: list[float] = []
-    if spy["prices"] and port["values"]:
-        spy_base = spy["prices"][0]
+    if spy["prices"]:
+        spy_base = spy["prices"][0] or 1.0
         spy_norm = [p / spy_base * _STARTING_CAPITAL for p in spy["prices"]]
 
     qqq_norm: list[float] = []
-    if qqq["prices"] and port["values"]:
-        qqq_base = qqq["prices"][0]
+    if qqq["prices"]:
+        qqq_base = qqq["prices"][0] or 1.0
         qqq_norm = [p / qqq_base * _STARTING_CAPITAL for p in qqq["prices"]]
 
     # Latest normalized values for display
@@ -1890,6 +1888,16 @@ body::after {{
 <script>
 var portDates  = {port_dates_j};
 var portValues = {port_values_j};
+// Strip initial inflated value from May 2026 double-run (> 1.5x starting capital)
+(function() {{
+  var cap = 150000;
+  var clean = []; var cleanD = [];
+  for (var i = 0; i < portValues.length; i++) {{
+    if (portValues[i] <= cap) {{ clean.push(portValues[i]); cleanD.push(portDates[i]); }}
+  }}
+  // Only apply filter if at least one clean value remains; otherwise keep all data
+  if (clean.length) {{ portValues = clean; portDates = cleanD; }}
+}})();
 var spyDates   = {spy_dates_j};
 var spyNorm    = {spy_norm_j};
 var qqqDates   = {qqq_dates_j};
