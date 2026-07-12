@@ -909,13 +909,15 @@ body::after {{
 }}
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
-/* ── Status bar — pinned to bottom of feed panel, never shifts content ── */
+/* ── Status bar — rigid box pinned to bottom, top and bottom both fixed ── */
 #status-bar {{
   position:absolute; bottom:0; left:0; right:0;
+  height:46px;
+  overflow:hidden;
   background:#000;
   border-top:1px solid #003311;
-  padding:4px 10px 5px;
-  line-height:1.65;
+  padding:4px 10px 4px;
+  line-height:1.6;
   z-index:5;
 }}
 .con-dot {{
