@@ -1,4 +1,18 @@
 ﻿strategies:
+  - name: crypto_momentum
+    module: strategies.crypto.strategy
+    params_file: strategies/crypto/config.yaml
+    status: paper
+    description: >
+      24/7 crypto breakout momentum. 10-bar high/low breakout filtered by
+      rolling 24h VWAP and RVOL >= 1.2x. 1-min bars across 15 pairs.
+      Position size scales automatically from live Alpaca NAV — deposits
+      and withdrawals reflected in next trade. Single risk_pct dial.
+      Stop 0.5%, target 1.0%, max hold 30 min. Runs on Fly.io free tier.
+    added: "2026-07-11"
+    author: tyler
+    deployment: fly.io / theblob-crypto
+
   - name: daytrader
     module: strategies.daytrader.models.strategy
     params_file: strategies/daytrader/config.yaml

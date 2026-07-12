@@ -1,0 +1,40 @@
+strategy:
+  name: crypto_momentum
+  description: "10-bar breakout + 24h VWAP + RVOL on 1-min crypto bars"
+
+universe:
+  - BTC/USD
+  - ETH/USD
+  - SOL/USD
+  - AVAX/USD
+  - LINK/USD
+  - DOT/USD
+  - DOGE/USD
+  - LTC/USD
+  - BCH/USD
+  - UNI/USD
+  - AAVE/USD
+  - SHIB/USD
+  - MKR/USD
+  - CRV/USD
+  - XTZ/USD
+
+signals:
+  breakout_bars: 10          # N-bar high/low for breakout
+  rvol_min: 1.2              # min relative volume to confirm
+  vwap_window_hours: 24      # rolling VWAP window
+
+position:
+  risk_pct: 1.0              # % of account value per position (THE dial)
+  max_positions: 5           # max concurrent open positions
+  stop_pct: 0.005            # 0.5% stop from entry
+  target_pct: 0.010          # 1.0% target (2:1 R/R)
+  max_hold_minutes: 30       # hard exit after N minutes
+
+risk:
+  max_daily_loss_pct: 0.10   # halt all trading if down 10% on the day
+  max_daily_trades: 200      # sanity ceiling
+
+execution:
+  slippage_bps: 15           # 15bps simulated slippage on paper
+  paper: true

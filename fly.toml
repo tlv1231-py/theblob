@@ -1,0 +1,25 @@
+# Fly.io config for crypto_momentum worker
+# Deploy: fly launch (first time) or fly deploy
+# Secrets: fly secrets set ALPACA_API_KEY=... ALPACA_SECRET_KEY=... DATABASE_URL=...
+
+app = "theblob-crypto"
+primary_region = "iad"   # US-East — lowest latency to Alpaca
+
+[build]
+
+[env]
+  ENV = "production"
+  LOG_LEVEL = "INFO"
+
+# Worker process — no HTTP server needed
+[[services]]
+
+[checks]
+
+# Keep it alive — restart on crash
+[processes]
+  worker = "python run_crypto.py"
+
+[[vm]]
+  size = "shared-cpu-1x"   # free tier VM
+  memory = "256mb"
