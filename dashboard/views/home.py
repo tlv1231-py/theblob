@@ -921,12 +921,15 @@ body::after {{
 #pos-overlay {{
   position:absolute; right:0; top:0; bottom:0; width:130px; z-index:15;
   display:flex; flex-direction:column;
+  background:transparent;
+}}
+#pos-overlay .panel-hdr {{ flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; display:none; }}
+#pos-overlay #pos-body {{ flex:1; overflow:hidden; display:flex; flex-direction:row; gap:0; }}
+#pos-right {{
   background:linear-gradient(270deg,rgba(1,0,8,.88) 0%,rgba(1,0,8,.6) 80%,transparent 100%);
   -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
   mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
 }}
-#pos-overlay .panel-hdr {{ flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; }}
-#pos-overlay #pos-body {{ flex:1; overflow:hidden; display:flex; flex-direction:row; gap:0; }}
 #pos-left {{ flex-direction:row !important; overflow-x:hidden; overflow-y:hidden !important; flex:0 0 auto !important; width:0; transition:width .4s cubic-bezier(.22,1,.36,1); }}
 #pos-left .pos-section-label {{ display:none; }}
 #pos-overlay #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
@@ -1445,12 +1448,13 @@ body::after {{
   flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(148,0,255,.25) transparent;
   display:flex; flex-direction:column; padding-bottom:6px; min-height:0;
 }}
-#pos-left {{ border-right:1px solid #0d0020; }}
-/* Crypto cards in horizontal row — each is a narrow column */
+#pos-left {{ border-right:none; }}
+/* Crypto cards in horizontal row — each is a narrow transparent column */
 #pos-left .pos-card {{
   min-width:118px; max-width:118px; flex-shrink:0;
-  border-left:3px solid; border-right:1px solid #0d0020; border-bottom:none;
+  border-left:3px solid; border-right:1px solid rgba(13,0,32,.6); border-bottom:none;
   height:100%; box-sizing:border-box; display:flex; flex-direction:column; justify-content:flex-start;
+  background:transparent !important; backdrop-filter:none !important;
 }}
 #pos-overlay {{ transition:width .4s cubic-bezier(.22,1,.36,1); }}
 #pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ width:2px; }}
