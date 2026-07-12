@@ -172,7 +172,6 @@ def _log_fill(symbol: str, order_id: str, side: str, qty: float, price: float,
             s.add(FillRecord(
                 id        = str(uuid.uuid4()),
                 order_id  = order_id,
-                strategy  = "crypto_momentum",
                 symbol    = symbol,
                 side      = side,
                 qty       = qty,
@@ -219,8 +218,8 @@ def _ema(values: list[float], period: int) -> float:
 
 def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
     """EMA(5) / EMA(13) trend state on 1-min closes.
-    Returns current desired direction — long when fast > slow, short when fast < slow.
-    Always in market: every run enters or stays positioned.
+    Long when fast > slow, None (flat) when fast < slow.
+    Alpaca paper crypto is long-only — no shorting.
     """
     fast_period = _SIG["ema_fast"]
     slow_period = _SIG["ema_slow"]
@@ -228,10 +227,10 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
     if len(min_bars) < slow_period + 1:
         return None
 
-    closes   = [b["close"] for b in min_bars]
-    fast     = _ema(closes, fast_period)
-    slow     = _ema(closes, slow_period)
-    return "long" if fast > slow else "short"
+    closes = [b["close"] for b in min_bars]
+    fast   = _ema(closes, fast_period)
+    slow   = _ema(closes, slow_period)
+    return "long" if fast > slow else None
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────
@@ -334,7 +333,7 @@ def run() -> None:
             arrow = "▲" if signal == "long" else "▼"
             _post_event("TRADE", sym,
                 f"{arrow} ENTER {signal.upper()} {sym} @ ${filled:,.4f} · stop ${stop:,.4f}",
-                f"qty={qty:.6f} target=${target:,.4f}")
+                f"qty={qty:.6f}")
             logger.info(f"[entry] {signal.upper()} {sym} @ {filled:.4f} qty={qty:.6f}")
 
 
