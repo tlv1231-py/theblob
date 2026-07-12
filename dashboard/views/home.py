@@ -786,7 +786,12 @@ def _build_daw_html(data: dict) -> str:
             f'</div>'
         ) if ep else ""
         pos_cards += (
-            f'<div class="pos-card" style="border-left:3px solid {tcol}">'
+            f'<div class="pos-card pos-card-active pos-card-entering" data-sym="{p["sym"]}"'
+            f' style="border-left:3px solid {tcol};position:relative;overflow:hidden;transform-origin:center top">'
+            f'<span class="pos-corner tl" style="border-color:{tcol}"></span>'
+            f'<span class="pos-corner tr" style="border-color:{tcol}"></span>'
+            f'<span class="pos-corner bl" style="border-color:{tcol}"></span>'
+            f'<span class="pos-corner br" style="border-color:{tcol}"></span>'
             f'<div class="pos-top">'
             f'<span class="pos-sym" style="color:{tcol}">{p["sym"]}</span>'
             f'<span class="pos-qty">{p["qty"]} sh</span>'
@@ -1243,11 +1248,8 @@ body::after {{
 /* ── VHS Scan bar ── */
 #vhs-scan-bar {{
   display:inline-flex; align-items:center; gap:9px;
-  opacity:0; pointer-events:none;
-  transition:opacity .2s;
   flex-shrink:0;
 }}
-#vhs-scan-bar.active {{ opacity:1; }}
 #vhs-scan-label {{
   font-size:11px; font-weight:900; letter-spacing:.32em;
   font-stretch:condensed;
@@ -1260,8 +1262,8 @@ body::after {{
 }}
 #vhs-track {{
   width:220px; height:10px;
-  background:#080014;
-  border:1px solid #1a0030;
+  background:#000;
+  border:1px solid rgba(255,255,255,.55);
   overflow:hidden; position:relative;
   /* vertical stripe grid mimicking VHS tape */
   background-image:repeating-linear-gradient(
@@ -2133,7 +2135,7 @@ window.addEventListener('resize', function() {{
       <span id="run-progress-label">075s</span>
     </div>
     <div id="vhs-scan-bar">
-      <span id="vhs-scan-label">SCAN</span>
+      <span id="vhs-scan-label">SCAN:</span>
       <div id="vhs-track"><div id="vhs-fill"></div></div>
     </div>
   </div>
@@ -3038,8 +3040,8 @@ window.addEventListener('resize', function() {{
         panel.classList.add('panel-scanning');
         setTimeout(function() {{ panel.classList.remove('panel-scanning'); }}, 1000);
       }}
-      // Card sweep animations
-      var cardEls = Object.values(_cryptoCardEls);
+      // Card sweep animations — crypto + equity
+      var cardEls = Object.values(_cryptoCardEls).concat(Object.values(_equityCardEls));
       cardEls.forEach(function(el, i) {{
         setTimeout(function() {{
           el.classList.remove('pos-card-scanning');
@@ -3054,12 +3056,10 @@ window.addEventListener('resize', function() {{
       var vhsFill = document.getElementById('vhs-fill');
       if (!vhsBar || !vhsFill) return;
 
-      // Reset to left edge and show
+      // Reset to left edge then fill across
       vhsFill.style.transition = 'none';
       vhsFill.style.width = '0%';
-      vhsBar.classList.add('active');
 
-      // Fill across over ~1.4s then hold briefly and fade
       requestAnimationFrame(function() {{
         requestAnimationFrame(function() {{
           vhsFill.style.transition = 'width 1.35s cubic-bezier(.15,.8,.35,1)';
@@ -3068,10 +3068,9 @@ window.addEventListener('resize', function() {{
       }});
 
       setTimeout(function() {{
-        vhsFill.style.transition = 'width .18s ease-in';
+        vhsFill.style.transition = 'width .22s ease-in';
         vhsFill.style.width = '0%';
-        setTimeout(function() {{ vhsBar.classList.remove('active'); }}, 220);
-      }}, 1600);
+      }}, 1650);
     }};
 
     // ── Reason-aware card exit ──────────────────────────────────────────────────
@@ -3100,12 +3099,24 @@ window.addEventListener('resize', function() {{
       'signal':   'pos-card-exit-rev'
     }};
     var _EXIT_DUR = {{ 'target':540, 'stop':430, 'timeout':500, 'reversal':510, 'signal':510 }};
+    // ── Equity card map — built from SSR DOM on load ────────────────────────────
+    var _equityCardEls = {{}};
+    function _buildEquityMap() {{
+      document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').forEach(function(el) {{
+        _equityCardEls[el.getAttribute('data-sym')] = el;
+      }});
+    }}
+    setTimeout(_buildEquityMap, 500);
+
     window._triggerCardExit = function(fullSym, reason, pnl) {{
-      // fullSym may be "BTC/USD" or just "BTC" — try both
-      var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD'];
+      // Check crypto map first (fullSym may be "BTC/USD" or just "BTC"), then equity map
+      var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD']
+             || _equityCardEls[fullSym];
       if (!el) return;
-      var sym = Object.keys(_cryptoCardEls).find(function(k) {{ return _cryptoCardEls[k] === el; }});
-      if (sym) delete _cryptoCardEls[sym];
+      // Remove from whichever map owns it
+      if (_cryptoCardEls[fullSym]) delete _cryptoCardEls[fullSym];
+      else if (_cryptoCardEls[fullSym + '/USD']) delete _cryptoCardEls[fullSym + '/USD'];
+      else if (_equityCardEls[fullSym]) delete _equityCardEls[fullSym];
       el.classList.remove('pos-card-active');
       _spawnPnlGhost(el, pnl);
       var cls = _EXIT_CLASS[reason] || 'pos-card-exit-stop';

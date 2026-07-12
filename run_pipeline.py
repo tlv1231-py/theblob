@@ -77,6 +77,10 @@ def run(as_of_date: date | None = None) -> None:
         log_event(as_of_date, "SIGNAL",
                   f"scored universe  ·  top pick: {top.symbol} ({top.score:.3f})",
                   detail=f"selected {len(signals)} of {gen.top_n} target slots")
+        # Trigger dashboard scan animation — UPDATE with symbol list in parens
+        syms_str = ", ".join(s.symbol for s in signals)
+        log_event(as_of_date, "UPDATE",
+                  f"▸ scan · equity universe scored · ({syms_str})")
     else:
         log_event(as_of_date, "SIGNAL", "no signals generated — market may be closed")
 
@@ -111,8 +115,8 @@ def run(as_of_date: date | None = None) -> None:
             fill = executor.execute_sell(symbol, qty, price, STRATEGY)
             if fill:
                 alert_fill(fill)
-                log_event(as_of_date, "EXIT",
-                          f"sold {qty} shares at ${price:.2f}",
+                log_event(as_of_date, "TRADE",
+                          f"✗ EXIT {symbol} @ ${price:.2f} · signal",
                           detail=f"slippage ${fill.slippage:.2f}",
                           symbol=symbol)
 
@@ -133,8 +137,8 @@ def run(as_of_date: date | None = None) -> None:
                 fill = executor.execute_signal(signal, price, qty)
                 if fill:
                     alert_fill(fill)
-                    log_event(as_of_date, "ENTRY",
-                              f"bought {qty} shares at ${price:.2f}",
+                    log_event(as_of_date, "TRADE",
+                              f"✓ ENTER {signal.symbol} @ ${price:.2f}",
                               detail=f"score {signal.score:.3f}  ·  slippage ${fill.slippage:.2f}",
                               symbol=signal.symbol)
             except RiskVeto as e:
