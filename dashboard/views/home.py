@@ -866,6 +866,7 @@ body::after {{
 #main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
 #chart {{ position:absolute; inset:0; }}
 #pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
+#particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
 /* ── Top bar ── */
 .topbar {{
@@ -1836,8 +1837,59 @@ var ambCanvas = document.getElementById('ambient-canvas');
       ctx.fillStyle = g;
       ctx.fill();
     }});
+    // Heartbeat flatline — drawn on same canvas after blobs
+    (function() {{
+      var baseY = H * 0.88;
+      var now2 = Date.now();
+      var idle = (now2 - (window._hbLastTrade||now2)) / 1000;
+      var alpha = Math.min(1, Math.max(0, (idle - 8) / 4)) * 0.5;
+      if (alpha > 0 && !window._hbSpike) {{
+        var t2 = now2 / 1000;
+        var drift = Math.sin(t2 * 0.4) * 3;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,229,255,' + (alpha * 0.55) + ')';
+        ctx.lineWidth = 1;
+        ctx.shadowColor = 'rgba(0,229,255,' + (alpha * 0.25) + ')';
+        ctx.shadowBlur = 5;
+        ctx.beginPath();
+        ctx.moveTo(0, baseY + drift);
+        for (var x = 0; x <= W; x += 4) {{
+          var noise = Math.sin(x * 0.08 + t2 * 1.2) * 0.8 + Math.sin(x * 0.31 + t2 * 0.7) * 0.4;
+          ctx.lineTo(x, baseY + drift + noise * alpha * 3);
+        }}
+        ctx.stroke();
+        ctx.restore();
+      }}
+      if (window._hbSpike) {{
+        var sp = window._hbSpike;
+        sp.t += 0.022;
+        var col2 = sp.col;
+        var spA = Math.max(0, 1 - sp.t / 0.7);
+        var spikeH = H * 0.28 * Math.min(1, sp.t * 8);
+        var cx2 = W * 0.5;
+        ctx.save();
+        ctx.strokeStyle = 'rgba('+col2[0]+','+col2[1]+','+col2[2]+','+spA+')';
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = 'rgba('+col2[0]+','+col2[1]+','+col2[2]+','+(spA*0.7)+')';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(0, baseY); ctx.lineTo(cx2-60, baseY); ctx.lineTo(cx2-20, baseY);
+        ctx.lineTo(cx2, baseY - spikeH); ctx.lineTo(cx2+8, baseY + spikeH*0.3);
+        ctx.lineTo(cx2+24, baseY); ctx.lineTo(W, baseY);
+        ctx.stroke();
+        ctx.restore();
+        if (sp.t >= 0.7) window._hbSpike = null;
+      }}
+    }})();
     requestAnimationFrame(drawAmb);
   }}
+  // Heartbeat state (shared with drawAmb)
+  window._hbLastTrade = Date.now();
+  window._hbSpike = null;
+  window._triggerHeartbeat = function(isWin) {{
+    window._hbLastTrade = Date.now();
+    window._hbSpike = {{ t: 0, col: isWin ? [0,255,157] : [255,51,102] }};
+  }};
   drawAmb();
 }})();
 
@@ -1967,6 +2019,90 @@ function _playTones(freqs, dur, type) {{
 window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
 window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
 window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
+
+// ── C: Particle drift — upward drifting motes in the positions panel ─────────
+(function() {{
+  var pc = document.getElementById('particle-canvas');
+  if (!pc) return;
+  var pCtx = pc.getContext('2d');
+
+  // palette pulled from open positions' accent colors
+  var PALETTE = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
+  function symCol(s) {{ var h=0; for(var c of s)h=(h*31+c.charCodeAt(0))&0xffff; return PALETTE[h%PALETTE.length]; }}
+
+  var particles = [];
+  var MAX_P = 60;
+
+  function _resize() {{ pc.width = pc.offsetWidth; pc.height = pc.offsetHeight; }}
+  _resize();
+  window.addEventListener('resize', _resize);
+
+  function _getColors() {{
+    var cols = [];
+    // Crypto positions
+    Object.keys(window._cryptoPositionsMap || {{}}).forEach(function(sym) {{
+      cols.push(symCol(sym.replace('/USD','')));
+    }});
+    // Equity positions
+    document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').forEach(function(el) {{
+      cols.push(symCol(el.getAttribute('data-sym')));
+    }});
+    return cols.length ? cols : ['#1a0830']; // near-black when flat
+  }}
+
+  function _spawn(cols) {{
+    var col = cols[Math.floor(Math.random() * cols.length)];
+    particles.push({{
+      x: Math.random() * pc.width,
+      y: pc.height + 4,
+      vy: -(0.25 + Math.random() * 0.55),   // slow upward
+      vx: (Math.random() - 0.5) * 0.15,
+      r:  0.8 + Math.random() * 1.4,
+      alpha: 0,
+      fadeIn: 0.015 + Math.random() * 0.01,
+      life: 1,
+      decay: 0.0008 + Math.random() * 0.0012,
+      col: col,
+    }});
+  }}
+
+  var _spawnTick = 0;
+  function _drawParticles() {{
+    var W = pc.width, H = pc.height;
+    pCtx.clearRect(0, 0, W, H);
+
+    var cols = _getColors();
+    var nOpen = cols.length;
+    // Spawn rate: 1 particle every N frames, scales with open positions
+    _spawnTick++;
+    var spawnEvery = nOpen === 1 ? 999 : Math.max(8, 60 - nOpen * 3);
+    if (_spawnTick % spawnEvery === 0 && particles.length < MAX_P) _spawn(cols);
+
+    for (var i = particles.length - 1; i >= 0; i--) {{
+      var p = particles[i];
+      p.x  += p.vx;
+      p.y  += p.vy;
+      p.alpha = Math.min(p.alpha + p.fadeIn, p.life);
+      p.life -= p.decay;
+      if (p.life <= 0 || p.y < -8) {{ particles.splice(i, 1); continue; }}
+
+      // Parse hex to rgb for alpha blending
+      var hex = p.col.replace('#','');
+      var r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
+      var a = Math.min(p.alpha, p.life) * 0.55;
+
+      pCtx.beginPath();
+      pCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      pCtx.fillStyle = 'rgba('+r+','+g+','+b+','+a+')';
+      pCtx.shadowColor = 'rgba('+r+','+g+','+b+','+(a*0.6)+')';
+      pCtx.shadowBlur = 4;
+      pCtx.fill();
+    }}
+    pCtx.shadowBlur = 0;
+    requestAnimationFrame(_drawParticles);
+  }}
+  _drawParticles();
+}})();
 
 // ── ATH tracking ─────────────────────────────────────────────────────────────
 var _athNav = Math.max.apply(null, portValues.length ? portValues : [100000]);
@@ -2177,6 +2313,7 @@ window.addEventListener('resize', function() {{
 
     <!-- Positions scorecard — two columns: crypto | equity -->
     <div id="pos-panel">
+      <canvas id="particle-canvas"></canvas>
       <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
       <div id="pos-body">
         <div id="pos-left">
@@ -2807,6 +2944,11 @@ window.addEventListener('resize', function() {{
               var exitReason = reasonM ? reasonM[1].toLowerCase() : (pnlM && pnlM[1][0] === '+' ? 'target' : 'stop');
               var pnlVal = pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null;
               window._triggerCardExit(sym, exitReason, pnlVal);
+            }}
+            // Heartbeat spike on live trades
+            if (!isHistory && window._triggerHeartbeat) {{
+              var isWinTrade = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : true);
+              window._triggerHeartbeat(isWinTrade);
             }}
           }} else if (row.event_type === 'UPDATE') {{
             if (!isHistory) {{
