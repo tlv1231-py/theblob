@@ -906,8 +906,8 @@ body::after {{
   display:flex; flex-direction:column;
   background:linear-gradient(90deg,rgba(1,0,6,.9) 0%,rgba(1,0,6,.55) 75%,transparent 100%);
   pointer-events:none;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 14%,black 84%,transparent 100%);
-  mask-image:linear-gradient(to bottom,transparent 0%,black 14%,black 84%,transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 100%);
+  mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 100%);
 }}
 #feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
 #feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:2px 0 4px; scrollbar-width:none; background:transparent; }}
@@ -1999,6 +1999,7 @@ body::after {{
       {term_rows}
     </div>
     <div id="feed-bottom-bar">
+      <span id="feed-last-ago" style="font:700 7px Consolas,monospace;letter-spacing:.14em;color:#3a1a5a;flex:1">—</span>
       <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">&#128266;</button>
     </div>
   </div>
@@ -2957,22 +2958,14 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
 
 gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
 
-// ── Real-time x-axis advance ─────────────────────────────────────────────────
-// Slides the right edge forward every 30s so the chart feels live
+// ── Real-time x-axis advance — DISABLED: _recenterOnLatest() handles centering ──
 var _userPanned = false;
 var _initLayoutDone = false;
+var _rtAdvancing = false;
 gd.on('plotly_relayout', function(u) {{
-  // Ignore the initial render relayout and programmatic advances
   if (!_initLayoutDone || _rtAdvancing) return;
   if (u['xaxis.range[0]'] !== undefined) _userPanned = true;
 }});
-var _rtAdvancing = false;
-setInterval(function() {{
-  if (_userPanned) return;
-  _rtAdvancing = true;
-  Plotly.relayout(gd, {{ 'xaxis.range[1]': _datePlus(2) }});
-  _rtAdvancing = false;
-}}, 30000);
 
 // ── Trade event markers ───────────────────────────────────────────────────────
 var _tradeEventIds = new Set(); // track seen event IDs to avoid re-adding
@@ -3174,11 +3167,12 @@ setInterval(_fetchIntradayMarks, 15000);
 // ── Orb metrics panel updates ─────────────────────────────────────────────────
 var _orbTodayTrades = 0, _orbWins = 0, _orbLosses = 0;
 function _updateOrbMetrics(todayTrades, wins, losses) {{
-  _orbTodayTrades = todayTrades || _orbTodayTrades;
-  _orbWins   = wins   || _orbWins;
-  _orbLosses = losses || _orbLosses;
+  if (todayTrades > 0) _orbTodayTrades = todayTrades;
+  if (wins   > 0) _orbWins   = wins;
+  if (losses > 0) _orbLosses = losses;
 
-  var tph = _tradeTs.length; // trades in last hour (from gauge array)
+  // _tradeTs is defined in script block 2 — access via window or direct (same scope)
+  var tph = (typeof _tradeTs !== 'undefined') ? _tradeTs.length : 0;
   var el;
 
   el = document.getElementById('om-tph');
@@ -3193,7 +3187,7 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
 
   el = document.getElementById('om-streak-orb');
   if (el) {{
-    var s = _streak; // from gauge script block
+    var s = (typeof _streak !== 'undefined') ? _streak : null;
     if (s && s.count > 0) {{
       var col = s.win ? '#00ff9d' : '#ff3366';
       el.textContent = (s.win ? '+' : '-') + s.count;
@@ -3331,6 +3325,7 @@ window.addEventListener('resize', function() {{
 
   // ── Gauge — avg trades per hour ───────────────────────────────────────────
   var _tradeTs = [];
+  window._tradeTs = _tradeTs; // expose to script block 1
   var _GAUGE_MAX = 8;
   var _gaugeRate = 0;
 
@@ -3368,6 +3363,7 @@ window.addEventListener('resize', function() {{
 
   // ── Streak tracker ────────────────────────────────────────────────────────
   var _streak = {{ count: 0, win: null }};
+  window._streak = _streak; // expose to script block 1
 
   window._recordStreakResult = function(isWin) {{
     if (_streak.win === null || _streak.win === isWin) {{
@@ -3641,8 +3637,41 @@ window.addEventListener('resize', function() {{
     }}
   }}
 
+  // Last feed event tracker — updated by feed poller when new entry added
+  window._lastFeedEventMs = Date.now();
+  function _tickFeedAgo() {{
+    var ago = document.getElementById('feed-last-ago');
+    if (!ago) return;
+    var diff = Math.floor((Date.now() - window._lastFeedEventMs) / 1000);
+    if (diff < 5)        ago.textContent = 'just now';
+    else if (diff < 60)  ago.textContent = diff + 's ago';
+    else if (diff < 3600) ago.textContent = Math.floor(diff/60) + 'm ago';
+    else                 ago.textContent = Math.floor(diff/3600) + 'h ago';
+    // Color: green when fresh, dims over time
+    var alpha = Math.max(0.18, 0.7 - diff * 0.008);
+    ago.style.color = 'rgba(100,0,160,' + alpha + ')';
+    if (diff < 10) ago.style.color = '#00ff9d';
+    else if (diff < 30) ago.style.color = '#9400ff';
+  }}
+
+  // ── Position card scan animation — staggered sweeps across all visible cards ──
+  function _scanPositionCards() {{
+    var cards = document.querySelectorAll('#pos-overlay .pos-card');
+    if (!cards.length) return;
+    cards.forEach(function(card, i) {{
+      setTimeout(function() {{
+        card.classList.remove('pos-card-scanning');
+        void card.offsetWidth; // reflow to restart
+        card.classList.add('pos-card-scanning');
+        setTimeout(function() {{ card.classList.remove('pos-card-scanning'); }}, 1200);
+      }}, i * 180); // stagger each card by 180ms
+    }});
+  }}
+  setTimeout(_scanPositionCards, 4000);
+  setInterval(_scanPositionCards, 12000); // scan every 12s
+
   tick();
-  setInterval(function() {{ tick(); _updateDynamicQueue(); _syncHud(); _updatePosCounts(); }}, 1000);
+  setInterval(function() {{ tick(); _tickFeedAgo(); _updateDynamicQueue(); _syncHud(); _updatePosCounts(); }}, 1000);
   _updateDynamicQueue(); // immediate first render
 
   // ── Terminal typewriter ──────────────────────────────────────────────────────
@@ -3800,6 +3829,8 @@ window.addEventListener('resize', function() {{
         }}
         row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + _h;
         if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
+        // Update "Xs ago" ticker on every new feed entry
+        window._lastFeedEventMs = Date.now();
         _busy = false;
         if (_feedQueue.length) {{
           setTimeout(_drainQueue, 400);
