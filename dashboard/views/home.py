@@ -1796,8 +1796,11 @@ window.addEventListener('resize', function() {{
     // ── postToFeed: THE single gateway for all System Feed entries ────────────
     // Every trade, fill, deposit, withdraw, pipeline event goes through here.
     // Text types through Status first, Enter commits it as a new feed row.
-    function postToFeed(text, timestamp) {{
-      _feedQueue.push({{text: text, ts: timestamp || null}});
+    // postToFeed(plain, timestamp, html)
+    // plain = what types through the status bar cursor (no HTML tags)
+    // html  = what appears in the feed row (may contain spans for color)
+    function postToFeed(plain, timestamp, html) {{
+      _feedQueue.push({{plain: plain, html: html || plain, ts: timestamp || null}});
       _drainQueue();
     }}
 
@@ -1805,7 +1808,7 @@ window.addEventListener('resize', function() {{
       if (_busy || !_feedQueue.length) return;
       _busy = true;
       var item = _feedQueue.shift();
-      typeAtCursor(item.text, function() {{
+      typeAtCursor(item.plain, function() {{
         // Append new row to System Feed
         var tb   = document.getElementById('term-body');
         var now  = item.ts ? new Date(item.ts) : new Date();
@@ -1815,7 +1818,7 @@ window.addEventListener('resize', function() {{
         row.style.color = '#00ff41';
         row.style.textShadow = '0 0 8px rgba(0,255,65,.6)';
         row.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
-        row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + item.text;
+        row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + item.html;
         if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
         // Fade from status green to normal feed color
         requestAnimationFrame(function() {{
@@ -2029,18 +2032,21 @@ window.addEventListener('resize', function() {{
               ovl.classList.add(isEntry ? 'flash-entry' : 'flash-exit');
               setTimeout(function() {{ ovl.classList.remove('flash-entry','flash-exit'); }}, 1300);
             }}
-            var verb    = isEntry ? '<span style="color:#00ff9d">enter</span>' : '<span style="color:#ff9900">exit</span>';
-            var priceM  = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
-            var priceS  = priceM ? ' @ $' + priceM[1] : '';
-            var pnlM    = raw.match(/pnl\s*([+-][\d,.]+)/);
-            var pnlCol  = pnlM && pnlM[1][0] === '+' ? '#00ff9d' : '#ff4444';
-            var pnlS    = pnlM ? ' · pnl <span style="color:' + pnlCol + '">' + pnlM[1] + '</span>' : '';
-            display = verb + ' ' + sym + priceS + pnlS;
+            var verbPlain = isEntry ? 'enter' : 'exit';
+            var verbHtml  = isEntry ? '<span style="color:#00ff9d">enter</span>' : '<span style="color:#ff9900">exit</span>';
+            var priceM    = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
+            var priceS    = priceM ? ' @ $' + priceM[1] : '';
+            var pnlM      = raw.match(/pnl\s*([+-][\d,.]+)/);
+            var pnlCol    = pnlM && pnlM[1][0] === '+' ? '#00ff9d' : '#ff4444';
+            var pnlHtml   = pnlM ? ' · pnl <span style="color:' + pnlCol + '">' + pnlM[1] + '</span>' : '';
+            var plain     = verbPlain + ' ' + sym;
+            var html      = verbHtml + ' ' + sym + priceS + pnlHtml;
+            if (window._postToFeed) window._postToFeed(plain, new Date(row.recorded_at), html);
           }} else {{
             var label = _labelFor(row.event_type);
-            display = raw || (label + (sym ? ' · ' + sym : ''));
+            var txt   = raw || (label + (sym ? ' · ' + sym : ''));
+            if (window._postToFeed) window._postToFeed(txt, new Date(row.recorded_at));
           }}
-          if (window._postToFeed) window._postToFeed(display, new Date(row.recorded_at));
         }});
       }})
       .catch(function() {{}}); // silent — offline or auth issue
