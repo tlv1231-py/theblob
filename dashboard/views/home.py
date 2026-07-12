@@ -2790,6 +2790,9 @@ window.addEventListener('resize', function() {{
               if (window._triggerScan) window._triggerScan(symList);
             }}
           }} else {{
+            // Suppress scan messages — handled by VHS bar, not the feed
+            if (raw.toLowerCase().indexOf('scan complete') !== -1) return;
+            if (raw.toLowerCase().indexOf('scan ') === 0) return;
             var label = _labelFor(row.event_type);
             var txt   = raw || (label + (sym ? ' · ' + sym : ''));
             if (window._postToFeed) window._postToFeed(txt, _parseTs(row.recorded_at));
