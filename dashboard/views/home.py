@@ -2259,6 +2259,15 @@ window.addEventListener('resize', function() {{
     var SUPA_KEY  = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
     var _lastSeen = null;   // null = load history first, then switch to live
 
+    // Supabase returns "2026-07-12 14:57:23+00" — normalize to proper ISO UTC
+    function _parseTs(s) {{
+      if (!s) return new Date();
+      s = s.replace(' ', 'T');                          // space → T
+      if (/[+-]\d{{2}}$/.test(s)) s += ':00';           // +00 → +00:00
+      else if (!/Z|[+-]\d{{2}}:\d{{2}}$/.test(s)) s += 'Z'; // bare → UTC
+      return new Date(s);
+    }}
+
     function _labelFor(eventType) {{
       var m = {{
         'TRADE':'TRADE','ENTRY':'BUY','EXIT':'SELL','SIGNAL':'SIGNAL',
@@ -2302,8 +2311,8 @@ window.addEventListener('resize', function() {{
                 else {{ if (window._soundLoss) window._soundLoss(); }}
               }}
             }}
-            // Flash the terminal border
-            var ovl = document.getElementById('term-overlay');
+            // Flash the terminal border — live events only
+            var ovl = !isHistory && document.getElementById('term-overlay');
             if (ovl) {{
               ovl.classList.remove('flash-entry','flash-exit');
               void ovl.offsetWidth; // force reflow to restart animation
@@ -2319,11 +2328,11 @@ window.addEventListener('resize', function() {{
             var pnlHtml   = pnlM ? ' · pnl <span style="color:' + pnlCol + '">' + pnlM[1] + '</span>' : '';
             var plain     = verbPlain + ' ' + sym;
             var html      = verbHtml + ' ' + sym + priceS + pnlHtml;
-            if (window._postToFeed) window._postToFeed(plain, new Date(row.recorded_at), html);
+            if (window._postToFeed) window._postToFeed(plain, _parseTs(row.recorded_at), html);
           }} else {{
             var label = _labelFor(row.event_type);
             var txt   = raw || (label + (sym ? ' · ' + sym : ''));
-            if (window._postToFeed) window._postToFeed(txt, new Date(row.recorded_at));
+            if (window._postToFeed) window._postToFeed(txt, _parseTs(row.recorded_at));
           }}
         }});
       }})
