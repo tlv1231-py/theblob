@@ -490,8 +490,9 @@ def _build_daw_html(data: dict) -> str:
     qqq_latest = f'${qqq["prices"][-1]:.2f}'  if qqq["prices"]  else "—"
     status     = _read_strategy_status()
     last_run   = data["last_run"][:10] if data["last_run"] else "—"
-    day_pnl    = data["day_pnl"]
-    dpnl_str   = f'{day_pnl:+,.0f}'
+    day_pnl      = data["day_pnl"]
+    dpnl_str     = f'{day_pnl:+,.0f}'
+    n_positions  = len(data.get("positions_data", []))
 
     # ── Terminal feed rows ────────────────────────────────────────────────────
     import re as _re
@@ -1433,23 +1434,33 @@ body::after {{
   font-size:7px; letter-spacing:.2em; color:rgba(0,229,255,.4);
   background:rgba(0,229,255,.03);
 }}
-/* ── Floating P&L tooltip above portfolio orb ── */
+/* ── Orb metrics panel — replaces old P&L tooltip ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
-  background:rgba(6,0,8,.92); border:1px solid #2a003d; border-top:2px solid #ff00cc;
-  padding:7px 12px 8px; min-width:110px;
+  background:rgba(4,0,10,.88); border:1px solid #2a003d; border-top:2px solid #ff00cc;
+  backdrop-filter:blur(8px);
+  padding:8px 12px; min-width:130px;
   transform:translate(-50%, -100%) translateY(-18px);
   opacity:0;
-  transition:opacity .4s ease, transform .6s cubic-bezier(.22,1,.36,1), border-top-color .4s ease;
+  transition:opacity .4s ease, transform .6s cubic-bezier(.22,1,.36,1);
 }}
 #pnl-float.visible {{ opacity:1; }}
 #pnl-float.nudge-up   {{ transform:translate(-50%, -100%) translateY(-28px); }}
 #pnl-float.nudge-down {{ transform:translate(-50%, -100%) translateY(-10px); }}
-.pnl-float-val {{
-  font-size:22px; font-weight:700; letter-spacing:-.02em; display:block; line-height:1.1;
-  transition:color .3s ease;
+.om-row {{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  padding:1.5px 0;
 }}
-.pnl-float-sub {{ font-size:8.5px; color:#4a2a6a; margin-top:3px; display:block; }}
+.om-label {{
+  font-size:7px; letter-spacing:.18em; color:#4a2a6a; white-space:nowrap;
+  font-family:Consolas,monospace; text-transform:uppercase;
+}}
+.om-val {{
+  font-size:11px; font-weight:700; font-family:Consolas,monospace;
+  color:#ff00cc; letter-spacing:.04em; white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}}
+.om-divider {{ height:1px; background:#1a0028; margin:4px 0; }}
 /* ── Recovery meter ── */
 #rc-widget {{ margin-top:5px; }}
 #rc-top {{ display:flex; align-items:baseline; gap:5px; margin-bottom:3px; }}
@@ -1906,9 +1917,36 @@ body::after {{
   <canvas id="pulse-canvas"></canvas>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
-    <span class="pnl-float-val" style="color:{_pnl_col}">{_pnl_str}</span>
-    <div class="pnl-float-sub" id="pnl-sub-root">
-      <span>{_pnl_pct_str}</span>
+    <div class="om-row">
+      <span class="om-label">DAY P&amp;L</span>
+      <span class="om-val" id="om-dpnl" style="color:{_pnl_col}">{dpnl_str}</span>
+    </div>
+    <div class="om-divider"></div>
+    <div class="om-row">
+      <span class="om-label">TRADES/HR</span>
+      <span class="om-val" id="om-tph">—</span>
+    </div>
+    <div class="om-row">
+      <span class="om-label">TODAY</span>
+      <span class="om-val" id="om-today">0</span>
+    </div>
+    <div class="om-divider"></div>
+    <div class="om-row">
+      <span class="om-label">WIN RATE</span>
+      <span class="om-val" id="om-winrate">—</span>
+    </div>
+    <div class="om-row">
+      <span class="om-label">STREAK</span>
+      <span class="om-val" id="om-streak-orb">—</span>
+    </div>
+    <div class="om-divider"></div>
+    <div class="om-row">
+      <span class="om-label">OPEN POS</span>
+      <span class="om-val" id="om-openpos">{n_positions}</span>
+    </div>
+    <div class="om-row">
+      <span class="om-label">TOTAL P&amp;L</span>
+      <span class="om-val" style="color:{_pnl_col}">{_pnl_str}</span>
     </div>
   </div>
   <div class="legend-strip">
@@ -2011,7 +2049,7 @@ function _datePlus_from(isoDateStr, days) {{
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
 // Center the current-position dot: equal padding left and right of latest data
-var _CENTER_DAYS = 14;
+var _CENTER_DAYS = 4;  // tight zoom — 4 days each side so movements look dramatic
 var xEnd   = latestPortDate ? _datePlus_from(latestPortDate, _CENTER_DAYS) : _datePlus(14);
 var xStart = latestPortDate ? _dateMinus(latestPortDate, _CENTER_DAYS) : _datePlus(-30);
 
@@ -2104,7 +2142,14 @@ var traces = [
     name:'HYSA 4.8%',
     hovertemplate:'<b style="color:#ffc800">HYSA $%{{y:,.0f}}</b><extra></extra>',
   }},
-  // Trade event markers — ENTER (index 6), EXIT (index 7)
+  // Intraday "marked the book" values — live portfolio value within the day (index 6)
+  {{
+    x:[], y:[], name:'INTRADAY',
+    type:'scatter', mode:'lines',
+    line:{{ color:'rgba(255,0,204,.55)', width:1.5 }},
+    hoverinfo:'skip', showlegend:false,
+  }},
+  // Trade event markers — ENTER (index 7), EXIT (index 8)
   {{
     x:[], y:[], text:[], name:'ENTER',
     type:'scatter', mode:'markers+text',
@@ -3038,10 +3083,10 @@ function _fetchTradeEvents() {{
       }}
     }});
 
-    // Rebuild traces 6 + 7
-    if (gd && gd.data && gd.data.length >= 8) {{
-      Plotly.restyle(gd, {{ x:[enterXs], y:[enterYs], text:[enterTexts] }}, [6]);
-      Plotly.restyle(gd, {{ x:[exitXs],  y:[exitYs],  text:[exitTexts]  }}, [7]);
+    // Rebuild traces 7 + 8 (entry/exit markers; 6 = intraday line)
+    if (gd && gd.data && gd.data.length >= 9) {{
+      Plotly.restyle(gd, {{ x:[enterXs], y:[enterYs], text:[enterTexts] }}, [7]);
+      Plotly.restyle(gd, {{ x:[exitXs],  y:[exitYs],  text:[exitTexts]  }}, [8]);
       // Merge drop lines with current layout shapes (preserves ATH shape etc.)
       var curShapes = (gd.layout && gd.layout.shapes) ? gd.layout.shapes.slice() : shapes.slice();
       var baseShapes = curShapes.filter(function(s) {{ return !s._trade; }});
@@ -3059,8 +3104,105 @@ setInterval(_fetchTradeEvents, 10000);
 // Also trigger on live TRADE events from feed poller
 window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 
-// Rebuild pulse targets after any re-render
-gd.on('plotly_relayout', function() {{ buildTargets(); }});
+// ── Intraday "marked the book" trace — live portfolio value within today ──────
+var _SUPA_URL_REF = SUPA_URL, _SUPA_KEY_REF = SUPA_KEY;
+function _fetchIntradayMarks() {{
+  var today = new Date().toISOString().slice(0,10);
+  var url = _SUPA_URL_REF + '/rest/v1/pipeline_events'
+    + '?run_date=eq.' + today
+    + '&order=recorded_at.asc&limit=2000';
+  fetch(url, {{ headers: {{ 'apikey': _SUPA_KEY_REF, 'Authorization': 'Bearer ' + _SUPA_KEY_REF }} }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(rows) {{
+    if (!Array.isArray(rows)) return;
+    var xs = [], ys = [];
+    var tradeCountToday = 0, wins = 0, losses = 0;
+    rows.forEach(function(row) {{
+      var msg = row.message || '';
+      // Intraday portfolio value
+      var m = msg.match(/marked the book at \$?([\d,]+)/);
+      if (m) {{
+        var v = parseFloat(m[1].replace(/,/g,''));
+        if (!isNaN(v) && v > 50000 && v < 200000) {{
+          xs.push(new Date(row.recorded_at).toISOString());
+          ys.push(v);
+        }}
+      }}
+      // Count trades for metrics panel
+      if (msg.match(/ENTER|enter/)) tradeCountToday++;
+      if (msg.match(/EXIT|exit/)) {{
+        tradeCountToday++;
+        var pnlM = msg.match(/pnl\s*([+-][\d.]+)/);
+        if (pnlM) {{ if (parseFloat(pnlM[1]) >= 0) wins++; else losses++; }}
+      }}
+    }});
+    // Update intraday trace (index 6)
+    if (gd && gd.data && gd.data.length >= 7) {{
+      Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]);
+    }}
+    // Update metrics panel
+    _updateOrbMetrics(tradeCountToday, wins, losses);
+  }}).catch(function() {{}});
+}}
+setTimeout(_fetchIntradayMarks, 3000);
+setInterval(_fetchIntradayMarks, 15000);
+
+// ── Orb metrics panel updates ─────────────────────────────────────────────────
+var _orbTodayTrades = 0, _orbWins = 0, _orbLosses = 0;
+function _updateOrbMetrics(todayTrades, wins, losses) {{
+  _orbTodayTrades = todayTrades || _orbTodayTrades;
+  _orbWins   = wins   || _orbWins;
+  _orbLosses = losses || _orbLosses;
+
+  var tph = _tradeTs.length; // trades in last hour (from gauge array)
+  var el;
+
+  el = document.getElementById('om-tph');
+  if (el) el.textContent = tph.toFixed(1);
+
+  el = document.getElementById('om-today');
+  if (el) el.textContent = _orbTodayTrades + ' trades';
+
+  var total = _orbWins + _orbLosses;
+  el = document.getElementById('om-winrate');
+  if (el) el.textContent = total > 0 ? Math.round(_orbWins/total*100) + '%' : '—';
+
+  el = document.getElementById('om-streak-orb');
+  if (el) {{
+    var s = _streak; // from gauge script block
+    if (s && s.count > 0) {{
+      var col = s.win ? '#00ff9d' : '#ff3366';
+      el.textContent = (s.win ? '+' : '-') + s.count;
+      el.style.color = col;
+    }} else {{
+      el.textContent = '—';
+    }}
+  }}
+}}
+setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 5000);
+
+// ── Auto-reset chart to default view after 10s idle ──────────────────────────
+var _defaultXRange = [xStart, xEnd];
+var _resetTimer = null;
+var _userInteracting = false;
+gd.on('plotly_relayout', function(ev) {{
+  buildTargets();
+  // Detect user pan/zoom (not our programmatic relayouts)
+  if (ev['xaxis.range[0]'] !== undefined || ev['xaxis.autorange'] !== undefined) {{
+    if (!_programmaticRelayout) {{
+      _userInteracting = true;
+      clearTimeout(_resetTimer);
+      _resetTimer = setTimeout(function() {{
+        _programmaticRelayout = true;
+        Plotly.relayout(gd, {{ 'xaxis.range': _defaultXRange }}).then(function() {{
+          _programmaticRelayout = false;
+          _userInteracting = false;
+        }});
+      }}, 10000);
+    }}
+  }}
+}});
+var _programmaticRelayout = false;
 
 window.addEventListener('resize', function() {{
   resizeCanvas();
