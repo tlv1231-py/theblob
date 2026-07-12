@@ -198,6 +198,7 @@ def _load_chart_data() -> dict:
             "SIGNAL_PREVIEW":  ("ev-signal",   "SIGNAL_PREVIEW"),
             "RANK_CHANGE":     ("ev-signal",   "RANK_CHANGE"),
             "ACTION_PREVIEW":  ("ev-snapshot", "ACTION_PREVIEW"),
+            "TRADE":           ("ev-fill",     "TRADE"),
         }
         try:
             pipe_rows = s.execute(text("""
@@ -1918,6 +1919,12 @@ window.addEventListener('resize', function() {{
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def render() -> None:
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=30_000, key="home_refresh")
+    except ImportError:
+        pass
+
     st.markdown("""
     <style>
     /* Hide Streamlit chrome */
