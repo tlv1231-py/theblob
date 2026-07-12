@@ -1117,11 +1117,34 @@ body::after {{
 .q-timer.urgent {{ color:#ff9900; }}
 @keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.5}} }}
 .q-timer.imminent {{ color:#ff3366; animation:q-pulse .6s ease-in-out infinite; }}
+/* ── Live queue items ── */
+.q-item-live {{ border-top:1px solid rgba(0,229,255,.12); }}
+.q-item-live .q-badge {{ color:#00e5ff; }}
+/* ── Panel scan sweep ── */
+@keyframes panel-sweep {{
+  0%   {{ top:-5px; opacity:0; }}
+  6%   {{ opacity:1; }}
+  94%  {{ opacity:1; }}
+  100% {{ top:calc(100% + 5px); opacity:0; }}
+}}
+@keyframes panel-border-pulse {{
+  0%   {{ box-shadow:none; border-color:#1a0028; }}
+  25%  {{ box-shadow:0 0 18px rgba(0,229,255,.35),inset 0 0 8px rgba(0,229,255,.08); border-color:#00e5ff; }}
+  100% {{ box-shadow:none; border-color:#1a0028; }}
+}}
+#pos-panel.panel-scanning {{ animation:panel-border-pulse .9s ease-out forwards; }}
+#pos-panel.panel-scanning::after {{
+  content:''; position:absolute; pointer-events:none; z-index:25;
+  left:-2px; right:-2px; height:4px; top:-5px;
+  background:linear-gradient(90deg,transparent 0%,rgba(0,229,255,.5) 20%,#fff 50%,rgba(0,229,255,.5) 80%,transparent 100%);
+  box-shadow:0 0 10px #00e5ff,0 0 24px rgba(0,229,255,.5);
+  animation:panel-sweep .9s ease-in-out forwards;
+}}
 /* ── Positions panel (gamified scorecard) ── */
 #pos-panel {{
   flex:1; min-width:240px;
-  overflow:hidden; scrollbar-width:none;
-  background:#010008;
+  overflow:visible; scrollbar-width:none;
+  background:#010008; position:relative;
   display:flex; flex-direction:column;
 }}
 #pos-panel::-webkit-scrollbar {{ display:none; }}
@@ -2071,7 +2094,10 @@ window.addEventListener('resize', function() {{
     <!-- Queued Actions -->
     <div id="queue-panel">
       <div class="panel-hdr"><div class="term-dot"></div>QUEUED ACTIONS</div>
-      <div id="queue-body">{q_items}</div>
+      <div id="queue-body">
+        <div id="queue-dynamic"></div>
+        {q_items}
+      </div>
     </div>
 
     <div class="col-drag" id="drag-q"></div>
@@ -2240,6 +2266,72 @@ window.addEventListener('resize', function() {{
     if (m > 0) return m + 'm ' + String(s).padStart(2,'0') + 's';
     return s + 's';
   }}
+  window._fmtCountdown = fmtCountdown;
+
+  // ── Dynamic queue ────────────────────────────────────────────────────────────
+  function _nextEquityPipelineMs() {{
+    var now = new Date();
+    var etOffset = -5 * 60;
+    var etNow = new Date(now.getTime() + (now.getTimezoneOffset() + etOffset) * 60000);
+    var target = new Date(etNow); target.setHours(16, 5, 0, 0);
+    if (etNow >= target) target.setDate(target.getDate() + 1);
+    return target - etNow;
+  }}
+
+  function _updateDynamicQueue() {{
+    var qd = document.getElementById('queue-dynamic');
+    if (!qd) return;
+    var now = Date.now();
+    var items = [];
+
+    // Crypto scan — based on last heartbeat
+    var scanTarget = (window._lastRunAt || now) + 75000;
+    var scanDiff   = scanTarget - now;
+    var scanPairs  = window._cryptoPairCount || 15;
+    items.push({{
+      badge:'SCAN', label:'CRYPTO · ALL PAIRS',
+      detail: scanPairs + ' symbols · EMA 2/5 signal check',
+      color:'#00e5ff', diff: Math.max(0, scanDiff),
+    }});
+
+    // Equity pipeline
+    var eqDiff = _nextEquityPipelineMs();
+    items.push({{
+      badge:'REBALANCE', label:'EQUITY PIPELINE',
+      detail:'momentum signal · top-5 rebalance',
+      color:'#9400ff', diff: eqDiff,
+    }});
+
+    // Per-position timeouts (< 90s remaining)
+    var positions = window._cryptoPositionsMap || {{}};
+    Object.values(positions).forEach(function(p) {{
+      var exitAt = new Date(p.entered_at).getTime() + 4 * 60 * 1000;
+      var diff   = exitAt - now;
+      if (diff > 0 && diff < 90000) {{
+        items.push({{
+          badge:'TIMEOUT', label:p.symbol.replace('/USD','') + ' · MAX HOLD',
+          detail:'force evaluation · stop/target check',
+          color: diff < 30000 ? '#ff3366' : '#ff9900', diff: diff,
+        }});
+      }}
+    }});
+
+    // Sort most urgent first
+    items.sort(function(a, b) {{ return a.diff - b.diff; }});
+
+    qd.innerHTML = items.map(function(it) {{
+      var urgent = it.diff < 60000;
+      var imminent = it.diff < 15000;
+      var timerTxt = imminent ? 'executing...' : fmtCountdown(it.diff);
+      var timerCls = 'q-timer' + (imminent ? ' imminent' : urgent ? ' urgent' : '');
+      return '<div class="q-item q-item-live">' +
+        '<div class="q-badge" style="color:' + it.color + '">' + it.badge + '</div>' +
+        '<div class="q-label" style="color:' + it.color + '">' + it.label + '</div>' +
+        '<div class="q-detail">' + it.detail + '</div>' +
+        '<div class="' + timerCls + '">' + timerTxt + '</div>' +
+        '</div>';
+    }}).join('');
+  }}
 
   function tick() {{
     var now = Date.now();
@@ -2277,7 +2369,8 @@ window.addEventListener('resize', function() {{
     }});
   }}
   tick();
-  setInterval(tick, 1000);
+  setInterval(function() {{ tick(); _updateDynamicQueue(); }}, 1000);
+  _updateDynamicQueue(); // immediate first render
 
   // ── Terminal typewriter ──────────────────────────────────────────────────────
   (function() {{
@@ -2322,10 +2415,12 @@ window.addEventListener('resize', function() {{
     // ── Next-run progress bar ─────────────────────────────────────────────────
     var _RUN_INTERVAL = 75;  // seconds — 60s sleep + ~15s execution = loop cycle
     var _lastRunAt    = Date.now();
+    window._lastRunAt = _lastRunAt; // expose for dynamic queue
     var _progTimer    = null;
 
     function _resetRunTimer() {{
       _lastRunAt = Date.now();
+      window._lastRunAt = _lastRunAt;
     }}
 
     function _tickProgress() {{
@@ -2653,26 +2748,20 @@ window.addEventListener('resize', function() {{
             if (window._postToFeed) window._postToFeed(plain, _parseTs(row.recorded_at), html);
           }} else if (row.event_type === 'UPDATE') {{
             if (!isHistory) {{
-              // Parse open symbols from "... N open (SYM, SYM, ...)"
+              // Parse open symbols
               var symMatch = raw.match(/\(([^)]+)\)/);
               var symList = symMatch
                 ? symMatch[1].split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean)
                 : [];
-              // Terminal: brief line with typing dots, "Complete." appended by popup callback
-              var ts = _parseTs(row.recorded_at);
-              if (window._postToFeed) window._postToFeed(
-                '[runner] scan initiated', ts,
-                '[runner] scan initiated<span id="scan-dots">...</span>'
-              );
-              // Register callback so popup can append "Complete." to the last feed line
+              // Callback: post "Scan complete." to terminal only when popup finishes
+              var _ts = _parseTs(row.recorded_at);
               window._scanCompleteCallback = function(n) {{
-                var dots = document.getElementById('scan-dots');
-                if (dots) {{
-                  dots.style.opacity = '0';
-                  dots.insertAdjacentHTML('afterend',
-                    ' <span style="color:#00ff9d">complete.</span>'
-                  );
-                }}
+                if (window._postToFeed) window._postToFeed(
+                  'Scan complete.',
+                  _ts,
+                  'Scan complete. <span style="color:#3a1a4a">·</span> ' +
+                  '<span style="color:#2a1a3a">' + n + ' positions</span>'
+                );
               }};
               if (window._triggerScan) window._triggerScan(symList);
             }}
@@ -2893,10 +2982,20 @@ window.addEventListener('resize', function() {{
     }}
 
     var _cryptoCardEls = {{}}; // symbol → DOM element
+    window._cryptoPositionsMap = {{}}; // exposed for dynamic queue
+    window._cryptoPairCount    = 15;
 
     // Scan sweep + popup — expose globally so feed poller can call it
     window._triggerScan = function(symbols) {{
       // symbols: optional array e.g. ['ETH/USD','SOL/USD',...]
+      // Panel-level sweep — the whole positions panel gets a scan beam
+      var panel = document.getElementById('pos-panel');
+      if (panel) {{
+        panel.classList.remove('panel-scanning');
+        void panel.offsetWidth;
+        panel.classList.add('panel-scanning');
+        setTimeout(function() {{ panel.classList.remove('panel-scanning'); }}, 1000);
+      }}
       // Card sweep animations
       var cardEls = Object.values(_cryptoCardEls);
       cardEls.forEach(function(el, i) {{
@@ -3048,6 +3147,16 @@ window.addEventListener('resize', function() {{
         var section = document.getElementById('pos-crypto-section');
         if (!section) return;
         var flat = document.getElementById('pos-crypto-flat');
+
+        // Expose positions map for dynamic queue timeout countdowns
+        if (Array.isArray(rows) && rows.length) {{
+          var newMap = {{}};
+          rows.forEach(function(p) {{ newMap[p.symbol] = p; }});
+          window._cryptoPositionsMap = newMap;
+          window._cryptoPairCount    = 15; // universe size
+        }} else {{
+          window._cryptoPositionsMap = {{}};
+        }}
 
         if (!Array.isArray(rows) || !rows.length) {{
           // Exit all existing cards
