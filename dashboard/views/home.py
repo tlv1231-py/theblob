@@ -1284,6 +1284,36 @@ body::after {{
   font-size:8px; letter-spacing:.22em; color:rgba(255,255,255,.2);
   text-transform:uppercase; margin-top:4px;
 }}
+/* wallet canvas — full panel background */
+#wallet-canvas {{
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; z-index:1;
+}}
+/* momentum bar */
+#wallet-momentum-bar {{
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  width:100%; margin-top:8px;
+}}
+#wallet-vel-track {{
+  width:140px; height:3px; background:rgba(255,255,255,.06);
+  border-radius:2px; position:relative; overflow:visible;
+}}
+#wallet-vel-fill {{
+  position:absolute; top:0; height:100%; border-radius:2px;
+  transition:left .6s cubic-bezier(.22,1,.36,1), width .6s cubic-bezier(.22,1,.36,1), background .4s ease;
+  box-shadow:0 0 8px currentColor;
+}}
+#wallet-vel-label {{
+  font-size:6px; letter-spacing:.35em; color:rgba(255,255,255,.18);
+  font-family:Consolas,monospace; text-transform:uppercase;
+}}
+/* event ticker — latest action */
+#wallet-event-ticker {{
+  font-size:8.5px; letter-spacing:.08em; color:rgba(255,255,255,.25);
+  font-family:Consolas,monospace; min-height:14px; margin-top:2px;
+  transition:color .3s ease, text-shadow .3s ease;
+  text-align:center;
+}}
 /* noise band that sweeps across the wallet on update */
 @keyframes wallet-noise-sweep {{
   0%   {{ top:-4px; opacity:0; }}
@@ -2228,6 +2258,259 @@ window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
 window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
 window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
 
+// ── Wallet canvas engine ──────────────────────────────────────────────────────
+(function() {{
+  var wc = document.getElementById('wallet-canvas');
+  if (!wc) return;
+  var ctx = wc.getContext('2d');
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  var rings    = [];   // {{ r, maxR, alpha, col, speed }}
+  var particles= [];   // {{ x,y,vx,vy,r,life,decay,col }}
+  var bursts   = [];   // {{ t, isEntry, isWin, x, y }}
+  var scanLines= [];   // {{ y, alpha, speed, col }}
+  var _velSmooth = 0;  // exponentially smoothed velocity
+  var _lastNavVal = null;
+  var _trend = 0;      // −1..+1 smoothed P&L trend
+
+  // ── Public API ────────────────────────────────────────────────────────────
+  window._walletScan = function() {{
+    var W = wc.width, H = wc.height;
+    // Expand rings from panel center
+    for (var i=0; i<3; i++) {{
+      rings.push({{ r:0, maxR:Math.max(W,H)*0.7, alpha:0.55-i*0.12,
+                    col:[0,229,255], speed:2.2+i*0.5, delay:i*60 }});
+    }}
+    // Scanning horizontal lines sweeping downward
+    for (var j=0; j<2; j++) {{
+      scanLines.push({{ y:-4+(j*8), alpha:0.7, speed:2.5+j, col:[0,229,255,0.4] }});
+    }}
+  }};
+
+  window._walletTrade = function(isEntry, isWin, sym, price) {{
+    var W = wc.width, H = wc.height;
+    var cx = W/2, cy = H*0.42;
+    var col = isEntry ? [0,255,157] : (isWin ? [255,153,0] : [255,51,102]);
+
+    // Burst ring
+    rings.push({{ r:0, maxR:W*0.6, alpha:0.8, col:col, speed:4 }});
+
+    // Directional particles
+    var count = 18;
+    for (var i=0; i<count; i++) {{
+      var angle = (Math.PI*2/count)*i + (Math.random()-.5)*.4;
+      var speed = 1.5 + Math.random()*2.5;
+      var vy0 = isEntry ? -Math.abs(Math.sin(angle)*speed)-0.3 : Math.abs(Math.sin(angle)*speed)+0.3;
+      particles.push({{
+        x:cx + (Math.random()-.5)*20, y:cy,
+        vx:Math.cos(angle)*speed*0.6,
+        vy:vy0,
+        r:1.2+Math.random()*2, life:1,
+        decay:0.012+Math.random()*0.016, col:col
+      }});
+    }}
+
+    // Update event ticker
+    var ticker = document.getElementById('wallet-event-ticker');
+    if (ticker) {{
+      var arrow = isEntry ? '▲ ENTER' : '▼ EXIT';
+      var tCol = isEntry ? '#00ff9d' : (isWin ? '#ff9900' : '#ff3366');
+      ticker.textContent = arrow + (sym ? '  ' + sym.replace('/USD','') : '') + (price ? '  $' + price : '');
+      ticker.style.color = tCol;
+      ticker.style.textShadow = '0 0 10px ' + tCol;
+      setTimeout(function() {{
+        ticker.style.color = 'rgba(255,255,255,.2)';
+        ticker.style.textShadow = 'none';
+      }}, 4000);
+    }}
+  }};
+
+  // Called every time NAV updates — feed into velocity smoothing
+  window._walletNavUpdate = function(newNav) {{
+    if (_lastNavVal !== null) {{
+      var delta = newNav - _lastNavVal;
+      var pct   = delta / 100000; // fraction of starting capital
+      _velSmooth = _velSmooth * 0.75 + pct * 0.25; // EMA
+    }}
+    _lastNavVal = newNav;
+    _trend = Math.max(-1, Math.min(1, (_velSmooth * 2000)));
+
+    // Update momentum bar
+    var track = document.getElementById('wallet-vel-track');
+    var fill  = document.getElementById('wallet-vel-fill');
+    if (track && fill) {{
+      var tw = track.offsetWidth || 140;
+      var half = tw / 2;
+      var bar = Math.abs(_trend) * half;
+      if (_trend >= 0) {{
+        fill.style.left = half + 'px';
+        fill.style.width = bar + 'px';
+        fill.style.background = 'linear-gradient(90deg,rgba(0,255,157,.6),rgba(0,255,157,1))';
+        fill.style.color = '#00ff9d';
+      }} else {{
+        fill.style.left = (half - bar) + 'px';
+        fill.style.width = bar + 'px';
+        fill.style.background = 'linear-gradient(90deg,rgba(255,51,102,1),rgba(255,51,102,.6))';
+        fill.style.color = '#ff3366';
+      }}
+    }}
+  }};
+
+  // ── Resize ────────────────────────────────────────────────────────────────
+  function resize() {{ wc.width = wc.offsetWidth; wc.height = wc.offsetHeight; }}
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  var _t = 0;
+
+  function _trendCols() {{
+    // primary color shifts from red → neutral → green based on _trend
+    var r = _trend < 0 ? 255 : Math.round(255*(1-_trend));
+    var g = _trend > 0 ? 255 : Math.round(255*(1+_trend));
+    return [r, g, 80];
+  }}
+
+  function _drawSparkline(W, H) {{
+    var nh = window._navHistory || [];
+    if (nh.length < 2) return;
+    var pts = nh.slice().reverse(); // oldest first
+
+    var minV = Infinity, maxV = -Infinity;
+    pts.forEach(function(p) {{ if(p.nav<minV)minV=p.nav; if(p.nav>maxV)maxV=p.nav; }});
+    var range = maxV - minV || 2000;
+    var pad = range * 0.2;
+    minV -= pad; maxV += pad;
+
+    var sx = W * 0.08, ex = W * 0.92;
+    var sy = H * 0.72, ey = H * 0.88;
+
+    function px(i) {{ return sx + (i/(pts.length-1))*(ex-sx); }}
+    function py(v) {{ return ey - ((v-minV)/(maxV-minV))*(ey-sy); }}
+
+    // Glow pass
+    var lastVal = pts[pts.length-1].nav;
+    var isUp = lastVal >= 100000;
+    var glowCol = isUp ? 'rgba(0,255,157,' : 'rgba(255,51,102,';
+
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = glowCol + '0.7)';
+    ctx.shadowColor  = glowCol + '0.5)';
+    ctx.shadowBlur   = 12;
+    ctx.beginPath();
+    for (var i=0; i<pts.length; i++) {{
+      var x=px(i), y=py(pts[i].nav);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }}
+    ctx.stroke();
+
+    // Fill under curve
+    ctx.beginPath();
+    for (var i=0; i<pts.length; i++) {{
+      var x=px(i), y=py(pts[i].nav);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }}
+    ctx.lineTo(px(pts.length-1), ey);
+    ctx.lineTo(px(0), ey);
+    ctx.closePath();
+    ctx.fillStyle = glowCol + '0.06)';
+    ctx.fill();
+
+    // Endpoint dot
+    var endX = px(pts.length-1), endY = py(lastVal);
+    ctx.beginPath();
+    ctx.arc(endX, endY, 3, 0, Math.PI*2);
+    ctx.fillStyle = isUp ? '#00ff9d' : '#ff3366';
+    ctx.shadowColor = isUp ? 'rgba(0,255,157,.9)' : 'rgba(255,51,102,.9)';
+    ctx.shadowBlur = 10;
+    ctx.fill();
+
+    ctx.restore();
+  }}
+
+  function _drawParticles() {{
+    for (var i=particles.length-1; i>=0; i--) {{
+      var p = particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vy *= 0.97; p.vx *= 0.98;
+      p.life -= p.decay;
+      if (p.life <= 0) {{ particles.splice(i,1); continue; }}
+      var a = p.life * 0.7;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba('+p.col[0]+','+p.col[1]+','+p.col[2]+','+a+')';
+      ctx.shadowColor= 'rgba('+p.col[0]+','+p.col[1]+','+p.col[2]+','+(a*.5)+')';
+      ctx.shadowBlur = 6;
+      ctx.fill();
+    }}
+  }}
+
+  function _drawRings(W, H) {{
+    var cx = W/2, cy = H*0.42;
+    for (var i=rings.length-1; i>=0; i--) {{
+      var ring = rings[i];
+      if (ring.delay > 0) {{ ring.delay -= 16; continue; }}
+      ring.r += ring.speed;
+      ring.alpha *= 0.975;
+      if (ring.r > ring.maxR || ring.alpha < 0.005) {{ rings.splice(i,1); continue; }}
+      ctx.beginPath();
+      ctx.arc(cx, cy, ring.r, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba('+ring.col[0]+','+ring.col[1]+','+ring.col[2]+','+ring.alpha+')';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = 'rgba('+ring.col[0]+','+ring.col[1]+','+ring.col[2]+','+(ring.alpha*.6)+')';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+    }}
+  }}
+
+  function _drawScanLines(W, H) {{
+    for (var i=scanLines.length-1; i>=0; i--) {{
+      var sl = scanLines[i];
+      sl.y += sl.speed; sl.alpha *= 0.97;
+      if (sl.y > H || sl.alpha < 0.01) {{ scanLines.splice(i,1); continue; }}
+      var g = ctx.createLinearGradient(0,0,W,0);
+      g.addColorStop(0,'transparent');
+      g.addColorStop(0.2,'rgba('+sl.col[0]+','+sl.col[1]+','+sl.col[2]+','+sl.alpha*0.6+')');
+      g.addColorStop(0.5,'rgba('+sl.col[0]+','+sl.col[1]+','+sl.col[2]+','+sl.alpha+')');
+      g.addColorStop(0.8,'rgba('+sl.col[0]+','+sl.col[1]+','+sl.col[2]+','+sl.alpha*0.6+')');
+      g.addColorStop(1,'transparent');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, sl.y, W, 2);
+    }}
+  }}
+
+  function _drawBackground(W, H) {{
+    // Ambient radial that breathes with trend
+    var breath = 0.5 + 0.5*Math.sin(_t*0.4);
+    var isUp = _trend >= 0;
+    var bgCol = isUp ? '0,255,157' : '255,51,102';
+    var grad = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, W*0.55);
+    grad.addColorStop(0,   'rgba('+bgCol+','+(0.025+breath*0.015)+')');
+    grad.addColorStop(0.6, 'rgba('+bgCol+',0.005)');
+    grad.addColorStop(1,   'rgba('+bgCol+',0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }}
+
+  // ── Main draw loop ─────────────────────────────────────────────────────────
+  function draw() {{
+    var W = wc.width, H = wc.height;
+    ctx.clearRect(0, 0, W, H);
+    _t += 0.016;
+    ctx.shadowBlur = 0;
+
+    _drawBackground(W, H);
+    _drawScanLines(W, H);
+    _drawSparkline(W, H);
+    _drawRings(W, H);
+    _drawParticles();
+
+    requestAnimationFrame(draw);
+  }}
+  draw();
+}})();
+
 // ── C: Particle drift — upward drifting motes in the positions panel ─────────
 (function() {{
   var pc = document.getElementById('particle-canvas');
@@ -2689,14 +2972,20 @@ window.addEventListener('resize', function() {{
 
     <div class="col-drag" id="drag-f"></div>
 
-    <!-- Report panel — Alpaca wallet total -->
+    <!-- Report panel — live wallet canvas -->
     <div id="report-panel">
+      <canvas id="wallet-canvas"></canvas>
       <div id="wallet-block">
         <div id="wallet-noise"></div>
         <div id="wallet-label">ALPACA WALLET</div>
         <div id="wallet-nav" data-val="{last_nav_fmt}" class="glitch-active">{last_nav_fmt}</div>
         <div id="wallet-pnl" style="color:{_pnl_col}">{_pnl_str}</div>
         <div id="wallet-sub">paper trading · {_pnl_pct_str}</div>
+        <div id="wallet-momentum-bar">
+          <div id="wallet-vel-track"><div id="wallet-vel-fill"></div></div>
+          <div id="wallet-vel-label">MOMENTUM</div>
+        </div>
+        <div id="wallet-event-ticker"></div>
       </div>
     </div>
 
@@ -3401,6 +3690,12 @@ window.addEventListener('resize', function() {{
               var isWinTrade = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : true);
               window._triggerHeartbeat(isWinTrade);
             }}
+            // Wallet canvas trade burst
+            if (!isHistory && window._walletTrade) {{
+              var isWinW = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : false);
+              var priceW = priceM ? priceM[1] : '';
+              window._walletTrade(isEntry, isWinW, sym, priceW);
+            }}
             // Trigger chart trade marker refresh
             if (!isHistory && window._onLiveTrade) window._onLiveTrade();
           }} else if (row.event_type === 'UPDATE') {{
@@ -3411,6 +3706,7 @@ window.addEventListener('resize', function() {{
                 ? symMatch[1].split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean)
                 : [];
               if (window._triggerScan) window._triggerScan(symList);
+              if (window._walletScan) window._walletScan();
             }}
           }} else {{
             // Suppress scan messages — handled by VHS bar, not the feed
@@ -3481,16 +3777,16 @@ window.addEventListener('resize', function() {{
         if (wNav.textContent !== newVal) {{
           wNav.textContent = newVal;
           wNav.setAttribute('data-val', newVal);
-          // Trigger noise sweep
           if (wNoise) {{
-            wNoise.classList.remove('sweep');
-            void wNoise.offsetWidth;
+            wNoise.classList.remove('sweep'); void wNoise.offsetWidth;
             wNoise.classList.add('sweep');
             setTimeout(function() {{ wNoise.classList.remove('sweep'); }}, 650);
           }}
         }}
       }}
       if (wPnl) {{ wPnl.textContent = (pnl >= 0 ? '+' : '−') + '$' + Math.abs(pnl).toLocaleString('en-US',{{maximumFractionDigits:0}}); wPnl.style.color = pnl >= 0 ? '#00ff9d' : '#ff3366'; }}
+      // Feed wallet canvas engine
+      if (window._walletNavUpdate) window._walletNavUpdate(nav);
 
       // nav-card overlay (top-left of chart)
       var nvVal = document.querySelector('.nv-val');
