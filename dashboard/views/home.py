@@ -895,7 +895,7 @@ body::after {{
 }}
 /* flex children */
 #main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
-#chart {{ position:absolute; inset:0; }}
+#chart {{ position:absolute; inset:0; width:100%; height:100%; }}
 #pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
 #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
@@ -2065,8 +2065,6 @@ var layout = {{
   paper_bgcolor:'#060008',
   plot_bgcolor:'#060008',
   margin:{{ t:44, b:310, l:72, r:16 }},
-  width: window.innerWidth,
-  height: window.innerHeight,
 
   xaxis:{{
     range: xStart ? [xStart, xEnd] : undefined,
@@ -2962,11 +2960,7 @@ window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 // Rebuild pulse targets after any re-render
 gd.on('plotly_relayout', function() {{ buildTargets(); }});
 
-window.addEventListener('load', function() {{
-  Plotly.relayout(gd, {{ width:window.innerWidth, height:window.innerHeight }});
-}});
 window.addEventListener('resize', function() {{
-  Plotly.relayout(gd, {{ width:window.innerWidth, height:window.innerHeight }});
   resizeCanvas();
 }});
 </script>
