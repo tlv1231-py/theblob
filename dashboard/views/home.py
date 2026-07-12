@@ -952,21 +952,49 @@ body::after {{
 #status-divider {{ display:none; }}
 .con-dot {{ display:inline-block; vertical-align:middle; margin-right:5px; }}
 #run-progress-wrap {{
-  display:inline-flex; align-items:center; gap:5px;
+  display:inline-flex; align-items:center; gap:7px;
   margin-left:auto; flex-shrink:0; transition:opacity .3s;
 }}
 #run-progress-wrap.hidden {{ opacity:0; pointer-events:none; }}
 #run-progress-track {{
-  width:120px; height:3px; background:#1a003a; border-radius:2px; overflow:hidden;
+  width:140px; height:8px; background:#080014;
+  border:1px solid #2a004a;
+  overflow:hidden; position:relative;
+  /* vertical scanlines — the grid */
+  background-image:repeating-linear-gradient(
+    90deg,
+    transparent 0px, transparent 7px,
+    rgba(255,0,200,.08) 7px, rgba(255,0,200,.08) 8px
+  );
 }}
 #run-progress-fill {{
-  height:100%; width:0%; border-radius:2px;
-  background:linear-gradient(90deg,#3a0060,#cc00ff);
-  box-shadow:0 0 6px rgba(204,0,255,.5);
+  height:100%; width:0%;
+  background:linear-gradient(90deg, #ff006e 0%, #cc00ff 50%, #00e5ff 100%);
+  box-shadow:0 0 10px rgba(204,0,255,.7), 0 0 3px rgba(0,229,255,.5);
   transition:width .9s linear;
+  position:relative;
+}}
+/* scanline shimmer over the fill */
+#run-progress-fill::after {{
+  content:'';
+  position:absolute; inset:0;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 1px,
+    rgba(0,0,0,.35) 1px, rgba(0,0,0,.35) 2px
+  );
+  animation:vp-shimmer 1.8s linear infinite;
+}}
+@keyframes vp-shimmer {{
+  from {{ background-position:0 0; }}
+  to   {{ background-position:0 8px; }}
 }}
 #run-progress-label {{
-  font-size:8px; letter-spacing:.12em; color:#3a0060; white-space:nowrap;
+  font-size:9px; letter-spacing:.18em; white-space:nowrap;
+  font-family:Consolas,monospace;
+  color:#cc00ff;
+  text-shadow:0 0 8px rgba(204,0,255,.8);
+  min-width:28px; text-align:right;
 }}
 /* all status bar children are inline — text wraps like a real terminal */
 #live-clock {{ display:inline; color:#006622; font-size:8.5px; letter-spacing:.04em; }}
@@ -1005,7 +1033,7 @@ body::after {{
 .te {{ padding:2px 12px; flex-shrink:0;
        font-size:10px; line-height:1.6; color:#9060b8;
        white-space:normal; word-break:break-word; }}
-.te-ts  {{ color:#2a0040; font-size:9px; }}
+.te-ts  {{ color:#6a5a7a; font-size:9px; }}
 .te-date {{ padding:5px 12px 1px; flex-shrink:0;
             font-size:7.5px; font-weight:700; letter-spacing:.28em;
             color:#1a0028; text-transform:uppercase; }}
@@ -1728,7 +1756,19 @@ window.addEventListener('resize', function() {{
         if (fill) fill.style.width = pct.toFixed(1) + '%';
         if (lbl) {{
           var rem = Math.max(0, Math.round(_RUN_INTERVAL - elapsed));
-          lbl.textContent = pct >= 100 ? 'running…' : rem + 's';
+          if (pct >= 100) {{
+            lbl.textContent = '···';
+            lbl.style.color = '#00e5ff';
+            lbl.style.textShadow = '0 0 8px rgba(0,229,255,.9)';
+          }} else {{
+            lbl.textContent = String(rem).padStart(3,'0');
+            // fade from cyan → magenta as timer runs out
+            var heat = rem < 30 ? 1 : 0;
+            lbl.style.color = heat ? '#ff006e' : '#cc00ff';
+            lbl.style.textShadow = heat
+              ? '0 0 10px rgba(255,0,110,.9)'
+              : '0 0 8px rgba(204,0,255,.8)';
+          }}
         }}
         // hide bar while a message is typing through status
         if (wrap) wrap.classList.toggle('hidden', _busy);
