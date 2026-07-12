@@ -61,17 +61,20 @@ def _data_client():
 
 # ── Bar fetching ──────────────────────────────────────────────────────────────
 
-def _fetch_bars(timeframe: str, limit: int) -> dict[str, list]:
-    """Fetch latest bars for all universe symbols in one request."""
+def _fetch_bars(timeframe: str, lookback_minutes: int) -> dict[str, list]:
+    """Fetch bars for all universe symbols over a trailing time window."""
     from alpaca.data.requests import CryptoBarsRequest
-    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+    from alpaca.data.timeframe import TimeFrame
 
-    tf = TimeFrame.Minute if timeframe == "1Min" else TimeFrame.Hour
+    tf  = TimeFrame.Minute if timeframe == "1Min" else TimeFrame.Hour
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(minutes=lookback_minutes)
     client = _data_client()
     req = CryptoBarsRequest(
         symbol_or_symbols = _UNIVERSE,
         timeframe         = tf,
-        limit             = limit,
+        start             = start,
+        end               = end,
     )
     resp = client.get_crypto_bars(req)
     raw = resp.data if hasattr(resp, "data") else resp
@@ -256,11 +259,13 @@ def run() -> None:
 
     # Fetch bars (2 API calls, all symbols batched)
     try:
-        min_bars  = _fetch_bars("1Min", 32)
-        hour_bars = _fetch_bars("1Hour", 24)
+        min_bars  = _fetch_bars("1Min",  35)      # last 35 minutes of 1-min bars
+        hour_bars = _fetch_bars("1Hour", 1500)    # last 25 hours of 1-hr bars
     except Exception as e:
         logger.error(f"[crypto] Bar fetch failed: {e}")
         return
+
+    logger.info(f"[crypto] bars: {len(min_bars)} syms (1min) · {len(hour_bars)} syms (1hr)")
 
     positions = _load_positions()
     daily_pnl = 0.0
