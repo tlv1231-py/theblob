@@ -188,13 +188,15 @@ def _log_fill(symbol: str, order_id: str, side: str, qty: float, price: float,
 
 
 def _write_snapshot(nav: float, positions: dict) -> None:
+    import json as _json
     try:
+        pos_json = _json.dumps({k: v["qty"] for k, v in positions.items()})
         with get_session() as s:
             s.execute(text("""
                 INSERT INTO portfolio_snapshots
                     (snapshot_date, strategy, cash, gross_exposure, net_exposure,
                      total_value, positions, recorded_at)
-                VALUES (:sd, :strat, :cash, :gross, :net, :total, :pos::jsonb, :ts)
+                VALUES (:sd, :strat, :cash, :gross, :net, :total, cast(:pos as jsonb), :ts)
             """), {
                 "sd":    datetime.now(timezone.utc).date(),
                 "strat": "crypto_momentum",
@@ -202,7 +204,7 @@ def _write_snapshot(nav: float, positions: dict) -> None:
                 "gross": nav,
                 "net":   nav,
                 "total": nav,
-                "pos":   str({k: v["qty"] for k, v in positions.items()}).replace("'", '"'),
+                "pos":   pos_json,
                 "ts":    datetime.now(timezone.utc),
             })
             s.commit()
@@ -211,6 +213,17 @@ def _write_snapshot(nav: float, positions: dict) -> None:
 
 
 # ── Order execution ───────────────────────────────────────────────────────────
+
+def _close_position(symbol: str) -> str | None:
+    """Close entire position via Alpaca close_position — avoids float qty precision errors."""
+    order_sym = symbol.replace("/", "")
+    try:
+        resp = _trading_client().close_position(order_sym)
+        return str(resp.id)
+    except Exception as e:
+        logger.warning(f"Close position failed {symbol}: {e}")
+        return str(uuid.uuid4())
+
 
 def _submit_order(symbol: str, side: str, qty: float) -> str | None:
     order_sym = symbol.replace("/", "")
@@ -341,7 +354,7 @@ def run() -> None:
             daily_pnl += pnl
 
             side = "sell" if d == "long" else "buy"
-            _submit_order(sym, side, pos["qty"])
+            _close_position(sym) if side == "sell" else _submit_order(sym, side, pos["qty"])
             _log_fill(sym, pos["order_id"] or "", "exit", pos["qty"], exit_price, pnl, reason)
             _delete_position(sym)
             del positions[sym]
