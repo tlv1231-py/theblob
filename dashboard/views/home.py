@@ -133,8 +133,10 @@ def _load_chart_data() -> dict:
                 ORDER BY date
             """), {"start": _STARTING_CAPITAL}).fetchall()
 
-        port_dates  = [r.d for r in port_rows]
-        port_values = [float(r.total_value) for r in port_rows]
+        # Filter out outlier rows from double-run artifacts (initial $197K inflated value)
+        _OUTLIER_CAP = _STARTING_CAPITAL * 1.5
+        port_dates  = [r.d     for r in port_rows if float(r.total_value) <= _OUTLIER_CAP]
+        port_values = [float(r.total_value) for r in port_rows if float(r.total_value) <= _OUTLIER_CAP]
 
         # Benchmark tracks — SPY / QQQ
         start_cutoff = port_dates[0] if port_dates else "2026-01-01"
@@ -2029,7 +2031,7 @@ var layout = {{
     tickformat:'%b %d\n%H:%M', zeroline:false, showline:false, type:'date', fixedrange:false,
   }},
   yaxis:{{
-    range: yr[0] !== null ? yr : undefined,
+    autorange:true,
     showgrid:true, gridcolor:'rgba(42,0,61,0.35)',
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
     tickformat:'$,.0f',
