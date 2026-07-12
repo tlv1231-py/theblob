@@ -2123,6 +2123,57 @@ window.addEventListener('resize', function() {{
       _pollNav();
       setInterval(_pollNav, 5000);
     }}, 4000);
+
+    // ── Live positions poller — crypto_positions table ────────────────────────
+    var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
+    function _symCol(sym) {{
+      var h = 0;
+      for (var i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) & 0xffff;
+      return _TICKER_COLS[h % _TICKER_COLS.length];
+    }}
+
+    function _pollPositions() {{
+      var url = SUPA_URL + '/rest/v1/crypto_positions'
+        + '?select=symbol,direction,qty,entry_price,stop_price,entered_at'
+        + '&order=entered_at.asc';
+      fetch(url, {{
+        headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }}
+      }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        var body = document.getElementById('pos-body');
+        if (!body) return;
+        if (!Array.isArray(rows) || !rows.length) {{
+          body.innerHTML = '<div class="pos-hold" style="padding:8px 14px">flat · no open positions</div>';
+          return;
+        }}
+        var html = '';
+        rows.forEach(function(p) {{
+          var col   = _symCol(p.symbol);
+          var entry = parseFloat(p.entry_price);
+          var stop  = parseFloat(p.stop_price);
+          var qty   = parseFloat(p.qty);
+          var age   = p.entered_at ? Math.round((Date.now() - new Date(p.entered_at)) / 60000) : 0;
+          var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
+          html += '<div class="pos-card" style="border-left:3px solid ' + col + '">'
+            + '<div class="pos-top">'
+            + '<span class="pos-sym" style="color:' + col + '">' + p.symbol.replace('/USD','') + '</span>'
+            + '<span class="pos-qty">' + qty.toFixed(4) + '</span>'
+            + '<span class="pos-val" style="color:#cc00ff">▲ LONG</span>'
+            + '</div>'
+            + '<div class="pos-hold active">entry $' + entry.toFixed(4) + ' · stop ' + stopPct + '% · ' + age + 'm</div>'
+            + '</div>';
+        }});
+        body.innerHTML = html;
+      }})
+      .catch(function() {{}});
+    }}
+
+    setTimeout(function() {{
+      _pollPositions();
+      setInterval(_pollPositions, 5000);
+    }}, 2000);
+
   }})();
 
 </script>

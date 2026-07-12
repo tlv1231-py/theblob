@@ -379,6 +379,12 @@ def run() -> None:
     # Re-fetch NAV so snapshot reflects any just-executed trades
     nav = _account_value()
     _write_snapshot(nav, positions)
+
+    # Heartbeat — always post so the dashboard progress bar resets each run
+    open_syms = ", ".join(positions.keys()) if positions else "flat"
+    _post_event("UPDATE", None,
+        f"▸ scan complete · NAV ${nav:,.2f} · {len(positions)} open ({open_syms})",
+        f"positions={len(positions)}")
     logger.info(f"[crypto] snapshot written NAV=${nav:,.2f}")
 
 
