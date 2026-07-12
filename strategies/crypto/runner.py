@@ -169,20 +169,45 @@ def _log_fill(symbol: str, order_id: str, side: str, qty: float, price: float,
               pnl: float | None, reason: str) -> None:
     try:
         with get_session() as s:
-            s.add(FillRecord(
-                id        = str(uuid.uuid4()),
-                order_id  = order_id,
-                symbol    = symbol,
-                side      = side,
-                qty       = qty,
-                price     = price,
-                pnl       = pnl or 0.0,
-                filled_at = datetime.now(timezone.utc),
-                note      = reason,
-            ))
+            s.execute(text("""
+                INSERT INTO fills (fill_id, order_id, symbol, side, quantity, fill_price,
+                                   commission, slippage, filled_at)
+                VALUES (:fid, :oid, :sym, :side, :qty, :price, 0, 0, :ts)
+            """), {
+                "fid":  str(uuid.uuid4()),
+                "oid":  order_id or str(uuid.uuid4()),
+                "sym":  symbol,
+                "side": side,
+                "qty":  qty,
+                "price": price,
+                "ts":   datetime.now(timezone.utc),
+            })
             s.commit()
     except Exception as e:
         logger.warning(f"Fill log failed: {e}")
+
+
+def _write_snapshot(nav: float, positions: dict) -> None:
+    try:
+        with get_session() as s:
+            s.execute(text("""
+                INSERT INTO portfolio_snapshots
+                    (snapshot_date, strategy, cash, gross_exposure, net_exposure,
+                     total_value, positions, recorded_at)
+                VALUES (:sd, :strat, :cash, :gross, :net, :total, :pos::jsonb, :ts)
+            """), {
+                "sd":    datetime.now(timezone.utc).date(),
+                "strat": "crypto_momentum",
+                "cash":  nav,
+                "gross": nav,
+                "net":   nav,
+                "total": nav,
+                "pos":   str({k: v["qty"] for k, v in positions.items()}).replace("'", '"'),
+                "ts":    datetime.now(timezone.utc),
+            })
+            s.commit()
+    except Exception as e:
+        logger.warning(f"Snapshot write failed: {e}")
 
 
 # ── Order execution ───────────────────────────────────────────────────────────
@@ -350,6 +375,11 @@ def run() -> None:
                 f"{arrow} ENTER {signal.upper()} {sym} @ ${filled:,.4f} · stop ${stop:,.4f}",
                 f"qty={qty:.6f}")
             logger.info(f"[entry] {signal.upper()} {sym} @ {filled:.4f} qty={qty:.6f}")
+
+    # Re-fetch NAV so snapshot reflects any just-executed trades
+    nav = _account_value()
+    _write_snapshot(nav, positions)
+    logger.info(f"[crypto] snapshot written NAV=${nav:,.2f}")
 
 
 if __name__ == "__main__":

@@ -1979,6 +1979,89 @@ window.addEventListener('resize', function() {{
     }}, 3000);
   }})();
 
+  // ── Live NAV poller — updates chart + all NAV displays in-place ─────────────
+  (function() {{
+    var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
+    var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
+    var START_NAV = 100000;
+    var _lastNavTs = null;
+
+    function _fmt(v) {{
+      return '$' + Math.round(v).toLocaleString('en-US');
+    }}
+    function _fmtRet(v, start) {{
+      var pct = ((v - start) / start * 100).toFixed(2);
+      return (pct >= 0 ? '+' : '') + pct + '%';
+    }}
+    function _retColor(v, start) {{
+      return v >= start ? '#00ff9d' : '#ff3366';
+    }}
+
+    function _updateNavDisplays(nav, ts) {{
+      var col = _retColor(nav, START_NAV);
+      var ret = _fmtRet(nav, START_NAV);
+      var pnl = nav - START_NAV;
+      var pnlStr = (pnl >= 0 ? '+' : '') + _fmt(Math.abs(pnl));
+
+      // Topbar NAV stat
+      document.querySelectorAll('.tb-stat-val').forEach(function(el, i) {{
+        // NAV is first tb-stat-val
+        if (i === 0) {{ el.textContent = _fmt(nav); el.style.color = '#ff00cc'; }}
+        if (i === 1) {{ el.textContent = ret; el.style.color = col; }}
+      }});
+
+      // nav-card overlay (top-left of chart)
+      var nvVal = document.querySelector('.nv-val');
+      var nvRet = document.querySelector('.nv-ret');
+      var nvDpnl = document.querySelector('.nv-dpnl');
+      if (nvVal) nvVal.textContent = _fmt(nav);
+      if (nvRet) {{ nvRet.textContent = ret + ' vs $100K start'; nvRet.style.color = col; }}
+
+      // pnl-float (bottom-right of chart)
+      var pnlFloat = document.querySelector('.pnl-float-val');
+      var pnlSub   = document.querySelector('.pnl-float-sub');
+      if (pnlFloat) {{ pnlFloat.textContent = (pnl >= 0 ? '+' : '') + _fmt(Math.abs(pnl)); pnlFloat.style.color = col; }}
+      if (pnlSub)   {{ pnlSub.textContent = ret + ' since $100K start'; }}
+
+      // legend-strip PORTFOLIO
+      var legVals = document.querySelectorAll('.leg-val');
+      var legRets = document.querySelectorAll('.leg-ret');
+      if (legVals[0]) legVals[0].textContent = _fmt(nav);
+      if (legRets[0]) {{ legRets[0].textContent = ret; legRets[0].style.color = col; }}
+
+      // Extend the Plotly chart with this new data point
+      var gd = document.getElementById('chart');
+      if (gd && gd.data && gd.data.length > 0) {{
+        var isoTs = ts || new Date().toISOString();
+        Plotly.extendTraces(gd, {{x: [[isoTs]], y: [[nav]]}}, [0]);
+      }}
+    }}
+
+    function _pollNav() {{
+      var url = SUPA_URL + '/rest/v1/portfolio_snapshots'
+        + '?select=total_value,recorded_at,strategy'
+        + '&strategy=eq.crypto_momentum'
+        + '&order=recorded_at.desc&limit=1';
+      fetch(url, {{
+        headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }}
+      }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows) || !rows.length) return;
+        var row = rows[0];
+        if (row.recorded_at === _lastNavTs) return; // no change
+        _lastNavTs = row.recorded_at;
+        _updateNavDisplays(row.total_value, row.recorded_at);
+      }})
+      .catch(function() {{}});
+    }}
+
+    setTimeout(function() {{
+      _pollNav();
+      setInterval(_pollNav, 5000);
+    }}, 4000);
+  }})();
+
 </script>
 
 </body>
