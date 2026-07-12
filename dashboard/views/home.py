@@ -714,7 +714,7 @@ def _build_daw_html(data: dict) -> str:
         prose = _humanize(ev, nav_col)
 
         is_newest = (_ev_i == _last_ev_i)
-        tw = ' id="te-newest" style="opacity:0"' if is_newest else ''
+        tw = ' id="te-newest" style="opacity:0;color:#00ff41;text-shadow:0 0 8px rgba(0,255,65,.6)"' if is_newest else ''
         term_rows += (
             f'<div class="te"{tw}>'
             f'<span class="te-ts">{hhmm}&nbsp;&nbsp;</span>'
@@ -1753,9 +1753,15 @@ window.addEventListener('resize', function() {{
       tb.scrollTop = tb.scrollHeight;
       var plainText = newest.textContent.replace(/\s+/g, ' ').trim();
       typeAtCursor(plainText, function() {{
+        newest.style.transition = 'opacity 80ms ease, color 1400ms ease, text-shadow 1400ms ease';
         newest.style.opacity = '1';
-        newest.style.transition = 'opacity 80ms ease';
         tb.scrollTop = tb.scrollHeight;
+        requestAnimationFrame(function() {{
+          requestAnimationFrame(function() {{
+            newest.style.color = '#9060b8';
+            newest.style.textShadow = 'none';
+          }});
+        }});
         _busy = false;
         startIdle();
       }});
