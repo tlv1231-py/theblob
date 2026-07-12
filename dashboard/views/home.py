@@ -909,58 +909,30 @@ body::after {{
 }}
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
-/* ── Console strip (full-width matrix green feed) ── */
-#console-strip {{
-  height:40%; flex-shrink:0; min-height:60px;
-  border-bottom:1px solid #003311;
+/* ── Status bar (single-line matrix green) ── */
+#status-bar {{
+  flex-shrink:0; height:22px;
   background:#000;
-  display:flex; flex-direction:column;
+  border-bottom:1px solid #003311;
+  display:flex; align-items:center;
+  padding:0 12px; gap:8px;
   overflow:hidden;
 }}
-#console-hdr {{
-  flex-shrink:0; padding:3px 14px;
-  border-bottom:1px solid #001a08;
-  font-size:7px; letter-spacing:.3em; color:#00661a;
-  display:flex; align-items:center; gap:8px;
-  background:#000;
-}}
 .con-dot {{
-  width:4px; height:4px; border-radius:50%;
-  background:#00ff41;
-  box-shadow:0 0 6px #00ff41;
+  width:5px; height:5px; border-radius:50%; flex-shrink:0;
+  background:#00ff41; box-shadow:0 0 6px #00ff41;
   animation:gdot 1.4s ease-in-out infinite;
 }}
 @keyframes gdot {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
-#term-body {{
-  flex:1; overflow-y:auto;
-  display:flex; flex-direction:column;
-  padding:2px 0;
-  scrollbar-width:none; background:#000;
-}}
-#term-body::-webkit-scrollbar {{ display:none; }}
-.te {{ padding:0 14px; flex-shrink:0;
-       font-size:10.5px; line-height:1.7; color:#00b330;
-       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-       position:relative; }}
-.te-ts  {{ color:#004410; font-size:9.5px; }}
-.te-date {{ padding:6px 14px 1px; flex-shrink:0;
-            font-size:8px; font-weight:700; letter-spacing:.3em;
-            color:#003311; text-transform:uppercase; }}
-/* clock line */
-#clock-line {{
-  flex-shrink:0; padding:2px 14px 4px;
-  font-size:11px; color:#00ff41;
-  text-shadow:0 0 8px rgba(0,255,65,.8);
-  letter-spacing:.04em;
-  display:flex; align-items:center; gap:0;
-  background:#000;
-}}
-#live-clock {{ margin-right:6px; color:#006622; font-size:9.5px; letter-spacing:.06em; }}
-#prompt-sym {{ color:#004d18; margin-right:5px; font-size:11px; flex-shrink:0; user-select:none; }}
+#status-label {{ font-size:7px; letter-spacing:.28em; color:#00661a; flex-shrink:0; }}
+#status-divider {{ color:#002208; flex-shrink:0; }}
+/* clock + cursor in status bar */
+#live-clock {{ color:#006622; font-size:9px; letter-spacing:.06em; flex-shrink:0; }}
+#prompt-sym {{ color:#004d18; font-size:10px; flex-shrink:0; user-select:none; }}
 #type-preview {{
-  color:#00ff41; font-size:10.5px; letter-spacing:.04em;
+  color:#00ff41; font-size:10px; letter-spacing:.04em;
   text-shadow:0 0 8px rgba(0,255,65,.9);
-  white-space:nowrap; flex:1; overflow:hidden;
+  white-space:nowrap; overflow:hidden; flex:1;
 }}
 #blink-cur {{
   display:inline-block; color:#00ff41; flex-shrink:0;
@@ -973,6 +945,34 @@ body::after {{
   100% {{ background:transparent; }}
 }}
 .enter-flash {{ animation:enter-flash 220ms ease-out forwards; }}
+
+/* ── System Feed panel (bottom-left) ── */
+#feed-panel {{
+  flex:1; min-width:160px;
+  background:#000;
+  display:flex; flex-direction:column;
+  overflow:hidden;
+}}
+#term-body {{
+  flex:1; overflow-y:auto;
+  display:flex; flex-direction:column;
+  padding:2px 0;
+  scrollbar-width:none; background:#000;
+}}
+#term-body::-webkit-scrollbar {{ display:none; }}
+.te {{ padding:0 12px; flex-shrink:0;
+       font-size:10px; line-height:1.7; color:#00b330;
+       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.te-ts  {{ color:#004410; font-size:9px; }}
+.te-date {{ padding:5px 12px 1px; flex-shrink:0;
+            font-size:7.5px; font-weight:700; letter-spacing:.28em;
+            color:#003311; text-transform:uppercase; }}
+/* clock line inside feed panel */
+#clock-line {{
+  flex-shrink:0; padding:2px 12px 4px;
+  font-size:10px; color:#00ff41;
+  display:none; /* clock lives in status bar now */
+}}
 
 /* ── Lower panels row ── */
 #lower-panels {{
@@ -1411,20 +1411,32 @@ window.addEventListener('resize', function() {{
 <div id="term-overlay">
   <div id="vert-drag"></div>
 
-  <!-- Full-width matrix green console feed -->
-  <div id="console-strip">
-    <div id="console-hdr">
-      <div class="con-dot"></div>
-      <span>SYSTEM FEED</span>
-    </div>
-    <div id="term-body">
-      {term_rows}
-      <div id="clock-line"><span id="live-clock"></span><span id="prompt-sym">&gt;</span><span id="type-preview"></span><span id="blink-cur">█</span></div>
-    </div>
+  <!-- Single-line matrix green status bar -->
+  <div id="status-bar">
+    <div class="con-dot"></div>
+    <span id="status-label">SYSTEM FEED</span>
+    <span id="status-divider">|</span>
+    <span id="live-clock"></span>
+    <span id="prompt-sym">&gt;</span>
+    <span id="type-preview"></span>
+    <span id="blink-cur">█</span>
   </div>
+  <div id="clock-line" style="display:none"></div>
 
-  <!-- Three lower panels side by side -->
+  <!-- Four lower panels side by side -->
   <div id="lower-panels">
+
+    <!-- System Feed panel -->
+    <div id="feed-panel">
+      <div class="panel-hdr" style="border-bottom:1px solid #001a08;color:#006622;">
+        <div class="con-dot" style="animation-delay:.3s"></div>SYSTEM FEED
+      </div>
+      <div id="term-body">
+        {term_rows}
+      </div>
+    </div>
+
+    <div class="col-drag" id="drag-f"></div>
 
     <!-- Queued Actions -->
     <div id="queue-panel">
@@ -1510,11 +1522,13 @@ window.addEventListener('resize', function() {{
     }}
 
     var qPanel   = document.getElementById('queue-panel');
-    var posPanel = document.getElementById('pos-panel');
-    var depPanel = document.getElementById('deposit-panel');
+    var feedPanel = document.getElementById('feed-panel');
+    var posPanel  = document.getElementById('pos-panel');
+    var depPanel  = document.getElementById('deposit-panel');
 
-    makeColDrag(document.getElementById('drag-q'), qPanel,   posPanel, null, null);
-    makeColDrag(document.getElementById('drag-p'), posPanel, depPanel, null, null);
+    makeColDrag(document.getElementById('drag-f'), feedPanel, qPanel,   null, null);
+    makeColDrag(document.getElementById('drag-q'), qPanel,    posPanel, null, null);
+    makeColDrag(document.getElementById('drag-p'), posPanel,  depPanel, null, null);
 
     // Vertical overlay drag (drag the top edge to resize height)
     var overlay  = document.getElementById('term-overlay');
