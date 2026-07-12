@@ -1682,6 +1682,44 @@ body::after {{
   display:flex; justify-content:space-between;
   font-size:6.5px; color:#2a1a4a; letter-spacing:.03em; margin-top:1px;
 }}
+/* ── Live proximity meter ── */
+.pos-prox-wrap {{
+  margin-top:5px; padding:0 0 2px;
+}}
+.pos-prox-track {{
+  position:relative; height:4px; border-radius:2px; overflow:visible;
+  background:rgba(255,255,255,.06);
+}}
+.pos-prox-fill {{
+  position:absolute; left:0; top:0; height:100%; border-radius:2px;
+  transition:width .6s cubic-bezier(.22,1,.36,1), background .6s;
+  background:linear-gradient(90deg,rgba(255,51,102,.6) 0%,rgba(255,153,0,.7) 50%,rgba(0,255,157,.8) 100%);
+  background-size:200% 100%;
+}}
+.pos-prox-cursor {{
+  position:absolute; top:50%; transform:translate(-50%,-50%);
+  width:6px; height:6px; border-radius:50%;
+  transition:left .6s cubic-bezier(.22,1,.36,1), background .6s, box-shadow .6s;
+  background:#fff; box-shadow:0 0 6px #fff;
+}}
+@keyframes prox-danger {{
+  0%,100%{{box-shadow:0 0 4px #ff3366,0 0 10px rgba(255,51,102,.5)}}
+  50%{{box-shadow:0 0 8px #ff3366,0 0 20px rgba(255,51,102,.8)}}
+}}
+@keyframes prox-target {{
+  0%,100%{{box-shadow:0 0 4px #00ff9d,0 0 10px rgba(0,255,157,.5)}}
+  50%{{box-shadow:0 0 8px #00ff9d,0 0 20px rgba(0,255,157,.8)}}
+}}
+.pos-prox-cursor.danger {{ background:#ff3366; animation:prox-danger .8s ease-in-out infinite; }}
+.pos-prox-cursor.target {{ background:#00ff9d; animation:prox-target .8s ease-in-out infinite; }}
+.pos-prox-labels {{
+  display:flex; justify-content:space-between; align-items:center;
+  margin-top:2px; font-size:6px; letter-spacing:.05em; color:#2a1a4a;
+}}
+.pos-prox-live {{
+  text-align:center; font-size:7px; font-weight:700; letter-spacing:.04em;
+  font-family:Consolas,monospace; transition:color .4s;
+}}
 /* ── Equity pipeline countdown ── */
 #equity-countdown {{
   padding:6px 12px 4px; font-size:7px; letter-spacing:.18em;
@@ -2364,6 +2402,7 @@ window._orbTradeFlash = function(isEntry) {{
   _orbBurstCount = isEntry ? 6 : 5;
 }};
 var _orbBurstCount = 0;
+var _liveTip = {{ pts: [] }}; // brownian extension from latest portfolio point
 
 function buildTargets() {{
   pulseTargets = [];
@@ -2469,6 +2508,44 @@ function drawPulse() {{
       ctx.fill();
     }} catch(e) {{ console.error('pulse err', e, t); }}
   }});
+
+  // ── Live-tip: brownian extension from latest portfolio point ─────────────
+  (function() {{
+    var portT = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
+    if (!portT) return;
+    try {{
+      var fl = gd._fullLayout;
+      if (!fl || !fl.xaxis || !fl.yaxis) return;
+      var cx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
+      var cy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
+      if (!isFinite(cx) || !isFinite(cy)) return;
+      // Brownian motion state (persisted across frames via closure on module scope)
+      if (!_liveTip.pts.length) _liveTip.pts.push({{dx:0,dy:0}});
+      var last = _liveTip.pts[_liveTip.pts.length-1];
+      var ndx = last.dx + (Math.random()-0.48)*1.1; // slight rightward drift
+      var ndy = last.dy * 0.93 + (Math.random()-0.5)*1.4; // mean-reverting
+      ndx = Math.min(ndx, 52); // cap extension width
+      _liveTip.pts.push({{dx:ndx, dy:ndy}});
+      if (_liveTip.pts.length > 80) _liveTip.pts.shift();
+      // Fade alpha along the path
+      var n = _liveTip.pts.length;
+      ctx.save();
+      for (var i = 1; i < n; i++) {{
+        var a = (i/n) * 0.55;
+        var p0 = _liveTip.pts[i-1], p1 = _liveTip.pts[i];
+        ctx.beginPath();
+        ctx.moveTo(cx + p0.dx, cy + p0.dy);
+        ctx.lineTo(cx + p1.dx, cy + p1.dy);
+        ctx.strokeStyle = 'rgba(255,0,204,' + a + ')';
+        ctx.lineWidth   = 1.1;
+        ctx.shadowColor = 'rgba(255,0,204,' + (a*0.8) + ')';
+        ctx.shadowBlur  = 5;
+        ctx.stroke();
+      }}
+      ctx.restore();
+    }} catch(e) {{}}
+  }})();
+
   rafId = requestAnimationFrame(drawPulse);
 }}
 
@@ -3664,24 +3741,8 @@ window.addEventListener('resize', function() {{
   _syncHud();
   window.addEventListener('resize', _syncHud);
 
-  // Update crypto position count badge
-  function _updatePosCounts() {{
-    var cryptoSection = document.getElementById('pos-crypto-section');
-    var badgeId = 'crypto-pos-count';
-    if (!cryptoSection) return;
-    var count = cryptoSection.querySelectorAll('.pos-card[data-sym]').length;
-    var existing = document.getElementById(badgeId);
-    if (count > 0) {{
-      if (!existing) {{
-        existing = document.createElement('div');
-        existing.id = badgeId; existing.className = 'pos-count-badge';
-        cryptoSection.parentNode.insertBefore(existing, cryptoSection);
-      }}
-      existing.textContent = count + ' position' + (count !== 1 ? 's' : '');
-    }} else if (existing) {{
-      existing.parentNode.removeChild(existing);
-    }}
-  }}
+  // Position count badge removed (redundant with card count)
+  function _updatePosCounts() {{ /* no-op */ }}
 
   // Last feed event tracker — updated by feed poller when new entry added
   window._lastFeedEventMs = Date.now();
@@ -4586,20 +4647,22 @@ window.addEventListener('resize', function() {{
       flash.textContent = '⌐ ACQUIRED ¬';
       flash.style.color = col;
       el.appendChild(flash);
-      // stop / target range bar
+      // Live proximity meter (stop → current → target)
       var tgt = parseFloat(p.target_price || 0);
       var rangeHtml = '';
       if (tgt > 0 && entry > 0 && stop > 0) {{
-        var stopDist   = Math.abs(entry - stop);
-        var targetDist = Math.abs(tgt - entry);
-        rangeHtml = '<div class="pos-range-bar">'
-          + '<div class="pos-range-stop" style="flex:' + stopDist.toFixed(6) + '"></div>'
-          + '<div class="pos-range-marker"></div>'
-          + '<div class="pos-range-target" style="flex:' + targetDist.toFixed(6) + '"></div>'
+        var tgtPct = ((tgt - entry)/entry*100).toFixed(1);
+        rangeHtml = '<div class="pos-prox-wrap"'
+          + ' data-entry="' + entry + '" data-stop="' + stop + '" data-target="' + tgt + '">'
+          + '<div class="pos-prox-track">'
+          + '<div class="pos-prox-fill" style="width:50%"></div>'
+          + '<div class="pos-prox-cursor" style="left:50%"></div>'
           + '</div>'
-          + '<div class="pos-range-labels">'
-          + '<span>stop ' + stopPct + '%</span>'
-          + '<span>+' + (entry > 0 ? ((tgt - entry)/entry*100).toFixed(1) : '—') + '% tgt</span>'
+          + '<div class="pos-prox-labels">'
+          + '<span style="color:#ff3366">&#x25B6; stop ' + stopPct + '%</span>'
+          + '<span class="pos-prox-live" id="prox-live-' + p.symbol.replace(/\//g,'-') + '">——</span>'
+          + '<span style="color:#00ff9d">tgt +' + tgtPct + '% &#x25C0;</span>'
+          + '</div>'
           + '</div>';
       }}
       var inner = document.createElement('div');
@@ -4793,6 +4856,73 @@ window.addEventListener('resize', function() {{
       _pollPositions();
       setInterval(_pollPositions, 5000);
     }}, 2000);
+
+    // ── Live crypto price poller — updates proximity meters in real time ──────
+    var _BINANCE_SYM_MAP = {{
+      'BTC/USD':'BTCUSDT','ETH/USD':'ETHUSDT','SOL/USD':'SOLUSDT',
+      'AVAX/USD':'AVAXUSDT','LINK/USD':'LINKUSDT','DOGE/USD':'DOGEUSDT',
+      'BCH/USD':'BCHUSDT','UNI/USD':'UNIUSDT','CRV/USD':'CRVUSDT',
+      'ADA/USD':'ADAUSDT','MATIC/USD':'MATICUSDT','DOT/USD':'DOTUSDT',
+    }};
+    function _updateProxMeters(priceMap) {{
+      document.querySelectorAll('.pos-prox-wrap[data-entry]').forEach(function(wrap) {{
+        var card = wrap.closest('.pos-card[data-sym]');
+        if (!card) return;
+        var sym = card.getAttribute('data-sym');
+        var price = priceMap[sym];
+        if (!price) return;
+        var entry  = parseFloat(wrap.getAttribute('data-entry'));
+        var stop   = parseFloat(wrap.getAttribute('data-stop'));
+        var tgt    = parseFloat(wrap.getAttribute('data-target'));
+        if (!entry || !stop || !tgt) return;
+        // t=0 at stop, t=1 at target (clamped)
+        var range = tgt - stop;
+        var t = range !== 0 ? Math.max(0, Math.min(1, (price - stop) / range)) : 0.5;
+        var pct = (t * 100).toFixed(1);
+        var fill   = wrap.querySelector('.pos-prox-fill');
+        var cursor = wrap.querySelector('.pos-prox-cursor');
+        var live   = wrap.querySelector('.pos-prox-live');
+        if (fill)   fill.style.width   = pct + '%';
+        if (cursor) cursor.style.left  = pct + '%';
+        // Color the cursor: danger zone <15%, target zone >85%
+        if (cursor) {{
+          cursor.classList.toggle('danger', t < 0.15);
+          cursor.classList.toggle('target', t > 0.85);
+          if (t >= 0.15 && t <= 0.85) {{
+            cursor.style.background = '#ffffff';
+            cursor.style.animation  = 'none';
+          }}
+        }}
+        // Live P&L
+        if (live) {{
+          var pnlPct = entry > 0 ? ((price - entry)/entry*100) : 0;
+          var sign   = pnlPct >= 0 ? '+' : '';
+          live.textContent = sign + pnlPct.toFixed(2) + '%';
+          live.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
+        }}
+      }});
+    }}
+    function _pollCryptoPrices() {{
+      var openSyms = Object.keys(window._cryptoPositionsMap || {{}});
+      if (!openSyms.length) return;
+      var bSyms = openSyms.map(function(s) {{ return _BINANCE_SYM_MAP[s] || s.replace('/',''); }})
+                          .filter(Boolean);
+      if (!bSyms.length) return;
+      var encoded = encodeURIComponent('["' + bSyms.join('","') + '"]');
+      fetch('https://api.binance.com/api/v3/ticker/price?symbols=' + encoded)
+        .then(function(r) {{ return r.json(); }})
+        .then(function(rows) {{
+          if (!Array.isArray(rows)) return;
+          var priceMap = {{}};
+          rows.forEach(function(r) {{
+            var rev = Object.entries(_BINANCE_SYM_MAP).find(function(kv) {{ return kv[1] === r.symbol; }});
+            if (rev) priceMap[rev[0]] = parseFloat(r.price);
+          }});
+          _updateProxMeters(priceMap);
+        }}).catch(function() {{}});
+    }}
+    setTimeout(_pollCryptoPrices, 3500);
+    setInterval(_pollCryptoPrices, 4000);
 
     // ── Equity pipeline countdown (daily 4:05pm ET) ───────────────────────────
     (function() {{
