@@ -265,6 +265,7 @@ def _load_chart_data() -> dict:
     with get_session() as s:
         snap = s.execute(text("""
             SELECT positions FROM portfolio_snapshots
+            WHERE strategy = 'momentum'
             ORDER BY snapshot_date DESC LIMIT 1
         """)).fetchone()
         if snap and snap.positions:
