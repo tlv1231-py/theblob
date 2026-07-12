@@ -912,9 +912,9 @@ body::after {{
 /* ── Status bar — rigid box pinned to bottom, top and bottom both fixed ── */
 #status-bar {{
   position:absolute; bottom:0; left:0; right:0;
-  height:46px;
+  height:66px;
   overflow:hidden;
-  background:#000;
+  background:transparent;
   border-top:1px solid #003311;
   padding:4px 10px 4px;
   line-height:1.6;
@@ -960,7 +960,7 @@ body::after {{
 #term-body {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
-  padding:2px 0 50px;   /* bottom pad keeps last entry above status bar */
+  padding:2px 0 70px;   /* bottom pad keeps last entry above status bar */
   scrollbar-width:none; background:#010006;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
