@@ -1614,14 +1614,24 @@ var traces = [
     hovertemplate:'<b style="color:#9400ff">QQQ $%{{y:,.0f}}</b><extra></extra>',
   }},
   // Portfolio on top — solid, brightest
+  // Ghost glow — wide blurred trace drawn BELOW portfolio for depth
+  {{
+    x: portDates, y: portValues,
+    type:'scatter', mode:'lines',
+    line:{{ color:'rgba(255,0,204,0.06)', width:14 }},
+    fill:'tozeroy', fillcolor:'rgba(255,0,204,0.04)',
+    name:'ghost', hoverinfo:'skip', showlegend:false,
+  }},
+  // PORTFOLIO — main line (trace index 4)
   {{
     x: portDates, y: portValues,
     type:'scatter', mode:'lines',
     line:{{ color:'#ff00cc', width:2.5 }},
+    fill:'tozeroy', fillcolor:'rgba(255,0,204,0.07)',
     name:'PORTFOLIO',
     hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
   }},
-  // HYSA 4.8% benchmark
+  // HYSA 4.8% benchmark (trace index 5)
   {{
     x: _hysaDates, y: _hysaVals,
     type:'scatter', mode:'lines',
@@ -1631,11 +1641,20 @@ var traces = [
   }},
 ];
 
-var shapes = latestDate ? [{{
+// Milestone y-levels — subtle horizontal markers at round NAV values
+var _milestones = [97000,98000,99000,101000,102000,103000,104000,105000];
+var _milestoneShapes = _milestones.map(function(v) {{
+  return {{
+    type:'line', xref:'paper', yref:'y',
+    x0:0, x1:1, y0:v, y1:v,
+    line:{{ color:'rgba(120,0,160,0.18)', width:1, dash:'dot' }},
+  }};
+}});
+var shapes = [].concat(_milestoneShapes, latestDate ? [{{
   type:'line', xref:'x', yref:'paper',
   x0:latestDate, x1:latestDate, y0:0, y1:1,
   line:{{ color:'rgba(255,255,255,0.15)', width:1, dash:'dot' }},
-}}] : [];
+}}] : []);
 
 var annotations = latestDate ? [{{
   xref:'x', yref:'paper',
@@ -1825,14 +1844,110 @@ window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
 window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
 window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
 
+// ── ATH tracking ─────────────────────────────────────────────────────────────
+var _athNav = Math.max.apply(null, portValues.length ? portValues : [100000]);
+var _athTs  = portDates.length ? portDates[portDates.length - 1] : latestDate;
+var _athShapeIdx = _milestoneShapes.length + (latestDate ? 1 : 0); // index in shapes array
+
+function _updateAthShape(nav, ts) {{
+  if (nav <= _athNav) return;
+  _athNav = nav;
+  _athTs  = ts;
+  var athShape = {{
+    type:'line', xref:'paper', yref:'y',
+    x0:0, x1:1, y0:_athNav, y1:_athNav,
+    line:{{ color:'rgba(0,255,157,0.35)', width:1, dash:'dash' }},
+  }};
+  var athAnnot = {{
+    xref:'paper', yref:'y',
+    x:0.01, y:_athNav,
+    text:'▲ ATH',
+    showarrow:false,
+    font:{{ family:'Consolas', size:7, color:'rgba(0,255,157,0.6)' }},
+    xanchor:'left', yanchor:'bottom',
+  }};
+  // Upsert the ATH shape at a known index
+  var newShapes = (gd.layout.shapes || []).slice();
+  newShapes[_athShapeIdx] = athShape;
+  var newAnnots = (gd.layout.annotations || []).slice();
+  // Keep existing annotations (NOW marker), add/replace ATH annotation at index 1
+  newAnnots[1] = athAnnot;
+  Plotly.relayout(gd, {{ shapes: newShapes, annotations: newAnnots }});
+}}
+
+// ── Endpoint dot — SVG pulsing circle at current portfolio position ───────────
+function _updateEndpointDot(nav, ts) {{
+  var svg = gd && gd.querySelector('svg.main-svg');
+  if (!svg || !gd._fullLayout) return;
+  var fl = gd._fullLayout;
+  var xa = fl.xaxis, ya = fl.yaxis;
+  if (!xa || !ya || !xa.range || !ya.range) return;
+
+  var tsMs  = new Date(ts).getTime();
+  var xMin  = new Date(xa.range[0]).getTime();
+  var xMax  = new Date(xa.range[1]).getTime();
+  var xFrac = xMax > xMin ? (tsMs - xMin) / (xMax - xMin) : 1;
+  var yFrac = ya.range[1] > ya.range[0] ? (nav - ya.range[0]) / (ya.range[1] - ya.range[0]) : 0.5;
+  var ml = fl.margin.l, mt = fl.margin.t;
+  var cw = fl.width  - fl.margin.l - fl.margin.r;
+  var ch = fl.height - fl.margin.t - fl.margin.b;
+  var cx = ml + xFrac * cw;
+  var cy = mt + (1 - yFrac) * ch;
+
+  // Above/below baseline determines color
+  var aboveBase = nav >= 100000;
+  var dotCol  = aboveBase ? '#00ff9d' : '#ff3366';
+  var ringCol = aboveBase ? 'rgba(0,255,157,' : 'rgba(255,51,102,';
+
+  var g = svg.querySelector('#ep-g');
+  if (!g) {{
+    g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.id = 'ep-g';
+    // Outer pulse ring
+    var r1 = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    r1.id = 'ep-ring1'; r1.setAttribute('fill','none'); r1.setAttribute('stroke-width','1');
+    g.appendChild(r1);
+    // Inner pulse ring
+    var r2 = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    r2.id = 'ep-ring2'; r2.setAttribute('fill','none'); r2.setAttribute('stroke-width','1');
+    g.appendChild(r2);
+    // Core dot
+    var dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.id = 'ep-dot'; dot.setAttribute('r','4');
+    g.appendChild(dot);
+    // Animation styles
+    var st = document.createElementNS('http://www.w3.org/2000/svg','style');
+    st.id = 'ep-style';
+    st.textContent =
+      '@keyframes ep-p1{{0%{{r:5;opacity:.9}}100%{{r:18;opacity:0}}}}' +
+      '@keyframes ep-p2{{0%{{r:5;opacity:.6}}100%{{r:12;opacity:0}}}}' +
+      '#ep-ring1{{animation:ep-p1 1.8s ease-out infinite}}' +
+      '#ep-ring2{{animation:ep-p2 1.8s ease-out .6s infinite}}' +
+      '#ep-dot{{filter:drop-shadow(0 0 4px currentColor)}}';
+    g.appendChild(st);
+    svg.appendChild(g);
+  }}
+
+  var ring1 = svg.querySelector('#ep-ring1');
+  var ring2 = svg.querySelector('#ep-ring2');
+  var edot  = svg.querySelector('#ep-dot');
+  [ring1, ring2, edot].forEach(function(el) {{
+    if (!el) return;
+    el.setAttribute('cx', cx); el.setAttribute('cy', cy);
+  }});
+  if (ring1) {{ ring1.setAttribute('stroke', ringCol + '0.7)'); }}
+  if (ring2) {{ ring2.setAttribute('stroke', ringCol + '0.5)'); }}
+  if (edot)  {{ edot.setAttribute('fill', dotCol); edot.style.color = dotCol; }}
+}}
+
 function applyPortfolioGlow() {{
-  // Portfolio trace is index 3 — its line path sits inside the 4th .scatter group
+  // Portfolio is now trace index 4 (ghost at 3, portfolio at 4)
   var scatters = gd.querySelectorAll('.scatter');
-  if (scatters[3]) {{
-    var lp = scatters[3].querySelector('path.js-line');
+  if (scatters[4]) {{
+    var lp = scatters[4].querySelector('path.js-line');
     if (lp) lp.classList.add('portfolio-glow');
   }}
-  // Gridline shimmer — inject CSS animation into the Plotly SVG so it only hits the lines
+  // Gridline shimmer
   var svg = gd.querySelector('svg.main-svg');
   if (svg && !svg.querySelector('#gl-anim')) {{
     var st = document.createElementNS('http://www.w3.org/2000/svg','style');
@@ -1841,9 +1956,12 @@ function applyPortfolioGlow() {{
       '.gridlayer .crisp line{{animation:gl-sw 14s ease-in-out infinite}}';
     svg.prepend(st);
   }}
-  // Stagger each gridline so it sweeps like a wash
   var lines = gd.querySelectorAll('.gridlayer .crisp line');
   lines.forEach(function(l, i) {{ l.style.animationDelay = -(i * 1.1) % 14 + 's'; }});
+  // Update endpoint dot position after replot
+  if (window._lastKnownNav && window._lastKnownTs) {{
+    _updateEndpointDot(window._lastKnownNav, window._lastKnownTs);
+  }}
 }}
 
 // Start everything once Plotly has rendered
@@ -1852,6 +1970,15 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   applyPortfolioGlow();
   if (rafId) cancelAnimationFrame(rafId);
   drawPulse();
+  // Seed endpoint dot from server-rendered data
+  if (portDates.length && portValues.length) {{
+    var initNav = portValues[portValues.length - 1];
+    var initTs  = portDates[portDates.length - 1];
+    window._lastKnownNav = initNav;
+    window._lastKnownTs  = initTs;
+    setTimeout(function() {{ _updateEndpointDot(initNav, initTs); }}, 200);
+    setTimeout(function() {{ _updateAthShape(initNav, initTs); }}, 250);
+  }}
   // Crosshair on load: show → zoom in after crosshair fades
   setTimeout(showCrosshair, 1500);
 }});
@@ -2630,7 +2757,19 @@ window.addEventListener('resize', function() {{
       var gd = document.getElementById('chart');
       if (gd && gd.data && gd.data.length > 0) {{
         var isoTs = ts || new Date().toISOString();
-        Plotly.extendTraces(gd, {{x: [[isoTs]], y: [[nav]]}}, [3]); // trace 3 = PORTFOLIO
+        window._lastKnownTs = isoTs;
+        // Extend ghost (3) + portfolio (4) simultaneously
+        Plotly.extendTraces(gd, {{x:[[isoTs],[isoTs]], y:[[nav],[nav]]}}, [3,4]);
+        // Conditional fill color: green above baseline, red below
+        var aboveBase = nav >= 100000;
+        var fillNew = aboveBase ? 'rgba(0,255,157,0.09)' : 'rgba(255,51,102,0.09)';
+        var lineNew = aboveBase ? '#00ff9d' : '#ff3366';
+        Plotly.restyle(gd, {{ fillcolor: fillNew, 'line.color': lineNew }}, [4]);
+        Plotly.restyle(gd, {{ fillcolor: aboveBase ? 'rgba(0,255,157,0.04)' : 'rgba(255,51,102,0.04)', 'line.color': aboveBase ? 'rgba(0,255,157,0.06)' : 'rgba(255,51,102,0.06)' }}, [3]);
+        // Endpoint dot
+        _updateEndpointDot(nav, isoTs);
+        // ATH check
+        _updateAthShape(nav, isoTs);
       }}
     }}
 
