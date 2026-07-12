@@ -2094,6 +2094,7 @@ var portValues = {port_values_j};
   // Only apply filter if at least one clean value remains; otherwise keep all data
   if (clean.length) {{ portValues = clean; portDates = cleanD; }}
 }})();
+window._portfolioBaseline = portValues.length ? portValues[portValues.length-1] : 100000;
 var spyDates   = {spy_dates_j};
 var spyNorm    = {spy_norm_j};
 var qqqDates   = {qqq_dates_j};
@@ -2118,10 +2119,11 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Center the current-position dot: equal padding left and right of latest data
-var _CENTER_DAYS = 4;  // tight zoom — 4 days each side so movements look dramatic
-var xEnd   = latestPortDate ? _datePlus_from(latestPortDate, _CENTER_DAYS) : _datePlus(14);
-var xStart = latestPortDate ? _dateMinus(latestPortDate, _CENTER_DAYS) : _datePlus(-30);
+// Default to today's intraday window — minute-by-minute view
+var _CENTER_DAYS = 1;
+var _todayStr = new Date().toISOString().slice(0,10);
+var xStart = _dateMinus(_todayStr, _CENTER_DAYS);
+var xEnd   = _datePlus_from(_todayStr, _CENTER_DAYS);
 
 // Tight Y range for the visible window
 function yRange(x0, x1) {{
@@ -3446,8 +3448,10 @@ function _fetchIntradayMarks() {{
     if (!Array.isArray(rows)) return;
     var xs = [], ys = [];
     var tradeCountToday = 0, wins = 0, losses = 0;
+    var tradeTs = [];
     rows.forEach(function(row) {{
       var msg = row.message || '';
+      var ts  = row.recorded_at ? new Date(row.recorded_at).getTime() : 0;
       // Intraday portfolio value
       var m = msg.match(/marked the book at \$?([\d,]+)/);
       if (m) {{
@@ -3457,19 +3461,25 @@ function _fetchIntradayMarks() {{
           ys.push(v);
         }}
       }}
-      // Count trades for metrics panel
-      if (msg.match(/ENTER|enter/)) tradeCountToday++;
+      // Count trades for metrics panel + collect trade timestamps for TRADES/HR
+      if (msg.match(/ENTER|enter/)) {{
+        tradeCountToday++;
+        if (ts) tradeTs.push(ts);
+      }}
       if (msg.match(/EXIT|exit/)) {{
         tradeCountToday++;
+        if (ts) tradeTs.push(ts);
         var pnlM = msg.match(/pnl\s*([+-][\d.]+)/);
         if (pnlM) {{ if (parseFloat(pnlM[1]) >= 0) wins++; else losses++; }}
       }}
     }});
-    // Update intraday trace (index 6)
-    if (gd && gd.data && gd.data.length >= 7) {{
+    // Expose trade timestamps so TRADES/HR works across blocks
+    window._tradeTs = tradeTs;
+    // Update intraday trace (index 6) from DB marks only — live prices extend it via _pushIntradayPoint
+    if (xs.length && gd && gd.data && gd.data.length >= 7) {{
       Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]);
     }}
-    // Recenter chart on actual latest point (intraday or daily snapshot)
+    // Recenter chart on today (intraday default) unless user has panned
     _recenterOnLatest(xs.length > 0 ? xs[xs.length - 1] : null);
     // Update metrics panel
     _updateOrbMetrics(tradeCountToday, wins, losses);
@@ -3477,6 +3487,32 @@ function _fetchIntradayMarks() {{
 }}
 setTimeout(_fetchIntradayMarks, 3000);
 setInterval(_fetchIntradayMarks, 15000);
+
+// ── Live intraday NAV accumulator — fed by Binance price poll every 4s ────────
+var _intradayPts = [];  // {{t: isoStr, v: number}}
+window._pushIntradayPoint = function(isoTs, val) {{
+  var now = Date.now();
+  var cutoff = now - 10 * 3600000;  // keep 10h of points
+  _intradayPts = _intradayPts.filter(function(p) {{ return new Date(p.t).getTime() > cutoff; }});
+  // Overwrite last point if less than 30s old (smooth, not spiky)
+  if (_intradayPts.length) {{
+    var last = _intradayPts[_intradayPts.length - 1];
+    if (now - new Date(last.t).getTime() < 30000) {{
+      last.t = isoTs; last.v = val;
+    }} else {{
+      _intradayPts.push({{ t: isoTs, v: val }});
+    }}
+  }} else {{
+    _intradayPts.push({{ t: isoTs, v: val }});
+  }}
+  window._lastKnownNav = val;
+  if (gd && gd.data && gd.data.length >= 7) {{
+    Plotly.restyle(gd, {{
+      x: [_intradayPts.map(function(p) {{ return p.t; }})],
+      y: [_intradayPts.map(function(p) {{ return p.v; }})]
+    }}, [6]);
+  }}
+}};
 
 // ── Orb metrics panel updates ─────────────────────────────────────────────────
 var _orbTodayTrades = 0, _orbWins = 0, _orbLosses = 0;
@@ -5145,6 +5181,24 @@ window.addEventListener('resize', function() {{
           }});
           window._liveProxPrices = priceMap; // expose for satellite dots in drawPulse
           _updateProxMeters(priceMap);
+          // Compute live portfolio NAV and push intraday point
+          if (window._pushIntradayPoint) {{
+            var posMap = window._cryptoPositionsMap || {{}};
+            var baseline = window._portfolioBaseline || 100000;
+            var livePnl = 0;
+            Object.keys(posMap).forEach(function(sym) {{
+              var p = posMap[sym];
+              var px = priceMap[sym];
+              if (!p || !px) return;
+              var entry = parseFloat(p.entry_price || 0);
+              var qty   = parseFloat(p.qty || 0);
+              if (entry > 0 && qty !== 0) livePnl += qty * (px - entry);
+            }});
+            var nav = baseline + livePnl;
+            if (nav > 50000 && nav < 5000000) {{
+              window._pushIntradayPoint(new Date().toISOString(), nav);
+            }}
+          }}
         }}).catch(function() {{}});
     }}
     setTimeout(_pollCryptoPrices, 3500);
