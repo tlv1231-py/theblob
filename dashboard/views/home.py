@@ -1125,13 +1125,19 @@ body::after {{
 /* ── Floating P&L tooltip above portfolio orb ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
-  background:rgba(6,0,8,.88); border:1px solid #2a003d; border-top:2px solid #ff00cc;
+  background:rgba(6,0,8,.92); border:1px solid #2a003d; border-top:2px solid #ff00cc;
   padding:7px 12px 8px; min-width:110px;
   transform:translate(-50%, -100%) translateY(-18px);
-  opacity:0; transition:opacity .3s ease;
+  opacity:0;
+  transition:opacity .4s ease, transform .6s cubic-bezier(.22,1,.36,1), border-top-color .4s ease;
 }}
 #pnl-float.visible {{ opacity:1; }}
-.pnl-float-val {{ font-size:22px; font-weight:700; letter-spacing:-.02em; display:block; line-height:1.1; }}
+#pnl-float.nudge-up   {{ transform:translate(-50%, -100%) translateY(-28px); }}
+#pnl-float.nudge-down {{ transform:translate(-50%, -100%) translateY(-10px); }}
+.pnl-float-val {{
+  font-size:22px; font-weight:700; letter-spacing:-.02em; display:block; line-height:1.1;
+  transition:color .3s ease;
+}}
 .pnl-float-sub {{ font-size:8.5px; color:#4a2a6a; margin-top:3px; display:block; }}
 /* pos-cards */
 .pos-section-label {{
@@ -2109,11 +2115,41 @@ window.addEventListener('resize', function() {{
       if (nvVal) nvVal.textContent = _fmt(nav);
       if (nvRet) {{ nvRet.textContent = ret + ' vs $100K start'; nvRet.style.color = col; }}
 
-      // pnl-float (bottom-right of chart)
+      // pnl-float — animated counter + physical nudge
       var pnlFloat = document.querySelector('.pnl-float-val');
       var pnlSub   = document.querySelector('.pnl-float-sub');
-      if (pnlFloat) {{ pnlFloat.textContent = (pnl >= 0 ? '+' : '') + _fmt(Math.abs(pnl)); pnlFloat.style.color = col; }}
-      if (pnlSub)   {{ pnlSub.textContent = ret + ' since $100K start'; }}
+      var pnlBox   = document.getElementById('pnl-float');
+      if (pnlFloat) {{
+        var fromVal = parseFloat(pnlFloat.getAttribute('data-raw') || '0');
+        var toVal   = pnl;
+        var sign    = toVal >= 0 ? '+' : '-';
+        var signCol = toVal >= 0 ? '#00ff9d' : '#ff3366';
+        pnlFloat.setAttribute('data-raw', toVal);
+        pnlFloat.style.color = signCol;
+        if (pnlBox) pnlBox.style.borderTopColor = signCol;
+        // Animated digit roll
+        var startTime = null;
+        var dur = 800;
+        function animPnl(ts) {{
+          if (!startTime) startTime = ts;
+          var p = Math.min((ts - startTime) / dur, 1);
+          var ease = 1 - Math.pow(1 - p, 3); // ease-out cubic
+          var cur = fromVal + (toVal - fromVal) * ease;
+          var s = cur >= 0 ? '+' : '-';
+          pnlFloat.textContent = s + '$' + Math.round(Math.abs(cur)).toLocaleString('en-US');
+          if (p < 1) requestAnimationFrame(animPnl);
+        }}
+        requestAnimationFrame(animPnl);
+        // Physical nudge
+        if (pnlBox) {{
+          var going = toVal > fromVal ? 'nudge-up' : 'nudge-down';
+          pnlBox.classList.remove('nudge-up','nudge-down');
+          void pnlBox.offsetWidth;
+          pnlBox.classList.add(going);
+          setTimeout(function() {{ pnlBox.classList.remove('nudge-up','nudge-down'); }}, 700);
+        }}
+      }}
+      if (pnlSub) {{ pnlSub.textContent = ret + ' since $100K start'; }}
 
       // legend-strip PORTFOLIO
       var legVals = document.querySelectorAll('.leg-val');
