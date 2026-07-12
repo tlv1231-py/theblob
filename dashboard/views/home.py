@@ -1929,7 +1929,7 @@ body::after {{
       {term_rows}
     </div>
     <div id="feed-bottom-bar">
-      <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">🔊</button>
+      <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">&#128266;</button>
     </div>
   </div>
 
@@ -2366,7 +2366,7 @@ _unlockAudio();
 function _toggleMute() {{
   _audioMuted = !_audioMuted;
   var btn = document.getElementById('mute-btn');
-  if (btn) btn.textContent = _audioMuted ? '🔇' : '🔊';
+  if (btn) btn.innerHTML = _audioMuted ? '&#128263;' : '&#128266;';
   if (!_audioMuted) _unlockAudio();
 }}
 function _playTones(freqs, dur, type) {{
