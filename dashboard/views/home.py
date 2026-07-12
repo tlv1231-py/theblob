@@ -713,7 +713,20 @@ def _build_daw_html(data: dict) -> str:
                 date_label = ev_date
             term_rows += f'<div class="te-date">{date_label}</div>'
 
-        hhmm = ts_raw[11:16] if len(ts_raw) >= 16 else ""
+        # Convert UTC → NYC (ET = UTC-5 standard, UTC-4 daylight)
+        if len(ts_raw) >= 16:
+            try:
+                from datetime import timezone as _tz, timedelta as _tdd
+                _utc_dt = _dt.fromisoformat(ts_raw.replace("Z","").split(".")[0])
+                import time as _time_mod
+                _is_dst = bool(_time_mod.daylight) and bool(_time_mod.localtime().tm_isdst)
+                _et_offset = -4 if True else -5  # EDT (summer) always for NYC
+                _et_dt = _utc_dt + _tdd(hours=_et_offset)
+                hhmm = _et_dt.strftime("%H:%M")
+            except Exception:
+                hhmm = ts_raw[11:16]
+        else:
+            hhmm = ""
 
         tag = ev.get("tag", "")
         nav_col = None
@@ -1671,12 +1684,10 @@ window.addEventListener('resize', function() {{
   function tick() {{
     var now = Date.now();
     var n = new Date();
-    var mo = n.getMonth()+1, d = n.getDate(), y = String(n.getFullYear()).slice(2);
-    var hh = String(n.getHours()).padStart(2,'0');
-    var mm = String(n.getMinutes()).padStart(2,'0');
-    var ss = String(n.getSeconds()).padStart(2,'0');
+    var etParts = n.toLocaleDateString('en-US', {{timeZone:'America/New_York', month:'numeric', day:'numeric', year:'2-digit'}}).split('/');
+    var etTime  = n.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}});
     var el = document.getElementById('live-clock');
-    if (el) el.textContent = mo+'/'+d+'/'+y+'  '+hh+':'+mm+':'+ss+'  ';
+    if (el) el.textContent = etParts[0]+'/'+etParts[1]+'/'+etParts[2]+'  '+etTime+'  ';
 
     document.querySelectorAll('.q-timer').forEach(function(el) {{
       var target = parseInt(el.getAttribute('data-target'), 10);
@@ -1813,7 +1824,7 @@ window.addEventListener('resize', function() {{
         // Append new row to System Feed
         var tb   = document.getElementById('term-body');
         var now  = item.ts ? new Date(item.ts) : new Date();
-        var hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
         var row  = document.createElement('div');
         row.className = 'te';
         row.style.color = '#00ff41';
