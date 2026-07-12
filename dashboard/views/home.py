@@ -762,6 +762,7 @@ def _build_daw_html(data: dict) -> str:
         )
 
     # P&L banner values
+    last_nav_fmt = f'${last_nav:,.0f}'
     _total_pnl     = last_nav - _STARTING_CAPITAL
     _total_pnl_pct = (_total_pnl / _STARTING_CAPITAL) * 100
     _pnl_col       = "#00ff9d" if _total_pnl >= 0 else "#ff3366"
@@ -806,6 +807,36 @@ def _build_daw_html(data: dict) -> str:
         pos_cards = equity_label + '<div class="pos-hold" style="padding:8px 14px">no equity positions</div>'
     else:
         pos_cards = equity_label + pos_cards
+
+    # Report panel equity cards — larger, richer layout
+    rp_equity_cards = ""
+    for p in data.get("positions_data", []):
+        tcol = _TICKER_PAL[hash(p["sym"]) % len(_TICKER_PAL)]
+        ep, epnl, epct = p["entry_price"], p["entry_pnl"], p["entry_pnl_pct"]
+        pnl_col = "#00ff9d" if epnl >= 0 else "#ff3366"
+        pnl_sign = "+" if epnl >= 0 else "−"
+        pnl_str = f'{pnl_sign}${abs(epnl):,.0f} ({epct:+.1f}%)' if ep else "—"
+        rp_equity_cards += (
+            f'<div class="rp-pos rp-pos-entering" data-sym="{p["sym"]}">'
+            f'<span class="pos-corner tl" style="border-color:{tcol}"></span>'
+            f'<span class="pos-corner tr" style="border-color:{tcol}"></span>'
+            f'<span class="pos-corner bl" style="border-color:{tcol}"></span>'
+            f'<span class="pos-corner br" style="border-color:{tcol}"></span>'
+            f'<div class="rp-pos-stripe" style="background:{tcol};box-shadow:0 0 8px {tcol}55"></div>'
+            f'<div class="rp-pos-top">'
+            f'  <span class="rp-pos-sym" style="color:{tcol}">{p["sym"]}</span>'
+            f'  <span class="rp-pos-type">EQUITY</span>'
+            f'</div>'
+            f'<div class="rp-pos-val">${p["value"]:,.0f}</div>'
+            f'<div class="rp-pos-sub">'
+            f'  <span class="rp-pos-qty">{p["qty"]} sh</span>'
+            f'  <span class="rp-pos-hold">{p["hold_text"]}</span>'
+            f'</div>'
+            f'<div class="rp-pos-pnl" style="color:{pnl_col}">{pnl_str}</div>'
+            f'</div>'
+        )
+    if not rp_equity_cards:
+        rp_equity_cards = '<div style="padding:12px 14px;font-size:9px;color:#2a1a3a;letter-spacing:.04em">no equity positions</div>'
 
     # Normalize SPY and QQQ to $100K at portfolio start date
     # so all 3 lines are directly comparable on one axis
@@ -1104,31 +1135,148 @@ body::after {{
   flex-shrink:0;
 }}
 /* ── Queue panel ── */
-#queue-panel {{
-  flex:1; min-width:160px;
-  overflow-y:auto; padding:0;
-  scrollbar-width:none; background:#010006;
-  display:flex; flex-direction:column;
+/* ── HUD overlay (fixed, slides from top) ── */
+#hud-overlay {{
+  position:fixed; top:0; left:0; right:0; z-index:300;
+  background:rgba(2,0,10,.96);
+  border-bottom:1px solid rgba(0,229,255,.18);
+  box-shadow:0 2px 32px rgba(0,229,255,.1), 0 8px 48px rgba(0,0,0,.6);
+  transform:translateY(-100%);
+  transition:transform .22s cubic-bezier(.22,1,.36,1);
+  display:flex; align-items:stretch; gap:0; min-height:52px;
+  /* CRT top-edge glow */
+  padding-top:1px;
 }}
-#queue-panel::-webkit-scrollbar {{ display:none; }}
-#queue-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:4px 0; }}
-#queue-body::-webkit-scrollbar {{ display:none; }}
-.q-item {{
-  padding:6px 12px 8px;
-  border-top:1px solid rgba(26,0,40,.4);
+#hud-overlay::before {{
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.8) 20%,rgba(255,0,204,.6) 50%,rgba(0,229,255,.8) 80%,transparent);
+  box-shadow:0 0 12px rgba(0,229,255,.6);
+}}
+#hud-overlay.hud-open {{ transform:translateY(0); }}
+#hud-label {{
+  flex-shrink:0; display:flex; align-items:center;
+  padding:0 14px; border-right:1px solid rgba(0,229,255,.12);
+  gap:7px;
+}}
+#hud-label-text {{
+  font-size:7px; letter-spacing:.32em; color:rgba(0,229,255,.45);
+  text-transform:uppercase; writing-mode:horizontal-tb; white-space:nowrap;
+}}
+#hud-items {{
+  flex:1; display:flex; align-items:stretch; overflow:hidden;
+}}
+.hud-item {{
+  flex:1; display:flex; flex-direction:column; justify-content:center;
+  padding:8px 14px 8px; border-right:1px solid rgba(255,255,255,.04);
+  position:relative; overflow:hidden; min-width:0;
+}}
+.hud-item:last-child {{ border-right:none; }}
+.hud-item::after {{ /* left accent line */
+  content:''; position:absolute; left:0; top:20%; bottom:20%; width:2px;
+  background:currentColor; opacity:.0; transition:opacity .2s;
+}}
+.hud-item.hud-imminent::after {{ opacity:.7; animation:hud-imminent-blink .5s ease-in-out infinite; }}
+@keyframes hud-imminent-blink {{ 0%,100%{{opacity:.7}} 50%{{opacity:.15}} }}
+.hud-badge {{
+  font-size:7px; letter-spacing:.22em; font-weight:700; margin-bottom:2px;
+  text-transform:uppercase; opacity:.8;
+}}
+.hud-sym {{
+  font-size:13px; font-weight:700; letter-spacing:.04em; line-height:1.2;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}}
+.hud-detail {{
+  font-size:7.5px; color:rgba(255,255,255,.25); margin-top:1px;
+  letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}}
+.hud-timer {{
+  font-size:16px; font-weight:700; letter-spacing:-.02em; margin-top:3px;
+  font-variant-numeric:tabular-nums; line-height:1;
+}}
+.hud-timer.hud-urgent {{ color:#ff9900; }}
+.hud-timer.hud-imminent {{ color:#ff3366; animation:q-pulse .5s ease-in-out infinite; }}
+@keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
+/* ── Report panel (replaces queue column) ── */
+#report-panel {{
+  flex:1.6; min-width:260px; max-width:520px;
+  background:#01000a; display:flex; flex-direction:column;
+  border-right:1px solid #0a0018; position:relative; overflow:hidden;
+}}
+/* Score block — NAV + daily P&L */
+#rp-score {{
+  flex-shrink:0; padding:10px 16px 8px;
+  border-bottom:1px solid #0d0020;
+  display:flex; align-items:baseline; gap:14px;
+}}
+#rp-nav {{
+  font-size:26px; font-weight:700; letter-spacing:-.03em; line-height:1;
+  color:#f0e0ff; font-variant-numeric:tabular-nums;
+}}
+#rp-dpnl {{
+  font-size:13px; font-weight:700; letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
+}}
+#rp-label {{
+  font-size:7px; letter-spacing:.22em; color:#3a1a5a;
+  text-transform:uppercase; margin-left:auto; align-self:center;
+}}
+/* Position rows in report panel */
+#rp-pos-list {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:0; }}
+#rp-pos-list::-webkit-scrollbar {{ display:none; }}
+.rp-pos {{
+  display:grid;
+  grid-template-columns:3px 1fr auto;
+  grid-template-rows:auto auto;
+  column-gap:10px; row-gap:0;
+  padding:9px 14px 9px 10px;
+  border-bottom:1px solid #0a0018;
   position:relative; overflow:hidden;
+  cursor:default;
+  transition:background .15s;
 }}
+.rp-pos:hover {{ background:rgba(255,255,255,.015); }}
+/* left accent stripe */
+.rp-pos-stripe {{
+  grid-row:1/3; grid-column:1/2; border-radius:1px;
+  width:3px; align-self:stretch;
+}}
+/* top row */
+.rp-pos-top {{ grid-row:1; grid-column:2/3; display:flex; align-items:baseline; gap:7px; }}
+.rp-pos-sym {{ font-size:17px; font-weight:700; letter-spacing:-.01em; line-height:1.15; }}
+.rp-pos-type {{ font-size:7px; letter-spacing:.2em; opacity:.45; font-weight:700; align-self:center; }}
+.rp-pos-val {{ grid-row:1; grid-column:3/4; font-size:16px; font-weight:700; letter-spacing:-.01em;
+  text-align:right; font-variant-numeric:tabular-nums; align-self:baseline; }}
+/* bottom row */
+.rp-pos-sub {{ grid-row:2; grid-column:2/3; display:flex; gap:10px; margin-top:2px; }}
+.rp-pos-qty {{ font-size:9px; color:#4a2a6a; }}
+.rp-pos-hold {{ font-size:9px; color:#3a1a5a; }}
+.rp-pos-pnl {{ grid-row:2; grid-column:3/4; font-size:11px; font-weight:700;
+  text-align:right; font-variant-numeric:tabular-nums; align-self:baseline; }}
+/* corner brackets on report rows */
+.rp-pos .pos-corner {{ width:7px; height:7px; }}
+/* entering animation for report rows */
+@keyframes rp-enter {{ 0%{{opacity:0;transform:translateX(-8px)}} 100%{{opacity:1;transform:none}} }}
+.rp-pos-entering {{ animation:rp-enter .35s cubic-bezier(.22,1,.36,1) forwards; }}
+/* empty state */
+#rp-empty {{
+  flex:1; display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:8px; opacity:.35;
+}}
+#rp-empty-line {{ font-size:9px; letter-spacing:.22em; color:#3a1a5a; }}
+/* section dividers */
+.rp-section-hdr {{
+  font-size:7px; letter-spacing:.22em; color:#2a1a3a; text-transform:uppercase;
+  padding:5px 14px 4px 14px; border-bottom:1px solid #080018; background:#01000a;
+  position:sticky; top:0; z-index:2;
+}}
+/* live q-items still used in the queue panel (hidden) — keep styles */
+.q-item {{ display:none; }}
 .q-badge {{ font-size:7px; letter-spacing:.2em; font-weight:700; margin-bottom:2px; }}
 .q-label {{ font-size:11px; font-weight:700; line-height:1.3; word-break:break-all; }}
 .q-detail {{ font-size:8px; color:#3a2a5a; margin-top:1px; letter-spacing:.02em; }}
-.q-timer {{
-  font-size:11.5px; font-weight:700; letter-spacing:.04em;
-  margin-top:4px; color:#6a4a8a; font-variant-numeric:tabular-nums;
-}}
+.q-timer {{ font-size:11.5px; font-weight:700; letter-spacing:.04em; margin-top:4px; color:#6a4a8a; font-variant-numeric:tabular-nums; }}
 .q-timer.urgent {{ color:#ff9900; }}
-@keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.5}} }}
 .q-timer.imminent {{ color:#ff3366; animation:q-pulse .6s ease-in-out infinite; }}
-/* ── Live queue items ── */
 .q-item-live {{ border-top:1px solid rgba(0,229,255,.12); }}
 .q-item-live .q-badge {{ color:#00e5ff; }}
 /* ── Panel scan sweep ── */
@@ -2288,6 +2436,19 @@ window.addEventListener('resize', function() {{
   </div>
 
   <!-- Four lower panels side by side -->
+  <!-- HUD overlay — slides from top when any action is imminent -->
+  <div id="hud-overlay">
+    <div id="hud-label">
+      <div class="term-dot" style="background:#00e5ff;box-shadow:0 0 8px rgba(0,229,255,.9)"></div>
+      <span id="hud-label-text">QUEUED</span>
+    </div>
+    <div id="hud-items"><!-- populated by JS --></div>
+  </div>
+
+  <!-- Hidden queue body (data source, never shown) -->
+  <div id="queue-dynamic" style="display:none"></div>
+  <div style="display:none">{q_items}</div>
+
   <div id="lower-panels">
 
     <!-- System Feed panel -->
@@ -2300,12 +2461,20 @@ window.addEventListener('resize', function() {{
 
     <div class="col-drag" id="drag-f"></div>
 
-    <!-- Queued Actions -->
-    <div id="queue-panel">
-      <div class="panel-hdr"><div class="term-dot"></div>QUEUED ACTIONS</div>
-      <div id="queue-body">
-        <div id="queue-dynamic"></div>
-        {q_items}
+    <!-- Report panel — big positions + live P&L -->
+    <div id="report-panel">
+      <div id="rp-score">
+        <div>
+          <div id="rp-nav">{last_nav_fmt}</div>
+        </div>
+        <div id="rp-dpnl" style="color:{_pnl_col}">{_pnl_str}</div>
+        <div id="rp-label">TOTAL RETURN</div>
+      </div>
+      <div id="rp-pos-list">
+        <div class="rp-section-hdr">crypto positions</div>
+        <div id="rp-crypto-section"><!-- filled by JS poller --></div>
+        <div class="rp-section-hdr" style="margin-top:2px">equity positions</div>
+        <div id="rp-equity-section">{rp_equity_cards}</div>
       </div>
     </div>
 
@@ -2409,12 +2578,12 @@ window.addEventListener('resize', function() {{
       document.addEventListener('touchend', end);
     }}
 
-    var qPanel   = document.getElementById('queue-panel');
-    var feedPanel = document.getElementById('feed-panel');
-    var posPanel  = document.getElementById('pos-panel');
+    var reportPanel = document.getElementById('report-panel');
+    var feedPanel   = document.getElementById('feed-panel');
+    var posPanel    = document.getElementById('pos-panel');
 
-    makeColDrag(document.getElementById('drag-f'), feedPanel, qPanel,   null, null);
-    makeColDrag(document.getElementById('drag-q'), qPanel,    posPanel, null, null);
+    makeColDrag(document.getElementById('drag-f'), feedPanel,   reportPanel, null, null);
+    makeColDrag(document.getElementById('drag-q'), reportPanel, posPanel,    null, null);
 
     // Vertical overlay drag (drag the top edge to resize height)
     var overlay  = document.getElementById('term-overlay');
@@ -2470,31 +2639,42 @@ window.addEventListener('resize', function() {{
     return target - etNow;
   }}
 
+  // HUD open threshold: any action within this many ms shows the HUD
+  var HUD_THRESHOLD = 30000;
+  var _hudOpen = false;
+
+  function _setHud(open) {{
+    var hud = document.getElementById('hud-overlay');
+    if (!hud) return;
+    if (open === _hudOpen) return;
+    _hudOpen = open;
+    if (open) {{ hud.classList.add('hud-open'); }}
+    else      {{ hud.classList.remove('hud-open'); }}
+  }}
+
   function _updateDynamicQueue() {{
-    var qd = document.getElementById('queue-dynamic');
-    if (!qd) return;
     var now = Date.now();
     var items = [];
 
-    // Crypto scan — based on last heartbeat
+    // Crypto scan
     var scanTarget = (window._lastRunAt || now) + 75000;
-    var scanDiff   = scanTarget - now;
+    var scanDiff   = Math.max(0, scanTarget - now);
     var scanPairs  = window._cryptoPairCount || 15;
     items.push({{
       badge:'SCAN', label:'CRYPTO · ALL PAIRS',
-      detail: scanPairs + ' symbols · EMA 2/5 signal check',
-      color:'#00e5ff', diff: Math.max(0, scanDiff),
+      detail: scanPairs + ' pairs · EMA 3/8 signal',
+      color:'#00e5ff', diff: scanDiff,
     }});
 
     // Equity pipeline
     var eqDiff = _nextEquityPipelineMs();
     items.push({{
       badge:'REBALANCE', label:'EQUITY PIPELINE',
-      detail:'momentum signal · top-5 rebalance',
+      detail:'momentum · top-5 rebalance',
       color:'#9400ff', diff: eqDiff,
     }});
 
-    // Per-position timeouts (< 90s remaining)
+    // Per-position timeouts (<90s)
     var positions = window._cryptoPositionsMap || {{}};
     Object.values(positions).forEach(function(p) {{
       var exitAt = new Date(p.entered_at).getTime() + 4 * 60 * 1000;
@@ -2511,18 +2691,27 @@ window.addEventListener('resize', function() {{
     // Sort most urgent first
     items.sort(function(a, b) {{ return a.diff - b.diff; }});
 
-    qd.innerHTML = items.map(function(it) {{
-      var urgent = it.diff < 60000;
-      var imminent = it.diff < 15000;
-      var timerTxt = imminent ? 'executing...' : fmtCountdown(it.diff);
-      var timerCls = 'q-timer' + (imminent ? ' imminent' : urgent ? ' urgent' : '');
-      return '<div class="q-item q-item-live">' +
-        '<div class="q-badge" style="color:' + it.color + '">' + it.badge + '</div>' +
-        '<div class="q-label" style="color:' + it.color + '">' + it.label + '</div>' +
-        '<div class="q-detail">' + it.detail + '</div>' +
-        '<div class="' + timerCls + '">' + timerTxt + '</div>' +
-        '</div>';
-    }}).join('');
+    // Determine if HUD should open (any item within threshold)
+    var anyImminent = items.some(function(it) {{ return it.diff <= HUD_THRESHOLD; }});
+    _setHud(anyImminent);
+
+    // Populate HUD items
+    var hudItems = document.getElementById('hud-items');
+    if (hudItems) {{
+      hudItems.innerHTML = items.map(function(it) {{
+        var imminent = it.diff < 15000;
+        var urgent   = it.diff < 60000;
+        var timerTxt = imminent ? 'EXECUTING' : fmtCountdown(it.diff);
+        var timerCls = 'hud-timer' + (imminent ? ' hud-imminent' : urgent ? ' hud-urgent' : '');
+        var itemCls  = 'hud-item' + (imminent ? ' hud-imminent' : '');
+        return '<div class="' + itemCls + '" style="color:' + it.color + '">' +
+          '<div class="hud-badge">' + it.badge + '</div>' +
+          '<div class="hud-sym">' + it.label + '</div>' +
+          '<div class="hud-detail">' + it.detail + '</div>' +
+          '<div class="' + timerCls + '">' + timerTxt + '</div>' +
+          '</div>';
+      }}).join('');
+    }}
   }}
 
   function tick() {{
@@ -3019,6 +3208,12 @@ window.addEventListener('resize', function() {{
         if (i === 1) {{ el.textContent = ret; el.style.color = col; }}
       }});
 
+      // Report panel score block
+      var rpNav  = document.getElementById('rp-nav');
+      var rpDpnl = document.getElementById('rp-dpnl');
+      if (rpNav)  rpNav.textContent = _fmt(nav);
+      if (rpDpnl) {{ rpDpnl.textContent = (pnl >= 0 ? '+' : '−') + '$' + _fmt(Math.abs(pnl)).replace('$',''); rpDpnl.style.color = pnl >= 0 ? '#00ff9d' : '#ff3366'; }}
+
       // nav-card overlay (top-left of chart)
       var nvVal = document.querySelector('.nv-val');
       var nvRet = document.querySelector('.nv-ret');
@@ -3453,7 +3648,7 @@ window.addEventListener('resize', function() {{
           }}
         }});
 
-        // Add or update
+        // Add or update small cards
         rows.forEach(function(p) {{
           if (_cryptoCardEls[p.symbol]) {{
             _updateCard(_cryptoCardEls[p.symbol], p);
@@ -3464,6 +3659,60 @@ window.addEventListener('resize', function() {{
             _cryptoCardEls[p.symbol] = el;
           }}
         }});
+
+        // Mirror into report panel rp-crypto-section
+        var rpSection = document.getElementById('rp-crypto-section');
+        if (rpSection) {{
+          var PALETTE = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
+          function _symCol(s) {{ var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
+          function _rpPnlStr(p) {{
+            if (!p.entry_price) return '—';
+            // For crypto we don't have current price in this fetch — show entry info
+            return 'entered @ $' + parseFloat(p.entry_price).toFixed(4);
+          }}
+          // Build desired set of syms
+          var desiredSyms = {{}};
+          rows.forEach(function(p) {{ desiredSyms[p.symbol] = p; }});
+          // Remove stale rp rows
+          Array.from(rpSection.querySelectorAll('.rp-pos[data-sym]')).forEach(function(el) {{
+            if (!desiredSyms[el.getAttribute('data-sym')]) {{ rpSection.removeChild(el); }}
+          }});
+          // Add missing rp rows
+          rows.forEach(function(p) {{
+            if (rpSection.querySelector('.rp-pos[data-sym="'+p.symbol+'"]')) return;
+            var tcol = _symCol(p.symbol.replace('/USD',''));
+            var baseSym = p.symbol.replace('/USD','');
+            var holdMin = Math.floor((Date.now() - new Date(p.entered_at).getTime()) / 60000);
+            var holdStr = holdMin < 1 ? '<1m' : holdMin + 'm';
+            var subText = (p.qty ? parseFloat(p.qty).toFixed(4) + ' ' + baseSym : '') + (holdMin !== undefined ? '  ·  ' + holdStr : '');
+            var el = document.createElement('div');
+            el.className = 'rp-pos rp-pos-entering'; el.setAttribute('data-sym', p.symbol);
+            el.style.cssText = 'position:relative;overflow:hidden';
+            el.innerHTML = '<span class="pos-corner tl" style="border-color:'+tcol+'"></span>' +
+              '<span class="pos-corner tr" style="border-color:'+tcol+'"></span>' +
+              '<span class="pos-corner bl" style="border-color:'+tcol+'"></span>' +
+              '<span class="pos-corner br" style="border-color:'+tcol+'"></span>' +
+              '<div class="rp-pos-stripe" style="background:'+tcol+';box-shadow:0 0 8px '+tcol+'55"></div>' +
+              '<div class="rp-pos-top"><span class="rp-pos-sym" style="color:'+tcol+'">'+baseSym+'</span>' +
+              '<span class="rp-pos-type">CRYPTO</span></div>' +
+              '<div class="rp-pos-val">—</div>' +
+              '<div class="rp-pos-sub"><span class="rp-pos-qty">'+subText+'</span></div>' +
+              '<div class="rp-pos-pnl" style="color:#6a4a8a">'+_rpPnlStr(p)+'</div>';
+            rpSection.appendChild(el);
+          }});
+          if (!rows.length) {{
+            if (!rpSection.querySelector('.rp-empty-crypto')) {{
+              var emp = document.createElement('div');
+              emp.className = 'rp-empty-crypto';
+              emp.style.cssText = 'padding:12px 14px;font-size:9px;color:#2a1a3a;letter-spacing:.04em';
+              emp.textContent = 'no crypto positions';
+              rpSection.appendChild(emp);
+            }}
+          }} else {{
+            var emp2 = rpSection.querySelector('.rp-empty-crypto');
+            if (emp2) rpSection.removeChild(emp2);
+          }}
+        }}
       }})
       .catch(function() {{}});
     }}
