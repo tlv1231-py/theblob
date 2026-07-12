@@ -901,7 +901,7 @@ body::after {{
 
 /* ── Left feed overlay ── */
 #feed-overlay {{
-  position:absolute; left:0; top:0; bottom:0; width:165px; z-index:15;
+  position:absolute; left:0; top:0; bottom:0; width:280px; z-index:15;
   display:flex; flex-direction:column;
   background:linear-gradient(90deg,rgba(1,0,6,.9) 0%,rgba(1,0,6,.55) 75%,transparent 100%);
   pointer-events:none;
@@ -2003,10 +2003,17 @@ function _dateMinus(isoDateStr, days) {{
   d.setDate(d.getDate() - days);
   return d.toISOString().slice(0,10);
 }}
+function _datePlus_from(isoDateStr, days) {{
+  var d = new Date(isoDateStr + 'T00:00:00Z');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-var xEnd   = _datePlus(2);   // today + 2 days buffer
-var xStart = latestPortDate ? _dateMinus(latestPortDate, 14) : _datePlus(-30);
+// Center the current-position dot: equal padding left and right of latest data
+var _CENTER_DAYS = 14;
+var xEnd   = latestPortDate ? _datePlus_from(latestPortDate, _CENTER_DAYS) : _datePlus(14);
+var xStart = latestPortDate ? _dateMinus(latestPortDate, _CENTER_DAYS) : _datePlus(-30);
 
 // Tight Y range for the visible window
 function yRange(x0, x1) {{
@@ -3232,12 +3239,7 @@ window.addEventListener('resize', function() {{
       document.addEventListener('touchend', end);
     }}
 
-    var reportPanel = document.getElementById('report-panel');
-    var feedPanel   = document.getElementById('feed-panel');
-    var posPanel    = document.getElementById('pos-panel');
-
-    makeColDrag(document.getElementById('drag-f'), feedPanel,   reportPanel, null, null);
-    makeColDrag(document.getElementById('drag-q'), reportPanel, posPanel,    null, null);
+    // Panel drag disabled — panels are now absolute overlays, not flex columns
 
     // Vertical overlay drag (drag the top edge to resize height)
     var overlay  = document.getElementById('term-overlay');
@@ -3403,9 +3405,9 @@ window.addEventListener('resize', function() {{
       else if (diff < 3600000) el.classList.add('urgent');
     }});
   }}
-  // Sync HUD to feed panel bounds
+  // Sync HUD to feed overlay bounds
   function _syncHud() {{
-    var feed = document.getElementById('feed-panel');
+    var feed = document.getElementById('feed-overlay');
     var hud  = document.getElementById('hud-overlay');
     if (!feed || !hud) return;
     var r = feed.getBoundingClientRect();
