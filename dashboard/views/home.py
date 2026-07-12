@@ -2176,19 +2176,20 @@ var traces = [
   {{
     x:[], y:[], text:[], name:'ENTER',
     type:'scatter', mode:'markers+text',
-    marker:{{ symbol:'triangle-up', size:12, color:'#00ff9d',
-              line:{{ color:'rgba(0,255,157,.3)', width:2 }} }},
+    marker:{{ symbol:'triangle-up', size:18, color:'rgba(0,255,157,0.92)',
+              line:{{ color:'rgba(0,255,157,.9)', width:2.5 }},
+              gradient:{{ type:'none' }} }},
     textposition:'top center',
-    textfont:{{ family:'Consolas', size:7.5, color:'rgba(0,255,157,.8)' }},
+    textfont:{{ family:'Consolas', size:8.5, color:'rgba(0,255,157,1)' }},
     hovertemplate:'<b style="color:#00ff9d">ENTER %{{text}}</b><extra></extra>',
   }},
   {{
     x:[], y:[], text:[], name:'EXIT',
     type:'scatter', mode:'markers+text',
-    marker:{{ symbol:'triangle-down', size:12, color:'#ff3366',
-              line:{{ color:'rgba(255,51,102,.3)', width:2 }} }},
+    marker:{{ symbol:'triangle-down', size:18, color:'rgba(255,51,102,0.92)',
+              line:{{ color:'rgba(255,51,102,.9)', width:2.5 }} }},
     textposition:'bottom center',
-    textfont:{{ family:'Consolas', size:7.5, color:'rgba(255,51,102,.8)' }},
+    textfont:{{ family:'Consolas', size:8.5, color:'rgba(255,51,102,1)' }},
     hovertemplate:'<b style="color:#ff3366">EXIT %{{text}}</b><extra></extra>',
   }},
 ];
@@ -2352,16 +2353,38 @@ resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
 var pulseTargets = [];
+
+// ── Orb trade flash — animated color burst on entry/exit ─────────────────────
+var _orbFlash = {{ active: false, isEntry: true, t: 0, dur: 2200 }};
+window._orbTradeFlash = function(isEntry) {{
+  _orbFlash.active = true;
+  _orbFlash.isEntry = isEntry;
+  _orbFlash.t = Date.now();
+  // Burst: extra rings, held briefly
+  _orbBurstCount = isEntry ? 6 : 5;
+}};
+var _orbBurstCount = 0;
+
 function buildTargets() {{
   pulseTargets = [];
-  // trace order: 0=baseline(skip), 1=SPY, 2=QQQ, 3=PORTFOLIO
-  [[1,[0,229,255]], [2,[148,0,255]], [3,[255,0,204]]].forEach(function(ic) {{
+  // trace order: 0=baseline(skip), 1=SPY, 2=QQQ, 3=PORTFOLIO ghost, 4=PORTFOLIO
+  [[1,[0,229,255]], [2,[148,0,255]], [4,[255,0,204]]].forEach(function(ic) {{
     var tr = gd.data[ic[0]];
     if (tr && tr.x && tr.x.length) {{
       var pt = {{ x: tr.x[tr.x.length-1], y: tr.y[tr.y.length-1], rgb: ic[1] }};
       pulseTargets.push(pt);
     }}
   }});
+  // If intraday trace (6) has newer data, update portfolio orb position
+  var intra = gd.data[6];
+  if (intra && intra.x && intra.x.length) {{
+    // Move portfolio dot to latest intraday position
+    var pi = pulseTargets.findIndex(function(p) {{ return p.rgb[0]===255 && p.rgb[2]===204; }});
+    if (pi >= 0 && intra.y && intra.y.length) {{
+      pulseTargets[pi].x = intra.x[intra.x.length-1];
+      pulseTargets[pi].y = intra.y[intra.y.length-1];
+    }}
+  }}
   positionPnlFloat();
 }}
 
@@ -2387,31 +2410,54 @@ function drawPulse() {{
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   phase += 0.03;
 
+  // Compute flash blend for portfolio orb
+  var flashAlpha = 0;
+  var flashRgb = [255, 0, 204]; // default pink
+  if (_orbFlash.active) {{
+    var elapsed = Date.now() - _orbFlash.t;
+    flashAlpha = Math.max(0, 1 - elapsed / _orbFlash.dur);
+    if (flashAlpha <= 0) {{ _orbFlash.active = false; _orbBurstCount = 0; }}
+    else flashRgb = _orbFlash.isEntry ? [0,255,157] : [255,51,102];
+  }}
+
   pulseTargets.forEach(function(t) {{
     try {{
       var fl = gd._fullLayout;
       if (!fl || !fl.xaxis || !fl.yaxis) return;
-      // d2l converts data value → linearized internal value; l2p converts that → pixels
       var cx = fl.xaxis.l2p(fl.xaxis.d2l(t.x)) + fl.margin.l;
       var cy = fl.yaxis.l2p(fl.yaxis.d2l(t.y)) + fl.margin.t;
       if (!isFinite(cx) || !isFinite(cy)) return;
-      var r=t.rgb[0], g=t.rgb[1], b=t.rgb[2];
 
-      // 3 staggered expanding rings
-      for (var k = 0; k < 3; k++) {{
-        var p = (Math.sin(phase - k * 1.1) + 1) / 2;
+      // Portfolio orb: blend between flash color and base pink
+      var isPortfolio = t.rgb[0]===255 && t.rgb[2]===204;
+      var r, g, b;
+      if (isPortfolio && flashAlpha > 0) {{
+        r = Math.round(t.rgb[0]*(1-flashAlpha) + flashRgb[0]*flashAlpha);
+        g = Math.round(t.rgb[1]*(1-flashAlpha) + flashRgb[1]*flashAlpha);
+        b = Math.round(t.rgb[2]*(1-flashAlpha) + flashRgb[2]*flashAlpha);
+      }} else {{
+        r=t.rgb[0]; g=t.rgb[1]; b=t.rgb[2];
+      }}
+
+      // Rings — extra burst count on trade flash
+      var ringCount = (isPortfolio && _orbBurstCount > 0) ? _orbBurstCount : 3;
+      if (isPortfolio && _orbBurstCount > 0) _orbBurstCount = Math.max(0, _orbBurstCount - 0.04);
+      for (var k = 0; k < Math.ceil(ringCount); k++) {{
+        var p = (Math.sin(phase - k * 0.9) + 1) / 2;
+        var maxR = isPortfolio && flashAlpha > 0 ? 40 + flashAlpha*20 : 26;
         ctx.beginPath();
-        ctx.arc(cx, cy, 5 + p * 26, 0, Math.PI*2);
+        ctx.arc(cx, cy, 5 + p * maxR, 0, Math.PI*2);
         ctx.strokeStyle = 'rgba('+r+','+g+','+b+','+(0.7*(1-p))+')';
-        ctx.lineWidth = 2 - k*0.4;
+        ctx.lineWidth = 2 - k*0.3;
         ctx.stroke();
       }}
 
-      // Bright core with glow
+      // Core glow — brighter during flash
+      var coreSize = isPortfolio && flashAlpha > 0 ? 6 + flashAlpha*4 : 6;
       ctx.shadowColor = 'rgba('+r+','+g+','+b+',1)';
-      ctx.shadowBlur = 22;
+      ctx.shadowBlur = isPortfolio && flashAlpha > 0 ? 35 + flashAlpha*20 : 22;
       ctx.beginPath();
-      ctx.arc(cx, cy, 6, 0, Math.PI*2);
+      ctx.arc(cx, cy, coreSize, 0, Math.PI*2);
       ctx.fillStyle = 'rgba('+r+','+g+','+b+',1)';
       ctx.fill();
 
@@ -3084,7 +3130,7 @@ function _fetchTradeEvents() {{
       newShapes.push({{
         type:'line', xref:'x', yref:'paper',
         x0:isoTs, x1:isoTs, y0:0, y1:1,
-        line:{{ color: isEntry ? 'rgba(0,255,157,.12)' : 'rgba(255,51,102,.12)', width:1, dash:'dot' }},
+        line:{{ color: isEntry ? 'rgba(0,255,157,.38)' : 'rgba(255,51,102,.38)', width:1.5, dash:'dot' }},
         layer:'below',
       }});
 
@@ -4078,12 +4124,13 @@ window.addEventListener('resize', function() {{
               var isWinTrade = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : true);
               window._triggerHeartbeat(isWinTrade);
             }}
-            // Gauge + streak on live trades
+            // Gauge + streak + orb flash on live trades
             if (!isHistory) {{
               if (window._recordTradeForGauge) window._recordTradeForGauge();
               if (!isEntry && pnlM && window._recordStreakResult) {{
                 window._recordStreakResult(pnlM[1][0] === '+');
               }}
+              if (window._orbTradeFlash) window._orbTradeFlash(isEntry);
             }}
             // Wallet canvas trade burst
             if (!isHistory && window._walletTrade) {{
