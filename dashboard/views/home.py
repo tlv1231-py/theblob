@@ -2072,7 +2072,7 @@ var layout = {{
     range: xStart ? [xStart, xEnd] : undefined,
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
-    tickformat:'%b %d\n%H:%M', zeroline:false, showline:false, type:'date', fixedrange:false,
+    tickformat:'%b %d', zeroline:false, showline:false, type:'date', fixedrange:false,
   }},
   yaxis:{{
     autorange:true,
