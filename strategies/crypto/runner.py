@@ -280,17 +280,37 @@ def run() -> None:
 
     positions = _load_positions()
 
-    # Reconcile DB positions against actual Alpaca holdings — drop any ghost rows
+    # Reconcile DB against actual Alpaca holdings (both directions)
     try:
+        alpaca_raw = _trading_client().get_all_positions()
         alpaca_positions = {
-            p.symbol.replace("USD", "/USD"): float(p.qty)
-            for p in _trading_client().get_all_positions()
+            p.symbol.replace("USD", "/USD"): p for p in alpaca_raw
         }
+        # Drop DB rows not in Alpaca
         for sym in list(positions.keys()):
-            if alpaca_positions.get(sym, 0) <= 0:
-                logger.warning(f"[reconcile] {sym} in DB but not in Alpaca — dropping stale row")
+            if sym not in alpaca_positions:
+                logger.warning(f"[reconcile] {sym} in DB but not in Alpaca — dropping")
                 _delete_position(sym)
                 del positions[sym]
+        # Import Alpaca positions missing from DB
+        for sym, ap in alpaca_positions.items():
+            if sym not in positions:
+                qty   = float(ap.qty)
+                entry = float(ap.avg_entry_price)
+                stop  = entry * (1 - _POS["stop_pct"])
+                pos   = {
+                    "symbol":       sym,
+                    "direction":    "long",
+                    "qty":          qty,
+                    "entry_price":  entry,
+                    "stop_price":   stop,
+                    "target_price": 0.0,
+                    "entered_at":   now,
+                    "order_id":     None,
+                }
+                _save_position(pos)
+                positions[sym] = pos
+                logger.info(f"[reconcile] imported {sym} from Alpaca qty={qty} entry={entry}")
     except Exception as e:
         logger.warning(f"[reconcile] Could not fetch Alpaca positions: {e}")
 
