@@ -915,7 +915,7 @@ body::after {{
 /* ── Terminal overlay ── */
 #term-overlay {{
   height:42%; flex-shrink:0; min-height:180px; width:100%;
-  border-top:1px solid #00ff41;
+  border-top:none;
   background:#000;
   display:flex; flex-direction:column;
   z-index:20; pointer-events:auto;
@@ -951,26 +951,23 @@ body::after {{
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
 /* ── Status bar — solid row spanning all four columns ── */
-#status-bar {{
+/* ── Tracker bar (between chart and panels) ── */
+#tracker-bar {{
   flex-shrink:0;
-  background:#060010;
-  border-top:1px solid #1a003a;
-  padding:6px 14px;
-  line-height:1.6;
-  font-size:10px;
+  background:#000;
+  border-top:1px solid #0a0018;
+  border-bottom:1px solid #0a0018;
+  padding:0 16px;
+  height:26px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  z-index:5;
 }}
-.con-dot {{
-  width:5px; height:5px; border-radius:50%; flex-shrink:0;
-  background:#00ff41; box-shadow:0 0 6px #00ff41;
-  animation:gdot 1.4s ease-in-out infinite;
-}}
-@keyframes gdot {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
-#status-label {{ display:none; }}
-#status-divider {{ display:none; }}
-.con-dot {{ display:inline-block; vertical-align:middle; margin-right:5px; }}
+/* CYCLE block */
 #run-progress-wrap {{
   display:inline-flex; align-items:center; gap:7px;
-  margin-left:auto; flex-shrink:0; transition:opacity .3s;
+  flex-shrink:0; transition:opacity .3s;
 }}
 #run-progress-wrap.hidden {{ opacity:0; pointer-events:none; }}
 #run-progress-track {{
@@ -1018,9 +1015,17 @@ body::after {{
   text-shadow:0 0 8px rgba(204,0,255,.8);
   min-width:28px; text-align:right;
 }}
-/* all status bar children are inline — text wraps like a real terminal */
-#live-clock {{ display:inline; color:#006622; font-size:8.5px; letter-spacing:.04em; }}
-#prompt-sym {{ display:inline; color:#004d18; font-size:10px; user-select:none; margin:0 2px; }}
+/* ── Status bar (clock / cursor only) ── */
+#status-bar {{
+  flex-shrink:0;
+  background:#060010;
+  border-top:1px solid #0d001e;
+  padding:5px 16px;
+  font-size:10px;
+  line-height:1.4;
+}}
+#live-clock {{ display:inline; color:#1a0830; font-size:8px; letter-spacing:.06em; }}
+#prompt-sym {{ display:inline; color:#120620; font-size:10px; user-select:none; margin:0 2px; }}
 #type-preview {{
   display:inline; color:#00ff41; font-size:10px; letter-spacing:.04em;
   text-shadow:0 0 8px rgba(0,255,65,.9);
@@ -1238,7 +1243,7 @@ body::after {{
 /* ── VHS Scan bar ── */
 #vhs-scan-bar {{
   display:inline-flex; align-items:center; gap:9px;
-  margin-left:18px; opacity:0; pointer-events:none;
+  opacity:0; pointer-events:none;
   transition:opacity .2s;
   flex-shrink:0;
 }}
@@ -1254,7 +1259,7 @@ body::after {{
   transform-origin:left center;
 }}
 #vhs-track {{
-  width:160px; height:8px;
+  width:220px; height:10px;
   background:#080014;
   border:1px solid #1a0030;
   overflow:hidden; position:relative;
@@ -1926,6 +1931,7 @@ function _getAudio() {{
 function _playTones(freqs, dur, type) {{
   try {{
     var ctx = _getAudio();
+    if (ctx.state === 'suspended') ctx.resume();
     freqs.forEach(function(f, i) {{
       var osc = ctx.createOscillator(), g = ctx.createGain();
       osc.connect(g); g.connect(ctx.destination);
@@ -1942,6 +1948,12 @@ function _playTones(freqs, dur, type) {{
 window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
 window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
 window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
+// Unlock AudioContext on first user gesture (browser autoplay policy)
+document.addEventListener('click', function _unlock() {{
+  if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume();
+  if (!_audioCtx) {{ _getAudio(); }}
+  document.removeEventListener('click', _unlock);
+}}, {{ once: true }});
 
 // ── ATH tracking ─────────────────────────────────────────────────────────────
 var _athNav = Math.max.apply(null, portValues.length ? portValues : [100000]);
@@ -2113,6 +2125,19 @@ window.addEventListener('resize', function() {{
 
   <div id="clock-line" style="display:none"></div>
 
+  <!-- Tracker bar — sits between chart and the four panels -->
+  <div id="tracker-bar">
+    <div id="run-progress-wrap">
+      <span style="font:700 7px Consolas,monospace;letter-spacing:.22em;color:#2a1a4a;text-transform:uppercase">CYCLE</span>
+      <div id="run-progress-track"><div id="run-progress-fill"></div></div>
+      <span id="run-progress-label">075s</span>
+    </div>
+    <div id="vhs-scan-bar">
+      <span id="vhs-scan-label">SCAN</span>
+      <div id="vhs-track"><div id="vhs-fill"></div></div>
+    </div>
+  </div>
+
   <!-- Four lower panels side by side -->
   <div id="lower-panels">
 
@@ -2185,22 +2210,12 @@ window.addEventListener('resize', function() {{
     </div>
   </div>
 
-  <!-- Status bar — full width below all four columns -->
+  <!-- Status bar — clock / cursor only -->
   <div id="status-bar">
-    <div class="con-dot"></div>
     <span id="live-clock"></span>
     <span id="prompt-sym">&gt;</span>
     <span id="type-preview"></span>
     <span id="blink-cur">█</span>
-    <div id="run-progress-wrap">
-      <span style="font:700 6px Consolas,monospace;letter-spacing:.18em;color:#3a1a5a;text-transform:uppercase;margin-right:2px">CYCLE</span>
-      <div id="run-progress-track"><div id="run-progress-fill"></div></div>
-      <span id="run-progress-label">075s</span>
-    </div>
-    <div id="vhs-scan-bar">
-      <span id="vhs-scan-label">SCAN</span>
-      <div id="vhs-track"><div id="vhs-fill"></div></div>
-    </div>
   </div>
 
 </div>
