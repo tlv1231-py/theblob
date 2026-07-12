@@ -254,6 +254,21 @@ def run() -> None:
         return
 
     positions = _load_positions()
+
+    # Reconcile DB positions against actual Alpaca holdings — drop any ghost rows
+    try:
+        alpaca_positions = {
+            p.symbol.replace("USD", "/USD"): float(p.qty)
+            for p in _trading_client().get_all_positions()
+        }
+        for sym in list(positions.keys()):
+            if alpaca_positions.get(sym, 0) <= 0:
+                logger.warning(f"[reconcile] {sym} in DB but not in Alpaca — dropping stale row")
+                _delete_position(sym)
+                del positions[sym]
+    except Exception as e:
+        logger.warning(f"[reconcile] Could not fetch Alpaca positions: {e}")
+
     daily_pnl = 0.0
 
     # ── Manage open positions ─────────────────────────────────────────────────
