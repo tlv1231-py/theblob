@@ -909,13 +909,13 @@ body::after {{
 }}
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
-/* ── Status bar (single-line matrix green) ── */
+/* ── Status bar — bottom of System Feed panel ── */
 #status-bar {{
   flex-shrink:0; height:22px;
   background:#000;
-  border-bottom:1px solid #003311;
+  border-top:1px solid #003311;
   display:flex; align-items:center;
-  padding:0 12px; gap:8px;
+  padding:0 10px; gap:7px;
   overflow:hidden;
 }}
 .con-dot {{
@@ -986,17 +986,20 @@ body::after {{
   display:none; /* headers embedded in each panel */
 }}
 .panel-hdr {{
-  flex-shrink:0; padding:4px 12px 4px;
-  border-bottom:1px solid #0d0010;
-  font-size:7px; letter-spacing:.28em; color:#3a1a5a;
-  display:flex; align-items:center; gap:6px;
+  flex-shrink:0; padding:6px 12px 5px;
+  border-bottom:1px solid #1a0022;
+  font-size:9px; letter-spacing:.22em; color:#ff00cc;
+  text-shadow:0 0 10px rgba(255,0,204,.45);
+  display:flex; align-items:center; gap:7px;
   background:#02000a; text-transform:uppercase;
+  font-weight:700;
 }}
 .term-dot {{
-  width:4px; height:4px; border-radius:50%;
+  width:6px; height:6px; border-radius:50%;
   background:#ff00cc;
-  box-shadow:0 0 6px rgba(255,0,204,.7);
+  box-shadow:0 0 8px rgba(255,0,204,.9);
   animation:pdot 1.6s ease-in-out infinite;
+  flex-shrink:0;
 }}
 /* ── Queue panel ── */
 #queue-panel {{
@@ -1425,16 +1428,6 @@ window.addEventListener('resize', function() {{
 <div id="term-overlay">
   <div id="vert-drag"></div>
 
-  <!-- Single-line matrix green status bar -->
-  <div id="status-bar">
-    <div class="con-dot"></div>
-    <span id="status-label">STATUS</span>
-    <span id="status-divider">|</span>
-    <span id="live-clock"></span>
-    <span id="prompt-sym">&gt;</span>
-    <span id="type-preview"></span>
-    <span id="blink-cur">█</span>
-  </div>
   <div id="clock-line" style="display:none"></div>
 
   <!-- Four lower panels side by side -->
@@ -1445,6 +1438,16 @@ window.addEventListener('resize', function() {{
       <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
       <div id="term-body">
         {term_rows}
+      </div>
+      <!-- Status bar lives at the bottom of System Feed -->
+      <div id="status-bar">
+        <div class="con-dot"></div>
+        <span id="status-label">STATUS</span>
+        <span id="status-divider">|</span>
+        <span id="live-clock"></span>
+        <span id="prompt-sym">&gt;</span>
+        <span id="type-preview"></span>
+        <span id="blink-cur">█</span>
       </div>
     </div>
 
@@ -1660,8 +1663,59 @@ window.addEventListener('resize', function() {{
 
     var _busy      = false;
     var _feedQueue = [];
+    var _idleIdx   = 0;
+    var _idleTimer = null;
 
-    function startIdle() {{ /* no-op until crypto feed is live */ }}
+    // Each phrase mirrors an actual step the crypto runner executes every minute
+    var _idlePhrases = [
+      'fetching 1-min bars · 15 pairs',
+      'BTC/USD · testing 10-bar high breakout',
+      'ETH/USD · checking vwap alignment',
+      'SOL/USD · relative volume below threshold',
+      'scanning for entries · 5 slots open',
+      'AVAX/USD · breakout confirmed · checking rvol',
+      'monitoring open positions',
+      'BTC/USD · stop $67,240 · target $68,100',
+      'ETH/USD · age 14m of 30m max hold',
+      'checking daily loss limit · nominal',
+      'LINK/USD · no signal this bar',
+      'persisting positions to db',
+      'DOT/USD · 10-bar low breakdown · vwap below',
+      'risk limits nominal · all clear',
+      'next bar in ~45s',
+    ];
+
+    function startIdle() {{
+      if (_busy) return;
+      if (_idleTimer) clearTimeout(_idleTimer);
+      _idleTimer = setTimeout(_idleLoop, 1400);
+    }}
+
+    function _idleLoop() {{
+      if (_busy) return;
+      var phrase  = _idlePhrases[_idleIdx % _idlePhrases.length];
+      _idleIdx++;
+      var preview = document.getElementById('type-preview');
+      var blink   = document.getElementById('blink-cur');
+      if (!preview) return;
+      if (blink) blink.style.animation = 'none';
+      preview.textContent = '';
+      var i = 0;
+      (function tick() {{
+        if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
+        if (i < phrase.length) {{
+          preview.textContent += phrase[i++];
+          setTimeout(tick, 13 + (Math.random() < 0.05 ? 55 : 0));
+        }} else {{
+          setTimeout(function() {{
+            if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
+            preview.textContent = '';
+            if (blink) blink.style.animation = '';
+            _idleTimer = setTimeout(_idleLoop, 2600);
+          }}, 1800);
+        }}
+      }})();
+    }}
 
     // ── postToFeed: THE single gateway for all System Feed entries ────────────
     // Every trade, fill, deposit, withdraw, pipeline event goes through here.
