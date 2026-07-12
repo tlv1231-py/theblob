@@ -2262,9 +2262,8 @@ window.addEventListener('resize', function() {{
       var url = SUPA_URL + '/rest/v1/pipeline_events'
         + '?select=event_type,symbol,message,recorded_at'
         + (_lastSeen
-            ? '&recorded_at=gt.' + encodeURIComponent(_lastSeen)
-            : '&order=recorded_at.desc&limit=50')
-        + (_lastSeen ? '&order=recorded_at.asc&limit=20' : '');
+            ? '&recorded_at=gt.' + encodeURIComponent(_lastSeen) + '&order=recorded_at.asc&limit=20'
+            : '&order=recorded_at.desc&limit=8');
       fetch(url, {{
         headers: {{
           'apikey': SUPA_KEY,
