@@ -1720,8 +1720,18 @@ window.addEventListener('resize', function() {{
         var hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
         var row  = document.createElement('div');
         row.className = 'te';
+        row.style.color = '#00ff41';
+        row.style.textShadow = '0 0 8px rgba(0,255,65,.6)';
+        row.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
         row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + item.text;
         if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
+        // Fade from status green to normal feed color
+        requestAnimationFrame(function() {{
+          requestAnimationFrame(function() {{
+            row.style.color = '#9060b8';
+            row.style.textShadow = 'none';
+          }});
+        }});
         _busy = false;
         if (_feedQueue.length) {{
           setTimeout(_drainQueue, 400);
