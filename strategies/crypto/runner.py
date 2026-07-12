@@ -274,12 +274,13 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
 # ── Main run ──────────────────────────────────────────────────────────────────
 
 def run() -> None:
-    now     = datetime.now(timezone.utc)
-    nav     = _account_value()
-    risk_pc = _POS["risk_pct"] / 100.0
-    stop_pc = _POS["stop_pct"]
-    max_pos = _POS["max_positions"]
-    max_hold= _POS["max_hold_minutes"]
+    now      = datetime.now(timezone.utc)
+    nav      = _account_value()
+    risk_pc  = _POS["risk_pct"] / 100.0
+    stop_pc  = _POS["stop_pct"]
+    target_pc= _POS.get("target_pct", 0.0)
+    max_pos  = _POS["max_positions"]
+    max_hold = _POS["max_hold_minutes"]
 
     logger.info(f"[crypto] run @ {now.isoformat()} | NAV=${nav:,.2f}")
 
@@ -344,8 +345,16 @@ def run() -> None:
         if d == "long"  and close <= pos["stop_price"]: reason = "stop"
         if d == "short" and close >= pos["stop_price"]: reason = "stop"
 
+        # Profit target
+        if reason is None and target_pc > 0:
+            if d == "long"  and close >= pos["entry_price"] * (1 + target_pc): reason = "target"
+            if d == "short" and close <= pos["entry_price"] * (1 - target_pc): reason = "target"
+
+        # Max hold exceeded
+        if reason is None and age >= max_hold: reason = "timeout"
+
         # EMA flipped — exit and let entry loop reverse
-        if reason is None and signal and signal != d:
+        if reason is None and signal != d:
             reason = "reversal"
 
         if reason:
@@ -386,6 +395,7 @@ def run() -> None:
             qty    = round((nav * risk_pc) / price, 8)
             filled = price * (1 + _SLIPPAGE) if signal == "long" else price * (1 - _SLIPPAGE)
             stop   = filled * (1 - stop_pc)  if signal == "long" else filled * (1 + stop_pc)
+            target = filled * (1 + target_pc) if signal == "long" else filled * (1 - target_pc)
 
             order_id = _submit_order(sym, "buy" if signal == "long" else "sell", qty)
             _log_fill(sym, order_id or "", "entry", qty, filled, None, "signal")
@@ -396,7 +406,7 @@ def run() -> None:
                 "qty":          qty,
                 "entry_price":  filled,
                 "stop_price":   stop,
-                "target_price": 0.0,
+                "target_price": target,
                 "entered_at":   now,
                 "order_id":     order_id,
             }
