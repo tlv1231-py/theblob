@@ -932,7 +932,8 @@ body::after {{
 #type-preview {{
   color:#00ff41; font-size:10px; letter-spacing:.04em;
   text-shadow:0 0 8px rgba(0,255,65,.9);
-  white-space:nowrap; overflow:hidden; flex:1;
+  white-space:nowrap; overflow:hidden;
+  flex:0 1 auto; max-width:60%;
 }}
 #blink-cur {{
   display:inline-block; color:#00ff41; flex-shrink:0;
@@ -960,9 +961,9 @@ body::after {{
   scrollbar-width:none; background:#010006;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
-.te {{ padding:0 12px; flex-shrink:0;
-       font-size:10px; line-height:1.7; color:#9060b8;
-       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.te {{ padding:2px 12px; flex-shrink:0;
+       font-size:10px; line-height:1.6; color:#9060b8;
+       white-space:normal; word-break:break-word; }}
 .te-ts  {{ color:#2a0040; font-size:9px; }}
 .te-date {{ padding:5px 12px 1px; flex-shrink:0;
             font-size:7.5px; font-weight:700; letter-spacing:.28em;
