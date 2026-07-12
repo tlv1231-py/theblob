@@ -735,6 +735,14 @@ def _build_daw_html(data: dict) -> str:
             f'</div>'
         )
 
+    # P&L banner values
+    _total_pnl     = last_nav - _STARTING_CAPITAL
+    _total_pnl_pct = (_total_pnl / _STARTING_CAPITAL) * 100
+    _pnl_col       = "#00ff9d" if _total_pnl >= 0 else "#ff3366"
+    _pnl_sign      = "+" if _total_pnl >= 0 else "−"
+    _pnl_str       = f'{_pnl_sign}${abs(_total_pnl):,.0f}'
+    _pnl_pct_str   = f'{_total_pnl_pct:+.2f}% since $100K start'
+
     pos_cards = ""
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     for p in data.get("positions_data", []):
@@ -746,21 +754,19 @@ def _build_daw_html(data: dict) -> str:
         epct = p["entry_pnl_pct"]
         pnl_col = "#00ff9d" if epnl >= 0 else "#ff3366"
         pnl_sign = "+" if epnl >= 0 else "−"
-        tip = (
-            f'<div class="pos-tip">'
-            f'<div>entered {p["entry_date"]} &nbsp;·&nbsp; {p["qty"]} sh @ ${ep:.2f}</div>'
-            f'<div>cost basis &nbsp;${ec:,.0f} &nbsp;→&nbsp; now ${p["value"]:,.0f}</div>'
-            f'<div style="color:{pnl_col}">{pnl_sign}${abs(epnl):,.0f} &nbsp;({epct:+.1f}% lifetime)</div>'
+        pnl_line = (
+            f'<div class="pos-pnl-line" style="color:{pnl_col}">'
+            f'{pnl_sign}${abs(epnl):,.0f} &nbsp;<span style="color:{pnl_col};opacity:.7">({epct:+.1f}%)</span>'
             f'</div>'
         ) if ep else ""
         pos_cards += (
-            f'<div class="pos-card">'
-            f'{tip}'
+            f'<div class="pos-card" style="border-left:3px solid {tcol}">'
             f'<div class="pos-top">'
             f'<span class="pos-sym" style="color:{tcol}">{p["sym"]}</span>'
             f'<span class="pos-qty">{p["qty"]} sh</span>'
             f'<span class="pos-val">${p["value"]:,.0f}</span>'
             f'</div>'
+            f'{pnl_line}'
             f'<div class="pos-hold {hold_cls}">{p["hold_text"]}</div>'
             f'</div>'
         )
@@ -877,204 +883,225 @@ body::after {{
 .spacer {{ flex:1; }}
 .hint {{ font-size:8px; letter-spacing:.1em; color:#2a003d; white-space:nowrap; }}
 
-/* ── Terminal overlay — CRT retrowave ── */
+/* ── Terminal overlay ── */
 #term-overlay {{
-  height:38%; flex-shrink:0; min-height:160px; width:100%;
-  border-bottom:2px solid #ff00cc;
-  background:#03000a;
-  border-top:2px solid #ff00cc;
-  box-shadow:0 0 32px rgba(255,0,204,.18), inset 0 0 60px rgba(0,0,0,.6);
+  height:42%; flex-shrink:0; min-height:180px; width:100%;
+  border-top:1px solid #00ff41;
+  background:#000;
   display:flex; flex-direction:column;
   z-index:20; pointer-events:auto;
   overflow:hidden;
 }}
-/* CRT scanlines inside terminal */
+/* CRT scanlines */
 #term-overlay::before {{
   content:'';
   position:absolute; inset:0;
   background:repeating-linear-gradient(
     0deg, transparent, transparent 2px,
-    rgba(0,0,0,.18) 2px, rgba(0,0,0,.18) 3px
+    rgba(0,255,65,.03) 2px, rgba(0,255,65,.03) 3px
   );
   pointer-events:none; z-index:100;
 }}
-/* vertical resize handle at top of overlay */
+/* vertical resize handle */
 #vert-drag {{
-  height:6px; flex-shrink:0; cursor:ns-resize;
+  height:5px; flex-shrink:0; cursor:ns-resize;
   background:transparent; transition:background .15s; z-index:10;
 }}
-#vert-drag:hover, #vert-drag.dragging {{
-  background:rgba(255,0,204,.22);
+#vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
+
+/* ── Console strip (full-width matrix green feed) ── */
+#console-strip {{
+  height:40%; flex-shrink:0; min-height:60px;
+  border-bottom:1px solid #003311;
+  background:#000;
+  display:flex; flex-direction:column;
+  overflow:hidden;
 }}
-#term-hdr {{
-  flex-shrink:0; padding:0;
-  border-bottom:1px solid #1a0028;
-  font-size:8px; letter-spacing:.28em; color:#ff00cc;
-  text-shadow:0 0 12px rgba(255,0,204,.9), 0 0 30px rgba(255,0,204,.4);
-  display:flex; align-items:center; gap:0;
-  background:#02000a;
-}}
-.hdr-col {{
+#console-hdr {{
+  flex-shrink:0; padding:3px 14px;
+  border-bottom:1px solid #001a08;
+  font-size:7px; letter-spacing:.3em; color:#00661a;
   display:flex; align-items:center; gap:8px;
-  padding:5px 14px; overflow:hidden; flex-shrink:0;
+  background:#000;
 }}
-#hdr-feed {{ flex:1; flex-shrink:1; }}
-.hdr-drag-ph {{ width:5px; flex-shrink:0; }}
-.term-dot {{
-  width:5px; height:5px; border-radius:50%;
-  background:#ff00cc;
-  box-shadow:0 0 8px #ff00cc, 0 0 20px rgba(255,0,204,.5);
-  animation:shimmer 2s ease-in-out infinite;
+.con-dot {{
+  width:4px; height:4px; border-radius:50%;
+  background:#00ff41;
+  box-shadow:0 0 6px #00ff41;
+  animation:gdot 1.4s ease-in-out infinite;
 }}
-/* two-column body */
-#term-cols {{
-  flex:1; display:flex; overflow:hidden;
-}}
+@keyframes gdot {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
 #term-body {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
-  padding:4px 0 2px;
-  scrollbar-width:none;
+  padding:2px 0;
+  scrollbar-width:none; background:#000;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
-.te {{ padding:0 16px; flex-shrink:0;
-       font-size:11px; line-height:1.75; color:#9060b8;
+.te {{ padding:0 14px; flex-shrink:0;
+       font-size:10.5px; line-height:1.7; color:#00b330;
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
        position:relative; }}
-.te-ts  {{ color:#2e1448; font-size:10px; }}
-/* typewriter curtain */
-.tw-curtain {{
-  position:absolute; top:0; right:0; bottom:0;
-  background:#060008; pointer-events:none; z-index:4;
-  display:flex; align-items:stretch;
-}}
-.tw-cur {{
-  width:2px; flex-shrink:0; align-self:stretch;
-  background:#ff00cc;
-  box-shadow:0 0 6px rgba(255,0,204,.9), 0 0 14px rgba(255,0,204,.4);
-}}
-/* queue items need relative + clip for curtain */
-.q-item {{ position:relative; overflow:hidden; }}
-.te-date {{ padding:10px 16px 1px; flex-shrink:0;
-            font-size:9px; font-weight:700; letter-spacing:.3em;
-            color:#4a2a6a; text-transform:uppercase; }}
+.te-ts  {{ color:#004410; font-size:9.5px; }}
+.te-date {{ padding:6px 14px 1px; flex-shrink:0;
+            font-size:8px; font-weight:700; letter-spacing:.3em;
+            color:#003311; text-transform:uppercase; }}
 /* clock line */
 #clock-line {{
-  flex-shrink:0; padding:2px 16px 4px;
-  font-size:11.5px; color:#ff00cc;
-  text-shadow:0 0 10px rgba(255,0,204,.8), 0 0 24px rgba(255,0,204,.3);
+  flex-shrink:0; padding:2px 14px 4px;
+  font-size:11px; color:#00ff41;
+  text-shadow:0 0 8px rgba(0,255,65,.8);
   letter-spacing:.04em;
   display:flex; align-items:center; gap:0;
+  background:#000;
 }}
-#live-clock {{ margin-right:8px; color:#3a1a5a; font-size:10px; letter-spacing:.06em; }}
-#prompt-sym {{
-  color:#4a1a6a; margin-right:5px; font-size:12px; flex-shrink:0;
-  text-shadow:none; user-select:none;
-}}
+#live-clock {{ margin-right:6px; color:#006622; font-size:9.5px; letter-spacing:.06em; }}
+#prompt-sym {{ color:#004d18; margin-right:5px; font-size:11px; flex-shrink:0; user-select:none; }}
 #type-preview {{
-  color:#ff00cc; font-size:11px; letter-spacing:.04em;
-  text-shadow:0 0 8px rgba(255,0,204,.8), 0 0 20px rgba(255,0,204,.3);
+  color:#00ff41; font-size:10.5px; letter-spacing:.04em;
+  text-shadow:0 0 8px rgba(0,255,65,.9);
   white-space:nowrap; flex:1; overflow:hidden;
 }}
 #blink-cur {{
-  display:inline-block; color:#ff00cc; flex-shrink:0;
-  text-shadow:0 0 10px rgba(255,0,204,.9);
+  display:inline-block; color:#00ff41; flex-shrink:0;
+  text-shadow:0 0 8px rgba(0,255,65,.9);
   animation:blink-c 1s step-start infinite;
 }}
 @keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
 @keyframes enter-flash {{
-  0%   {{ background:rgba(255,0,204,.18); }}
+  0%   {{ background:rgba(0,255,65,.15); }}
   100% {{ background:transparent; }}
 }}
 .enter-flash {{ animation:enter-flash 220ms ease-out forwards; }}
-/* positions panel */
-#pos-panel {{
-  flex:1; min-width:180px;
-  border-left:none;
-  overflow-y:auto; padding:6px 0;
-  scrollbar-width:none;
-  background:#020008;
+
+/* ── Lower panels row ── */
+#lower-panels {{
+  flex:1; display:flex; overflow:hidden; min-height:0;
 }}
-#pos-panel::-webkit-scrollbar {{ display:none; }}
-#pos-panel .pos-hdr {{
-  font-size:7.5px; letter-spacing:.28em; color:#2e1448;
-  padding:0 14px 6px; text-transform:uppercase;
-}}
-.pos-card {{ padding:5px 14px 8px; position:relative; cursor:default; }}
-.pos-top {{
-  display:flex; align-items:baseline; gap:6px;
-  font-size:12px; line-height:1.3;
-}}
-.pos-sym {{ font-weight:700; font-size:13px; }}
-.pos-qty {{ color:#4a2a6a; font-size:10.5px; }}
-.pos-val {{ color:#9060b8; font-size:11px; margin-left:auto; }}
-.pos-hold {{
-  font-size:9px; color:#6a4a8a;
-  margin-top:2px; letter-spacing:.02em;
-}}
-.pos-hold.active  {{ color:#3a7a4a; }}
-.pos-hold.exiting {{ color:#a05020; }}
 /* ── Drag handles ── */
 .col-drag {{
   width:5px; flex-shrink:0; cursor:col-resize;
-  background:transparent;
-  transition:background .15s;
-  position:relative; z-index:10;
+  background:transparent; transition:background .15s; position:relative; z-index:10;
 }}
-.col-drag:hover, .col-drag.dragging {{
-  background:rgba(255,0,204,.25);
+.col-drag:hover, .col-drag.dragging {{ background:rgba(255,0,204,.25); }}
+/* shared panel header row */
+#lower-hdr {{
+  display:none; /* headers embedded in each panel */
+}}
+.panel-hdr {{
+  flex-shrink:0; padding:4px 12px 4px;
+  border-bottom:1px solid #0d0010;
+  font-size:7px; letter-spacing:.28em; color:#3a1a5a;
+  display:flex; align-items:center; gap:6px;
+  background:#02000a; text-transform:uppercase;
+}}
+.term-dot {{
+  width:4px; height:4px; border-radius:50%;
+  background:#ff00cc;
+  box-shadow:0 0 6px rgba(255,0,204,.7);
+  animation:pdot 1.6s ease-in-out infinite;
 }}
 /* ── Queue panel ── */
 #queue-panel {{
-  flex:1; min-width:180px;
-  border-left:none;
-  overflow-y:auto; padding:4px 0;
-  scrollbar-width:none;
-  background:#010006;
+  flex:1; min-width:160px;
+  overflow-y:auto; padding:0;
+  scrollbar-width:none; background:#010006;
+  display:flex; flex-direction:column;
 }}
 #queue-panel::-webkit-scrollbar {{ display:none; }}
-.q-hdr {{
-  font-size:7.5px; letter-spacing:.28em; color:#2e1448;
-  padding:2px 14px 6px; text-transform:uppercase;
-}}
+#queue-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:4px 0; }}
+#queue-body::-webkit-scrollbar {{ display:none; }}
 .q-item {{
-  padding:7px 14px 9px;
+  padding:6px 12px 8px;
   border-top:1px solid rgba(26,0,40,.4);
-  overflow:hidden;
+  position:relative; overflow:hidden;
 }}
-.q-badge {{
-  font-size:7px; letter-spacing:.2em; font-weight:700;
-  margin-bottom:3px;
-}}
-.q-label {{
-  font-size:11px; font-weight:700;
-  line-height:1.3; word-break:break-all;
-}}
-.q-detail {{
-  font-size:8.5px; color:#3a2a5a;
-  margin-top:1px; letter-spacing:.02em;
-}}
+.q-badge {{ font-size:7px; letter-spacing:.2em; font-weight:700; margin-bottom:2px; }}
+.q-label {{ font-size:11px; font-weight:700; line-height:1.3; word-break:break-all; }}
+.q-detail {{ font-size:8px; color:#3a2a5a; margin-top:1px; letter-spacing:.02em; }}
 .q-timer {{
-  font-size:12px; font-weight:700; letter-spacing:.04em;
-  margin-top:5px; color:#6a4a8a;
-  font-variant-numeric:tabular-nums;
+  font-size:11.5px; font-weight:700; letter-spacing:.04em;
+  margin-top:4px; color:#6a4a8a; font-variant-numeric:tabular-nums;
 }}
 .q-timer.urgent {{ color:#ff9900; }}
-@keyframes q-pulse {{
-  0%,100% {{ opacity:1; }} 50% {{ opacity:.5; }}
-}}
+@keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.5}} }}
 .q-timer.imminent {{ color:#ff3366; animation:q-pulse .6s ease-in-out infinite; }}
-.pos-tip {{
-  display:none;
-  position:absolute; left:0; bottom:100%;
-  background:#0a0015; border:1px solid #3a1a4a;
-  border-top:1px solid #ff00cc;
-  padding:7px 12px; font-size:9.5px; line-height:1.75;
-  z-index:999; white-space:nowrap; color:#6a4a8a;
-  pointer-events:none;
-  box-shadow:0 -4px 20px rgba(255,0,204,.1);
+/* ── Positions panel (gamified scorecard) ── */
+#pos-panel {{
+  flex:1; min-width:160px;
+  overflow-y:auto; scrollbar-width:none;
+  background:#010008;
+  display:flex; flex-direction:column;
 }}
-.pos-card:hover .pos-tip {{ display:block; }}
+#pos-panel::-webkit-scrollbar {{ display:none; }}
+#pos-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:0 0 6px; }}
+#pos-body::-webkit-scrollbar {{ display:none; }}
+/* big P&L banner */
+#pnl-banner {{
+  padding:8px 12px 7px;
+  border-bottom:1px solid #0d0010;
+  flex-shrink:0;
+}}
+.pnl-label {{ font-size:7px; letter-spacing:.28em; color:#2a0040; text-transform:uppercase; }}
+.pnl-big {{
+  font-size:26px; font-weight:700; letter-spacing:-.03em;
+  line-height:1.05; display:block; margin-top:2px;
+}}
+.pnl-sub {{ font-size:9px; margin-top:3px; color:#4a2a6a; }}
+/* pos-cards */
+.pos-card {{ padding:6px 12px 7px; cursor:default; }}
+.pos-top {{ display:flex; align-items:baseline; gap:6px; line-height:1.3; }}
+.pos-sym {{ font-weight:700; font-size:15px; }}
+.pos-qty {{ color:#3a1a5a; font-size:10px; }}
+.pos-val {{ color:#9060b8; font-size:12px; font-weight:700; margin-left:auto; }}
+.pos-pnl-line {{ font-size:10px; margin-top:1px; }}
+.pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
+.pos-hold.active  {{ color:#1a6a2a; }}
+.pos-hold.exiting {{ color:#7a3a0a; }}
+/* ── Deposit / Withdraw panel ── */
+#deposit-panel {{
+  flex:1; min-width:160px;
+  overflow:hidden; scrollbar-width:none;
+  background:#00000a;
+  display:flex; flex-direction:column;
+  border-left:1px solid #0a0018;
+}}
+#deposit-panel::-webkit-scrollbar {{ display:none; }}
+#dep-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:8px 12px; display:flex; flex-direction:column; gap:8px; }}
+#dep-body::-webkit-scrollbar {{ display:none; }}
+.dep-tabs {{ display:flex; gap:0; }}
+.dep-tab {{
+  flex:1; padding:5px 0; font-size:9px; letter-spacing:.16em; text-align:center;
+  cursor:pointer; border:1px solid #1a0028; color:#4a2a6a;
+  background:#000; transition:all .15s;
+}}
+.dep-tab.active {{ color:#ff00cc; border-color:#ff00cc; background:rgba(255,0,204,.06);
+  text-shadow:0 0 8px rgba(255,0,204,.5); }}
+.dep-amt-row {{ display:flex; gap:6px; align-items:center; }}
+.dep-input {{
+  flex:1; background:#000; border:1px solid #1a0028; color:#f0e0ff;
+  font-family:Consolas,monospace; font-size:13px; padding:5px 8px;
+  outline:none; letter-spacing:.02em;
+}}
+.dep-input:focus {{ border-color:#ff00cc; box-shadow:0 0 8px rgba(255,0,204,.2); }}
+.dep-btn {{
+  padding:5px 12px; background:transparent; border:1px solid #ff00cc;
+  color:#ff00cc; font-family:Consolas,monospace; font-size:9px; letter-spacing:.18em;
+  cursor:pointer; transition:all .15s;
+  text-shadow:0 0 6px rgba(255,0,204,.4);
+}}
+.dep-btn:hover {{ background:rgba(255,0,204,.1); }}
+.dep-note {{ font-size:8px; color:#2a0040; letter-spacing:.04em; line-height:1.5; }}
+.dep-hist-hdr {{ font-size:7px; letter-spacing:.28em; color:#2a0040; text-transform:uppercase; border-top:1px solid #0a0018; padding-top:8px; }}
+.dep-hist-item {{ font-size:10px; color:#4a2a6a; display:flex; gap:6px; }}
+.dep-hist-amt {{ font-weight:700; }}
+.dep-hist-date {{ color:#1a0028; font-size:9px; margin-left:auto; }}
+/* ── Crosshair overlay ── */
+#crosshair-overlay {{
+  position:absolute; inset:0; pointer-events:none; z-index:15;
+  opacity:0;
+}}
+#xhair-canvas {{ position:absolute; inset:0; }}
 </style>
 </head>
 <body>
@@ -1122,6 +1149,7 @@ body::after {{
 <div id="main-area">
   <div id="chart"></div>
   <canvas id="pulse-canvas"></canvas>
+  <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div class="nav-card">
     <span class="nv-val">{nav_str}</span>
     <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
@@ -1353,6 +1381,8 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   buildTargets();
   if (rafId) cancelAnimationFrame(rafId);
   drawPulse();
+  // Crosshair on load: show → zoom in after 1.5s
+  setTimeout(showCrosshair, 800);
 }});
 
 gd.on('plotly_afterplot', buildTargets);
@@ -1377,41 +1407,72 @@ window.addEventListener('resize', function() {{
 }});
 </script>
 
-<!-- Terminal overlay — bottom third of chart -->
+<!-- Terminal overlay -->
 <div id="term-overlay">
   <div id="vert-drag"></div>
-  <div id="term-hdr">
-    <div class="hdr-col" id="hdr-feed">
-      <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">SYSTEM FEED</span>
+
+  <!-- Full-width matrix green console feed -->
+  <div id="console-strip">
+    <div id="console-hdr">
+      <div class="con-dot"></div>
+      <span>SYSTEM FEED</span>
     </div>
-    <div class="hdr-drag-ph"></div>
-    <div class="hdr-col" id="hdr-queue" style="flex:1;min-width:180px">
-      <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">QUEUED ACTIONS</span>
-    </div>
-    <div class="hdr-drag-ph"></div>
-    <div class="hdr-col" id="hdr-pos" style="flex:1;min-width:180px">
-      <div class="term-dot"></div><span style="font-size:13px;letter-spacing:.18em;color:#ff00cc">POSITIONS</span>
-    </div>
-  </div>
-  <div id="term-cols">
     <div id="term-body">
       {term_rows}
       <div id="clock-line"><span id="live-clock"></span><span id="prompt-sym">&gt;</span><span id="type-preview"></span><span id="blink-cur">█</span></div>
     </div>
-    <div class="col-drag" id="drag-q" title="drag to resize"></div>
+  </div>
+
+  <!-- Three lower panels side by side -->
+  <div id="lower-panels">
+
+    <!-- Queued Actions -->
     <div id="queue-panel">
-      {q_items}
+      <div class="panel-hdr"><div class="term-dot"></div>QUEUED ACTIONS</div>
+      <div id="queue-body">{q_items}</div>
     </div>
-    <div class="col-drag" id="drag-p" title="drag to resize"></div>
+
+    <div class="col-drag" id="drag-q"></div>
+
+    <!-- Positions scorecard -->
     <div id="pos-panel">
-      {pos_cards}
+      <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
+      <div id="pnl-banner">
+        <div class="pnl-label">total p&amp;l</div>
+        <span class="pnl-big" style="color:{_pnl_col}">{_pnl_str}</span>
+        <div class="pnl-sub">{_pnl_pct_str}</div>
+      </div>
+      <div id="pos-body">{pos_cards}</div>
     </div>
+
+    <div class="col-drag" id="drag-p"></div>
+
+    <!-- Capital / Deposit / Withdraw -->
+    <div id="deposit-panel">
+      <div class="panel-hdr"><div class="term-dot"></div>CAPITAL</div>
+      <div id="dep-body">
+        <div class="dep-tabs">
+          <div class="dep-tab active" id="tab-dep" onclick="setDepMode('deposit')">DEPOSIT</div>
+          <div class="dep-tab" id="tab-wdw" onclick="setDepMode('withdraw')">WITHDRAW</div>
+        </div>
+        <div class="dep-amt-row">
+          <input class="dep-input" id="dep-amount" type="number" placeholder="0.00" min="0" step="100">
+          <button class="dep-btn" onclick="submitTransfer()">TRANSFER</button>
+        </div>
+        <div class="dep-note" id="dep-note">ACH · free · 1-3 business days to settle</div>
+        <div class="dep-hist-hdr">history</div>
+        <div id="dep-hist">
+          <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 <script>
 
   var b = document.getElementById('term-body');
-  if (b) b.scrollTop = b.scrollHeight;
+  if (b) {{ b.scrollTop = b.scrollHeight; }}
 
   // ── Panel resize (horizontal + vertical) ───────────────────────────────
   (function() {{
@@ -1448,15 +1509,12 @@ window.addEventListener('resize', function() {{
       document.addEventListener('touchend', end);
     }}
 
-    var feedPanel = document.getElementById('term-body');
-    var qPanel    = document.getElementById('queue-panel');
-    var posPanel  = document.getElementById('pos-panel');
-    var hdrFeed   = document.getElementById('hdr-feed');
-    var hdrQueue  = document.getElementById('hdr-queue');
-    var hdrPos    = document.getElementById('hdr-pos');
+    var qPanel   = document.getElementById('queue-panel');
+    var posPanel = document.getElementById('pos-panel');
+    var depPanel = document.getElementById('deposit-panel');
 
-    makeColDrag(document.getElementById('drag-q'), feedPanel, qPanel,  hdrFeed, hdrQueue);
-    makeColDrag(document.getElementById('drag-p'), qPanel,   posPanel, hdrQueue, hdrPos);
+    makeColDrag(document.getElementById('drag-q'), qPanel,   posPanel, null, null);
+    makeColDrag(document.getElementById('drag-p'), posPanel, depPanel, null, null);
 
     // Vertical overlay drag (drag the top edge to resize height)
     var overlay  = document.getElementById('term-overlay');
@@ -1597,6 +1655,102 @@ window.addEventListener('resize', function() {{
     }}
 
   }})();
+
+  // ── Crosshair on portfolio dot ───────────────────────────────────────────────
+  function showCrosshair() {{
+    var overlay = document.getElementById('crosshair-overlay');
+    var xc      = document.getElementById('xhair-canvas');
+    var gd2     = document.getElementById('chart');
+    if (!overlay || !xc || !gd2 || !gd2._fullLayout) return;
+    try {{
+      var fl  = gd2._fullLayout;
+      var tr  = gd2.data[3]; // portfolio trace
+      if (!tr || !tr.x || !tr.x.length) return;
+      var px = fl.xaxis.l2p(fl.xaxis.d2l(tr.x[tr.x.length-1])) + fl.margin.l;
+      var py = fl.yaxis.l2p(fl.yaxis.d2l(tr.y[tr.y.length-1])) + fl.margin.t;
+
+      xc.width  = overlay.offsetWidth;
+      xc.height = overlay.offsetHeight;
+      var ctx = xc.getContext('2d');
+      var Y = '#FFE500';
+      ctx.clearRect(0, 0, xc.width, xc.height);
+
+      // Full cross lines
+      ctx.strokeStyle = 'rgba(255,229,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(xc.width, py); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, xc.height); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Corner brackets (retro radar lock)
+      var S = 14, G = 4;
+      ctx.strokeStyle = Y; ctx.lineWidth = 2;
+      [[px-G-S, py-G-S, 1, 1], [px+G+S, py-G-S, -1, 1],
+       [px-G-S, py+G+S, 1, -1], [px+G+S, py+G+S, -1, -1]].forEach(function(c) {{
+        ctx.beginPath();
+        ctx.moveTo(c[0], c[1]); ctx.lineTo(c[0] + c[2]*S, c[1]);
+        ctx.moveTo(c[0], c[1]); ctx.lineTo(c[0], c[1] + c[3]*S);
+        ctx.stroke();
+      }});
+
+      // Center dot
+      ctx.shadowColor = Y; ctx.shadowBlur = 12;
+      ctx.fillStyle = Y;
+      ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Label
+      ctx.fillStyle = Y; ctx.font = '700 8px Consolas,monospace';
+      ctx.letterSpacing = '0.18em';
+      ctx.fillText('TARGET ACQUIRED', px + G + S + 6, py + 4);
+
+      // Fade in → hold → fade out → then zoom tightens
+      overlay.style.transition = 'opacity 300ms ease';
+      overlay.style.opacity = '1';
+      setTimeout(function() {{
+        overlay.style.transition = 'opacity 400ms ease';
+        overlay.style.opacity = '0';
+        // Snap to 60-day window
+        var yr2 = yRange(xStart, xEnd);
+        Plotly.relayout(gd2, {{
+          'xaxis.range': [xStart, xEnd],
+          'yaxis.range': yr2[0] !== null ? yr2 : undefined
+        }});
+      }}, 1100);
+    }} catch(e) {{}}
+  }}
+
+  // ── Deposit / Withdraw panel ──────────────────────────────────────────────────
+  var _depMode = 'deposit';
+  function setDepMode(m) {{
+    _depMode = m;
+    document.getElementById('tab-dep').classList.toggle('active', m==='deposit');
+    document.getElementById('tab-wdw').classList.toggle('active', m==='withdraw');
+    var note = document.getElementById('dep-note');
+    if (note) note.textContent = m === 'deposit'
+      ? 'ACH · free · 1-3 business days to settle'
+      : 'ACH · free · available in 1-3 business days';
+  }}
+  function submitTransfer() {{
+    var amt = parseFloat(document.getElementById('dep-amount').value);
+    if (!amt || amt <= 0) return;
+    var hist = document.getElementById('dep-hist');
+    var sign = _depMode === 'deposit' ? '+' : '-';
+    var col  = _depMode === 'deposit' ? '#00ff9d' : '#ff9900';
+    var now  = new Date();
+    var label = (now.getMonth()+1)+'/'+now.getDate()+'/'+String(now.getFullYear()).slice(2);
+    var row = document.createElement('div');
+    row.className = 'dep-hist-item';
+    row.innerHTML = '<span class="dep-hist-amt" style="color:'+col+'">'+sign+'$'+amt.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}})+'</span>'
+      + '<span style="color:#3a2a5a">'+_depMode+'</span>'
+      + '<span class="dep-hist-date">'+label+'</span>';
+    var noTx = hist.querySelector('div');
+    if (noTx && noTx.textContent.includes('no transfers')) noTx.remove();
+    hist.insertBefore(row, hist.firstChild);
+    document.getElementById('dep-amount').value = '';
+    // TODO: fire Alpaca ACH API
+  }}
 
   // ── Page reload every 90s (data freshness) ─────────────────────────────────
   setTimeout(function() {{ window.parent.location.reload(); }}, 90000);
