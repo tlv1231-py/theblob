@@ -1079,6 +1079,24 @@ body::after {{
   100% {{ background:transparent; }}
 }}
 .enter-flash {{ animation:enter-flash 220ms ease-out forwards; }}
+/* ── VHS trade flash on enter/exit feed lines ── */
+@keyframes vhs-trade-in {{
+  0%   {{ opacity:0; transform:translateX(-4px); filter:brightness(6) saturate(0); }}
+  8%   {{ opacity:1; filter:brightness(3) saturate(1.5);
+          text-shadow:-3px 0 rgba(255,0,204,.7),3px 0 rgba(0,229,255,.7),0 0 20px rgba(0,255,65,.9); }}
+  30%  {{ filter:brightness(1.4) saturate(1.2);
+          text-shadow:-1px 0 rgba(255,0,204,.4),1px 0 rgba(0,229,255,.4),0 0 10px rgba(0,255,65,.6); }}
+  100% {{ opacity:1; transform:none; filter:brightness(1) saturate(1); text-shadow:none; }}
+}}
+@keyframes vhs-trade-aberr {{
+  0%,100% {{ text-shadow:0 0 6px rgba(0,255,65,.4); }}
+  20%      {{ text-shadow:-2px 0 rgba(255,0,204,.5),2px 0 rgba(0,229,255,.5),0 0 14px rgba(0,255,65,.7); }}
+  40%      {{ text-shadow:0 0 6px rgba(0,255,65,.3); }}
+  60%      {{ text-shadow:1px 0 rgba(255,0,204,.3),-1px 0 rgba(0,229,255,.3),0 0 8px rgba(0,255,65,.4); }}
+}}
+.te-trade {{
+  animation:vhs-trade-in .45s cubic-bezier(.22,1,.36,1) forwards, vhs-trade-aberr 1.8s ease-out 0.45s 1 forwards;
+}}
 
 /* ── System Feed panel (bottom-left) ── */
 #feed-panel {{
@@ -1135,135 +1153,152 @@ body::after {{
   flex-shrink:0;
 }}
 /* ── Queue panel ── */
-/* ── HUD overlay (fixed, slides from top) ── */
+/* ── HUD overlay (fixed, drops over feed panel only) ── */
 #hud-overlay {{
-  position:fixed; top:0; left:0; right:0; z-index:300;
-  background:rgba(2,0,10,.96);
-  border-bottom:1px solid rgba(0,229,255,.18);
-  box-shadow:0 2px 32px rgba(0,229,255,.1), 0 8px 48px rgba(0,0,0,.6);
+  position:fixed; top:0; left:0; width:300px; z-index:300;
+  background:rgba(2,0,10,.97);
+  border-bottom:1px solid rgba(0,229,255,.22);
+  border-right:1px solid rgba(0,229,255,.1);
+  box-shadow:0 2px 32px rgba(0,229,255,.12), 0 12px 48px rgba(0,0,0,.7);
   transform:translateY(-100%);
-  transition:transform .22s cubic-bezier(.22,1,.36,1);
-  display:flex; align-items:stretch; gap:0; min-height:52px;
-  /* CRT top-edge glow */
-  padding-top:1px;
+  transition:transform .2s cubic-bezier(.22,1,.36,1);
+  display:flex; flex-direction:column; gap:0;
+  padding-top:1px; overflow:hidden;
 }}
 #hud-overlay::before {{
   content:''; position:absolute; top:0; left:0; right:0; height:1px;
-  background:linear-gradient(90deg,transparent,rgba(0,229,255,.8) 20%,rgba(255,0,204,.6) 50%,rgba(0,229,255,.8) 80%,transparent);
-  box-shadow:0 0 12px rgba(0,229,255,.6);
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.9) 30%,rgba(255,0,204,.5) 70%,transparent);
+  box-shadow:0 0 14px rgba(0,229,255,.7);
 }}
 #hud-overlay.hud-open {{ transform:translateY(0); }}
 #hud-label {{
   flex-shrink:0; display:flex; align-items:center;
-  padding:0 14px; border-right:1px solid rgba(0,229,255,.12);
-  gap:7px;
+  padding:4px 12px 3px; border-bottom:1px solid rgba(0,229,255,.1); gap:7px;
 }}
 #hud-label-text {{
-  font-size:7px; letter-spacing:.32em; color:rgba(0,229,255,.45);
-  text-transform:uppercase; writing-mode:horizontal-tb; white-space:nowrap;
+  font-size:7px; letter-spacing:.32em; color:rgba(0,229,255,.5);
+  text-transform:uppercase; white-space:nowrap;
 }}
 #hud-items {{
-  flex:1; display:flex; align-items:stretch; overflow:hidden;
+  display:flex; flex-direction:column; overflow:hidden;
 }}
 .hud-item {{
-  flex:1; display:flex; flex-direction:column; justify-content:center;
-  padding:8px 14px 8px; border-right:1px solid rgba(255,255,255,.04);
-  position:relative; overflow:hidden; min-width:0;
+  display:flex; align-items:center; gap:10px;
+  padding:5px 12px; border-bottom:1px solid rgba(255,255,255,.03);
+  position:relative; overflow:hidden;
 }}
-.hud-item:last-child {{ border-right:none; }}
-.hud-item::after {{ /* left accent line */
-  content:''; position:absolute; left:0; top:20%; bottom:20%; width:2px;
-  background:currentColor; opacity:.0; transition:opacity .2s;
+.hud-item:last-child {{ border-bottom:none; }}
+.hud-item::before {{ /* left accent stripe */
+  content:''; flex-shrink:0; width:2px; height:28px; border-radius:1px;
+  background:currentColor; opacity:.6;
 }}
-.hud-item.hud-imminent::after {{ opacity:.7; animation:hud-imminent-blink .5s ease-in-out infinite; }}
-@keyframes hud-imminent-blink {{ 0%,100%{{opacity:.7}} 50%{{opacity:.15}} }}
+.hud-item.hud-imminent::before {{ animation:hud-imminent-blink .45s ease-in-out infinite; }}
+@keyframes hud-imminent-blink {{ 0%,100%{{opacity:.7}} 50%{{opacity:.1}} }}
 .hud-badge {{
-  font-size:7px; letter-spacing:.22em; font-weight:700; margin-bottom:2px;
-  text-transform:uppercase; opacity:.8;
+  font-size:6.5px; letter-spacing:.22em; font-weight:700;
+  text-transform:uppercase; opacity:.75; white-space:nowrap;
 }}
 .hud-sym {{
-  font-size:13px; font-weight:700; letter-spacing:.04em; line-height:1.2;
+  font-size:11px; font-weight:700; letter-spacing:.04em; flex:1;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }}
 .hud-detail {{
-  font-size:7.5px; color:rgba(255,255,255,.25); margin-top:1px;
-  letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-size:7px; color:rgba(255,255,255,.2);
+  letter-spacing:.02em; white-space:nowrap;
 }}
 .hud-timer {{
-  font-size:16px; font-weight:700; letter-spacing:-.02em; margin-top:3px;
-  font-variant-numeric:tabular-nums; line-height:1;
+  font-size:14px; font-weight:700; letter-spacing:-.01em; margin-left:auto;
+  font-variant-numeric:tabular-nums; white-space:nowrap;
 }}
 .hud-timer.hud-urgent {{ color:#ff9900; }}
 .hud-timer.hud-imminent {{ color:#ff3366; animation:q-pulse .5s ease-in-out infinite; }}
 @keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
-/* ── Report panel (replaces queue column) ── */
+/* ── Report panel — Alpaca wallet display ── */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap');
 #report-panel {{
-  flex:1.6; min-width:260px; max-width:520px;
-  background:#01000a; display:flex; flex-direction:column;
-  border-right:1px solid #0a0018; position:relative; overflow:hidden;
+  flex:1.4; min-width:200px; max-width:460px;
+  background:#000308; display:flex; flex-direction:column;
+  border-right:1px solid #08001a; position:relative; overflow:hidden;
+  align-items:center; justify-content:center;
 }}
-/* Score block — NAV + daily P&L */
-#rp-score {{
-  flex-shrink:0; padding:10px 16px 8px;
-  border-bottom:1px solid #0d0020;
-  display:flex; align-items:baseline; gap:14px;
+/* scanline overlay on the wallet panel */
+#report-panel::after {{
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:10;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.18) 2px,rgba(0,0,0,.18) 4px);
 }}
-#rp-nav {{
-  font-size:26px; font-weight:700; letter-spacing:-.03em; line-height:1;
-  color:#f0e0ff; font-variant-numeric:tabular-nums;
+#wallet-block {{
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; align-items:center;
+  gap:6px; padding:20px 24px;
+  width:100%;
 }}
-#rp-dpnl {{
-  font-size:13px; font-weight:700; letter-spacing:-.01em;
+#wallet-label {{
+  font-family:'Orbitron',Consolas,monospace;
+  font-size:7.5px; letter-spacing:.45em; font-weight:700;
+  color:rgba(0,229,255,.35); text-transform:uppercase;
+  text-shadow:0 0 12px rgba(0,229,255,.3);
+}}
+#wallet-nav {{
+  font-family:'Orbitron',Consolas,monospace;
+  font-size:clamp(28px,4.5vw,52px); font-weight:900; letter-spacing:-.02em;
+  line-height:1; font-variant-numeric:tabular-nums;
+  color:#00ff9d;
+  text-shadow:
+    0 0 20px rgba(0,255,157,.9),
+    0 0 50px rgba(0,255,157,.5),
+    0 0 100px rgba(0,255,157,.2),
+    2px 0 0 rgba(255,0,204,.25),
+    -2px 0 0 rgba(0,229,255,.2);
+  position:relative;
+}}
+/* chromatic aberration ghost layers */
+#wallet-nav::before,#wallet-nav::after {{
+  content:attr(data-val);
+  position:absolute; top:0; left:0; width:100%; pointer-events:none;
+  font-family:inherit; font-size:inherit; font-weight:inherit; letter-spacing:inherit;
+  white-space:nowrap;
+}}
+#wallet-nav::before {{
+  color:rgba(255,0,204,.18);
+  transform:translate(-3px,0);
+  clip-path:polygon(0 30%,100% 30%,100% 55%,0 55%);
+}}
+#wallet-nav::after {{
+  color:rgba(0,229,255,.18);
+  transform:translate(3px,0);
+  clip-path:polygon(0 55%,100% 55%,100% 75%,0 75%);
+}}
+@keyframes wallet-glitch {{
+  0%,94%,100% {{ transform:none; text-shadow:0 0 20px rgba(0,255,157,.9),0 0 50px rgba(0,255,157,.5),0 0 100px rgba(0,255,157,.2),2px 0 0 rgba(255,0,204,.25),-2px 0 0 rgba(0,229,255,.2); }}
+  95%          {{ transform:translate(-2px,0) skewX(-1deg); text-shadow:-4px 0 rgba(255,0,204,.6),4px 0 rgba(0,229,255,.6),0 0 30px rgba(0,255,157,.9); }}
+  97%          {{ transform:translate(2px,0) skewX(1deg); text-shadow:4px 0 rgba(255,0,204,.5),-4px 0 rgba(0,229,255,.5),0 0 40px rgba(0,255,157,.7); }}
+}}
+#wallet-nav.glitch-active {{ animation:wallet-glitch 4s ease-in-out infinite; }}
+#wallet-pnl {{
+  font-family:'Orbitron',Consolas,monospace;
+  font-size:clamp(13px,1.8vw,20px); font-weight:700; letter-spacing:.04em;
   font-variant-numeric:tabular-nums;
 }}
-#rp-label {{
-  font-size:7px; letter-spacing:.22em; color:#3a1a5a;
-  text-transform:uppercase; margin-left:auto; align-self:center;
+#wallet-sub {{
+  font-family:Consolas,monospace;
+  font-size:8px; letter-spacing:.22em; color:rgba(255,255,255,.2);
+  text-transform:uppercase; margin-top:4px;
 }}
-/* Position rows in report panel */
-#rp-pos-list {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:0; }}
-#rp-pos-list::-webkit-scrollbar {{ display:none; }}
-.rp-pos {{
-  display:grid;
-  grid-template-columns:3px 1fr auto;
-  grid-template-rows:auto auto;
-  column-gap:10px; row-gap:0;
-  padding:9px 14px 9px 10px;
-  border-bottom:1px solid #0a0018;
-  position:relative; overflow:hidden;
-  cursor:default;
-  transition:background .15s;
+/* noise band that sweeps across the wallet on update */
+@keyframes wallet-noise-sweep {{
+  0%   {{ top:-4px; opacity:0; }}
+  10%  {{ opacity:1; }}
+  90%  {{ opacity:.7; }}
+  100% {{ top:calc(100% + 4px); opacity:0; }}
 }}
-.rp-pos:hover {{ background:rgba(255,255,255,.015); }}
-/* left accent stripe */
-.rp-pos-stripe {{
-  grid-row:1/3; grid-column:1/2; border-radius:1px;
-  width:3px; align-self:stretch;
+#wallet-noise {{
+  position:absolute; left:-10px; right:-10px; height:6px; top:-4px;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.4) 20%,rgba(0,255,157,.8) 50%,rgba(0,229,255,.4) 80%,transparent);
+  box-shadow:0 0 12px rgba(0,229,255,.6);
+  opacity:0; pointer-events:none; z-index:15;
 }}
-/* top row */
-.rp-pos-top {{ grid-row:1; grid-column:2/3; display:flex; align-items:baseline; gap:7px; }}
-.rp-pos-sym {{ font-size:17px; font-weight:700; letter-spacing:-.01em; line-height:1.15; }}
-.rp-pos-type {{ font-size:7px; letter-spacing:.2em; opacity:.45; font-weight:700; align-self:center; }}
-.rp-pos-val {{ grid-row:1; grid-column:3/4; font-size:16px; font-weight:700; letter-spacing:-.01em;
-  text-align:right; font-variant-numeric:tabular-nums; align-self:baseline; }}
-/* bottom row */
-.rp-pos-sub {{ grid-row:2; grid-column:2/3; display:flex; gap:10px; margin-top:2px; }}
-.rp-pos-qty {{ font-size:9px; color:#4a2a6a; }}
-.rp-pos-hold {{ font-size:9px; color:#3a1a5a; }}
-.rp-pos-pnl {{ grid-row:2; grid-column:3/4; font-size:11px; font-weight:700;
-  text-align:right; font-variant-numeric:tabular-nums; align-self:baseline; }}
-/* corner brackets on report rows */
-.rp-pos .pos-corner {{ width:7px; height:7px; }}
-/* entering animation for report rows */
-@keyframes rp-enter {{ 0%{{opacity:0;transform:translateX(-8px)}} 100%{{opacity:1;transform:none}} }}
-.rp-pos-entering {{ animation:rp-enter .35s cubic-bezier(.22,1,.36,1) forwards; }}
-/* empty state */
-#rp-empty {{
-  flex:1; display:flex; align-items:center; justify-content:center;
-  flex-direction:column; gap:8px; opacity:.35;
-}}
-#rp-empty-line {{ font-size:9px; letter-spacing:.22em; color:#3a1a5a; }}
-/* section dividers */
+#wallet-noise.sweep {{ animation:wallet-noise-sweep .6s ease-in-out forwards; }}
+/* section dividers (kept for rp-section-hdr class used elsewhere) */
 .rp-section-hdr {{
   font-size:7px; letter-spacing:.22em; color:#2a1a3a; text-transform:uppercase;
   padding:5px 14px 4px 14px; border-bottom:1px solid #080018; background:#01000a;
@@ -1312,11 +1347,20 @@ body::after {{
   display:flex; flex-direction:row; gap:0;
 }}
 #pos-left, #pos-right {{
-  flex:1; overflow-y:auto; scrollbar-width:none;
-  display:flex; flex-direction:column; padding-bottom:6px;
+  flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(148,0,255,.25) transparent;
+  display:flex; flex-direction:column; padding-bottom:6px; min-height:0;
 }}
 #pos-left {{ border-right:1px solid #0d0020; }}
-#pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ display:none; }}
+#pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ width:2px; }}
+#pos-left::-webkit-scrollbar-thumb, #pos-right::-webkit-scrollbar-thumb {{ background:rgba(148,0,255,.3); border-radius:1px; }}
+/* position count badge */
+.pos-count-badge {{
+  flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  padding:3px 6px; margin:3px 10px;
+  border:1px solid rgba(0,229,255,.15); border-radius:2px;
+  font-size:7px; letter-spacing:.2em; color:rgba(0,229,255,.4);
+  background:rgba(0,229,255,.03);
+}}
 /* ── Floating P&L tooltip above portfolio orb ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
@@ -2461,20 +2505,14 @@ window.addEventListener('resize', function() {{
 
     <div class="col-drag" id="drag-f"></div>
 
-    <!-- Report panel — big positions + live P&L -->
+    <!-- Report panel — Alpaca wallet total -->
     <div id="report-panel">
-      <div id="rp-score">
-        <div>
-          <div id="rp-nav">{last_nav_fmt}</div>
-        </div>
-        <div id="rp-dpnl" style="color:{_pnl_col}">{_pnl_str}</div>
-        <div id="rp-label">TOTAL RETURN</div>
-      </div>
-      <div id="rp-pos-list">
-        <div class="rp-section-hdr">crypto positions</div>
-        <div id="rp-crypto-section"><!-- filled by JS poller --></div>
-        <div class="rp-section-hdr" style="margin-top:2px">equity positions</div>
-        <div id="rp-equity-section">{rp_equity_cards}</div>
+      <div id="wallet-block">
+        <div id="wallet-noise"></div>
+        <div id="wallet-label">ALPACA WALLET</div>
+        <div id="wallet-nav" data-val="{last_nav_fmt}" class="glitch-active">{last_nav_fmt}</div>
+        <div id="wallet-pnl" style="color:{_pnl_col}">{_pnl_str}</div>
+        <div id="wallet-sub">paper trading · {_pnl_pct_str}</div>
       </div>
     </div>
 
@@ -2749,8 +2787,40 @@ window.addEventListener('resize', function() {{
       else if (diff < 3600000) el.classList.add('urgent');
     }});
   }}
+  // Sync HUD to feed panel bounds
+  function _syncHud() {{
+    var feed = document.getElementById('feed-panel');
+    var hud  = document.getElementById('hud-overlay');
+    if (!feed || !hud) return;
+    var r = feed.getBoundingClientRect();
+    hud.style.left  = r.left + 'px';
+    hud.style.width = r.width + 'px';
+    hud.style.right = 'auto';
+  }}
+  _syncHud();
+  window.addEventListener('resize', _syncHud);
+
+  // Update crypto position count badge
+  function _updatePosCounts() {{
+    var cryptoSection = document.getElementById('pos-crypto-section');
+    var badgeId = 'crypto-pos-count';
+    if (!cryptoSection) return;
+    var count = cryptoSection.querySelectorAll('.pos-card[data-sym]').length;
+    var existing = document.getElementById(badgeId);
+    if (count > 0) {{
+      if (!existing) {{
+        existing = document.createElement('div');
+        existing.id = badgeId; existing.className = 'pos-count-badge';
+        cryptoSection.parentNode.insertBefore(existing, cryptoSection);
+      }}
+      existing.textContent = count + ' position' + (count !== 1 ? 's' : '');
+    }} else if (existing) {{
+      existing.parentNode.removeChild(existing);
+    }}
+  }}
+
   tick();
-  setInterval(function() {{ tick(); _updateDynamicQueue(); }}, 1000);
+  setInterval(function() {{ tick(); _updateDynamicQueue(); _syncHud(); _updatePosCounts(); }}, 1000);
   _updateDynamicQueue(); // immediate first render
 
   // ── Terminal typewriter ──────────────────────────────────────────────────────
@@ -2879,19 +2949,27 @@ window.addEventListener('resize', function() {{
         var now  = item.ts ? new Date(item.ts) : new Date();
         var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
         var row  = document.createElement('div');
-        row.className = 'te';
-        row.style.color = '#00ff41';
-        row.style.textShadow = '0 0 8px rgba(0,255,65,.6)';
-        row.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
+        var isTrade = item.html.indexOf('enter') !== -1 || item.html.indexOf('exit') !== -1 || item.html.indexOf('ENTER') !== -1 || item.html.indexOf('EXIT') !== -1;
+        if (isTrade) {{
+          row.className = 'te te-trade';
+          row.style.color = '#00ff9d';
+        }} else {{
+          row.className = 'te';
+          row.style.color = '#00ff41';
+          row.style.textShadow = '0 0 8px rgba(0,255,65,.6)';
+          row.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
+        }}
         row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + item.html;
         if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
-        // Fade from status green to normal feed color
-        requestAnimationFrame(function() {{
+        // Fade non-trade entries to dim color after flash
+        if (!isTrade) {{
           requestAnimationFrame(function() {{
-            row.style.color = '#9060b8';
-            row.style.textShadow = 'none';
+            requestAnimationFrame(function() {{
+              row.style.color = '#9060b8';
+              row.style.textShadow = 'none';
+            }});
           }});
-        }});
+        }}
         _busy = false;
         if (_feedQueue.length) {{
           setTimeout(_drainQueue, 400);
@@ -3208,11 +3286,25 @@ window.addEventListener('resize', function() {{
         if (i === 1) {{ el.textContent = ret; el.style.color = col; }}
       }});
 
-      // Report panel score block
-      var rpNav  = document.getElementById('rp-nav');
-      var rpDpnl = document.getElementById('rp-dpnl');
-      if (rpNav)  rpNav.textContent = _fmt(nav);
-      if (rpDpnl) {{ rpDpnl.textContent = (pnl >= 0 ? '+' : '−') + '$' + _fmt(Math.abs(pnl)).replace('$',''); rpDpnl.style.color = pnl >= 0 ? '#00ff9d' : '#ff3366'; }}
+      // Wallet panel
+      var wNav  = document.getElementById('wallet-nav');
+      var wPnl  = document.getElementById('wallet-pnl');
+      var wNoise = document.getElementById('wallet-noise');
+      if (wNav) {{
+        var newVal = _fmt(nav);
+        if (wNav.textContent !== newVal) {{
+          wNav.textContent = newVal;
+          wNav.setAttribute('data-val', newVal);
+          // Trigger noise sweep
+          if (wNoise) {{
+            wNoise.classList.remove('sweep');
+            void wNoise.offsetWidth;
+            wNoise.classList.add('sweep');
+            setTimeout(function() {{ wNoise.classList.remove('sweep'); }}, 650);
+          }}
+        }}
+      }}
+      if (wPnl) {{ wPnl.textContent = (pnl >= 0 ? '+' : '−') + '$' + Math.abs(pnl).toLocaleString('en-US',{{maximumFractionDigits:0}}); wPnl.style.color = pnl >= 0 ? '#00ff9d' : '#ff3366'; }}
 
       // nav-card overlay (top-left of chart)
       var nvVal = document.querySelector('.nv-val');
