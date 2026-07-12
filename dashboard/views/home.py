@@ -2401,17 +2401,60 @@ window.addEventListener('resize', resizeCanvas);
 
 var pulseTargets = [];
 
-// ── Orb trade flash — animated color burst on entry/exit ─────────────────────
+// ── Orb state ─────────────────────────────────────────────────────────────────
 var _orbFlash = {{ active: false, isEntry: true, t: 0, dur: 2200 }};
+var _orbBurstCount = 0;
+var _liveTip = {{ pts: [] }};
+
+// Shockwaves: array of {{age, col, cx, cy}}
+var _shockWaves = [];
+
+// Combo streak display
+var _comboCount = 0;
+var _comboFlash = null; // {{age, text, col}}
+
+// Satellite orbit angles: symbol → angle (radians)
+var _satAngles = {{}};
+
 window._orbTradeFlash = function(isEntry) {{
   _orbFlash.active = true;
   _orbFlash.isEntry = isEntry;
   _orbFlash.t = Date.now();
-  // Burst: extra rings, held briefly
   _orbBurstCount = isEntry ? 6 : 5;
+  // Spawn 5 shockwave rings staggered
+  var portT = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
+  if (portT) {{
+    try {{
+      var fl = gd._fullLayout;
+      var scx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
+      var scy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
+      if (isFinite(scx) && isFinite(scy)) {{
+        var scol = isEntry ? [0,255,157] : [255,51,102];
+        for (var si=0; si<5; si++) {{
+          (function(delay,offset) {{
+            setTimeout(function() {{
+              _shockWaves.push({{ age:offset, col:scol, cx:scx, cy:scy }});
+            }}, delay);
+          }})(si*75, si*0.06);
+        }}
+      }}
+    }} catch(e) {{}}
+  }}
 }};
-var _orbBurstCount = 0;
-var _liveTip = {{ pts: [] }}; // brownian extension from latest portfolio point
+
+// Called by block 2 on EXIT result (win/loss) to drive combo counter
+window._orbComboResult = function(isWin) {{
+  if (isWin) {{
+    _comboCount++;
+    var txt = _comboCount >= 10 ? '⚡ SURGE' : _comboCount >= 5 ? 'HOT STREAK' : '+WIN';
+    _comboFlash = {{ age:0, text:txt, col:[0,255,157] }};
+  }} else {{
+    if (_comboCount > 1) {{
+      _comboFlash = {{ age:0, text:'CHAIN BROKEN', col:[255,51,102] }};
+    }}
+    _comboCount = 0;
+  }}
+}};
 
 function buildTargets() {{
   pulseTargets = [];
@@ -2453,14 +2496,28 @@ function positionPnlFloat() {{
 
 var phase = 0;
 var rafId = null;
+
+// ── Compute pressure from live proximity meters (0=calm, 1=at stop) ──────────
+function _computePressure() {{
+  var maxDanger = 0;
+  document.querySelectorAll('.pos-prox-wrap[data-entry]').forEach(function(wrap) {{
+    var fill = wrap.querySelector('.pos-prox-fill');
+    if (!fill) return;
+    var t = parseFloat(fill.style.width) / 100; // 0=at stop, 1=at target
+    var danger = 1 - t;
+    if (danger > maxDanger) maxDanger = danger;
+  }});
+  return Math.max(0, Math.min(1, maxDanger));
+}}
+
 function drawPulse() {{
   var ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   phase += 0.03;
 
-  // Compute flash blend for portfolio orb
+  // Flash blend state
   var flashAlpha = 0;
-  var flashRgb = [255, 0, 204]; // default pink
+  var flashRgb = [255, 0, 204];
   if (_orbFlash.active) {{
     var elapsed = Date.now() - _orbFlash.t;
     flashAlpha = Math.max(0, 1 - elapsed / _orbFlash.dur);
@@ -2468,92 +2525,217 @@ function drawPulse() {{
     else flashRgb = _orbFlash.isEntry ? [0,255,157] : [255,51,102];
   }}
 
+  // Pressure 0=calm, 1=danger — modulates ring speed, color, tightness
+  var pressure = _computePressure();
+
+  // ── SPY / QQQ orbs (unchanged) ────────────────────────────────────────────
   pulseTargets.forEach(function(t) {{
+    if (t.rgb[0]===255 && t.rgb[2]===204) return; // portfolio handled separately
     try {{
       var fl = gd._fullLayout;
       if (!fl || !fl.xaxis || !fl.yaxis) return;
       var cx = fl.xaxis.l2p(fl.xaxis.d2l(t.x)) + fl.margin.l;
       var cy = fl.yaxis.l2p(fl.yaxis.d2l(t.y)) + fl.margin.t;
       if (!isFinite(cx) || !isFinite(cy)) return;
-
-      // Portfolio orb: blend between flash color and base pink
-      var isPortfolio = t.rgb[0]===255 && t.rgb[2]===204;
-      var r, g, b;
-      if (isPortfolio && flashAlpha > 0) {{
-        r = Math.round(t.rgb[0]*(1-flashAlpha) + flashRgb[0]*flashAlpha);
-        g = Math.round(t.rgb[1]*(1-flashAlpha) + flashRgb[1]*flashAlpha);
-        b = Math.round(t.rgb[2]*(1-flashAlpha) + flashRgb[2]*flashAlpha);
-      }} else {{
-        r=t.rgb[0]; g=t.rgb[1]; b=t.rgb[2];
-      }}
-
-      // Rings — extra burst count on trade flash
-      var ringCount = (isPortfolio && _orbBurstCount > 0) ? _orbBurstCount : 3;
-      if (isPortfolio && _orbBurstCount > 0) _orbBurstCount = Math.max(0, _orbBurstCount - 0.04);
-      for (var k = 0; k < Math.ceil(ringCount); k++) {{
-        var p = (Math.sin(phase - k * 0.9) + 1) / 2;
-        var maxR = isPortfolio && flashAlpha > 0 ? 40 + flashAlpha*20 : 26;
+      var r=t.rgb[0], g=t.rgb[1], b=t.rgb[2];
+      for (var k=0; k<3; k++) {{
+        var p = (Math.sin(phase - k*0.9)+1)/2;
         ctx.beginPath();
-        ctx.arc(cx, cy, 5 + p * maxR, 0, Math.PI*2);
-        ctx.strokeStyle = 'rgba('+r+','+g+','+b+','+(0.7*(1-p))+')';
-        ctx.lineWidth = 2 - k*0.3;
-        ctx.stroke();
+        ctx.arc(cx, cy, 5+p*22, 0, Math.PI*2);
+        ctx.strokeStyle='rgba('+r+','+g+','+b+','+(0.55*(1-p))+')';
+        ctx.lineWidth=1.5; ctx.stroke();
       }}
-
-      // Core glow — brighter during flash
-      var coreSize = isPortfolio && flashAlpha > 0 ? 6 + flashAlpha*4 : 6;
-      ctx.shadowColor = 'rgba('+r+','+g+','+b+',1)';
-      ctx.shadowBlur = isPortfolio && flashAlpha > 0 ? 35 + flashAlpha*20 : 22;
-      ctx.beginPath();
-      ctx.arc(cx, cy, coreSize, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba('+r+','+g+','+b+',1)';
-      ctx.fill();
-
-      // White hot center
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 2.5, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.fill();
-    }} catch(e) {{ console.error('pulse err', e, t); }}
+      ctx.shadowColor='rgba('+r+','+g+','+b+',1)'; ctx.shadowBlur=18;
+      ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2);
+      ctx.fillStyle='rgba('+r+','+g+','+b+',1)'; ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fill();
+    }} catch(e) {{}}
   }});
 
-  // ── Live-tip: brownian extension from latest portfolio point ─────────────
-  (function() {{
-    var portT = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
-    if (!portT) return;
+  // ── Portfolio orb — pressure aura + flash ─────────────────────────────────
+  var portT = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
+  if (portT) {{
     try {{
       var fl = gd._fullLayout;
-      if (!fl || !fl.xaxis || !fl.yaxis) return;
-      var cx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
-      var cy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
-      if (!isFinite(cx) || !isFinite(cy)) return;
-      // Brownian motion state (persisted across frames via closure on module scope)
-      if (!_liveTip.pts.length) _liveTip.pts.push({{dx:0,dy:0}});
-      var last = _liveTip.pts[_liveTip.pts.length-1];
-      var ndx = last.dx + (Math.random()-0.48)*1.1; // slight rightward drift
-      var ndy = last.dy * 0.93 + (Math.random()-0.5)*1.4; // mean-reverting
-      ndx = Math.min(ndx, 52); // cap extension width
-      _liveTip.pts.push({{dx:ndx, dy:ndy}});
-      if (_liveTip.pts.length > 80) _liveTip.pts.shift();
-      // Fade alpha along the path
-      var n = _liveTip.pts.length;
-      ctx.save();
-      for (var i = 1; i < n; i++) {{
-        var a = (i/n) * 0.55;
-        var p0 = _liveTip.pts[i-1], p1 = _liveTip.pts[i];
-        ctx.beginPath();
-        ctx.moveTo(cx + p0.dx, cy + p0.dy);
-        ctx.lineTo(cx + p1.dx, cy + p1.dy);
-        ctx.strokeStyle = 'rgba(255,0,204,' + a + ')';
-        ctx.lineWidth   = 1.1;
-        ctx.shadowColor = 'rgba(255,0,204,' + (a*0.8) + ')';
-        ctx.shadowBlur  = 5;
-        ctx.stroke();
+      if (!fl || !fl.xaxis || !fl.yaxis) throw '';
+      var pcx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
+      var pcy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
+      if (!isFinite(pcx) || !isFinite(pcy)) throw '';
+
+      // Base color: interpolate pink→red with pressure
+      var pr = Math.round(255);
+      var pg = Math.round(204*(1-pressure)*0.0);
+      var pb = Math.round(204*(1-pressure));
+      // Flash overrides
+      if (flashAlpha > 0) {{
+        pr = Math.round(pr*(1-flashAlpha) + flashRgb[0]*flashAlpha);
+        pg = Math.round(pg*(1-flashAlpha) + flashRgb[1]*flashAlpha);
+        pb = Math.round(pb*(1-flashAlpha) + flashRgb[2]*flashAlpha);
       }}
-      ctx.restore();
+
+      // Ring speed and size driven by pressure
+      var ringSpeed = 2.0 + pressure * 3.5;
+      var ringMax   = flashAlpha>0 ? 40+flashAlpha*20 : 28 - pressure*8;
+      var ringCount = flashAlpha>0 ? Math.ceil(Math.max(3,_orbBurstCount)) : 3;
+      if (_orbBurstCount > 0) _orbBurstCount = Math.max(0, _orbBurstCount-0.04);
+
+      for (var k=0; k<ringCount; k++) {{
+        var p2 = (Math.sin(phase*ringSpeed - k*0.9)+1)/2;
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, 5+p2*ringMax, 0, Math.PI*2);
+        ctx.strokeStyle='rgba('+pr+','+pg+','+pb+','+(0.7*(1-p2))+')';
+        ctx.lineWidth=2-k*0.3; ctx.stroke();
+      }}
+
+      // Pressure danger pulse — extra outer ring when near stop
+      if (pressure > 0.6) {{
+        var dp = (Math.sin(phase*6)+1)/2;
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, 8+dp*(ringMax+16), 0, Math.PI*2);
+        ctx.strokeStyle='rgba(255,51,102,'+(0.35*(1-dp)*(pressure-0.6)/0.4)+')';
+        ctx.lineWidth=1; ctx.stroke();
+      }}
+
+      // Core
+      var coreSize = flashAlpha>0 ? 6+flashAlpha*4 : 6;
+      ctx.shadowColor='rgba('+pr+','+pg+','+pb+',1)';
+      ctx.shadowBlur = flashAlpha>0 ? 35+flashAlpha*20 : 18+pressure*12;
+      ctx.beginPath(); ctx.arc(pcx,pcy,coreSize,0,Math.PI*2);
+      ctx.fillStyle='rgba('+pr+','+pg+','+pb+',1)'; ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.beginPath(); ctx.arc(pcx,pcy,2.5,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fill();
+
+      // ── Satellite dots — one per open position ────────────────────────────
+      var posMap = window._cryptoPositionsMap || {{}};
+      var prices  = window._liveProxPrices    || {{}};
+      var posSyms = Object.keys(posMap);
+      posSyms.forEach(function(sym, idx) {{
+        var pos = posMap[sym];
+        if (!pos) return;
+        var entry  = parseFloat(pos.entry_price);
+        var stop   = parseFloat(pos.stop_price);
+        var tgt    = parseFloat(pos.target_price || 0) || entry*1.008;
+        var price  = prices[sym] || entry;
+        var range  = tgt - stop;
+        var t2     = range ? Math.max(0, Math.min(1, (price-stop)/range)) : 0.5;
+
+        // Orbit radius: 20px (at stop) → 44px (at target)
+        var orbitR = 20 + t2 * 24;
+
+        // Speed: faster near stop, slower near target
+        var satSpeed = 0.012 + (1-t2)*0.022 + pressure*0.018;
+
+        if (!_satAngles[sym]) _satAngles[sym] = idx * (Math.PI*2/Math.max(posSyms.length,1));
+        _satAngles[sym] += satSpeed;
+
+        var sx = pcx + Math.cos(_satAngles[sym]) * orbitR;
+        var sy = pcy + Math.sin(_satAngles[sym]) * orbitR;
+
+        // Color: red=near stop, orange=mid, green=near target
+        var sr = Math.round(255*Math.max(0,1-t2*1.5));
+        var sg = Math.round(255*Math.min(1,t2*1.8));
+        var sb = Math.round(102*(1-t2));
+
+        // Faint orbit trail
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, orbitR, 0, Math.PI*2);
+        ctx.strokeStyle='rgba('+sr+','+sg+','+sb+',.06)';
+        ctx.lineWidth=.5; ctx.stroke();
+
+        // Satellite dot
+        var satPulse = (Math.sin(phase*4 + idx*2.1)+1)/2;
+        var satSize  = 2.5 + satPulse*1.5 + (pressure>0.7&&t2<0.2 ? satPulse*2 : 0);
+        ctx.shadowColor='rgba('+sr+','+sg+','+sb+',1)';
+        ctx.shadowBlur = 8 + t2*4;
+        ctx.beginPath(); ctx.arc(sx,sy,satSize,0,Math.PI*2);
+        ctx.fillStyle='rgba('+sr+','+sg+','+sb+',.92)'; ctx.fill();
+        ctx.shadowBlur=0;
+
+        // Connector thread to orb
+        ctx.beginPath(); ctx.moveTo(pcx,pcy); ctx.lineTo(sx,sy);
+        ctx.strokeStyle='rgba('+sr+','+sg+','+sb+',.08)';
+        ctx.lineWidth=.5; ctx.stroke();
+      }});
+
+      // ── Combo streak text above orb ───────────────────────────────────────
+      if (_comboCount > 0) {{
+        var comboCol = _comboCount>=10 ? '0,229,255' : _comboCount>=5 ? '255,170,0' : '255,0,204';
+        var bounce   = Math.sin(phase*6)*2;
+        var comboSize= Math.min(9 + _comboCount*0.8, 18);
+        ctx.save();
+        ctx.font = 'bold '+Math.round(comboSize)+'px Consolas';
+        ctx.fillStyle   = 'rgba('+comboCol+',.9)';
+        ctx.shadowColor = 'rgba('+comboCol+',1)';
+        ctx.shadowBlur  = 10+_comboCount*1.2;
+        ctx.textAlign   = 'center';
+        ctx.fillText('\xd7'+_comboCount+' COMBO', pcx, pcy-32+bounce);
+        ctx.restore();
+      }}
+      if (_comboFlash) {{
+        _comboFlash.age += 0.018;
+        var fa = Math.max(0, 1-_comboFlash.age*1.4);
+        ctx.save();
+        ctx.font='bold 8px Consolas';
+        ctx.fillStyle='rgba('+_comboFlash.col[0]+','+_comboFlash.col[1]+','+_comboFlash.col[2]+','+fa+')';
+        ctx.shadowColor='rgba('+_comboFlash.col[0]+','+_comboFlash.col[1]+','+_comboFlash.col[2]+','+fa+')';
+        ctx.shadowBlur=12;
+        ctx.textAlign='center';
+        ctx.fillText(_comboFlash.text, pcx, pcy-50-_comboFlash.age*20);
+        ctx.restore();
+        if (_comboFlash.age >= 1) _comboFlash = null;
+      }}
+
     }} catch(e) {{}}
-  }})();
+  }}
+
+  // ── Shockwave rings ───────────────────────────────────────────────────────
+  _shockWaves = _shockWaves.filter(function(w) {{ return w.age < 1; }});
+  _shockWaves.forEach(function(w) {{
+    w.age += 0.016;
+    var maxR = Math.max(canvas.width, canvas.height) * 1.1;
+    var radius = w.age * maxR;
+    var alpha  = Math.pow(1-w.age, 2) * 0.65;
+    ctx.beginPath();
+    ctx.arc(w.cx, w.cy, radius, 0, Math.PI*2);
+    ctx.strokeStyle='rgba('+w.col[0]+','+w.col[1]+','+w.col[2]+','+alpha+')';
+    ctx.lineWidth = Math.max(0.5, 2*(1-w.age));
+    ctx.stroke();
+  }});
+
+  // ── Brownian live-tip ─────────────────────────────────────────────────────
+  if (portT) {{
+    try {{
+      var fl2 = gd._fullLayout;
+      var tcx  = fl2.xaxis.l2p(fl2.xaxis.d2l(portT.x)) + fl2.margin.l;
+      var tcy  = fl2.yaxis.l2p(fl2.yaxis.d2l(portT.y)) + fl2.margin.t;
+      if (isFinite(tcx) && isFinite(tcy)) {{
+        if (!_liveTip.pts.length) _liveTip.pts.push({{dx:0,dy:0}});
+        var last2 = _liveTip.pts[_liveTip.pts.length-1];
+        var ndx = Math.min(last2.dx + (Math.random()-0.48)*1.1, 52);
+        var ndy = last2.dy*0.93 + (Math.random()-0.5)*1.4;
+        _liveTip.pts.push({{dx:ndx,dy:ndy}});
+        if (_liveTip.pts.length > 80) _liveTip.pts.shift();
+        var tn = _liveTip.pts.length;
+        ctx.save();
+        for (var ti=1; ti<tn; ti++) {{
+          var ta = (ti/tn)*0.55;
+          var tp0=_liveTip.pts[ti-1], tp1=_liveTip.pts[ti];
+          ctx.beginPath();
+          ctx.moveTo(tcx+tp0.dx, tcy+tp0.dy);
+          ctx.lineTo(tcx+tp1.dx, tcy+tp1.dy);
+          ctx.strokeStyle='rgba(255,0,204,'+ta+')';
+          ctx.lineWidth=1.1;
+          ctx.shadowColor='rgba(255,0,204,'+(ta*.8)+')';
+          ctx.shadowBlur=5;
+          ctx.stroke();
+        }}
+        ctx.restore();
+      }}
+    }} catch(e) {{}}
+  }}
 
   rafId = requestAnimationFrame(drawPulse);
 }}
@@ -3517,11 +3699,14 @@ window.addEventListener('resize', function() {{
       _streak.count = 1; _streak.win = isWin;
     }}
     var el = document.getElementById('wallet-streak');
-    if (!el) return;
-    var col  = isWin ? '#00ff9d' : '#ff3366';
-    var icon = isWin ? '▲' : '▼';
-    var n    = _streak.count;
-    el.innerHTML = '<span style="color:' + col + ';text-shadow:0 0 8px ' + col + '">' + icon + '&nbsp;' + n + (n === 1 ? ' WIN' : n < 3 ? ' STREAK' : ' STREAK 🔥') + '</span>';
+    if (el) {{
+      var col  = isWin ? '#00ff9d' : '#ff3366';
+      var icon = isWin ? '&#9650;' : '&#9660;';
+      var n    = _streak.count;
+      el.innerHTML = '<span style="color:' + col + ';text-shadow:0 0 8px ' + col + '">' + icon + '&nbsp;' + n + (n === 1 ? ' WIN' : ' STREAK') + '</span>';
+    }}
+    // Drive combo counter in drawPulse (block 1)
+    if (window._orbComboResult) window._orbComboResult(isWin);
   }};
 
   // ── Wallet NAV animated counter ───────────────────────────────────────────
@@ -4202,11 +4387,7 @@ window.addEventListener('resize', function() {{
               var pnlVal = pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null;
               window._triggerCardExit(sym, exitReason, pnlVal);
             }}
-            // Heartbeat spike on live trades
-            if (!isHistory && window._triggerHeartbeat) {{
-              var isWinTrade = isEntry ? true : (pnlM ? pnlM[1][0] === '+' : true);
-              window._triggerHeartbeat(isWinTrade);
-            }}
+            // (heartbeat replaced by shockwave rings in drawPulse)
             // Gauge + streak + orb flash on live trades
             if (!isHistory) {{
               if (window._recordTradeForGauge) window._recordTradeForGauge();
@@ -4962,6 +5143,7 @@ window.addEventListener('resize', function() {{
             var rev = Object.entries(_BINANCE_SYM_MAP).find(function(kv) {{ return kv[1] === r.symbol; }});
             if (rev) priceMap[rev[0]] = parseFloat(r.price);
           }});
+          window._liveProxPrices = priceMap; // expose for satellite dots in drawPulse
           _updateProxMeters(priceMap);
         }}).catch(function() {{}});
     }}
