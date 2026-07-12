@@ -911,11 +911,11 @@ body::after {{
 
 /* ── Status bar — bottom of System Feed panel ── */
 #status-bar {{
-  flex-shrink:0; height:22px;
+  flex-shrink:0;
   background:#000;
   border-top:1px solid #003311;
-  display:flex; align-items:center;
-  padding:0 10px; gap:7px;
+  padding:3px 10px 4px;
+  line-height:1.65;
   overflow:hidden;
 }}
 .con-dot {{
@@ -924,19 +924,19 @@ body::after {{
   animation:gdot 1.4s ease-in-out infinite;
 }}
 @keyframes gdot {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
-#status-label {{ display:none; }} /* removed — space goes to typing text */
+#status-label {{ display:none; }}
 #status-divider {{ display:none; }}
-/* clock + cursor in status bar */
-#live-clock {{ color:#006622; font-size:8.5px; letter-spacing:.04em; flex-shrink:0; }}
-#prompt-sym {{ color:#004d18; font-size:10px; flex-shrink:0; user-select:none; margin-left:2px; }}
+.con-dot {{ display:inline-block; vertical-align:middle; margin-right:5px; }}
+/* all status bar children are inline — text wraps like a real terminal */
+#live-clock {{ display:inline; color:#006622; font-size:8.5px; letter-spacing:.04em; }}
+#prompt-sym {{ display:inline; color:#004d18; font-size:10px; user-select:none; margin:0 2px; }}
 #type-preview {{
-  color:#00ff41; font-size:10px; letter-spacing:.04em;
+  display:inline; color:#00ff41; font-size:10px; letter-spacing:.04em;
   text-shadow:0 0 8px rgba(0,255,65,.9);
-  white-space:nowrap; overflow:hidden;
-  flex:1; min-width:0;
+  white-space:normal; word-break:break-word;
 }}
 #blink-cur {{
-  display:inline-block; color:#00ff41; flex-shrink:0;
+  display:inline; color:#00ff41;
   text-shadow:0 0 8px rgba(0,255,65,.9);
   animation:blink-c 1s step-start infinite;
 }}
