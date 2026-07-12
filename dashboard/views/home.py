@@ -904,6 +904,18 @@ body::after {{
   z-index:20; pointer-events:auto;
   overflow:hidden;
 }}
+@keyframes trade-entry-flash {{
+  0%   {{ box-shadow:inset 0 0 0 2px rgba(0,255,157,0), border-color:#00ff41; }}
+  15%  {{ box-shadow:inset 0 0 40px 6px rgba(0,255,157,.45); border-color:#00ff9d; }}
+  100% {{ box-shadow:inset 0 0 0 2px rgba(0,255,157,0); border-color:#00ff41; }}
+}}
+@keyframes trade-exit-flash {{
+  0%   {{ box-shadow:inset 0 0 0 2px rgba(255,153,0,0); border-color:#00ff41; }}
+  15%  {{ box-shadow:inset 0 0 40px 6px rgba(255,153,0,.45); border-color:#ff9900; }}
+  100% {{ box-shadow:inset 0 0 0 2px rgba(255,153,0,0); border-color:#00ff41; }}
+}}
+#term-overlay.flash-entry {{ animation:trade-entry-flash 1.2s ease-out forwards; }}
+#term-overlay.flash-exit  {{ animation:trade-exit-flash  1.2s ease-out forwards; }}
 /* CRT scanlines */
 #term-overlay::before {{
   content:'';
@@ -1958,6 +1970,14 @@ window.addEventListener('resize', function() {{
           var display;
           if (row.event_type === 'TRADE' && (raw.indexOf('ENTER') !== -1 || raw.indexOf('EXIT') !== -1)) {{
             var isEntry = raw.indexOf('ENTER') !== -1;
+            // Flash the terminal border
+            var ovl = document.getElementById('term-overlay');
+            if (ovl) {{
+              ovl.classList.remove('flash-entry','flash-exit');
+              void ovl.offsetWidth; // force reflow to restart animation
+              ovl.classList.add(isEntry ? 'flash-entry' : 'flash-exit');
+              setTimeout(function() {{ ovl.classList.remove('flash-entry','flash-exit'); }}, 1300);
+            }}
             var verb    = isEntry ? '<span style="color:#00ff9d">enter</span>' : '<span style="color:#ff9900">exit</span>';
             var priceM  = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
             var priceS  = priceM ? ' @ $' + priceM[1] : '';
