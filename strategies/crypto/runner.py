@@ -219,10 +219,11 @@ def _compute_signal(min_bars: list[dict], hour_bars: list[dict], sym: str = "") 
     highs   = [b["high"]   for b in min_bars]
     lows    = [b["low"]    for b in min_bars]
 
-    close   = closes[-1]
-    vol     = volumes[-1]
-    avg_vol = sum(volumes[-21:-1]) / 20
-    rvol    = (vol / avg_vol) if avg_vol > 0 else 0.0
+    close       = closes[-1]
+    vol         = volumes[-1]
+    recent_vols = [v for v in volumes[-21:-1] if v > 0]
+    avg_vol     = sum(recent_vols) / len(recent_vols) if recent_vols else 0.0
+    rvol        = (vol / avg_vol) if avg_vol > 0 and vol > 0 else 0.0
     logger.info(f"  {sym}: bars={len(min_bars)} rvol={rvol:.2f} close={close:.4f}")
     if rvol < _SIG["rvol_min"]:
         return None
@@ -261,7 +262,7 @@ def run() -> None:
 
     # Fetch bars (2 API calls, all symbols batched)
     try:
-        min_bars  = _fetch_bars("1Min",  35)      # last 35 minutes of 1-min bars
+        min_bars  = _fetch_bars("1Min",  180)     # last 3 hours of 1-min bars
         hour_bars = _fetch_bars("1Hour", 1500)    # last 25 hours of 1-hr bars
     except Exception as e:
         logger.error(f"[crypto] Bar fetch failed: {e}")
