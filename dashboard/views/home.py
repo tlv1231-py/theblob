@@ -1381,8 +1381,8 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   buildTargets();
   if (rafId) cancelAnimationFrame(rafId);
   drawPulse();
-  // Crosshair on load: show → zoom in after 1.5s
-  setTimeout(showCrosshair, 800);
+  // Crosshair on load: show → zoom in after crosshair fades
+  setTimeout(showCrosshair, 1500);
 }});
 
 gd.on('plotly_afterplot', buildTargets);
@@ -1661,10 +1661,23 @@ window.addEventListener('resize', function() {{
     var overlay = document.getElementById('crosshair-overlay');
     var xc      = document.getElementById('xhair-canvas');
     var gd2     = document.getElementById('chart');
-    if (!overlay || !xc || !gd2 || !gd2._fullLayout) return;
+    if (!overlay || !xc || !gd2 || !gd2._fullLayout) {{
+      // Retry up to 3s if layout not ready yet
+      if (!showCrosshair._tries) showCrosshair._tries = 0;
+      if (++showCrosshair._tries < 6) setTimeout(showCrosshair, 500);
+      return;
+    }}
+    showCrosshair._tries = 0;
     try {{
       var fl  = gd2._fullLayout;
-      var tr  = gd2.data[3]; // portfolio trace
+      // Find portfolio trace by name
+      var tr = null;
+      for (var i = 0; i < gd2.data.length; i++) {{
+        if (gd2.data[i].name && gd2.data[i].name.toLowerCase().indexOf('portfolio') >= 0) {{
+          tr = gd2.data[i]; break;
+        }}
+      }}
+      if (!tr) tr = gd2.data[0]; // fallback to first trace
       if (!tr || !tr.x || !tr.x.length) return;
       var px = fl.xaxis.l2p(fl.xaxis.d2l(tr.x[tr.x.length-1])) + fl.margin.l;
       var py = fl.yaxis.l2p(fl.yaxis.d2l(tr.y[tr.y.length-1])) + fl.margin.t;
