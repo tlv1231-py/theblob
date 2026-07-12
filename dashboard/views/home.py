@@ -1645,9 +1645,6 @@ window.addEventListener('resize', function() {{
       tick();
     }}
 
-    // Expose globally so live-polling code can call it later
-    window._typeAtCursor = typeAtCursor;
-
     // ── Idle status phrases ───────────────────────────────────────────────────
     var _idlePhrases = [
       'monitoring universe · 94 symbols',
@@ -1661,62 +1658,99 @@ window.addEventListener('resize', function() {{
       'sharpe ratio: stable',
       'drawdown within limits',
     ];
-    var _idleIdx = 0;
-    var _idleTimer = null;
-    var _typing = false;
+    var _idleIdx    = 0;
+    var _idleTimer  = null;
+    var _busy       = false;  // true while a real event is typing
+    var _feedQueue  = [];     // real events waiting to type through Status
 
-    function startIdle() {{
-      if (_typing) return;
-      _idleTimer = setTimeout(function loop() {{
-        if (_typing) return;
-        var phrase = _idlePhrases[_idleIdx % _idlePhrases.length];
-        _idleIdx++;
-        var preview = document.getElementById('type-preview');
-        var blink   = document.getElementById('blink-cur');
-        if (!preview) return;
-        // type it in, clear after short hold, then next phrase
-        if (blink) blink.style.animation = 'none';
-        preview.textContent = '';
-        var i = 0;
-        function tick() {{
-          if (_typing) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
-          if (i < phrase.length) {{
-            preview.textContent += phrase[i++];
-            setTimeout(tick, 14 + (Math.random() < 0.05 ? 60 : 0));
-          }} else {{
-            // hold, then fade clear, then schedule next
-            setTimeout(function() {{
-              preview.textContent = '';
-              if (blink) blink.style.animation = '';
-              if (!_typing) _idleTimer = setTimeout(loop, 3200);
-            }}, 2200);
-          }}
-        }}
-        tick();
-      }}, 1800);
+    function _clearIdleTimer() {{
+      if (_idleTimer) {{ clearTimeout(_idleTimer); _idleTimer = null; }}
     }}
 
-    // ── On load: type the latest System Feed entry ────────────────────────────
+    function _idleLoop() {{
+      if (_busy) return;
+      var phrase  = _idlePhrases[_idleIdx % _idlePhrases.length];
+      _idleIdx++;
+      var preview = document.getElementById('type-preview');
+      var blink   = document.getElementById('blink-cur');
+      if (!preview) return;
+      if (blink) blink.style.animation = 'none';
+      preview.textContent = '';
+      var i = 0;
+      (function tick() {{
+        if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
+        if (i < phrase.length) {{
+          preview.textContent += phrase[i++];
+          setTimeout(tick, 14 + (Math.random() < 0.05 ? 60 : 0));
+        }} else {{
+          setTimeout(function() {{
+            if (_busy) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
+            preview.textContent = '';
+            if (blink) blink.style.animation = '';
+            _idleTimer = setTimeout(_idleLoop, 3000);
+          }}, 2200);
+        }}
+      }})();
+    }}
+
+    function startIdle() {{
+      if (_busy) return;
+      _clearIdleTimer();
+      _idleTimer = setTimeout(_idleLoop, 1600);
+    }}
+
+    // ── postToFeed: THE single gateway for all System Feed entries ────────────
+    // Every trade, fill, deposit, withdraw, pipeline event goes through here.
+    // Text types through Status first, Enter commits it as a new feed row.
+    function postToFeed(text, timestamp) {{
+      _feedQueue.push({{text: text, ts: timestamp || null}});
+      _drainQueue();
+    }}
+
+    function _drainQueue() {{
+      if (_busy || !_feedQueue.length) return;
+      _busy = true;
+      _clearIdleTimer();
+      var item = _feedQueue.shift();
+      typeAtCursor(item.text, function() {{
+        // Append new row to System Feed
+        var tb   = document.getElementById('term-body');
+        var now  = item.ts ? new Date(item.ts) : new Date();
+        var hhmm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        var row  = document.createElement('div');
+        row.className = 'te';
+        row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + item.text;
+        if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
+        _busy = false;
+        if (_feedQueue.length) {{
+          setTimeout(_drainQueue, 400);
+        }} else {{
+          startIdle();
+        }}
+      }});
+    }}
+
+    // Expose globally — trades, fills, deposits, pipeline events all call this
+    window._postToFeed   = postToFeed;
+    window._typeAtCursor = typeAtCursor;  // raw cursor typing (no feed append)
+
+    // ── On load: type the latest System Feed entry through Status ─────────────
     var tb      = document.getElementById('term-body');
     var newest  = document.getElementById('te-newest');
     if (newest && tb) {{
-      _typing = true;
+      _busy = true;
       tb.scrollTop = tb.scrollHeight;
       var plainText = newest.textContent.replace(/\s+/g, ' ').trim();
       typeAtCursor(plainText, function() {{
         newest.style.opacity = '1';
         newest.style.transition = 'opacity 80ms ease';
         tb.scrollTop = tb.scrollHeight;
-        _typing = false;
+        _busy = false;
         startIdle();
       }});
     }} else {{
       startIdle();
     }}
-
-    // Expose so live-polling can pause idle, type a real event, then resume
-    window._startIdle = startIdle;
-    window._setTyping = function(v) {{ _typing = v; if (!v) startIdle(); }};
 
   }})();
 
@@ -1812,21 +1846,29 @@ window.addEventListener('resize', function() {{
   function submitTransfer() {{
     var amt = parseFloat(document.getElementById('dep-amount').value);
     if (!amt || amt <= 0) return;
+    var sign    = _depMode === 'deposit' ? '+' : '-';
+    var col     = _depMode === 'deposit' ? '#00ff9d' : '#ff9900';
+    var now     = new Date();
+    var label   = (now.getMonth()+1)+'/'+now.getDate()+'/'+String(now.getFullYear()).slice(2);
+    var amtStr  = amt.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+
+    // Log to capital history panel
     var hist = document.getElementById('dep-hist');
-    var sign = _depMode === 'deposit' ? '+' : '-';
-    var col  = _depMode === 'deposit' ? '#00ff9d' : '#ff9900';
-    var now  = new Date();
-    var label = (now.getMonth()+1)+'/'+now.getDate()+'/'+String(now.getFullYear()).slice(2);
-    var row = document.createElement('div');
+    var row  = document.createElement('div');
     row.className = 'dep-hist-item';
-    row.innerHTML = '<span class="dep-hist-amt" style="color:'+col+'">'+sign+'$'+amt.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}})+'</span>'
+    row.innerHTML = '<span class="dep-hist-amt" style="color:'+col+'">'+sign+'$'+amtStr+'</span>'
       + '<span style="color:#3a2a5a">'+_depMode+'</span>'
       + '<span class="dep-hist-date">'+label+'</span>';
     var noTx = hist.querySelector('div');
     if (noTx && noTx.textContent.includes('no transfers')) noTx.remove();
     hist.insertBefore(row, hist.firstChild);
     document.getElementById('dep-amount').value = '';
-    // TODO: fire Alpaca ACH API
+
+    // Route through Status → System Feed like every other event
+    var feedMsg = _depMode === 'deposit'
+      ? 'ACH deposit initiated · $' + amtStr + ' · pending 1-3 business days'
+      : 'ACH withdrawal initiated · $' + amtStr + ' · pending 1-3 business days';
+    if (window._postToFeed) window._postToFeed(feedMsg);
   }}
 
   // ── Page reload every 90s (data freshness) ─────────────────────────────────
