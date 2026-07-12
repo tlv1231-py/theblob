@@ -1152,6 +1152,37 @@ body::after {{
   transition:color .3s ease;
 }}
 .pnl-float-sub {{ font-size:8.5px; color:#4a2a6a; margin-top:3px; display:block; }}
+/* ── Recovery meter ── */
+#rc-widget {{ margin-top:5px; }}
+#rc-top {{ display:flex; align-items:baseline; gap:5px; margin-bottom:3px; }}
+#rc-label {{
+  font-size:6.5px; letter-spacing:.2em; text-transform:uppercase; color:#ff3366;
+  text-shadow:0 0 6px rgba(255,51,102,.5);
+}}
+#rc-amount {{
+  font-size:13px; font-weight:700; color:#ff3366; letter-spacing:-.01em;
+  font-family:Consolas,monospace;
+  text-shadow:0 0 10px rgba(255,51,102,.6);
+}}
+#rc-bar-bg {{
+  height:3px; background:#1a0010; border-radius:1px; overflow:hidden;
+  margin-bottom:3px;
+}}
+@keyframes rc-pulse {{
+  0%,100% {{ opacity:1; }} 50% {{ opacity:.55; }}
+}}
+#rc-bar {{
+  height:100%; width:0%; border-radius:1px;
+  background:linear-gradient(90deg,#ff3366,#ff9900,#ffff00);
+  transition:width .6s cubic-bezier(.22,1,.36,1);
+  animation:rc-pulse 2s ease-in-out infinite;
+}}
+#rc-bar.recovered {{ background:linear-gradient(90deg,#00ff9d,#00e5ff); animation:none; }}
+#rc-stats {{ display:flex; justify-content:space-between; }}
+#rc-rate, #rc-eta {{
+  font-size:7px; letter-spacing:.08em; color:#3a1a3a;
+  font-family:Consolas,monospace;
+}}
 /* pos-cards */
 .pos-section-label {{
   font-size:7px; letter-spacing:.22em; color:#2a1a3a;
@@ -1494,7 +1525,9 @@ body::after {{
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
     <span class="pnl-float-val" style="color:{_pnl_col}">{_pnl_str}</span>
-    <span class="pnl-float-sub">{_pnl_pct_str}</span>
+    <div class="pnl-float-sub" id="pnl-sub-root">
+      <span>{_pnl_pct_str}</span>
+    </div>
   </div>
   <div class="nav-card">
     <span class="nv-val">{nav_str}</span>
@@ -1575,29 +1608,30 @@ function yRange(x0, x1) {{
 
 var yr = yRange(xStart, xEnd);
 
-// ── HYSA comparison line ─────────────────────────────────────────────────
-var _hysaStart = portDates.length ? new Date(portDates[0]+'T00:00:00Z') : new Date('2026-05-29T00:00:00Z');
-var _hysaEnd   = new Date();
-var _hysaDates = [], _hysaVals = [];
+// ── Benchmark trajectories ───────────────────────────────────────────────
+var _benchStart = portDates.length ? new Date(portDates[0]+'T00:00:00Z') : new Date('2026-05-29T00:00:00Z');
+var _benchEnd   = new Date();
+var _hysaDates = [], _hysaVals = [], _tgt20Dates = [], _tgt20Vals = [];
 (function() {{
-  var d = new Date(_hysaStart);
+  var d = new Date(_benchStart);
   var msPerYear = 365.25 * 24 * 3600 * 1000;
-  while (d <= _hysaEnd) {{
-    _hysaDates.push(d.toISOString().split('T')[0]);
-    _hysaVals.push(100000 * Math.pow(1.048, (d - _hysaStart) / msPerYear));
+  while (d <= _benchEnd) {{
+    var iso = d.toISOString().split('T')[0];
+    var yr  = (d - _benchStart) / msPerYear;
+    _hysaDates.push(iso);  _hysaVals.push(100000 * Math.pow(1.048, yr));
+    _tgt20Dates.push(iso); _tgt20Vals.push(100000 * Math.pow(1.20,  yr));
     d.setDate(d.getDate() + 1);
   }}
 }})();
 
 var traces = [
-  // $100K baseline reference
+  // 20% annual target trajectory — replaces flat baseline (trace index 0)
   {{
-    x: [portDates[0]||xStart, latestDate],
-    y: [100000, 100000],
+    x: _tgt20Dates, y: _tgt20Vals,
     type:'scatter', mode:'lines',
-    line:{{ color:'rgba(255,0,204,0.55)', width:1.5, dash:'dot' }},
-    name:'$100K baseline',
-    hoverinfo:'skip',
+    line:{{ color:'rgba(0,229,100,0.4)', width:1, dash:'dashdot' }},
+    name:'20% TARGET',
+    hovertemplate:'<b style="color:#00e564">TARGET $%{{y:,.0f}}</b><extra></extra>',
   }},
   {{
     x: spyDates, y: spyNorm,
@@ -1641,7 +1675,7 @@ var traces = [
   }},
 ];
 
-// Milestone y-levels — subtle horizontal markers at round NAV values
+// Milestone y-levels
 var _milestones = [97000,98000,99000,101000,102000,103000,104000,105000];
 var _milestoneShapes = _milestones.map(function(v) {{
   return {{
@@ -1650,7 +1684,14 @@ var _milestoneShapes = _milestones.map(function(v) {{
     line:{{ color:'rgba(120,0,160,0.18)', width:1, dash:'dot' }},
   }};
 }});
-var shapes = [].concat(_milestoneShapes, latestDate ? [{{
+// Breakeven zone band ($99.5k – $100.5k)
+var _bkZone = [
+  {{ type:'rect', xref:'paper', yref:'y', x0:0, x1:1, y0:99500, y1:100500,
+     fillcolor:'rgba(255,0,204,0.04)', line:{{ width:0 }}, layer:'below' }},
+  {{ type:'line', xref:'paper', yref:'y', x0:0, x1:1, y0:100000, y1:100000,
+     line:{{ color:'rgba(255,0,204,0.35)', width:1, dash:'dot' }} }},
+];
+var shapes = [].concat(_milestoneShapes, _bkZone, latestDate ? [{{
   type:'line', xref:'x', yref:'paper',
   x0:latestDate, x1:latestDate, y0:0, y1:1,
   line:{{ color:'rgba(255,255,255,0.15)', width:1, dash:'dot' }},
@@ -1976,6 +2017,9 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
     var initTs  = portDates[portDates.length - 1];
     window._lastKnownNav = initNav;
     window._lastKnownTs  = initTs;
+    var initAbove = initNav >= 100000;
+    Plotly.restyle(gd, {{ fillcolor: initAbove ? 'rgba(0,255,157,0.09)' : 'rgba(255,51,102,0.09)' }}, [4]);
+    Plotly.restyle(gd, {{ fillcolor: initAbove ? 'rgba(0,255,157,0.04)' : 'rgba(255,51,102,0.04)' }}, [3]);
     setTimeout(function() {{ _updateEndpointDot(initNav, initTs); }}, 200);
     setTimeout(function() {{ _updateAthShape(initNav, initTs); }}, 250);
   }}
@@ -2667,8 +2711,16 @@ window.addEventListener('resize', function() {{
       return v >= start ? '#00ff9d' : '#ff3366';
     }}
 
+    // Rolling nav history for velocity computation
+    if (!window._navHistory) window._navHistory = [];
+    function _trackNav(nav, ts) {{
+      window._navHistory.unshift({{ nav: nav, ts: new Date(ts).getTime() }});
+      if (window._navHistory.length > 20) window._navHistory.pop();
+    }}
+
     function _updateNavDisplays(nav, ts) {{
       window._lastKnownNav = nav;
+      _trackNav(nav, ts);
       var col = _retColor(nav, START_NAV);
       var ret = _fmtRet(nav, START_NAV);
       var pnl = nav - START_NAV;
@@ -2722,11 +2774,48 @@ window.addEventListener('resize', function() {{
           setTimeout(function() {{ pnlBox.classList.remove('nudge-up','nudge-down'); }}, 700);
         }}
       }}
-      if (pnlSub) {{
+      // ── Recovery meter / profit display ──────────────────────────────────
+      var subRoot = document.getElementById('pnl-sub-root');
+      if (subRoot) {{
         if (pnl < 0) {{
-          pnlSub.textContent = 'need +$' + Math.abs(Math.round(pnl)).toLocaleString('en-US') + ' to recover';
+          var deficit = Math.abs(Math.round(pnl));
+          // Track worst deficit for bar scale
+          if (!window._worstDeficit || deficit > window._worstDeficit) {{
+            window._worstDeficit = deficit;
+          }}
+          // Compute recovery rate from nav history
+          var ratePerMin = null;
+          if (window._navHistory && window._navHistory.length >= 2) {{
+            var nh = window._navHistory;
+            var newest = nh[0], oldest = nh[nh.length - 1];
+            var dMin = (newest.ts - oldest.ts) / 60000;
+            if (dMin > 0.5) ratePerMin = (newest.nav - oldest.nav) / dMin;
+          }}
+          var barPct = window._worstDeficit > 0
+            ? Math.max(0, Math.round((1 - deficit / window._worstDeficit) * 100))
+            : 0;
+          var rateHtml = '—';
+          var etaHtml  = '—';
+          if (ratePerMin !== null && ratePerMin > 0) {{
+            var rateHr = Math.round(ratePerMin * 60);
+            rateHtml = '+$' + rateHr.toLocaleString('en-US') + '/hr';
+            var etaMin = Math.round(deficit / ratePerMin);
+            etaHtml = etaMin < 60 ? etaMin + 'min' : Math.round(etaMin/60) + 'h';
+          }}
+          subRoot.innerHTML =
+            '<div id="rc-widget">' +
+            '<div id="rc-top">' +
+            '<span id="rc-label">DEFICIT</span>' +
+            '<span id="rc-amount">-$' + deficit.toLocaleString('en-US') + '</span>' +
+            '</div>' +
+            '<div id="rc-bar-bg"><div id="rc-bar" style="width:' + barPct + '%"></div></div>' +
+            '<div id="rc-stats">' +
+            '<span id="rc-rate">' + rateHtml + '</span>' +
+            '<span id="rc-eta">eta: ' + etaHtml + '</span>' +
+            '</div></div>';
         }} else {{
-          pnlSub.textContent = ret + ' since $100K start';
+          window._worstDeficit = 0;
+          subRoot.innerHTML = '<span style="font-size:8.5px;color:#00ff9d">' + ret + ' since $100K start</span>';
         }}
       }}
 
@@ -2760,12 +2849,10 @@ window.addEventListener('resize', function() {{
         window._lastKnownTs = isoTs;
         // Extend ghost (3) + portfolio (4) simultaneously
         Plotly.extendTraces(gd, {{x:[[isoTs],[isoTs]], y:[[nav],[nav]]}}, [3,4]);
-        // Conditional fill color: green above baseline, red below
+        // Conditional fill only — portfolio line stays magenta always
         var aboveBase = nav >= 100000;
-        var fillNew = aboveBase ? 'rgba(0,255,157,0.09)' : 'rgba(255,51,102,0.09)';
-        var lineNew = aboveBase ? '#00ff9d' : '#ff3366';
-        Plotly.restyle(gd, {{ fillcolor: fillNew, 'line.color': lineNew }}, [4]);
-        Plotly.restyle(gd, {{ fillcolor: aboveBase ? 'rgba(0,255,157,0.04)' : 'rgba(255,51,102,0.04)', 'line.color': aboveBase ? 'rgba(0,255,157,0.06)' : 'rgba(255,51,102,0.06)' }}, [3]);
+        Plotly.restyle(gd, {{ fillcolor: aboveBase ? 'rgba(0,255,157,0.09)' : 'rgba(255,51,102,0.09)' }}, [4]);
+        Plotly.restyle(gd, {{ fillcolor: aboveBase ? 'rgba(0,255,157,0.04)' : 'rgba(255,51,102,0.04)' }}, [3]);
         // Endpoint dot
         _updateEndpointDot(nav, isoTs);
         // ATH check
