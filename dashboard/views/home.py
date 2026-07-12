@@ -1033,18 +1033,17 @@ body::after {{
 #pos-panel::-webkit-scrollbar {{ display:none; }}
 #pos-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:0 0 6px; }}
 #pos-body::-webkit-scrollbar {{ display:none; }}
-/* big P&L banner */
-#pnl-banner {{
-  padding:8px 12px 7px;
-  border-bottom:1px solid #0d0010;
-  flex-shrink:0;
+/* ── Floating P&L tooltip above portfolio orb ── */
+#pnl-float {{
+  position:absolute; pointer-events:none;
+  background:rgba(6,0,8,.88); border:1px solid #2a003d; border-top:2px solid #ff00cc;
+  padding:7px 12px 8px; min-width:110px;
+  transform:translate(-50%, -100%) translateY(-18px);
+  opacity:0; transition:opacity .3s ease;
 }}
-.pnl-label {{ font-size:7px; letter-spacing:.28em; color:#2a0040; text-transform:uppercase; }}
-.pnl-big {{
-  font-size:26px; font-weight:700; letter-spacing:-.03em;
-  line-height:1.05; display:block; margin-top:2px;
-}}
-.pnl-sub {{ font-size:9px; margin-top:3px; color:#4a2a6a; }}
+#pnl-float.visible {{ opacity:1; }}
+.pnl-float-val {{ font-size:22px; font-weight:700; letter-spacing:-.02em; display:block; line-height:1.1; }}
+.pnl-float-sub {{ font-size:8.5px; color:#4a2a6a; margin-top:3px; display:block; }}
 /* pos-cards */
 .pos-card {{ padding:6px 12px 7px; cursor:default; }}
 .pos-top {{ display:flex; align-items:baseline; gap:6px; line-height:1.3; }}
@@ -1147,6 +1146,10 @@ body::after {{
   <div id="chart"></div>
   <canvas id="pulse-canvas"></canvas>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
+  <div id="pnl-float">
+    <span class="pnl-float-val" style="color:{_pnl_col}">{_pnl_str}</span>
+    <span class="pnl-float-sub">{_pnl_pct_str}</span>
+  </div>
   <div class="nav-card">
     <span class="nv-val">{nav_str}</span>
     <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
@@ -1321,10 +1324,24 @@ function buildTargets() {{
     if (tr && tr.x && tr.x.length) {{
       var pt = {{ x: tr.x[tr.x.length-1], y: tr.y[tr.y.length-1], rgb: ic[1] }};
       pulseTargets.push(pt);
-      console.log('pulse target', pt.x, pt.y);
     }}
   }});
-  console.log('canvas size', canvas.width, canvas.height, 'targets', pulseTargets.length);
+  positionPnlFloat();
+}}
+
+function positionPnlFloat() {{
+  var fl = gd._fullLayout;
+  var tr = gd.data[3]; // PORTFOLIO trace
+  var pf = document.getElementById('pnl-float');
+  if (!fl || !tr || !tr.x || !tr.x.length || !pf) return;
+  try {{
+    var cx = fl.xaxis.l2p(fl.xaxis.d2l(tr.x[tr.x.length-1])) + fl.margin.l;
+    var cy = fl.yaxis.l2p(fl.yaxis.d2l(tr.y[tr.y.length-1])) + fl.margin.t;
+    if (!isFinite(cx) || !isFinite(cy)) return;
+    pf.style.left = cx + 'px';
+    pf.style.top  = cy + 'px';
+    pf.classList.add('visible');
+  }} catch(e) {{}}
 }}
 
 var phase = 0;
@@ -1444,11 +1461,6 @@ window.addEventListener('resize', function() {{
     <!-- Positions scorecard -->
     <div id="pos-panel">
       <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
-      <div id="pnl-banner">
-        <div class="pnl-label">total p&amp;l</div>
-        <span class="pnl-big" style="color:{_pnl_col}">{_pnl_str}</span>
-        <div class="pnl-sub">{_pnl_pct_str}</div>
-      </div>
       <div id="pos-body">{pos_cards}</div>
     </div>
 
@@ -1888,8 +1900,8 @@ window.addEventListener('resize', function() {{
     if (window._postToFeed) window._postToFeed(feedMsg);
   }}
 
-  // ── Page reload every 90s (data freshness) ─────────────────────────────────
-  setTimeout(function() {{ window.parent.location.reload(); }}, 90000);
+  // ── Page reload every 10 min (pipeline runs once daily; 90s was needless churn) ──
+  setTimeout(function() {{ window.parent.location.reload(); }}, 600000);
 
 </script>
 
