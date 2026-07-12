@@ -664,6 +664,17 @@ def _build_daw_html(data: dict) -> str:
             return f'<span style="color:#5a3a7a">{msg}</span>'
 
         if tag == "TRADE":
+            # Crypto runner format: "▲ ENTER long BTC/USD @ $99999 · stop $99499"
+            if "ENTER" in msg or "EXIT" in msg:
+                is_entry = "ENTER" in msg
+                verb_col = "#00ff9d" if is_entry else "#ff9900"
+                verb = "enter" if is_entry else "exit"
+                price_m = _re.search(r'@\s*\$([\d,]+(?:\.\d+)?)', msg)
+                price_s = f'@ ${price_m.group(1)}' if price_m else ""
+                pnl_m = _re.search(r'pnl\s*([+-][\d,.]+)', msg)
+                pnl_s = f' · pnl <span style="color:{"#00ff9d" if pnl_m and pnl_m.group(1).startswith("+") else "#ff4444"}">{pnl_m.group(1)}</span>' if pnl_m else ""
+                return f'<span style="color:{verb_col}">{verb}</span> {_ts(sym)} {price_s}{pnl_s}'
+            # Equity format: "bought/sold N shares"
             verb = "bought" if "bought" in msg else "sold"
             verb_col = "#00ff9d" if verb == "bought" else "#ff9900"
             qty_m = _re.search(r'(\d+)\s+shares', msg)
@@ -1939,10 +1950,23 @@ window.addEventListener('resize', function() {{
         if (!Array.isArray(rows) || !rows.length) return;
         rows.forEach(function(row) {{
           _lastSeen = row.recorded_at;
-          var label = _labelFor(row.event_type);
-          var sym   = row.symbol ? ' · ' + row.symbol : '';
-          var msg   = row.message || (label + sym);
-          if (window._postToFeed) window._postToFeed(msg, new Date(row.recorded_at));
+          var raw = row.message || '';
+          var sym = row.symbol || '';
+          var display;
+          if (row.event_type === 'TRADE' && (raw.indexOf('ENTER') !== -1 || raw.indexOf('EXIT') !== -1)) {{
+            var isEntry = raw.indexOf('ENTER') !== -1;
+            var verb    = isEntry ? '<span style="color:#00ff9d">enter</span>' : '<span style="color:#ff9900">exit</span>';
+            var priceM  = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
+            var priceS  = priceM ? ' @ $' + priceM[1] : '';
+            var pnlM    = raw.match(/pnl\s*([+-][\d,.]+)/);
+            var pnlCol  = pnlM && pnlM[1][0] === '+' ? '#00ff9d' : '#ff4444';
+            var pnlS    = pnlM ? ' · pnl <span style="color:' + pnlCol + '">' + pnlM[1] + '</span>' : '';
+            display = verb + ' ' + sym + priceS + pnlS;
+          }} else {{
+            var label = _labelFor(row.event_type);
+            display = raw || (label + (sym ? ' · ' + sym : ''));
+          }}
+          if (window._postToFeed) window._postToFeed(display, new Date(row.recorded_at));
         }});
       }})
       .catch(function() {{}}); // silent — offline or auth issue
