@@ -949,7 +949,7 @@ body::after {{
 /* ── System Feed panel (bottom-left) ── */
 #feed-panel {{
   flex:1; min-width:160px;
-  background:#000;
+  background:#010006;
   display:flex; flex-direction:column;
   overflow:hidden;
 }}
@@ -957,22 +957,18 @@ body::after {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
   padding:2px 0;
-  scrollbar-width:none; background:#000;
+  scrollbar-width:none; background:#010006;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
 .te {{ padding:0 12px; flex-shrink:0;
-       font-size:10px; line-height:1.7; color:#00b330;
+       font-size:10px; line-height:1.7; color:#9060b8;
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-.te-ts  {{ color:#004410; font-size:9px; }}
+.te-ts  {{ color:#2a0040; font-size:9px; }}
 .te-date {{ padding:5px 12px 1px; flex-shrink:0;
             font-size:7.5px; font-weight:700; letter-spacing:.28em;
-            color:#003311; text-transform:uppercase; }}
-/* clock line inside feed panel */
-#clock-line {{
-  flex-shrink:0; padding:2px 12px 4px;
-  font-size:10px; color:#00ff41;
-  display:none; /* clock lives in status bar now */
-}}
+            color:#1a0028; text-transform:uppercase; }}
+/* clock line hidden — status bar handles cursor */
+#clock-line {{ display:none; }}
 
 /* ── Lower panels row ── */
 #lower-panels {{
@@ -1414,7 +1410,7 @@ window.addEventListener('resize', function() {{
   <!-- Single-line matrix green status bar -->
   <div id="status-bar">
     <div class="con-dot"></div>
-    <span id="status-label">SYSTEM FEED</span>
+    <span id="status-label">STATUS</span>
     <span id="status-divider">|</span>
     <span id="live-clock"></span>
     <span id="prompt-sym">&gt;</span>
@@ -1428,9 +1424,7 @@ window.addEventListener('resize', function() {{
 
     <!-- System Feed panel -->
     <div id="feed-panel">
-      <div class="panel-hdr" style="border-bottom:1px solid #001a08;color:#006622;">
-        <div class="con-dot" style="animation-delay:.3s"></div>SYSTEM FEED
-      </div>
+      <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
       <div id="term-body">
         {term_rows}
       </div>
@@ -1619,9 +1613,9 @@ window.addEventListener('resize', function() {{
     // Machine-types text at the > prompt, then Enter: flash + post to feed.
     // Used on load for the latest entry; reusable for live events later.
     function typeAtCursor(text, onDone) {{
-      var preview   = document.getElementById('type-preview');
-      var blinkCur  = document.getElementById('blink-cur');
-      var clockLine = document.getElementById('clock-line');
+      var preview    = document.getElementById('type-preview');
+      var blinkCur   = document.getElementById('blink-cur');
+      var clockLine  = document.getElementById('status-bar'); // flash status bar on Enter
       if (!preview) {{ if (onDone) onDone(); return; }}
 
       // Kill the cursor blink while typing — it trails the text naturally
@@ -1654,19 +1648,75 @@ window.addEventListener('resize', function() {{
     // Expose globally so live-polling code can call it later
     window._typeAtCursor = typeAtCursor;
 
+    // ── Idle status phrases ───────────────────────────────────────────────────
+    var _idlePhrases = [
+      'monitoring universe · 94 symbols',
+      'next rebalance: market open',
+      'risk limits nominal · all clear',
+      'scanning momentum signals',
+      'portfolio mark-to-market · live',
+      'awaiting next trading session',
+      'all systems operational',
+      'tracking 5 open positions',
+      'sharpe ratio: stable',
+      'drawdown within limits',
+    ];
+    var _idleIdx = 0;
+    var _idleTimer = null;
+    var _typing = false;
+
+    function startIdle() {{
+      if (_typing) return;
+      _idleTimer = setTimeout(function loop() {{
+        if (_typing) return;
+        var phrase = _idlePhrases[_idleIdx % _idlePhrases.length];
+        _idleIdx++;
+        var preview = document.getElementById('type-preview');
+        var blink   = document.getElementById('blink-cur');
+        if (!preview) return;
+        // type it in, clear after short hold, then next phrase
+        if (blink) blink.style.animation = 'none';
+        preview.textContent = '';
+        var i = 0;
+        function tick() {{
+          if (_typing) {{ preview.textContent = ''; if (blink) blink.style.animation = ''; return; }}
+          if (i < phrase.length) {{
+            preview.textContent += phrase[i++];
+            setTimeout(tick, 14 + (Math.random() < 0.05 ? 60 : 0));
+          }} else {{
+            // hold, then fade clear, then schedule next
+            setTimeout(function() {{
+              preview.textContent = '';
+              if (blink) blink.style.animation = '';
+              if (!_typing) _idleTimer = setTimeout(loop, 3200);
+            }}, 2200);
+          }}
+        }}
+        tick();
+      }}, 1800);
+    }}
+
     // ── On load: type the latest System Feed entry ────────────────────────────
     var tb      = document.getElementById('term-body');
     var newest  = document.getElementById('te-newest');
     if (newest && tb) {{
+      _typing = true;
       tb.scrollTop = tb.scrollHeight;
       var plainText = newest.textContent.replace(/\s+/g, ' ').trim();
       typeAtCursor(plainText, function() {{
-        // Post: make the .te entry visible, scroll to it
         newest.style.opacity = '1';
         newest.style.transition = 'opacity 80ms ease';
         tb.scrollTop = tb.scrollHeight;
+        _typing = false;
+        startIdle();
       }});
+    }} else {{
+      startIdle();
     }}
+
+    // Expose so live-polling can pause idle, type a real event, then resume
+    window._startIdle = startIdle;
+    window._setTyping = function(v) {{ _typing = v; if (!v) startIdle(); }};
 
   }})();
 
