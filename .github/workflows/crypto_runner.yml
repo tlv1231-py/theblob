@@ -2,13 +2,14 @@ name: crypto_momentum runner
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Restart the long-running loop every 6 hours
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 350   # 5h50m — safely under GitHub's 6h job limit
 
     steps:
       - uses: actions/checkout@v4
@@ -21,9 +22,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt --quiet
 
-      - name: Run crypto_momentum
+      - name: Run crypto_momentum loop (~70s cycle)
         env:
           ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           DATABASE_URL:      ${{ secrets.DATABASE_URL }}
-        run: python -m strategies.crypto.runner
+        run: |
+          while true; do
+            python -m strategies.crypto.runner
+            sleep 60
+          done
