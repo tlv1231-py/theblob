@@ -909,16 +909,14 @@ body::after {{
 }}
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
-/* ── Status bar — rigid box pinned to bottom, top and bottom both fixed ── */
+/* ── Status bar — solid row spanning all four columns ── */
 #status-bar {{
-  position:absolute; bottom:0; left:0; right:0;
-  height:66px;
-  overflow:hidden;
-  background:transparent;
-  border-top:1px solid #003311;
-  padding:4px 10px 4px;
+  flex-shrink:0;
+  background:#060010;
+  border-top:1px solid #1a003a;
+  padding:6px 14px;
   line-height:1.6;
-  z-index:5;
+  font-size:10px;
 }}
 .con-dot {{
   width:5px; height:5px; border-radius:50%; flex-shrink:0;
@@ -955,12 +953,11 @@ body::after {{
   background:#010006;
   display:flex; flex-direction:column;
   overflow:hidden;
-  position:relative;
 }}
 #term-body {{
   flex:1; overflow-y:auto;
   display:flex; flex-direction:column;
-  padding:2px 0 70px;   /* bottom pad keeps last entry above status bar */
+  padding:2px 0 4px;
   scrollbar-width:none; background:#010006;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
@@ -1442,16 +1439,6 @@ window.addEventListener('resize', function() {{
       <div id="term-body">
         {term_rows}
       </div>
-      <!-- Status bar lives at the bottom of System Feed -->
-      <div id="status-bar">
-        <div class="con-dot"></div>
-        <span id="status-label">STATUS</span>
-        <span id="status-divider">|</span>
-        <span id="live-clock"></span>
-        <span id="prompt-sym">&gt;</span>
-        <span id="type-preview"></span>
-        <span id="blink-cur">█</span>
-      </div>
     </div>
 
     <div class="col-drag" id="drag-f"></div>
@@ -1493,6 +1480,18 @@ window.addEventListener('resize', function() {{
     </div>
 
   </div>
+
+  <!-- Status bar — full width below all four columns -->
+  <div id="status-bar">
+    <div class="con-dot"></div>
+    <span id="status-label">STATUS</span>
+    <span id="status-divider">|</span>
+    <span id="live-clock"></span>
+    <span id="prompt-sym">&gt;</span>
+    <span id="type-preview"></span>
+    <span id="blink-cur">█</span>
+  </div>
+
 </div>
 <script>
 
