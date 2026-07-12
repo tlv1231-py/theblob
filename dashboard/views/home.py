@@ -899,6 +899,34 @@ body::after {{
 #pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
 #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
+/* ── Left feed overlay ── */
+#feed-overlay {{
+  position:absolute; left:0; top:0; bottom:0; width:200px; z-index:15;
+  display:flex; flex-direction:column;
+  background:linear-gradient(90deg,rgba(1,0,6,.88) 0%,rgba(1,0,6,.6) 80%,transparent 100%);
+  pointer-events:none;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 18%,black 82%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0%,black 18%,black 82%,transparent 100%);
+}}
+#feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; }}
+#feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:2px 0 4px; scrollbar-width:none; background:transparent; }}
+#feed-overlay #term-body::-webkit-scrollbar {{ display:none; }}
+#feed-bottom-bar {{ flex-shrink:0; padding:4px 8px; pointer-events:auto; display:flex; align-items:center; }}
+#mute-btn {{ background:none; border:none; cursor:pointer; font-size:12px; opacity:.45; padding:2px 4px; transition:opacity .2s; }}
+#mute-btn:hover {{ opacity:.9; }}
+
+/* ── Right positions overlay ── */
+#pos-overlay {{
+  position:absolute; right:0; top:0; bottom:0; width:260px; z-index:15;
+  display:flex; flex-direction:column;
+  background:linear-gradient(270deg,rgba(1,0,8,.88) 0%,rgba(1,0,8,.6) 80%,transparent 100%);
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
+}}
+#pos-overlay .panel-hdr {{ flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; }}
+#pos-overlay #pos-body {{ flex:1; overflow:hidden; display:flex; flex-direction:row; gap:0; }}
+#pos-overlay #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
+
 /* ── Top bar ── */
 .topbar {{
   height:44px; flex-shrink:0;
@@ -949,14 +977,9 @@ body::after {{
 .spacer {{ flex:1; }}
 .hint {{ font-size:8px; letter-spacing:.1em; color:#2a003d; white-space:nowrap; }}
 
-/* ── Terminal overlay ── */
+/* ── Terminal overlay — hidden (data elements kept for JS) ── */
 #term-overlay {{
-  height:42%; flex-shrink:0; min-height:180px; width:100%;
-  border-top:none;
-  background:#000;
-  display:flex; flex-direction:column;
-  z-index:20; pointer-events:auto;
-  overflow:hidden;
+  display:none !important;
 }}
 @keyframes trade-entry-flash {{
   0%   {{ box-shadow:inset 0 0 0 2px rgba(0,255,157,0), border-color:#00ff41; }}
@@ -1054,7 +1077,7 @@ body::after {{
 }}
 /* ── Status bar (clock / cursor only) ── */
 #status-bar {{
-  flex-shrink:0;
+  position:fixed; bottom:0; left:0; right:0; z-index:200;
   background:#060010;
   border-top:1px solid #0d001e;
   padding:5px 16px;
@@ -1467,7 +1490,8 @@ body::after {{
   padding:4px 12px 2px; text-transform:uppercase; border-bottom:1px solid #0d0020;
 }}
 #pos-equity-section .pos-section-label {{ border-top:1px solid #0d0020; margin-top:2px; }}
-.pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden; }}
+.pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden;
+             background:rgba(6,0,8,.72); backdrop-filter:blur(6px); border-bottom:1px solid #0d0020; }}
 /* scan sweep */
 @keyframes card-scan-sweep {{
   0%   {{ top:-3px; opacity:0; }}
@@ -1877,12 +1901,6 @@ body::after {{
       <span>{_pnl_pct_str}</span>
     </div>
   </div>
-  <div class="nav-card">
-    <span class="nv-val">{nav_str}</span>
-    <span class="nv-ret" style="color:{ret_color}">{ret_str} vs $100K start</span>
-    <span class="nv-dpnl">today  {dpnl_str}</span>
-    <span class="nv-proj" id="nv-proj">pace: computing…</span>
-  </div>
   <div class="legend-strip">
     <div class="leg-item">
       <div class="leg-dot" style="background:#ff00cc;box-shadow:0 0 6px rgba(255,0,204,.7);"></div>
@@ -1903,6 +1921,44 @@ body::after {{
       <span class="leg-ret" style="color:#9400ff">{qqq_ret}</span>
     </div>
   </div>
+
+  <!-- Left overlay: System Feed -->
+  <div id="feed-overlay">
+    <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
+    <div id="term-body">
+      {term_rows}
+    </div>
+    <div id="feed-bottom-bar">
+      <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">🔊</button>
+    </div>
+  </div>
+
+  <!-- Right overlay: Positions -->
+  <div id="pos-overlay">
+    <canvas id="particle-canvas"></canvas>
+    <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
+    <div id="pos-body">
+      <div id="pos-left">
+        <div class="pos-section-label">crypto</div>
+        <div id="pos-crypto-section"></div>
+        <div id="crypto-cycle-chip">
+          <span class="eq-pip-label" id="crypto-cycle-label">next scan</span>
+          <div class="cc-bar"><div class="cc-fill" id="crypto-cycle-fill" style="width:0%"></div></div>
+          <span id="crypto-cycle-eta" style="font-size:7px;color:#2a1a4a;letter-spacing:.04em">—</span>
+        </div>
+      </div>
+      <div id="pos-right">
+        <div class="pos-section-label">equity</div>
+        <div id="pos-equity-section">{pos_cards}</div>
+        <div id="equity-countdown">
+          <span class="eq-pip-label" id="eq-pip-label">equity pipeline</span>
+          <div class="eq-pip-bar"><div class="eq-pip-fill" id="eq-pip-fill" style="width:0%"></div></div>
+          <span id="eq-pip-eta" style="font-size:7px;color:#2a1a4a;letter-spacing:.04em">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 
@@ -1938,9 +1994,9 @@ function _dateMinus(isoDateStr, days) {{
   return d.toISOString().slice(0,10);
 }}
 
-var firstDate = portDates.length ? portDates[0] : null;
+var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
 var xEnd   = _datePlus(2);   // today + 2 days buffer
-var xStart = firstDate ? _dateMinus(firstDate, 2) : _datePlus(-30);
+var xStart = latestPortDate ? _dateMinus(latestPortDate, 14) : _datePlus(-30);
 
 // Tight Y range for the visible window
 function yRange(x0, x1) {{
@@ -2288,26 +2344,33 @@ function drawPulse() {{
 // ── Sound system ─────────────────────────────────────────────────────────
 var _audioCtx = null;
 var _audioReady = false;
+var _audioMuted = false;
 function _unlockAudio() {{
   if (_audioReady) return;
   try {{
     _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Play a silent buffer to fully unlock
     var buf = _audioCtx.createBuffer(1, 1, 22050);
     var src = _audioCtx.createBufferSource();
     src.buffer = buf; src.connect(_audioCtx.destination); src.start(0);
     _audioCtx.resume().then(function() {{ _audioReady = true; }});
   }} catch(e) {{}}
 }}
-// Unlock on any gesture
+// Try to unlock immediately, then on first interaction as fallback
+_unlockAudio();
 ['click','keydown','touchstart'].forEach(function(ev) {{
   document.addEventListener(ev, function _u() {{
     _unlockAudio();
     document.removeEventListener(ev, _u);
   }});
 }});
+function _toggleMute() {{
+  _audioMuted = !_audioMuted;
+  var btn = document.getElementById('mute-btn');
+  if (btn) btn.textContent = _audioMuted ? '🔇' : '🔊';
+  if (!_audioMuted) _unlockAudio();
+}}
 function _playTones(freqs, dur, type) {{
-  if (!_audioReady || !_audioCtx) return;
+  if (_audioMuted || !_audioReady || !_audioCtx) return;
   try {{
     if (_audioCtx.state === 'suspended') {{ _audioCtx.resume(); return; }}
     freqs.forEach(function(f, i) {{
@@ -2987,158 +3050,70 @@ window.addEventListener('resize', function() {{
 }});
 </script>
 
-<!-- Terminal overlay -->
+<!-- Terminal overlay — hidden; kept as DOM container for JS elements -->
 <div id="term-overlay">
-  <div id="vert-drag"></div>
-
-  <div id="clock-line" style="display:none"></div>
-
-  <!-- Tracker bar — sits between chart and the four panels -->
-  <div id="tracker-bar">
-    <div id="run-progress-wrap">
-      <span style="font:700 7px Consolas,monospace;letter-spacing:.22em;color:#2a1a4a;text-transform:uppercase">CYCLE</span>
-      <div id="run-progress-track"><div id="run-progress-fill"></div></div>
-      <span id="run-progress-label">075s</span>
-    </div>
-    <div id="vhs-scan-bar">
-      <span id="vhs-scan-label">SCAN:</span>
-      <div id="vhs-track"><div id="vhs-fill"></div></div>
-    </div>
-  </div>
-
-  <!-- Four lower panels side by side -->
-  <!-- HUD overlay — slides from top when any action is imminent -->
+  <!-- Hidden data sources for JS -->
+  <div id="queue-dynamic" style="display:none"></div>
+  <div style="display:none">{q_items}</div>
+  <!-- HUD overlay (hidden under collapsed parent but DOM-accessible) -->
   <div id="hud-overlay">
     <div id="hud-label">
       <div class="term-dot" style="background:#00e5ff;box-shadow:0 0 8px rgba(0,229,255,.9)"></div>
       <span id="hud-label-text">QUEUED</span>
     </div>
-    <div id="hud-items"><!-- populated by JS --></div>
+    <div id="hud-items"></div>
   </div>
-
-  <!-- Hidden queue body (data source, never shown) -->
-  <div id="queue-dynamic" style="display:none"></div>
-  <div style="display:none">{q_items}</div>
-
-  <div id="lower-panels">
-
-    <!-- System Feed panel -->
-    <div id="feed-panel">
-      <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
-      <div id="term-body">
-        {term_rows}
-      </div>
+  <!-- Orphaned wallet elements JS might reference -->
+  <div id="wallet-nav" data-val="{last_nav_fmt}" style="display:none">{last_nav_fmt}</div>
+  <div id="wallet-pnl" style="display:none">{_pnl_str}</div>
+  <div id="wallet-streak" style="display:none"></div>
+  <div id="gauge-needle" style="display:none"></div>
+  <div id="gauge-arc" style="display:none"></div>
+  <div id="gauge-label" style="display:none"></div>
+  <div id="wallet-vel-fill" style="display:none"></div>
+  <div id="wallet-event-ticker" style="display:none"></div>
+  <!-- Feed panel stub (term-body is in overlay above; keep a hidden stub so old JS refs don't break) -->
+  <div id="feed-panel" style="display:none"></div>
+  <!-- Pos panel stub -->
+  <div id="pos-panel" style="display:none"></div>
+  <div id="tracker-bar" style="display:none">
+    <div id="run-progress-wrap">
+      <div id="run-progress-track"><div id="run-progress-fill"></div></div>
+      <span id="run-progress-label">075s</span>
     </div>
-
-    <div class="col-drag" id="drag-f"></div>
-
-    <!-- Report panel — live wallet canvas -->
-    <div id="report-panel">
-      <canvas id="wallet-canvas"></canvas>
-      <div id="wallet-block">
-        <div id="wallet-noise"></div>
-        <div id="wallet-label">ALPACA WALLET</div>
-
-        <!-- Speedometer gauge — avg trades per hour -->
-        <div id="gauge-wrap">
-          <svg id="speed-gauge" viewBox="0 0 200 116" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#00ff9d"/>
-                <stop offset="48%" stop-color="#ffcc00"/>
-                <stop offset="100%" stop-color="#ff3366"/>
-              </linearGradient>
-            </defs>
-            <!-- Track -->
-            <path d="M 22 108 A 78 78 0 0 1 178 108" stroke="rgba(255,255,255,0.05)" stroke-width="12" fill="none" stroke-linecap="round"/>
-            <!-- Gradient arc -->
-            <path d="M 22 108 A 78 78 0 0 1 178 108" stroke="url(#gGrad)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.2"/>
-            <!-- Active arc overlay (will be updated by JS via stroke-dashoffset) -->
-            <path id="gauge-arc" d="M 22 108 A 78 78 0 0 1 178 108" stroke="#00e5ff" stroke-width="7" fill="none" stroke-linecap="round" opacity="0" style="transition:opacity .6s ease"/>
-            <!-- Needle -->
-            <line id="gauge-needle"
-                  x1="100" y1="108" x2="100" y2="35"
-                  stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round"
-                  style="transform-origin:100px 108px; transform:rotate(-90deg);"/>
-            <!-- Hub -->
-            <circle cx="100" cy="108" r="8" fill="#000308"/>
-            <circle cx="100" cy="108" r="4" fill="#00e5ff" style="filter:drop-shadow(0 0 5px #00e5ff)"/>
-          </svg>
-          <div id="gauge-label">0.0 <span style="font-size:7px;opacity:.5">tr/hr</span></div>
-          <div id="gauge-sub">avg trades · live</div>
-        </div>
-
-        <div id="wallet-nav" data-val="{last_nav_fmt}" class="glitch-active">{last_nav_fmt}</div>
-        <div id="wallet-pnl" style="color:{_pnl_col}">{_pnl_str}</div>
-        <div id="wallet-sub">paper trading · {_pnl_pct_str}</div>
-        <div id="wallet-momentum-bar">
-          <div id="wallet-vel-track"><div id="wallet-vel-fill"></div></div>
-          <div id="wallet-vel-label">MOMENTUM</div>
-        </div>
-        <div id="wallet-streak"></div>
-        <div id="wallet-event-ticker"></div>
-      </div>
-    </div>
-
-    <div class="col-drag" id="drag-q"></div>
-
-    <!-- Positions scorecard — two columns: crypto | equity -->
-    <div id="pos-panel">
-      <canvas id="particle-canvas"></canvas>
-      <div class="panel-hdr"><div class="term-dot"></div>POSITIONS</div>
-      <div id="pos-body">
-        <div id="pos-left">
-          <div class="pos-section-label">crypto</div>
-          <div id="pos-crypto-section"></div>
-          <div id="crypto-cycle-chip">
-            <span class="eq-pip-label" id="crypto-cycle-label">next scan</span>
-            <div class="cc-bar"><div class="cc-fill" id="crypto-cycle-fill" style="width:0%"></div></div>
-            <span id="crypto-cycle-eta" style="font-size:7px;color:#2a1a4a;letter-spacing:.04em">—</span>
-          </div>
-        </div>
-        <div id="pos-right">
-          <div class="pos-section-label">equity</div>
-          <div id="pos-equity-section">{pos_cards}</div>
-          <div id="equity-countdown">
-            <span class="eq-pip-label" id="eq-pip-label">equity pipeline</span>
-            <div class="eq-pip-bar"><div class="eq-pip-fill" id="eq-pip-fill" style="width:0%"></div></div>
-            <span id="eq-pip-eta" style="font-size:7px;color:#2a1a4a;letter-spacing:.04em">—</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Capital FAB + popup (fixed, outside lower-panels flow) -->
-  <div id="capital-fab" onclick="toggleCapital()">◈ CAPITAL</div>
-  <div id="capital-popup">
-    <div class="panel-hdr" style="cursor:pointer" onclick="toggleCapital()"><div class="term-dot"></div>CAPITAL <span style="margin-left:auto;font-size:8px;opacity:.5">✕</span></div>
-    <div id="dep-body">
-      <div class="dep-tabs">
-        <div class="dep-tab active" id="tab-dep" onclick="setDepMode('deposit')">DEPOSIT</div>
-        <div class="dep-tab" id="tab-wdw" onclick="setDepMode('withdraw')">WITHDRAW</div>
-      </div>
-      <div class="dep-amt-row">
-        <input class="dep-input" id="dep-amount" type="number" placeholder="0.00" min="0" step="100">
-        <button class="dep-btn" onclick="submitTransfer()">TRANSFER</button>
-      </div>
-      <div class="dep-note" id="dep-note">ACH · free · 1-3 business days to settle</div>
-      <div class="dep-hist-hdr">history</div>
-      <div id="dep-hist">
-        <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
-      </div>
+    <div id="vhs-scan-bar">
+      <div id="vhs-track"><div id="vhs-fill"></div></div>
     </div>
   </div>
+</div>
 
-  <!-- Status bar — clock / cursor only -->
-  <div id="status-bar">
-    <span id="live-clock"></span>
-    <span id="prompt-sym">&gt;</span>
-    <span id="type-preview"></span>
-    <span id="blink-cur">█</span>
+<!-- Capital FAB + popup (fixed position, outside term-overlay) -->
+<div id="capital-fab" onclick="toggleCapital()">◈ CAPITAL</div>
+<div id="capital-popup">
+  <div class="panel-hdr" style="cursor:pointer" onclick="toggleCapital()"><div class="term-dot"></div>CAPITAL <span style="margin-left:auto;font-size:8px;opacity:.5">✕</span></div>
+  <div id="dep-body">
+    <div class="dep-tabs">
+      <div class="dep-tab active" id="tab-dep" onclick="setDepMode('deposit')">DEPOSIT</div>
+      <div class="dep-tab" id="tab-wdw" onclick="setDepMode('withdraw')">WITHDRAW</div>
+    </div>
+    <div class="dep-amt-row">
+      <input class="dep-input" id="dep-amount" type="number" placeholder="0.00" min="0" step="100">
+      <button class="dep-btn" onclick="submitTransfer()">TRANSFER</button>
+    </div>
+    <div class="dep-note" id="dep-note">ACH · free · 1-3 business days to settle</div>
+    <div class="dep-hist-hdr">history</div>
+    <div id="dep-hist">
+      <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
+    </div>
   </div>
+</div>
 
+<!-- Status bar — clock / cursor only (fixed) -->
+<div id="status-bar">
+  <span id="live-clock"></span>
+  <span id="prompt-sym">&gt;</span>
+  <span id="type-preview"></span>
+  <span id="blink-cur">█</span>
 </div>
 <script>
 
