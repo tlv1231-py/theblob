@@ -1684,8 +1684,44 @@ body::after {{
 .pos-card-exit-stop    {{ animation:card-exit-stop    .42s ease-in forwards; overflow:hidden; }}
 .pos-card-exit-timeout {{ animation:card-exit-timeout .48s ease-in forwards; overflow:hidden; }}
 .pos-card-exit-rev     {{ animation:card-exit-rev     .48s ease-out forwards; overflow:hidden; }}
-/* ── PnL ghost ── */
-.pnl-ghost {{ position:fixed; pointer-events:none; z-index:9999; font-size:18px; font-weight:700; font-family:Consolas,monospace; text-shadow:0 0 10px currentColor; transition:transform .9s cubic-bezier(.22,1,.36,1), opacity .9s ease; opacity:1; }}
+/* ── PnL ghost — video-game exit ── */
+@keyframes pnl-ghost-pop {{
+  0%   {{ transform:scale(.3) translateY(0);    opacity:0; filter:brightness(3); }}
+  18%  {{ transform:scale(1.4) translateY(-12px); opacity:1; filter:brightness(1.8); }}
+  38%  {{ transform:scale(.88) translateY(-22px); opacity:1; filter:brightness(1.2); }}
+  55%  {{ transform:scale(1.06) translateY(-34px); opacity:1; filter:brightness(1); }}
+  80%  {{ transform:scale(1.0) translateY(-70px); opacity:.85; }}
+  100% {{ transform:scale(.9) translateY(-115px); opacity:0; }}
+}}
+@keyframes pnl-particle {{
+  0%   {{ transform:translate(0,0) scale(1); opacity:1; }}
+  100% {{ transform:translate(var(--px),var(--py)) scale(0); opacity:0; }}
+}}
+@keyframes card-flash-exit {{
+  0%   {{ box-shadow:inset 0 0 0 1px transparent; }}
+  15%  {{ box-shadow:inset 0 0 0 2px var(--flash-col,#fff), 0 0 24px 4px var(--flash-col,#fff); filter:brightness(2.2); }}
+  100% {{ box-shadow:inset 0 0 0 1px transparent; filter:brightness(1); }}
+}}
+.pnl-ghost {{
+  position:fixed; pointer-events:none; z-index:9999;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  animation:pnl-ghost-pop 1.1s cubic-bezier(.22,1,.36,1) forwards;
+}}
+.pnl-ghost .pg-sym {{
+  font:600 8px Consolas,monospace; letter-spacing:.18em; opacity:.7; text-transform:uppercase;
+}}
+.pnl-ghost .pg-val {{
+  font:800 28px/1 Consolas,monospace; letter-spacing:.04em;
+  text-shadow:0 0 18px currentColor, 0 0 36px currentColor;
+}}
+.pnl-ghost .pg-label {{
+  font:600 7px Consolas,monospace; letter-spacing:.3em; opacity:.55;
+  text-transform:uppercase; margin-top:1px;
+}}
+.pnl-particle {{
+  position:fixed; pointer-events:none; z-index:9998; border-radius:50%;
+  animation:pnl-particle var(--dur,.6s) ease-out forwards;
+}}
 /* ── Ambient canvas (behind chart content) ── */
 #ambient-canvas {{
   position:absolute; inset:0; pointer-events:none; z-index:10;
@@ -4005,23 +4041,75 @@ window.addEventListener('resize', function() {{
       }}, 1650);
     }};
 
-    // ── Reason-aware card exit ──────────────────────────────────────────────────
-    function _spawnPnlGhost(el, pnl) {{
-      if (!el || pnl === null) return;
-      var r = el.getBoundingClientRect();
+    // ── Video-game card exit ────────────────────────────────────────────────────
+    function _spawnPnlGhost(el, pnl, sym) {{
+      if (!el) return;
+      var hasPnl = (pnl !== null && pnl !== undefined);
+      var r    = el.getBoundingClientRect();
+      var cx   = r.left + r.width  / 2;
+      var cy   = r.top  + r.height / 2;
+      var isWin = hasPnl ? pnl >= 0 : true;
+      var col  = isWin ? '#00ff9d' : '#ff3366';
+
+      // ── 1. Card flash ──────────────────────────────────────────────────────
+      el.style.setProperty('--flash-col', col);
+      el.style.animation = 'card-flash-exit .28s ease-out forwards';
+
+      // ── 2. Particle burst ──────────────────────────────────────────────────
+      var N = 14;
+      for (var i = 0; i < N; i++) {{
+        var angle = (Math.PI * 2 / N) * i + (Math.random() - .5) * .6;
+        var dist  = 55 + Math.random() * 60;
+        var size  = 3 + Math.random() * 5;
+        var dur   = (.45 + Math.random() * .35).toFixed(2) + 's';
+        var p = document.createElement('div');
+        p.className = 'pnl-particle';
+        p.style.cssText = [
+          'width:' + size + 'px', 'height:' + size + 'px',
+          'background:' + col,
+          'box-shadow:0 0 6px ' + col,
+          'left:' + (cx - size/2) + 'px',
+          'top:'  + (cy - size/2) + 'px',
+          '--px:' + Math.round(Math.cos(angle) * dist) + 'px',
+          '--py:' + Math.round(Math.sin(angle) * dist) + 'px',
+          '--dur:' + dur,
+          'opacity:1'
+        ].join(';');
+        document.body.appendChild(p);
+        setTimeout(function(pp) {{ if (pp.parentNode) pp.parentNode.removeChild(pp); }}, 900, p);
+      }}
+
+      // ── 3. Large P&L ghost number ──────────────────────────────────────────
       var g = document.createElement('div');
       g.className = 'pnl-ghost';
-      var sign = pnl >= 0 ? '+' : '-';
-      g.textContent = sign + '$' + Math.abs(pnl).toFixed(2);
-      g.style.color = pnl >= 0 ? '#00ff9d' : '#ff3366';
-      g.style.left = (r.left + r.width / 2 - 40) + 'px';
-      g.style.top  = (r.top  + r.height / 2 - 10) + 'px';
+      g.style.color = col;
+      g.style.left  = (cx - 52) + 'px';
+      g.style.top   = (cy - 28) + 'px';
+
+      var symEl = document.createElement('div');
+      symEl.className = 'pg-sym';
+      symEl.textContent = (sym || '').replace('/USD','');
+
+      var valEl = document.createElement('div');
+      valEl.className = 'pg-val';
+      if (hasPnl) {{
+        var absPnl = Math.abs(pnl);
+        valEl.textContent = absPnl >= 1000
+          ? (pnl >= 0 ? '+' : '-') + '$' + (absPnl / 1000).toFixed(1) + 'K'
+          : (pnl >= 0 ? '+' : '-') + '$' + absPnl.toFixed(2);
+      }} else {{
+        valEl.textContent = 'CLOSED';
+        valEl.style.fontSize = '18px';
+        valEl.style.letterSpacing = '.15em';
+      }}
+
+      var lbl = document.createElement('div');
+      lbl.className = 'pg-label';
+      lbl.textContent = hasPnl ? (isWin ? 'PROFIT' : 'LOSS') : 'EXIT';
+
+      g.appendChild(symEl); g.appendChild(valEl); g.appendChild(lbl);
       document.body.appendChild(g);
-      requestAnimationFrame(function() {{
-        g.style.transform = pnl >= 0 ? 'translateY(-70px)' : 'translateY(70px)';
-        g.style.opacity = '0';
-      }});
-      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1050);
+      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1200);
     }}
     var _EXIT_CLASS = {{
       'target':   'pos-card-exit-target',
@@ -4050,11 +4138,15 @@ window.addEventListener('resize', function() {{
       else if (_cryptoCardEls[fullSym + '/USD']) delete _cryptoCardEls[fullSym + '/USD'];
       else if (_equityCardEls[fullSym]) delete _equityCardEls[fullSym];
       el.classList.remove('pos-card-active');
-      _spawnPnlGhost(el, pnl);
+      // Spawn ghost + particles immediately; collapse card after flash plays (280ms)
+      _spawnPnlGhost(el, pnl, fullSym);
       var cls = _EXIT_CLASS[reason] || 'pos-card-exit-stop';
-      el.classList.add(cls);
       var dur = _EXIT_DUR[reason] || 500;
-      setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, dur);
+      setTimeout(function() {{
+        el.style.animation = '';  // clear flash so exit CSS can take over
+        el.classList.add(cls);
+        setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, dur);
+      }}, 260);
     }};
 
     function _makeCard(p) {{
