@@ -44,20 +44,19 @@ _SLIPPAGE = _EXE["slippage_bps"] / 10_000
 
 # ── Alpaca clients ────────────────────────────────────────────────────────────
 
+def _api_key():
+    return os.environ["ALPACA_API_KEY"].strip().lstrip("﻿")
+
+def _secret_key():
+    return os.environ["ALPACA_SECRET_KEY"].strip().lstrip("﻿")
+
 def _trading_client():
     from alpaca.trading.client import TradingClient
-    return TradingClient(
-        api_key    = os.environ["ALPACA_API_KEY"],
-        secret_key = os.environ["ALPACA_SECRET_KEY"],
-        paper      = True,
-    )
+    return TradingClient(api_key=_api_key(), secret_key=_secret_key(), paper=True)
 
 def _data_client():
     from alpaca.data.historical.crypto import CryptoHistoricalDataClient
-    return CryptoHistoricalDataClient(
-        api_key    = os.environ["ALPACA_API_KEY"],
-        secret_key = os.environ["ALPACA_SECRET_KEY"],
-    )
+    return CryptoHistoricalDataClient(api_key=_api_key(), secret_key=_secret_key())
 
 
 # ── Bar fetching ──────────────────────────────────────────────────────────────
