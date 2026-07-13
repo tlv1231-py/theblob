@@ -2153,6 +2153,7 @@ body::after {{
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
+  <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
   <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
   <div id="trade-veil"></div>
@@ -2383,24 +2384,9 @@ var traces = [
     name:'QQQ (norm)',
     hovertemplate:'<b style="color:#9400ff">QQQ $%{{y:,.0f}}</b><extra></extra>',
   }},
-  // Ghost glow (trace 3) — starts empty, populated by _navHistory
-  {{
-    x: [], y: [],
-    type:'scatter', mode:'lines',
-    line:{{ color:'rgba(255,0,204,0.18)', width:20 }},
-    fill:'none',
-    name:'ghost', hoverinfo:'skip', showlegend:false,
-  }},
-  // PORTFOLIO main line (trace 4) — starts empty, populated by _navHistory
-  {{
-    x: [], y: [],
-    type:'scatter', mode:'lines',
-    line:{{ color:'#ff00cc', width:3 }},
-    fill:'tozeroy',
-    fillcolor:'rgba(255,0,204,0.07)',
-    name:'PORTFOLIO',
-    hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
-  }},
+  // Traces 3+4 — kept as empty stubs; actual line drawn on #nav-canvas overlay
+  {{ x:[], y:[], type:'scatter', mode:'lines', line:{{color:'transparent',width:0}}, showlegend:false, hoverinfo:'skip' }},
+  {{ x:[], y:[], type:'scatter', mode:'lines', line:{{color:'transparent',width:0}}, showlegend:false, hoverinfo:'skip', name:'PORTFOLIO' }},
   // HYSA 4.8% benchmark (trace index 5)
   {{
     x: _hysaDates, y: _hysaVals,
@@ -3757,6 +3743,115 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
 }});
 
 gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
+
+// ── Canvas nav line — replaces Plotly portfolio traces for live intraday view ─────
+// Plotly's autorange and mixed date formats are fundamentally incompatible with a
+// locked 20-min sliding window. We draw the line ourselves on a canvas overlay.
+(function() {{
+  var _nc = document.getElementById('nav-canvas');
+  if (!_nc) return;
+
+  function _resize() {{
+    var ma = document.getElementById('main-area');
+    if (!ma) return;
+    var r = ma.getBoundingClientRect();
+    _nc.width  = r.width  || 800;
+    _nc.height = r.height || 500;
+  }}
+  _resize();
+  window.addEventListener('resize', _resize);
+
+  window._drawNavCanvas = function() {{
+    _resize(); // keep sharp on resize
+    var W = _nc.width, H = _nc.height;
+    var ctx = _nc.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    var history = window._navHistory || [];
+    var curNav  = window._lastKnownNav;
+    if (!curNav && history.length === 0) return;
+
+    var nowMs    = Date.now();
+    var halfWin  = 20 * 60 * 1000; // 20 min
+    var winStart = nowMs - halfWin;
+    var winEnd   = nowMs + halfWin;
+
+    // Include current nav as a synthetic "now" point
+    var pts = history.slice(); // [{x: ISO, y: nav}]
+    if (curNav) {{
+      var last = pts[pts.length - 1];
+      var nowIso = new Date(nowMs).toISOString();
+      if (!last || last.x !== nowIso) pts.push({{ x: nowIso, y: curNav }});
+    }}
+
+    // Filter to visible window only
+    pts = pts.filter(function(p) {{
+      var ms = new Date(p.x).getTime();
+      return ms >= winStart && ms <= winEnd;
+    }});
+    if (pts.length < 1) return;
+
+    // Y range — auto-scale tight to visible data
+    var minY = Infinity, maxY = -Infinity;
+    pts.forEach(function(p) {{
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }});
+    var spread = maxY - minY;
+    var base   = curNav || 100000;
+    var minSpread = base * 0.003; // at least 0.3% of NAV visible
+    if (spread < minSpread) {{
+      var mid = (minY + maxY) / 2;
+      minY = mid - minSpread / 2;
+      maxY = mid + minSpread / 2;
+      spread = minSpread;
+    }}
+    var pad = spread * 0.35;
+    minY -= pad; maxY += pad;
+
+    // Coordinate mappers — current moment always at W/2
+    function tx(isoStr) {{
+      var ms = new Date(isoStr).getTime();
+      return (ms - winStart) / (winEnd - winStart) * W;
+    }}
+    function ty(v) {{ return H - (v - minY) / (maxY - minY) * H; }}
+
+    var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
+
+    // Fill under the line
+    ctx.beginPath();
+    ctx.moveTo(mapped[0].x, mapped[0].y);
+    for (var i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
+    ctx.lineTo(mapped[mapped.length-1].x, H);
+    ctx.lineTo(mapped[0].x, H);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,0,204,0.06)';
+    ctx.fill();
+
+    // Glow pass
+    ctx.beginPath();
+    ctx.moveTo(mapped[0].x, mapped[0].y);
+    for (var i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
+    ctx.strokeStyle = 'rgba(255,0,204,0.15)';
+    ctx.lineWidth   = 18;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+
+    // Main line
+    ctx.beginPath();
+    ctx.moveTo(mapped[0].x, mapped[0].y);
+    for (var i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
+    ctx.strokeStyle = '#ff00cc';
+    ctx.lineWidth   = 2.5;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+  }};
+
+  // Redraw every 5s so center advances smoothly with real time
+  setInterval(window._drawNavCanvas, 5000);
+}})();
 
 // ── Real-time x-axis advance — DISABLED: _recenterOnLatest() handles centering ──
 var _userPanned = false;
@@ -5461,7 +5556,7 @@ window.addEventListener('resize', function() {{
       while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) {{
         window._navHistory.shift();
       }}
-      _redrawNavTraces();
+      if (window._drawNavCanvas) window._drawNavCanvas();
       _updateEndpointDot(nav, isoTs);
       _updateAthShape(nav, isoTs);
     }}
@@ -5530,7 +5625,7 @@ window.addEventListener('resize', function() {{
         // Draw immediately after seeding
         var _gd = document.getElementById('chart');
         if (_gd && _gd.data && _gd.data.length > 3 && window._navHistory.length) {{
-          _redrawNavTraces();
+          if (window._drawNavCanvas) window._drawNavCanvas();
           _recenterOnLatest(null);
         }}
       }}).catch(function() {{}});
@@ -5554,7 +5649,7 @@ window.addEventListener('resize', function() {{
       // Trim to 30 min — match the visible window
       var cutoff = new Date(Date.now() - 30*60*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
-      _redrawNavTraces();
+      if (window._drawNavCanvas) window._drawNavCanvas();
     }}, 15000);
 
     // ── Live positions poller — DOM-diffing with enter/exit animations ───────
