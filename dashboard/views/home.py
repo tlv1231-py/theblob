@@ -807,16 +807,16 @@ def _build_daw_html(data: dict) -> str:
         ep     = p["entry_price"]
         epnl   = p["entry_pnl"]
         epct   = p["entry_pnl_pct"]
-        pnl_col = "#00ff9d" if epnl >= 0 else "#ff3366"
+        pnl_col = "#00c880" if epnl >= 0 else "#e03355"
         pnl_arrow = "▲" if epnl >= 0 else "▼"
         pnl_sign  = "+" if epnl >= 0 else "−"
 
         # Status badge
         if p["in_signal"]:
             rank_n = p.get("rank") or "?"
-            badge_html = f'<span class="pc-badge pc-badge-hold">▶ #{rank_n}</span>'
+            badge_html = f'<span class="pc-badge pc-badge-hold">#{rank_n} HOLD</span>'
         else:
-            badge_html = '<span class="pc-badge pc-badge-sell">⚠ SELL</span>'
+            badge_html = '<span class="pc-badge pc-badge-sell">EXIT</span>'
 
         # Proximity bar: 0=at stop, 1=at target
         prox_pct = 0
@@ -825,7 +825,7 @@ def _build_daw_html(data: dict) -> str:
         cur_p   = p.get("price", ep or 0)
         if tgt_p > stop_p > 0 and cur_p:
             prox_pct = max(0, min(100, (cur_p - stop_p) / (tgt_p - stop_p) * 100))
-        prox_col = ("#ff3366" if prox_pct < 33 else "#ff9900" if prox_pct < 66 else "#00ff9d")
+        prox_col = ("#a03050" if prox_pct < 33 else "#4080b0" if prox_pct < 66 else "#00a060")
         prox_bar = (
             f'<div class="pc-prox-wrap">'
             f'  <div class="pc-prox-labels">'
@@ -989,7 +989,7 @@ body::after {{
   mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 100%);
 }}
 #feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
-#feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column-reverse; padding:4px 0 6px; scrollbar-width:none; background:transparent; }}
+#feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:4px 0 6px; scrollbar-width:none; background:transparent; }}
 #feed-overlay #term-body::-webkit-scrollbar {{ display:none; }}
 #feed-overlay .te {{ padding:3px 6px; font-size:11px; }}
 #feed-bottom-bar {{ flex-shrink:0; padding:4px 8px; pointer-events:auto; display:flex; align-items:center; }}
@@ -1187,10 +1187,10 @@ body::after {{
 }}
 /* ── Terminal row appear ── */
 @keyframes te-appear {{
-  from {{ opacity:0; transform:translateY(-4px); }}
+  from {{ opacity:0; transform:translateY(-6px); }}
   to   {{ opacity:1; transform:translateY(0); }}
 }}
-.te-new {{ animation:te-appear 90ms ease-out forwards; }}
+.te-new {{ animation:te-appear 120ms ease-out forwards; }}
 
 /* ── System Feed panel (bottom-left) ── */
 #feed-panel {{
@@ -1201,7 +1201,7 @@ body::after {{
 }}
 #term-body {{
   flex:1; overflow-y:auto;
-  display:flex; flex-direction:column-reverse;
+  display:flex; flex-direction:column;
   padding:4px 0 6px;
   scrollbar-width:none; background:#010006;
 }}
@@ -1607,116 +1607,122 @@ body::after {{
 
 /* ── Equity position cards (right panel) ── */
 .pc-eq {{
-  padding:8px 10px 8px 12px !important;
-  background:rgba(4,0,12,.55) !important;
-  backdrop-filter:blur(4px) !important;
-  border-bottom:1px solid rgba(30,0,50,.7) !important;
+  padding:11px 12px 10px 14px !important;
+  background:rgba(6,0,18,.62) !important;
+  backdrop-filter:blur(6px) !important;
+  border-bottom:1px solid rgba(255,255,255,.03) !important;
+  border-left-width:2px !important;
+  transition:background .4s ease;
 }}
+.pc-eq:hover {{ background:rgba(10,0,28,.72) !important; }}
+.pc-eq .pos-corner {{ display:none; }}
 .pc-row1 {{
-  display:flex; align-items:center; gap:5px; margin-bottom:3px;
+  display:flex; align-items:baseline; gap:6px; margin-bottom:5px;
 }}
 .pc-sym {{
-  font-family:Consolas,monospace; font-size:13px; font-weight:700;
-  letter-spacing:.04em; flex-shrink:0;
+  font-family:Consolas,monospace; font-size:14px; font-weight:800;
+  letter-spacing:.06em; flex-shrink:0;
 }}
 .pc-badge {{
-  font-size:7px; font-weight:700; letter-spacing:.14em; padding:1px 5px;
-  border-radius:2px; flex-shrink:0; font-family:Consolas,monospace;
+  font-size:6px; font-weight:700; letter-spacing:.18em; padding:2px 6px 1px;
+  border-radius:1px; flex-shrink:0; font-family:Consolas,monospace;
+  text-transform:uppercase;
 }}
 .pc-badge-hold {{
-  background:rgba(0,255,157,.12); color:#00ff9d; border:1px solid rgba(0,255,157,.3);
-  animation:badge-hold-pulse 2.4s ease-in-out infinite;
+  background:transparent; color:rgba(0,180,110,.55);
+  border:1px solid rgba(0,180,110,.2);
 }}
 .pc-badge-sell {{
-  background:rgba(255,153,0,.15); color:#ff9900; border:1px solid rgba(255,153,0,.4);
-  animation:badge-sell-pulse 1s ease-in-out infinite;
+  background:transparent; color:rgba(220,160,0,.6);
+  border:1px solid rgba(220,160,0,.25);
 }}
-@keyframes badge-hold-pulse {{ 0%,100%{{box-shadow:none}} 50%{{box-shadow:0 0 6px rgba(0,255,157,.35)}} }}
-@keyframes badge-sell-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.6}} }}
 .pc-val {{
-  margin-left:auto; font-family:Consolas,monospace; font-size:11px;
-  font-weight:700; color:rgba(200,180,255,.85); letter-spacing:.02em;
+  margin-left:auto; font-family:Consolas,monospace; font-size:13px;
+  font-weight:700; color:rgba(230,220,255,.9); letter-spacing:.01em;
   font-variant-numeric:tabular-nums;
 }}
 .pc-pnl {{
-  font-family:Consolas,monospace; font-size:12px; font-weight:700;
-  letter-spacing:.02em; margin-bottom:5px; font-variant-numeric:tabular-nums;
+  font-family:Consolas,monospace; font-size:11px; font-weight:600;
+  letter-spacing:.02em; margin-bottom:7px; font-variant-numeric:tabular-nums;
+  opacity:.9;
 }}
 .pc-pnl-pct {{
-  font-size:10px; opacity:.75; margin-left:4px;
+  font-size:9.5px; opacity:.65; margin-left:5px; font-weight:400;
 }}
-/* Proximity bar */
+/* Proximity bar — range navigator, not danger meter */
 .pc-prox-wrap {{
-  position:relative; margin-bottom:5px;
+  position:relative; margin-bottom:6px;
 }}
 .pc-prox-labels {{
   display:flex; justify-content:space-between; align-items:center;
-  position:relative; height:12px; margin-bottom:2px;
+  position:relative; height:11px; margin-bottom:3px;
 }}
 .pc-prox-stop,.pc-prox-tgt {{
-  font-family:Consolas,monospace; font-size:7px; color:rgba(120,90,160,.7);
+  font-family:Consolas,monospace; font-size:6.5px; color:rgba(140,110,170,.5);
   letter-spacing:.04em;
 }}
 .pc-prox-cur {{
   position:absolute; transform:translateX(-50%);
-  font-family:Consolas,monospace; font-size:7.5px; font-weight:700;
-  color:rgba(255,255,255,.8); white-space:nowrap;
+  font-family:Consolas,monospace; font-size:7px; font-weight:700;
+  color:rgba(255,255,255,.65); white-space:nowrap;
 }}
 .pc-prox-track {{
-  position:relative; height:4px; background:rgba(255,255,255,.06);
-  border-radius:2px; overflow:visible;
+  position:relative; height:2px; background:rgba(255,255,255,.05);
+  border-radius:1px; overflow:visible;
 }}
 .pc-prox-fill {{
-  height:100%; border-radius:2px; transition:width .6s ease;
+  height:100%; border-radius:1px; transition:width 1.2s ease; opacity:.7;
 }}
 .pc-prox-dot {{
   position:absolute; top:50%; transform:translate(-50%,-50%);
-  width:8px; height:8px; border-radius:50%;
-  border:1.5px solid rgba(0,0,0,.6);
-  transition:left .6s ease;
+  width:6px; height:6px; border-radius:50%;
+  border:1px solid rgba(0,0,0,.5);
+  transition:left 1.2s ease;
 }}
 /* Meta row */
 .pc-meta {{
   display:flex; justify-content:space-between; align-items:center;
-  margin-top:5px; margin-bottom:3px;
+  margin-top:5px; margin-bottom:4px;
 }}
 .pc-days {{
-  font-family:Consolas,monospace; font-size:8px; color:#00e5ff;
-  letter-spacing:.06em;
+  font-family:Consolas,monospace; font-size:8.5px; color:rgba(0,200,220,.55);
+  letter-spacing:.04em;
 }}
 .pc-entry {{
-  font-family:Consolas,monospace; font-size:7.5px; color:rgba(120,90,160,.6);
+  font-family:Consolas,monospace; font-size:7px; color:rgba(140,110,170,.45);
   letter-spacing:.02em;
 }}
 /* Status line */
 .pc-status {{
-  font-size:7.5px; letter-spacing:.04em; padding-top:3px;
+  font-size:7px; letter-spacing:.06em; padding-top:4px;
   border-top:1px solid rgba(255,255,255,.04);
-  font-family:Consolas,monospace; line-height:1.4;
+  font-family:Consolas,monospace; line-height:1.5; text-transform:uppercase;
 }}
-.pc-status-hold {{ color:rgba(0,200,120,.55); }}
-.pc-status-sell {{ color:rgba(255,153,0,.7); }}
+.pc-status-hold {{ color:rgba(0,170,100,.4); }}
+.pc-status-sell {{ color:rgba(210,160,0,.45); }}
 
-/* ── Crypto card redesign — minimal, flush, data-forward ── */
+/* ── Crypto cards — calm, data-dense ── */
 #pos-left .pos-card {{
-  padding:5px 8px 5px 10px;
-  background:transparent !important; backdrop-filter:none !important;
+  padding:7px 10px 6px 11px;
+  background:rgba(6,0,18,.5) !important; backdrop-filter:blur(4px) !important;
   border-left:2px solid; border-right:none; border-top:none;
-  border-bottom:1px solid rgba(255,255,255,.035);
+  border-bottom:1px solid rgba(255,255,255,.03);
+  transition:background .3s ease;
 }}
+#pos-left .pos-card:hover {{ background:rgba(10,0,28,.65) !important; }}
 #pos-left .pos-corner {{ display:none; }}
-#pos-left .pos-acq-flash {{ font-size:7px; letter-spacing:.2em; }}
+#pos-left .pos-acq-flash {{ font-size:7px; letter-spacing:.18em; }}
 #pos-left .pos-top {{
-  display:flex; justify-content:space-between; align-items:baseline; gap:4px; line-height:1.25;
+  display:flex; justify-content:space-between; align-items:baseline; gap:4px; line-height:1.3;
 }}
-#pos-left .pos-sym {{ font-size:11px; font-weight:800; letter-spacing:.04em; }}
+#pos-left .pos-sym {{ font-size:11px; font-weight:800; letter-spacing:.05em; }}
 #pos-left .pos-qty {{ display:none; }}
 #pos-left .pos-val {{
-  font-size:8px; font-weight:700; font-variant-numeric:tabular-nums;
-  color:rgba(255,255,255,.42); margin-left:auto;
+  font-size:8px; font-weight:600; font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,.38); margin-left:auto;
 }}
 #pos-left .pos-hold {{
-  font-size:7.5px; color:rgba(255,255,255,.28); margin-top:1px; letter-spacing:.01em;
+  font-size:7px; color:rgba(200,180,255,.22); margin-top:2px; letter-spacing:.02em;
 }}
 #pos-left .pos-prox-wrap {{ margin-top:4px; padding:0; }}
 #pos-left .pos-prox-track {{ height:2px; background:rgba(255,255,255,.06); }}
@@ -4673,7 +4679,7 @@ window.addEventListener('resize', function() {{
       eta.textContent = rem + 's';
     }}, 500);
 
-    // ── postToFeed: instant-append, newest at top (column-reverse) ─────────
+    // ── postToFeed: prepend newest to top, trim from tail ───────────────────
     function postToFeed(plain, timestamp, html) {{
       var _h  = html || plain;
       var tb  = document.getElementById('term-body');
@@ -4701,9 +4707,9 @@ window.addEventListener('resize', function() {{
         row.style.textShadow = 'none';
       }}
       row.innerHTML = '<span class="te-ts">' + hhmm + '</span>' + _h;
-      tb.appendChild(row);
-      // Trim to 50 entries — column-reverse shows newest (last) at top
-      while (tb.children.length > 50) tb.removeChild(tb.firstChild);
+      tb.insertBefore(row, tb.firstChild);
+      // Trim oldest entries (now at tail)
+      while (tb.children.length > 50) tb.removeChild(tb.lastChild);
       window._lastFeedEventMs = Date.now();
     }}
 
@@ -5508,8 +5514,8 @@ window.addEventListener('resize', function() {{
       el.style.position = 'relative';
       el.style.overflow = 'hidden';
       el.style.transformOrigin = 'center top';
-      var agePct  = Math.min(age / 90 * 100, 100);
-      var ageBg   = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+      var agePct  = Math.min(age / 2 * 100, 100);  // 2-min max hold
+      var ageBg   = agePct < 70 ? 'rgba(0,180,140,.55)' : agePct < 90 ? 'rgba(200,140,0,.6)' : 'rgba(200,60,80,.55)';
       // Acquired flash overlay
       var flash = document.createElement('div');
       flash.className = 'pos-acq-flash';
