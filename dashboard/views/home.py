@@ -6511,24 +6511,13 @@ window.addEventListener('resize', function() {{
           pnlEl.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
         }}
 
-        // Holdings value: qty × live price → pos-hval (green, top-right)
-        var posData = (window._cryptoPositionsMap || {{}})[sym];
-        var qty = posData ? parseFloat(posData.qty || 0) : 0;
-        var hvalEl = document.getElementById('hval-' + symId2);
-        if (hvalEl && qty > 0 && price > 0) {{
-          var holdVal = qty * price;
-          hvalEl.textContent = holdVal >= 1000
-            ? '$' + (holdVal / 1000).toFixed(2) + 'K'
-            : '$' + holdVal.toFixed(2);
-        }}
       }});
     }}
     function _pollCryptoPrices() {{
-      // Collect open symbols from DOM (works even if _cryptoPositionsMap not yet populated)
+      // Collect ALL open crypto card symbols (not just those with prox-wrap)
       var openSyms = [];
-      document.querySelectorAll('.pos-prox-wrap[data-entry]').forEach(function(w) {{
-        var card = w.closest('.pos-card[data-sym]');
-        if (card) openSyms.push(card.getAttribute('data-sym'));
+      document.querySelectorAll('#pos-crypto-section .pos-card[data-sym]').forEach(function(card) {{
+        openSyms.push(card.getAttribute('data-sym'));
       }});
       if (!openSyms.length) return;
       var cgIds = openSyms.map(function(s) {{ return _CG_SYM_MAP[s]; }}).filter(Boolean);
@@ -6542,9 +6531,47 @@ window.addEventListener('resize', function() {{
             var sym = _CG_ID_TO_SYM[id];
             if (sym && data[id] && data[id].usd) priceMap[sym] = data[id].usd;
           }});
-          window._liveProxPrices = priceMap; // expose for satellite dots in drawPulse
+          window._liveProxPrices = priceMap;
           if (window._onPricePoll) window._onPricePoll();
           _updateProxMeters(priceMap);
+          // Update holdings value for ALL cards (including those without prox-wrap)
+          var posMap = window._cryptoPositionsMap || {{}};
+          document.querySelectorAll('#pos-crypto-section .pos-card[data-sym]').forEach(function(card) {{
+            var sym = card.getAttribute('data-sym');
+            var price = priceMap[sym];
+            if (!price) return;
+            var symId = sym.replace(/[^A-Za-z0-9]/g,'_');
+            var hvalEl = document.getElementById('hval-' + symId);
+            if (!hvalEl) return;
+            var posData = posMap[sym];
+            var qty = posData ? parseFloat(posData.qty || 0) : 0;
+            if (qty > 0) {{
+              var holdVal = qty * price;
+              hvalEl.textContent = holdVal >= 1000
+                ? '$' + (holdVal/1000).toFixed(2) + 'K'
+                : '$' + holdVal.toFixed(2);
+            }}
+            // Also update P&L for cards without prox-wrap
+            var pnlEl = document.getElementById('pnl-live-' + symId);
+            if (pnlEl && posData) {{
+              var entry = parseFloat(posData.entry_price || 0);
+              if (entry > 0) {{
+                var pnlPct = (price - entry) / entry * 100;
+                var prevRaw = parseFloat(pnlEl.getAttribute('data-raw') || 'NaN');
+                var arrow = '';
+                if (!isNaN(prevRaw) && pnlPct !== prevRaw) {{
+                  arrow = pnlPct > prevRaw ? '▲ ' : '▼ ';
+                  var dir2 = pnlPct > prevRaw ? 'up' : 'dn';
+                  pnlEl.classList.remove('prox-tick-up','prox-tick-dn');
+                  void pnlEl.offsetWidth;
+                  pnlEl.classList.add('prox-tick-' + dir2);
+                }}
+                pnlEl.setAttribute('data-raw', pnlPct);
+                pnlEl.textContent = arrow + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
+                pnlEl.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
+              }}
+            }}
+          }});
           // Compute live portfolio NAV and push intraday point
           if (window._pushIntradayPoint) {{
             var posMap = window._cryptoPositionsMap || {{}};
