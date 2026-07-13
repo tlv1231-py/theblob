@@ -4745,6 +4745,26 @@ window.addEventListener('resize', function() {{
                 if (pnlM[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
                 else {{ if (window._soundLoss) window._soundLoss(); }}
               }}
+              // On ENTER: immediately insert card — don't wait for positions poll
+              if (isEntry && window._makeCard) {{
+                var _sec = document.getElementById('pos-crypto-section');
+                var _symE = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
+                if (_sec && !_cryptoCardEls[_symE]) {{
+                  var _priceE = priceM ? parseFloat(priceM[1].replace(/,/g,'')) : 0;
+                  var _now = new Date().toISOString();
+                  var _ep = {{
+                    symbol: _symE, direction: 'long', qty: 0,
+                    entry_price: _priceE, stop_price: _priceE * 0.997,
+                    target_price: _priceE * 1.006, entered_at: _now
+                  }};
+                  var _el = window._makeCard(_ep);
+                  _el.classList.add('pos-card-entering');
+                  _sec.appendChild(_el);
+                  _cryptoCardEls[_symE] = _el;
+                  var _flat = document.getElementById('pos-crypto-flat');
+                  if (_flat) _flat.style.display = 'none';
+                }}
+              }}
               // Sync all exit effects: satellite despawn + P&L odometer — same tick
               if (!isEntry) {{
                 // Trigger satellite exit directly (don't wait for positions poll)
@@ -5240,6 +5260,7 @@ window.addEventListener('resize', function() {{
       overlay.style.width = (leftW + _EQ_W) + 'px';
     }}
 
+    window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
       var col   = _symCol(p.symbol);
       var entry = parseFloat(p.entry_price);
@@ -5507,7 +5528,7 @@ window.addEventListener('resize', function() {{
 
     setTimeout(function() {{
       _pollPositions();
-      setInterval(_pollPositions, 5000);
+      setInterval(_pollPositions, 2000);
     }}, 2000);
 
     // ── Live crypto price poller — updates proximity meters in real time ──────
