@@ -3789,7 +3789,15 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       var ms = new Date(p.x).getTime();
       return ms >= winStart && ms <= winEnd;
     }});
-    if (pts.length < 1) return;
+    if (pts.length < 1) {{
+      // No history yet — just draw the dot at center so something is visible
+      if (curNav) {{
+        var dotCX = W / 2, dotCY = H / 2;
+        ctx.beginPath(); ctx.arc(dotCX, dotCY, 5, 0, Math.PI*2);
+        ctx.fillStyle = '#ff00cc'; ctx.fill();
+      }}
+      return;
+    }}
 
     // Y range — auto-scale tight to visible data
     var minY = Infinity, maxY = -Infinity;
@@ -3849,8 +3857,11 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.stroke();
   }};
 
-  // Redraw every 5s so center advances smoothly with real time
-  setInterval(window._drawNavCanvas, 5000);
+  // Redraw every 5s — also triggers heartbeat so history accumulates even if pollNav is slow
+  setInterval(function() {{
+    if (window._navHeartbeat) window._navHeartbeat();
+    window._drawNavCanvas();
+  }}, 5000);
 }})();
 
 // ── Real-time x-axis advance — DISABLED: _recenterOnLatest() handles centering ──
@@ -5636,21 +5647,22 @@ window.addEventListener('resize', function() {{
       setInterval(_pollNav, 5000);
     }}, 4000);
 
-    // Heartbeat: push current NAV every 15s so the chart fills in quickly.
-    // Snapshots are sparse (1 per trade batch); without this the chart is a 2-point laser.
-    setInterval(function() {{
+    // Heartbeat: stamp current NAV every 5s — fires immediately after first pollNav
+    function _navHeartbeat() {{
       var nav = window._lastKnownNav;
       if (!nav) return;
       if (!window._navHistory) window._navHistory = [];
       var isoNow = new Date().toISOString();
       var last = window._navHistory[window._navHistory.length - 1];
-      if (last && (new Date(isoNow) - new Date(last.x)) < 12000) return; // dedup
+      if (last && (new Date(isoNow) - new Date(last.x)) < 4000) return; // dedup <4s
       window._navHistory.push({{ x: isoNow, y: nav }});
-      // Trim to 30 min — match the visible window
       var cutoff = new Date(Date.now() - 30*60*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
       if (window._drawNavCanvas) window._drawNavCanvas();
-    }}, 15000);
+    }}
+    window._navHeartbeat = _navHeartbeat;
+    // Fire first heartbeat as soon as pollNav has set _lastKnownNav, then every 5s
+    setTimeout(function() {{ _navHeartbeat(); setInterval(_navHeartbeat, 5000); }}, 5000);
 
     // ── Live positions poller — DOM-diffing with enter/exit animations ───────
     var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
