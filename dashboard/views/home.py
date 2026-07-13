@@ -1164,8 +1164,7 @@ body::after {{
   display:flex; align-items:stretch;
   background:linear-gradient(180deg,rgba(2,0,12,.98) 0%,rgba(5,0,18,.95) 100%);
   border-bottom:1px solid rgba(148,0,255,.18);
-  position:relative; z-index:20;
-  overflow:visible; /* let callout-rail hang below */
+  position:relative; z-index:9001; /* above fixed callout-rail z-index:9000 */
   gap:0;
 }}
 /* scanline overlay */
@@ -1215,15 +1214,15 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 
-/* ── Callout rail — zero-height sibling after strat-bar, cards overflow downward ─ */
+/* ── Callout rail — fixed to viewport, JS pins top to strat-bar bottom once on load ─ */
 #callout-rail {{
-  height:0; overflow:visible;
-  position:relative; z-index:30;
+  position:fixed; left:50%; top:120px; /* JS overrides top immediately */
+  transform:translateX(-50%);
+  z-index:9000;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
-  width:100%;
+  width:380px;
   padding-top:4px;
-  flex-shrink:0;
 }}
 .callout-card {{
   width:100%; display:flex; align-items:center; gap:8px;
@@ -6938,6 +6937,18 @@ window.addEventListener('resize', function() {{
 
       // ── Callout system — stackable drop-in notifications ────────
       var _calloutRail = document.getElementById('callout-rail');
+
+      // Pin rail to bottom of strat-bar using fixed positioning (parent overflow:hidden clips relative/absolute)
+      function _pinRail() {{
+        var sb = document.getElementById('strat-bar');
+        if (sb && _calloutRail) {{
+          _calloutRail.style.top = sb.getBoundingClientRect().bottom + 'px';
+        }}
+      }}
+      // Run once after layout settles, then on any resize
+      setTimeout(_pinRail, 100);
+      setTimeout(_pinRail, 500);
+      window.addEventListener('resize', _pinRail);
 
       function _spawnCallout(cfg) {{
         var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
