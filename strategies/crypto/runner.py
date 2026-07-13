@@ -302,38 +302,20 @@ def run() -> None:
         return
 
     positions = _load_positions()
+    exited_this_run: set[str] = set()
 
-    # Reconcile DB against actual Alpaca holdings (both directions)
+    # Reconcile phase 1: fetch Alpaca state; drop DB rows that no longer exist in Alpaca
+    alpaca_positions: dict = {}
     try:
         alpaca_raw = _trading_client().get_all_positions()
         alpaca_positions = {
             p.symbol.replace("USD", "/USD"): p for p in alpaca_raw
         }
-        # Drop DB rows not in Alpaca
         for sym in list(positions.keys()):
             if sym not in alpaca_positions:
                 logger.warning(f"[reconcile] {sym} in DB but not in Alpaca — dropping")
                 _delete_position(sym)
                 del positions[sym]
-        # Import Alpaca positions missing from DB
-        for sym, ap in alpaca_positions.items():
-            if sym not in positions:
-                qty   = float(ap.qty)
-                entry = float(ap.avg_entry_price)
-                stop  = entry * (1 - _POS["stop_pct"])
-                pos   = {
-                    "symbol":       sym,
-                    "direction":    "long",
-                    "qty":          qty,
-                    "entry_price":  entry,
-                    "stop_price":   stop,
-                    "target_price": 0.0,
-                    "entered_at":   now,
-                    "order_id":     None,
-                }
-                _save_position(pos)
-                positions[sym] = pos
-                logger.info(f"[reconcile] imported {sym} from Alpaca qty={qty} entry={entry}")
     except Exception as e:
         logger.warning(f"[reconcile] Could not fetch Alpaca positions: {e}")
 
@@ -378,6 +360,7 @@ def run() -> None:
             _log_fill(sym, pos["order_id"] or "", "exit", pos["qty"], exit_price, pnl, reason)
             _delete_position(sym)
             del positions[sym]
+            exited_this_run.add(sym)
 
             emoji = "✓" if pnl >= 0 else "✗"
             _post_event("TRADE", sym,
@@ -389,6 +372,30 @@ def run() -> None:
     if nav > 0 and daily_pnl / nav <= -_CFG["risk"]["max_daily_loss_pct"] / 100:
         _post_event("RISK", "", f"daily loss limit hit · halted · pnl={daily_pnl:+.2f}")
         return
+
+    # Reconcile phase 2: import Alpaca positions missing from DB, skipping symbols
+    # just closed this run (Alpaca position list lags order settlement by ~15s)
+    for sym, ap in alpaca_positions.items():
+        if sym in exited_this_run:
+            logger.info(f"[reconcile] skip re-import {sym} — closed this run")
+            continue
+        if sym not in positions:
+            qty   = float(ap.qty)
+            entry = float(ap.avg_entry_price)
+            stop  = entry * (1 - _POS["stop_pct"])
+            pos   = {
+                "symbol":       sym,
+                "direction":    "long",
+                "qty":          qty,
+                "entry_price":  entry,
+                "stop_price":   stop,
+                "target_price": 0.0,
+                "entered_at":   now,
+                "order_id":     None,
+            }
+            _save_position(pos)
+            positions[sym] = pos
+            logger.info(f"[reconcile] imported {sym} qty={qty} entry={entry}")
 
     # ── Check for new entries ─────────────────────────────────────────────────
     if len(positions) < max_pos:
