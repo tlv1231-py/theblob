@@ -985,11 +985,13 @@ body::after {{
   display:flex; flex-direction:column;
   background:linear-gradient(90deg,rgba(1,0,6,.9) 0%,rgba(1,0,6,.55) 75%,transparent 100%);
   pointer-events:none;
-  -webkit-mask-image:linear-gradient(to bottom,black 0%,black 80%,transparent 100%);
-  mask-image:linear-gradient(to bottom,black 0%,black 80%,transparent 100%);
 }}
 #feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
-#feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:4px 0 6px; scrollbar-width:none; background:transparent; }}
+#feed-overlay #term-body {{
+  flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:4px 0 6px; scrollbar-width:none; background:transparent;
+  -webkit-mask-image:linear-gradient(to bottom,black 0%,black 75%,transparent 100%);
+  mask-image:linear-gradient(to bottom,black 0%,black 75%,transparent 100%);
+}}
 #feed-overlay #term-body::-webkit-scrollbar {{ display:none; }}
 #feed-overlay .te {{ padding:3px 6px; font-size:11px; }}
 #feed-bottom-bar {{ flex-shrink:0; padding:4px 8px; pointer-events:auto; display:flex; align-items:center; }}
@@ -4628,11 +4630,13 @@ window.addEventListener('resize', function() {{
         var bar     = '▓'.repeat(filled) + '░'.repeat(_BLOCKS - filled);
         var rem     = Math.max(0, Math.round((_RUN_INTERVAL || 75) - elapsed));
         var remStr  = pct >= 1 ? '▸▸▸' : String(rem).padStart(3,'0') + 's';
-        var barCol  = pct >= 0.9 ? 'rgba(255,120,0,.9)' : 'rgba(255,255,255,.28)';
+        var filledCol = pct >= 0.9 ? 'rgba(255,120,0,.9)' : '#ffffff';
+        var emptyCol  = 'rgba(255,255,255,.18)';
+        var filledBar = '<span style="color:' + filledCol + ';font-size:9px;letter-spacing:.04em">' + '▓'.repeat(filled) + '</span>';
+        var emptyBar  = '<span style="color:' + emptyCol + ';font-size:9px;letter-spacing:.04em">' + '░'.repeat(_BLOCKS - filled) + '</span>';
         clk.innerHTML = '<span style="color:#fff;font-size:9px;margin-right:6px">' + hhmm + '</span>'
-          + '<span style="color:' + barCol + ';font-size:9px;letter-spacing:.04em;margin-right:5px">' + bar + '</span>'
-          + '<span style="color:rgba(255,255,255,.35);font-size:9px;letter-spacing:.1em;margin-right:6px">' + remStr + '</span>'
-          + '<span id="term-cursor" style="color:#fff">█</span>';
+          + filledBar + emptyBar
+          + '<span style="color:rgba(255,255,255,.35);font-size:9px;letter-spacing:.1em;margin-left:5px">' + remStr + '</span>';
       }}
       _tickClock();
       setInterval(_tickClock, 1000);
