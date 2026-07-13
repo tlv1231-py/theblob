@@ -5337,27 +5337,58 @@ window.addEventListener('resize', function() {{
           }});
           var _batchDur = _tradeCount * 180; // total stagger duration
 
-          function _showChip(id, text, col, onFade) {{
+          // _showChip: shows chip and optionally drives decay on a companion value el
+          // valId: id of the main number el; baseVal: real base number; bonusVal: the delta shown in chip
+          function _showChip(id, text, col, onFade, valId, baseVal, bonusVal) {{
             var c = document.getElementById(id);
             if (!c) return;
             c.style.color = col;
             c.style.textShadow = '0 0 8px ' + col;
             c.textContent = text;
             c.style.opacity = '1';
+            var DECAY_MS = 7000; // slower — 7s visible window
+            var startTs = Date.now() + _batchDur;
+            // If companion value provided, animate it decaying from base+bonus → base
+            if (valId && bonusVal) {{
+              var valEl = document.getElementById(valId);
+              var decayRaf;
+              function _decayStep() {{
+                var now = Date.now();
+                if (now < startTs) {{ decayRaf = requestAnimationFrame(_decayStep); return; }}
+                var t = Math.min(1, (now - startTs) / DECAY_MS); // 0→1 over decay window
+                var cur = baseVal + bonusVal * (1 - t); // interpolate bonus → 0
+                if (valEl) {{
+                  var isInt = (Math.abs(bonusVal) >= 1 && Math.floor(bonusVal) === bonusVal);
+                  if (isInt) {{
+                    valEl.textContent = Math.round(cur).toLocaleString('en-US');
+                  }} else {{
+                    var pos = cur >= 0;
+                    valEl.textContent = (pos ? '+$' : '-$') + Math.abs(cur).toLocaleString('en-US', {{maximumFractionDigits:0}});
+                    valEl.style.color = pos ? '#00c880' : '#e03355';
+                  }}
+                }}
+                if (t < 1) {{ decayRaf = requestAnimationFrame(_decayStep); }}
+              }}
+              decayRaf = requestAnimationFrame(_decayStep);
+            }}
+            // Chip fades after decay window
             setTimeout(function() {{
+              c.style.transition = 'opacity 1.2s ease';
               c.style.opacity = '0';
               if (onFade) onFade();
-            }}, _batchDur + 3500);
+            }}, _batchDur + DECAY_MS);
           }}
 
           // P&L combo chip + sounds
           if (_exitCount > 0) {{
             var _isPos = _batchPnl >= 0;
+            var _basePnl = parseFloat((document.getElementById('total-pnl-val') || {{}}).getAttribute('data-raw') || '0');
 
-            // Show batch delta chip — visual only, no arithmetic on main number
+            // Show batch delta chip — decays companion P&L value from base+bonus → base
             _showChip('batch-pnl-chip',
               (_isPos ? '+' : '') + _batchPnl.toFixed(2),
-              _isPos ? '#00c880' : '#e03355', null);
+              _isPos ? '#00c880' : '#e03355', null,
+              'total-pnl-val', _basePnl, _batchPnl);
 
             // Sound: one per batch
             if (_isPos && window._soundWin) window._soundWin();
@@ -5384,9 +5415,11 @@ window.addEventListener('resize', function() {{
             }}, _batchDur + 1000);
           }}
 
-          // Trades combo chip — flash only, _pollStats owns the persistent count
+          // Trades combo chip — decays companion trade count from base+delta → base
           if (_tradeCount > 0) {{
-            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', null);
+            var _baseTrades = parseInt((document.getElementById('om-today') || {{}}).textContent || '0', 10);
+            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', null,
+              'om-today', _baseTrades, _tradeCount);
           }}
 
           // Open positions delta chip — flash only, _pollPositions owns the persistent count
