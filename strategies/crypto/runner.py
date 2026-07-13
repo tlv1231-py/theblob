@@ -251,79 +251,49 @@ def _submit_order(symbol: str, side: str, qty: float) -> str | None:
 
 # ── Signal computation ────────────────────────────────────────────────────────
 
-def _ema(values: list[float], period: int) -> float:
-    k = 2 / (period + 1)
-    e = values[0]
-    for v in values[1:]:
-        e = v * k + e * (1 - k)
-    return e
+def _compute_signal(min_bars: list[dict], _unused=None) -> str | None:
+    """1-min breakout + VWAP + volume spike.
 
-
-def _rsi(closes: list[float], period: int) -> float:
-    if len(closes) < period + 1:
-        return 50.0
-    gains, losses = [], []
-    for i in range(1, period + 1):
-        d = closes[-period - 1 + i] - closes[-period - 2 + i]
-        (gains if d >= 0 else losses).append(abs(d))
-    ag = sum(gains) / period if gains else 0.0
-    al = sum(losses) / period if losses else 0.0
-    return 100 - (100 / (1 + ag / al)) if al > 0 else 100.0
-
-
-def _compute_signal(bars_15m: list[dict], hour_bars: list[dict]) -> str | None:
-    """Three-layer signal on 15-min bars — designed for 60s polling cadence.
-
-    Each bar represents 15 polling cycles, so crossovers are structurally
-    meaningful rather than 1-min noise.
+    Fires on every genuine momentum bar — designed for rapid trading
+    with 60s polling cadence.
 
     Requires ALL of:
-    1. 15-min EMA(fast) > EMA(slow) for the last consec_confirm bars
-    2. EMA separation >= min_separation (filters marginal crossovers)
-    3. RSI in [rsi_min, rsi_max] (not crashing, not overbought)
-    4. 1-hour EMA confirms uptrend
+    1. Current close > N-bar high (breakout)
+    2. Breakout magnitude >= min_breakout_pct (not a dust move)
+    3. Current volume >= rvol_min × 20-bar avg volume (conviction)
+    4. Price >= rolling VWAP (trading with momentum, not against it)
     """
-    fast_p   = _SIG["ema_fast"]
-    slow_p   = _SIG["ema_slow"]
-    sep_min  = _SIG["min_separation"]
-    consec   = _SIG["consec_confirm"]
-    rsi_p    = _SIG["rsi_period"]
-    rsi_lo   = _SIG["rsi_min"]
-    rsi_hi   = _SIG["rsi_max"]
-    h_fast_p = _SIG["hour_ema_fast"]
-    h_slow_p = _SIG["hour_ema_slow"]
+    n         = _SIG["breakout_bars"]
+    min_brk   = _SIG["min_breakout_pct"] / 100.0
+    vwap_win  = _SIG["vwap_window_bars"]
+    rvol_min  = _SIG["rvol_min"]
 
-    min_bars_needed = slow_p + consec + rsi_p + 2
-    if len(bars_15m) < min_bars_needed:
+    needed = max(n + 1, vwap_win + 1, 22)
+    if len(min_bars) < needed:
         return None
 
-    closes = [b["close"] for b in bars_15m]
+    close  = min_bars[-1]["close"]
+    volume = min_bars[-1]["volume"]
 
-    # Layer 1: consec_confirm consecutive bars must all have fast > slow
-    for lag in range(consec):
-        subset = closes[:len(closes) - lag]
-        fast = _ema(subset, fast_p)
-        slow = _ema(subset, slow_p)
-        if fast <= slow:
-            return None
-        # Only check separation on the most recent bar
-        if lag == 0:
-            separation = (fast - slow) / slow
-            if separation < sep_min:
-                return None
-
-    # Layer 2: RSI momentum zone
-    rsi = _rsi(closes, rsi_p)
-    if not (rsi_lo <= rsi <= rsi_hi):
+    # Breakout above N-bar high (excluding current bar)
+    n_bar_high = max(b["high"] for b in min_bars[-(n + 1):-1])
+    if close <= n_bar_high:
+        return None
+    if (close - n_bar_high) / n_bar_high < min_brk:
         return None
 
-    # Layer 3: hourly trend confirmation
-    if len(hour_bars) >= h_slow_p:
-        h_closes = [b["close"] for b in hour_bars]
-        h_fast = _ema(h_closes, h_fast_p)
-        h_slow = _ema(h_closes, h_slow_p)
-        if h_fast < h_slow:
-            return None
+    # Volume spike
+    avg_vol = sum(b["volume"] for b in min_bars[-21:-1]) / 20
+    if avg_vol > 0 and volume < rvol_min * avg_vol:
+        return None
+
+    # Rolling VWAP: price must be on bullish side
+    w = min_bars[-vwap_win:]
+    tv  = sum(((b["high"] + b["low"] + b["close"]) / 3) * b["volume"] for b in w)
+    vol = sum(b["volume"] for b in w)
+    vwap = tv / vol if vol > 0 else close
+    if close < vwap:
+        return None
 
     return "long"
 
@@ -357,15 +327,12 @@ def run() -> None:
     target_pc= _POS.get("target_pct", 0.0)
     max_pos  = _POS["max_positions"]
     max_hold = _POS["max_hold_minutes"]
-    cooldown = _POS.get("min_reentry_minutes", 45)
 
     logger.info(f"[crypto] run @ {now.isoformat()} | NAV=${nav:,.2f}")
 
-    # Fetch bars — 15-min primary for signals, 1-min for stop checks, 1-hour for trend
+    # Single fetch: 3 hours of 1-min bars covers signal + stop checks
     try:
-        bars_15m  = _fetch_bars("15Min", 600)    # 10 hours → ~40 bars (need slow_p + consec + rsi)
-        min_bars  = _fetch_bars("1Min",  30)     # last 30 min for current price / stop check
-        hour_bars = _fetch_bars("1Hour", 600)    # last 10 hours of hourly bars
+        min_bars = _fetch_bars("1Min", 180)
     except Exception as e:
         logger.error(f"[crypto] Bar fetch failed: {e}")
         return
@@ -406,13 +373,11 @@ def run() -> None:
     except Exception as e:
         logger.warning(f"[reconcile] Could not fetch Alpaca positions: {e}")
 
-    daily_pnl   = 0.0
-    recent_exits = _recent_exits(cooldown)
+    daily_pnl = 0.0
 
-    # ── Manage open positions — use 1-min close for stop/target checks ────────
+    # ── Manage open positions ─────────────────────────────────────────────────
     for sym, pos in list(positions.items()):
-        # Use 1-min bars for the current price; fall back to 15-min if missing
-        m = min_bars.get(sym, []) or bars_15m.get(sym, [])
+        m = min_bars.get(sym, [])
         if not m:
             continue
         close = m[-1]["close"]
@@ -462,20 +427,12 @@ def run() -> None:
             if len(positions) >= max_pos:
                 break
 
-            # Cooldown: skip if we exited this symbol recently
-            if sym in recent_exits:
-                logger.debug(f"[cooldown] {sym} skipped — exited within {cooldown}m")
-                continue
-
-            s15 = bars_15m.get(sym, [])
-            h_bars = hour_bars.get(sym, [])
-            signal = _compute_signal(s15, h_bars)
+            m_bars = min_bars.get(sym, [])
+            signal = _compute_signal(m_bars)
             if not signal:
                 continue
 
-            # Use 1-min close as entry price if available, else last 15-min close
-            m_bars = min_bars.get(sym, [])
-            price = m_bars[-1]["close"] if m_bars else (s15[-1]["close"] if s15 else 0)
+            price = m_bars[-1]["close"] if m_bars else 0
             if price <= 0:
                 continue
 

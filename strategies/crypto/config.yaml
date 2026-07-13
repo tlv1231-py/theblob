@@ -1,6 +1,6 @@
 strategy:
   name: crypto_momentum
-  description: "15-min EMA trend + 1-hour confirmation — aligned with 60s polling cadence"
+  description: "1-min breakout + VWAP + volume spike — fires on every real momentum move"
 
 universe:
   - BTC/USD
@@ -10,36 +10,25 @@ universe:
   - LINK/USD
   - DOGE/USD
   - BCH/USD
+  - XTZ/USD
+  - CRV/USD
 
 signals:
-  # Primary: 15-min EMA crossover (each bar = 15 polls — crossovers are real)
-  ema_fast: 9
-  ema_slow: 21
-  min_separation: 0.0008     # 0.08% separation required — filters noise crossovers
-
-  # Trend confirmation: 1-hour trend must agree
-  hour_ema_fast: 4
-  hour_ema_slow: 9
-
-  # RSI filter: only enter in momentum zone, not overbought/oversold crash
-  rsi_period: 14
-  rsi_min: 40                # don't buy free-falling
-  rsi_max: 65                # don't chase overbought
-
-  # Consecutive confirmation: require N bars above slow EMA before entry
-  consec_confirm: 2          # 2 × 15-min bars = 30 min of trend momentum required
+  breakout_bars: 8           # close must break 8-bar high — clean momentum, not noise
+  min_breakout_pct: 0.12     # must break by at least 0.12% — filters dust crossovers
+  vwap_window_bars: 60       # 60-bar (~1hr) rolling VWAP — price must be above it
+  rvol_min: 1.6              # volume >= 1.6x 20-bar avg — only trade on conviction bars
 
 position:
-  risk_pct: 1.5              # bigger per trade — fewer, higher-conviction trades
-  max_positions: 2           # concentrate capital; don't spread across 5 losers
-  stop_pct: 0.012            # 1.2% stop — survivable on 15-min bars (avg range ~0.5-1%)
-  target_pct: 0.028          # 2.8% target → ~2.3:1 R:R after slippage
-  max_hold_minutes: 90       # 6 × 15-min bars — give trade room to develop
-  min_reentry_minutes: 45    # no re-entry within 45 min of an exit on same symbol
+  risk_pct: 1.0              # 1% NAV per trade
+  max_positions: 5           # up to 5 simultaneous trades
+  stop_pct: 0.005            # 0.5% stop — survivable between 60s polls
+  target_pct: 0.010          # 1.0% target → 2:1 R:R
+  max_hold_minutes: 5        # exit flat after 5 min if neither stop nor target hit
 
 risk:
-  max_daily_loss_pct: 0.04   # 4% daily loss halt
-  max_daily_trades: 20       # sanity cap — should be 3-8 trades/day on 15-min
+  max_daily_loss_pct: 0.05
+  max_daily_trades: 500      # high ceiling — signal quality filters it
 
 execution:
   slippage_bps: 10
