@@ -242,6 +242,8 @@ def _load_chart_data() -> dict:
 
     term_events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)  # newest first → newest at top
     term_events = term_events[:200]
+    # Newest event timestamp — passed to JS so the live poller skips re-inserting already-rendered history
+    _newest_ev_ts = str(term_events[0]["ts"]) if term_events else ""
 
     # Next trading day (for plain-English position subtext)
     from datetime import timedelta as _td
@@ -473,6 +475,7 @@ def _load_chart_data() -> dict:
         "cumulative_pnl": float(latest_pnl.cumulative_pnl) if latest_pnl else 0.0,
         "rolling_sharpe": None,
         "term_events": term_events,
+        "newest_ev_ts": _newest_ev_ts,
         "positions_data": positions_data,
         "queued_actions": queued_actions,
     }
@@ -702,8 +705,9 @@ def _build_daw_html(data: dict) -> str:
         # fallback
         return f'<span style="color:#5a3a7a">{msg}</span>'
 
-    _term_evs  = data.get("term_events", [])
-    _last_ev_i = 0
+    _term_evs      = data.get("term_events", [])
+    _last_ev_i     = 0
+    _newest_ev_ts_js = data.get("newest_ev_ts", "").replace("+00:00", "Z").replace(" ", "T")
 
     # Collect NAV values oldest-first for up/down coloring
     _snap_vals: list[float] = []
@@ -989,6 +993,7 @@ body::after {{
 #feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
 #feed-overlay #term-body {{
   flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:4px 0 6px; scrollbar-width:none; background:transparent;
+  pointer-events:auto;
   -webkit-mask-image:linear-gradient(to bottom,black 0%,black 75%,transparent 100%);
   mask-image:linear-gradient(to bottom,black 0%,black 75%,transparent 100%);
 }}
@@ -4855,7 +4860,8 @@ window.addEventListener('resize', function() {{
   (function() {{
     var SUPA_URL  = 'https://seeevuklabvhkawawtxn.supabase.co';
     var SUPA_KEY  = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
-    var _lastSeen = null;   // null = load history first, then switch to live
+    // Server already rendered history; start live polling from newest server event so poller never re-inserts them
+    var _lastSeen = '{_newest_ev_ts_js}' || null;
 
     // Supabase returns "2026-07-12 14:57:23+00" — normalize to proper ISO UTC
     function _parseTs(s) {{
