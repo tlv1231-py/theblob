@@ -351,22 +351,25 @@ def run() -> None:
             reason = "timeout"
 
         if reason:
-            exit_price = close * (1 - _SLIPPAGE) if d == "long" else close * (1 + _SLIPPAGE)
-            pnl = (exit_price - pos["entry_price"]) * pos["qty"] * (1 if d == "long" else -1)
-            daily_pnl += pnl
+            try:
+                exit_price = close * (1 - _SLIPPAGE) if d == "long" else close * (1 + _SLIPPAGE)
+                pnl = (exit_price - pos["entry_price"]) * pos["qty"] * (1 if d == "long" else -1)
+                daily_pnl += pnl
 
-            side = "sell" if d == "long" else "buy"
-            _close_position(sym) if side == "sell" else _submit_order(sym, side, pos["qty"])
-            _log_fill(sym, pos["order_id"] or "", "exit", pos["qty"], exit_price, pnl, reason)
-            _delete_position(sym)
-            del positions[sym]
-            exited_this_run.add(sym)
-
-            emoji = "✓" if pnl >= 0 else "✗"
-            _post_event("TRADE", sym,
-                f"{emoji} EXIT {d.upper()} {sym} @ ${exit_price:,.4f} · pnl {pnl:+,.4f} · {reason}",
-                f"age={age:.0f}m daily_pnl={daily_pnl:+,.2f}")
-            logger.info(f"[exit] {sym} {reason} pnl={pnl:+,.4f}")
+                side = "sell" if d == "long" else "buy"
+                _close_position(sym) if side == "sell" else _submit_order(sym, side, pos["qty"])
+                _log_fill(sym, pos["order_id"] or "", "exit", pos["qty"], exit_price, pnl, reason)
+                _post_event("TRADE", sym,
+                    f"{'✓' if pnl >= 0 else '✗'} EXIT {d.upper()} {sym} @ ${exit_price:,.4f} · pnl {pnl:+,.4f} · {reason}",
+                    f"age={age:.0f}m daily_pnl={daily_pnl:+,.2f}")
+                logger.info(f"[exit] {sym} {reason} pnl={pnl:+,.4f}")
+            except Exception as ex:
+                logger.error(f"[exit] {sym} exit block failed: {ex}")
+            finally:
+                # Always remove from DB and memory so stuck positions never block the loop
+                _delete_position(sym)
+                positions.pop(sym, None)
+                exited_this_run.add(sym)
 
     # Daily loss halt
     if nav > 0 and daily_pnl / nav <= -_CFG["risk"]["max_daily_loss_pct"] / 100:
