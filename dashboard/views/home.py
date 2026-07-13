@@ -1164,7 +1164,8 @@ body::after {{
   display:flex; align-items:stretch;
   background:linear-gradient(180deg,rgba(2,0,12,.98) 0%,rgba(5,0,18,.95) 100%);
   border-bottom:1px solid rgba(148,0,255,.18);
-  position:relative; z-index:20; overflow:hidden;
+  position:relative; z-index:20;
+  overflow:visible; /* let callout-rail hang below */
   gap:0;
 }}
 /* scanline overlay */
@@ -1214,24 +1215,28 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 
-/* ── Callout rail — drop-in notifications from strat-bar ─────── */
+/* ── Callout rail — anchored to bottom of strat-bar, drops DOWN ─ */
 #callout-rail {{
-  position:absolute; top:0; left:50%; transform:translateX(-50%);
-  z-index:200; display:flex; flex-direction:column; align-items:center;
-  gap:4px; padding-top:4px; pointer-events:none;
-  width:340px;
+  /* sits as absolute child of #strat-bar, bottom-edge anchored */
+  position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+  z-index:500; display:flex; flex-direction:column; align-items:center;
+  gap:3px; pointer-events:none;
+  width:360px;
+  /* translate down so cards start at the bar's bottom edge */
+  transform:translateX(-50%) translateY(100%);
 }}
 .callout-card {{
   width:100%; display:flex; align-items:center; gap:8px;
-  padding:7px 14px 7px 10px;
-  background:rgba(2,0,14,.96); backdrop-filter:blur(4px);
-  border:1px solid rgba(148,0,255,.3); border-left:3px solid;
-  transform:translateY(-60px); opacity:0;
-  transition:transform .22s cubic-bezier(.22,1,.36,1), opacity .18s ease;
+  padding:6px 14px 6px 10px;
+  background:rgba(2,0,12,.97); backdrop-filter:blur(6px);
+  border:1px solid rgba(148,0,255,.25); border-left:3px solid;
+  /* start above the rail (hidden behind bar), then drop down */
+  transform:translateY(-110%); opacity:0;
+  transition:transform .28s cubic-bezier(.22,1,.36,1), opacity .2s ease;
   pointer-events:none;
 }}
 .callout-card.cc-show {{ transform:translateY(0); opacity:1; }}
-.callout-card.cc-exit {{ transform:translateY(-60px); opacity:0; transition:transform .2s ease-in, opacity .18s ease-in; }}
+.callout-card.cc-exit {{ transform:translateY(-110%); opacity:0; transition:transform .22s ease-in, opacity .18s ease-in; }}
 .cc-badge {{
   font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 5px;
   border:1px solid; text-transform:uppercase; flex-shrink:0;
@@ -2258,8 +2263,9 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
-<!-- ── Stratagem HUD bar ── -->
+<!-- ── Stratagem HUD bar — callout-rail is a child so cards drop from its bottom ── -->
 <div id="strat-bar">
+  <div id="callout-rail"></div>
   <div class="strat-slot" id="ss-runner">
     <div class="ss-icon">⚡</div>
     <div class="ss-name">RUNNER</div>
@@ -2294,7 +2300,6 @@ body::after {{
 
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
-  <div id="callout-rail"></div>
   <div id="chart"></div>
   <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
   <canvas id="ambient-canvas"></canvas>
