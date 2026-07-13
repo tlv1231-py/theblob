@@ -2158,7 +2158,10 @@ body::after {{
     <div class="om-divider"></div>
     <div id="total-pnl-block">
       <div id="total-pnl-label">TOTAL P&amp;L</div>
-      <div id="total-pnl-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
+      <div style="display:flex;align-items:baseline;gap:8px;justify-content:flex-end">
+        <div id="total-pnl-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
+        <div id="batch-pnl-chip" style="font-family:Consolas,monospace;font-size:13px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none"></div>
+      </div>
       <div id="total-pnl-sub" style="color:{_pnl_col}">{_pnl_pct_str}</div>
     </div>
   </div>
@@ -4912,6 +4915,75 @@ window.addEventListener('resize', function() {{
         var isHistory = !_lastSeen;
         if (isHistory) rows = rows.slice().reverse(); // DESC → chronological
         if (window._resetRunTimer) window._resetRunTimer();
+
+        // ── Batch processing: exits before entries, then batch PnL chip ─────────
+        if (!isHistory) {{
+          // Sort: exits first, then entries, within this batch
+          rows = rows.slice().sort(function(a, b) {{
+            var aIsExit  = (a.message||'').indexOf('EXIT')  !== -1;
+            var bIsExit  = (b.message||'').indexOf('EXIT')  !== -1;
+            var aIsEntry = (a.message||'').indexOf('ENTER') !== -1;
+            var bIsEntry = (b.message||'').indexOf('ENTER') !== -1;
+            // exits first
+            if (aIsExit  && !bIsExit)  return -1;
+            if (!aIsExit &&  bIsExit)  return  1;
+            // then entries
+            if (aIsEntry && !bIsEntry) return -1;
+            if (!aIsEntry && bIsEntry) return  1;
+            return 0;
+          }});
+
+          // Accumulate batch exit PnL before any stagger fires
+          var _batchPnl = 0, _exitCount = 0;
+          rows.forEach(function(r) {{
+            if ((r.message||'').indexOf('EXIT') !== -1) {{
+              var m = (r.message||'').match(/pnl\s*([+-][\d,.]+)/);
+              if (m) {{ _batchPnl += parseFloat(m[1].replace(/,/g,'')); _exitCount++; }}
+            }}
+          }});
+
+          // Show batch chip immediately if exits exist
+          if (_exitCount > 0) {{
+            var _chip = document.getElementById('batch-pnl-chip');
+            if (_chip) {{
+              var _isPos = _batchPnl >= 0;
+              _chip.style.color = _isPos ? '#00c880' : '#e03355';
+              _chip.style.textShadow = '0 0 10px ' + (_isPos ? 'rgba(0,200,128,.8)' : 'rgba(224,51,85,.8)');
+              _chip.textContent = (_isPos ? '+' : '') + _batchPnl.toFixed(2);
+              _chip.style.opacity = '1';
+              // Fade chip out after last exit stagger fires + 800ms settle
+              setTimeout(function() {{
+                _chip.style.transition = 'opacity .6s';
+                _chip.style.opacity = '0';
+              }}, _exitCount * 180 + 800);
+            }}
+
+            // Alpaca NAV verification after batch settles
+            setTimeout(function() {{
+              var url = SUPA_URL + '/rest/v1/portfolio_snapshots'
+                + '?strategy=eq.crypto_momentum&order=recorded_at.desc&limit=1'
+                + '&select=total_value,recorded_at';
+              fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+              .then(function(r) {{ return r.json(); }})
+              .then(function(snaps) {{
+                if (!Array.isArray(snaps) || !snaps.length) return;
+                var _alpacaNav = parseFloat(snaps[0].total_value);
+                if (isNaN(_alpacaNav)) return;
+                // Update wallet display if differs by more than $1
+                var _walEl = document.querySelector('[data-val]');
+                var _dispEl = document.getElementById('wallet-val');
+                if (_dispEl) {{
+                  var _cur = parseFloat((_dispEl.getAttribute('data-val') || '').replace(/[^0-9.-]/g,''));
+                  if (Math.abs(_alpacaNav - _cur) > 1) {{
+                    _dispEl.setAttribute('data-val', '$' + _alpacaNav.toLocaleString('en-US', {{minimumFractionDigits:2}}));
+                    _dispEl.textContent  = '$' + Math.round(_alpacaNav).toLocaleString('en-US');
+                  }}
+                }}
+              }}).catch(function() {{}});
+            }}, _exitCount * 180 + 1200);
+          }}
+        }}
+
         // Stagger live batches so events drip in one-by-one (history: instant)
         var _staggerMs = isHistory ? 0 : 180;
         rows.forEach(function(row, _ri) {{ setTimeout(function() {{
