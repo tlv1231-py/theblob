@@ -924,9 +924,9 @@ body::after {{
   mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 100%);
 }}
 #feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
-#feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:2px 0 4px; scrollbar-width:none; background:transparent; }}
+#feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column-reverse; padding:4px 0 6px; scrollbar-width:none; background:transparent; }}
 #feed-overlay #term-body::-webkit-scrollbar {{ display:none; }}
-#feed-overlay .te {{ padding:2px 6px; font-size:10px; }}
+#feed-overlay .te {{ padding:3px 6px; font-size:11px; }}
 #feed-bottom-bar {{ flex-shrink:0; padding:4px 8px; pointer-events:auto; display:flex; align-items:center; }}
 #mute-btn {{ background:none; border:none; cursor:pointer; font-size:12px; opacity:.45; padding:2px 4px; transition:opacity .2s; }}
 #mute-btn:hover {{ opacity:.9; }}
@@ -1120,30 +1120,12 @@ body::after {{
   text-shadow:0 0 8px rgba(255,102,0,.8);
   min-width:28px; text-align:right;
 }}
-/* ── Terminal row slide-in ── */
-@keyframes te-slide-in {{
-  from {{ opacity:0; transform:translateY(6px); }}
+/* ── Terminal row appear ── */
+@keyframes te-appear {{
+  from {{ opacity:0; transform:translateY(-4px); }}
   to   {{ opacity:1; transform:translateY(0); }}
 }}
-.te-new {{ animation:te-slide-in 120ms ease-out forwards; }}
-/* ── VHS trade flash on enter/exit feed lines ── */
-@keyframes vhs-trade-in {{
-  0%   {{ opacity:0; transform:translateX(-4px); filter:brightness(6) saturate(0); }}
-  8%   {{ opacity:1; filter:brightness(3) saturate(1.5);
-          text-shadow:-3px 0 rgba(255,0,204,.7),3px 0 rgba(0,229,255,.7),0 0 20px rgba(0,255,65,.9); }}
-  30%  {{ filter:brightness(1.4) saturate(1.2);
-          text-shadow:-1px 0 rgba(255,0,204,.4),1px 0 rgba(0,229,255,.4),0 0 10px rgba(0,255,65,.6); }}
-  100% {{ opacity:1; transform:none; filter:brightness(1) saturate(1); text-shadow:none; }}
-}}
-@keyframes vhs-trade-aberr {{
-  0%,100% {{ text-shadow:0 0 6px rgba(0,255,65,.4); }}
-  20%      {{ text-shadow:-2px 0 rgba(255,0,204,.5),2px 0 rgba(0,229,255,.5),0 0 14px rgba(0,255,65,.7); }}
-  40%      {{ text-shadow:0 0 6px rgba(0,255,65,.3); }}
-  60%      {{ text-shadow:1px 0 rgba(255,0,204,.3),-1px 0 rgba(0,229,255,.3),0 0 8px rgba(0,255,65,.4); }}
-}}
-.te-trade {{
-  animation:vhs-trade-in .45s cubic-bezier(.22,1,.36,1) forwards, vhs-trade-aberr 1.8s ease-out 0.45s 1 forwards;
-}}
+.te-new {{ animation:te-appear 90ms ease-out forwards; }}
 
 /* ── System Feed panel (bottom-left) ── */
 #feed-panel {{
@@ -1154,15 +1136,15 @@ body::after {{
 }}
 #term-body {{
   flex:1; overflow-y:auto;
-  display:flex; flex-direction:column;
-  padding:2px 0 4px;
+  display:flex; flex-direction:column-reverse;
+  padding:4px 0 6px;
   scrollbar-width:none; background:#010006;
 }}
 #term-body::-webkit-scrollbar {{ display:none; }}
-.te {{ padding:2px 12px; flex-shrink:0;
-       font-size:10px; line-height:1.6; color:#9060b8;
-       white-space:normal; word-break:break-word; }}
-.te-ts  {{ color:#6a5a7a; font-size:9px; }}
+.te {{ padding:3px 12px; flex-shrink:0;
+       font-size:11px; line-height:1.65; color:#5a3a7a;
+       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+.te-ts  {{ color:#3a2a4a; font-size:9px; margin-right:4px; }}
 .te-date {{ padding:5px 12px 1px; flex-shrink:0;
             font-size:7.5px; font-weight:700; letter-spacing:.28em;
             color:#1a0028; text-transform:uppercase; }}
@@ -4495,8 +4477,7 @@ window.addEventListener('resize', function() {{
       eta.textContent = rem + 's';
     }}, 500);
 
-    // ── postToFeed: instant-append, no queue delay ───────────────────────────
-    // postToFeed(plain, timestamp, html)
+    // ── postToFeed: instant-append, newest at top (column-reverse) ─────────
     function postToFeed(plain, timestamp, html) {{
       var _h  = html || plain;
       var tb  = document.getElementById('term-body');
@@ -4504,53 +4485,39 @@ window.addEventListener('resize', function() {{
       var now  = timestamp ? new Date(timestamp) : new Date();
       var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
       var row  = document.createElement('div');
-      // Detect trade rows by html content
       var isTrade = (_h.indexOf('>enter<') !== -1 || _h.indexOf('>exit<') !== -1) && _h.indexOf('@') !== -1;
       if (isTrade) {{
-        row.className = 'te te-trade te-new';
+        row.className = 'te te-new';
         var _isEntry  = _h.indexOf('>enter<') !== -1;
-        var _isWin    = !_isEntry && _h.indexOf('color:#00ff9d') !== -1;
-        var _flashCol = _isEntry ? '#00e5ff' : (_isWin ? '#00ff9d' : '#ff3366');
-        var _dimCol   = _isEntry ? 'rgba(0,180,220,.4)' : (_isWin ? 'rgba(0,200,120,.4)' : 'rgba(255,60,80,.4)');
+        var _isWin    = !_isEntry && (_h.indexOf('color:#00ff9d') !== -1);
+        var _flashCol = _isEntry ? '#00e5ff' : (_isWin ? '#00ff9d' : '#ff4466');
+        var _dimCol   = _isEntry ? 'rgba(0,180,220,.55)' : (_isWin ? 'rgba(0,210,130,.55)' : 'rgba(255,60,80,.55)');
         row.style.color = _flashCol;
-        row.style.textShadow = '0 0 8px ' + _flashCol;
+        row.style.textShadow = '0 0 10px ' + _flashCol;
         setTimeout(function() {{
-          row.style.transition = 'color 1.5s ease, text-shadow 1.5s ease';
+          row.style.transition = 'color 2s ease, text-shadow 2s ease';
           row.style.color = _dimCol;
           row.style.textShadow = 'none';
-        }}, 2800);
+        }}, 1800);
       }} else {{
         row.className = 'te te-new';
-        row.style.color = '#00ff41';
-        row.style.textShadow = '0 0 6px rgba(0,255,65,.5)';
-        row.style.transition = 'color 1200ms ease, text-shadow 1200ms ease';
-        requestAnimationFrame(function() {{
-          requestAnimationFrame(function() {{
-            row.style.color = '#6a4a8a';
-            row.style.textShadow = 'none';
-          }});
-        }});
+        row.style.color = '#4a3060';
+        row.style.textShadow = 'none';
       }}
-      row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + _h;
+      row.innerHTML = '<span class="te-ts">' + hhmm + '</span>' + _h;
       tb.appendChild(row);
-      tb.scrollTop = tb.scrollHeight;
+      // Trim to 50 entries — column-reverse shows newest (last) at top
+      while (tb.children.length > 50) tb.removeChild(tb.firstChild);
       window._lastFeedEventMs = Date.now();
     }}
 
     // Expose globally
     window._postToFeed = postToFeed;
 
-    // On load: fade in the server-rendered newest entry immediately
+    // On load: show server-rendered entries
     var tb = document.getElementById('term-body');
-    var newest = document.getElementById('te-newest');
-    if (newest && tb) {{
-      tb.scrollTop = tb.scrollHeight;
-      newest.style.opacity = '1';
-      setTimeout(function() {{
-        newest.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
-        newest.style.color = '#9060b8';
-        newest.style.textShadow = 'none';
-      }}, 600);
+    if (tb) {{
+      tb.querySelectorAll('.te').forEach(function(el) {{ el.style.opacity = '1'; }});
     }}
 
     // Kick off the progress bar — inside IIFE where _tickProgress is in scope
