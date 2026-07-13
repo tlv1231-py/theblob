@@ -89,7 +89,7 @@ html,body{{height:100%;background:#040006;font-family:Consolas,'Courier New',mon
       display:flex;align-items:center;gap:10px}}
 .dot{{width:6px;height:6px;border-radius:50%;background:#ff00cc;
       box-shadow:0 0 6px #ff00cc;animation:bl 2s ease-in-out infinite}}
-#body{{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:46px 0 0}}
+#body{{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:0}}
 .bt-e{{padding:4px 18px 3px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
 .bt-m{{font-size:13px;font-weight:600;line-height:1.4;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
@@ -1160,12 +1160,12 @@ body::after {{
    STRATAGEM HUD — Helldivers-style process-status bar
    ═══════════════════════════════════════════════════════════════ */
 #strat-bar {{
-  height:46px;
+  height:46px; flex-shrink:0;
   display:flex; align-items:stretch;
   background:linear-gradient(180deg,rgba(2,0,12,.98) 0%,rgba(5,0,18,.95) 100%);
   border-bottom:1px solid rgba(148,0,255,.18);
-  position:fixed; top:0; left:0; right:0;
-  z-index:99999;
+  position:relative; z-index:99999;
+  overflow:visible;
   gap:0;
 }}
 /* scanline overlay */
@@ -1215,9 +1215,9 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 
-/* ── Callout rail — fixed to viewport, JS pins top to strat-bar bottom once on load ─ */
+/* ── Callout rail — absolute child of strat-bar, hangs below its bottom edge ─ */
 #callout-rail {{
-  position:fixed; left:50%; top:46px; /* exactly strat-bar height — no JS needed */
+  position:absolute; left:50%; top:100%;
   transform:translateX(-50%);
   z-index:9998;
   display:flex; flex-direction:column; align-items:center;
@@ -2324,9 +2324,9 @@ body::after {{
     <div class="ss-name">NAV</div>
     <div class="ss-status" id="ss-nav-st">—</div>
   </div>
+  <!-- ── Callout rail — absolute child, cards hang below strat-bar bottom edge ── -->
+  <div id="callout-rail"></div>
 </div>
-<!-- ── Callout rail — zero-height, cards overflow downward from here ── -->
-<div id="callout-rail"></div>
 
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
