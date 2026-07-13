@@ -4858,7 +4858,7 @@ window.addEventListener('resize', function() {{
         if (isHistory) rows = rows.slice().reverse(); // DESC → chronological
         if (window._resetRunTimer) window._resetRunTimer();
         // Stagger live batches so events drip in one-by-one (history: instant)
-        var _staggerMs = isHistory ? 0 : 90;
+        var _staggerMs = isHistory ? 0 : 180;
         rows.forEach(function(row, _ri) {{ setTimeout(function() {{
           _lastSeen = row.recorded_at;
           var raw = row.message || '';
