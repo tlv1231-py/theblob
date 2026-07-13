@@ -1227,25 +1227,40 @@ body::after {{
 }}
 .callout-card {{
   width:100%; display:flex; align-items:center; gap:8px;
-  padding:6px 14px 6px 10px;
-  background:rgba(2,0,12,.97); backdrop-filter:blur(6px);
-  border:1px solid rgba(148,0,255,.25); border-left:3px solid;
-  /* start above the rail (hidden behind bar), then drop down */
+  padding:7px 12px 7px 10px;
+  background:rgba(2,0,12,.98); backdrop-filter:blur(8px);
+  border:1px solid rgba(148,0,255,.2); border-left:3px solid;
   transform:translateY(-110%); opacity:0;
-  transition:transform .28s cubic-bezier(.22,1,.36,1), opacity .2s ease;
+  transition:transform .3s cubic-bezier(.22,1,.36,1), opacity .22s ease;
   pointer-events:none;
 }}
 .callout-card.cc-show {{ transform:translateY(0); opacity:1; }}
-.callout-card.cc-exit {{ transform:translateY(-110%); opacity:0; transition:transform .22s ease-in, opacity .18s ease-in; }}
+.callout-card.cc-exit {{ transform:translateY(-110%); opacity:0; transition:transform .24s ease-in, opacity .2s ease-in; }}
 .cc-badge {{
-  font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 5px;
-  border:1px solid; text-transform:uppercase; flex-shrink:0;
-  opacity:.85;
+  font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 6px;
+  border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.9;
 }}
 .cc-body {{ flex:1; min-width:0; }}
-.cc-sym   {{ font:700 11px Consolas,monospace; letter-spacing:.08em; }}
-.cc-detail {{ font:600 8px Consolas,monospace; letter-spacing:.04em; opacity:.6; }}
-.cc-time  {{ font:600 7px Consolas,monospace; letter-spacing:.1em; opacity:.4; flex-shrink:0; }}
+.cc-phase {{
+  font:700 9px Consolas,monospace; letter-spacing:.08em;
+  transition:color .2s;
+}}
+.cc-ticker {{
+  font:700 11px Consolas,monospace; letter-spacing:.06em;
+}}
+.cc-exec-bar {{
+  height:3px; background:rgba(255,255,255,.07); border-radius:1px;
+  margin-top:4px; overflow:hidden; display:none;
+}}
+.cc-exec-fill {{
+  height:100%; width:0%; border-radius:1px;
+  transition:width 1.1s linear;
+}}
+.cc-count {{
+  font:700 18px Consolas,monospace; letter-spacing:-.02em;
+  min-width:22px; text-align:right; flex-shrink:0;
+  opacity:.75; transition:opacity .15s;
+}}
 
 /* ── Terminal row appear ── */
 @keyframes te-appear {{
@@ -5412,7 +5427,7 @@ window.addEventListener('resize', function() {{
                 // Stratagem callout drop-in
                 if (window._fireCallout) {{
                   var _cPrice = priceM ? ' @$' + parseFloat(priceM[1].replace(/,/g,'')).toFixed(2) : '';
-                  window._fireCallout('ENTER', sym.replace('/USD','') + _cPrice, 'position opened · watching exit', '#00e5ff');
+                  window._fireCallout('ENTER', sym.replace('/USD','') + _cPrice, 'position opened · watching exit', '#00e5ff', 'ACQUIRED');
                 }}
                 if (window._orbTradeFlash) window._orbTradeFlash(true);
                 if (window._soundEntry) window._soundEntry();
@@ -5458,7 +5473,8 @@ window.addEventListener('resize', function() {{
                     _isWin ? 'WIN' : 'LOSS',
                     sym.replace('/USD','') + _cXPrice,
                     'closed' + _cPnl,
-                    _isWin ? '#00ff9d' : '#ff3366'
+                    _isWin ? '#00ff9d' : '#ff3366',
+                    _isWin ? 'CLOSED +' : 'CLOSED —'
                   );
                 }}
                 // 2. Orb bloom
@@ -6758,37 +6774,68 @@ window.addEventListener('resize', function() {{
         if (!_calloutQ.length || _calloutShowing) return;
         var cfg = _calloutQ.shift();
         _calloutShowing = true;
+
         var card = document.createElement('div');
         card.className = 'callout-card';
         card.style.borderLeftColor = cfg.col;
-        var now = new Date();
-        var hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
         card.innerHTML =
           '<div class="cc-badge" style="color:' + cfg.col + ';border-color:' + cfg.col + '">' + cfg.badge + '</div>' +
           '<div class="cc-body">' +
-            '<div class="cc-sym" style="color:' + cfg.col + '">' + cfg.sym + '</div>' +
-            '<div class="cc-detail">' + cfg.detail + '</div>' +
+            '<div class="cc-ticker" style="color:' + cfg.col + '">' + cfg.sym + '</div>' +
+            '<div class="cc-phase" id="cc-ph">SCANNING \xb7 <span id="cc-ct">5</span></div>' +
+            '<div class="cc-exec-bar"><div class="cc-exec-fill" id="cc-fill" style="background:' + cfg.col + '"></div></div>' +
           '</div>' +
-          '<div class="cc-time">' + hhmm + ' ET</div>';
+          '<div class="cc-count" style="color:' + cfg.col + '" id="cc-num">5</div>';
         if (_calloutRail) _calloutRail.appendChild(card);
-        // Trigger slide-in
+
         requestAnimationFrame(function() {{
           requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
         }});
-        // Auto-dismiss after 3.5s
-        setTimeout(function() {{
-          card.classList.remove('cc-show');
-          card.classList.add('cc-exit');
-          setTimeout(function() {{
-            if (card.parentNode) card.parentNode.removeChild(card);
-            _calloutShowing = false;
-            setTimeout(_showNextCallout, 80);
-          }}, 220);
-        }}, 3500);
+
+        var phEl  = card.querySelector('#cc-ph');
+        var ctEl  = card.querySelector('#cc-ct');
+        var numEl = card.querySelector('#cc-num');
+        var bar   = card.querySelector('.cc-exec-bar');
+        var fill  = card.querySelector('#cc-fill');
+
+        // Phase 1 — SCANNING countdown 5→1 (5 × 400ms)
+        var count = 5;
+        var countInt = setInterval(function() {{
+          count--;
+          if (count > 0) {{
+            if (ctEl)  ctEl.textContent  = count;
+            if (numEl) numEl.textContent = count;
+          }} else {{
+            clearInterval(countInt);
+
+            // Phase 2 — EXECUTING + progress bar (~1.1s)
+            if (phEl)  phEl.textContent = 'EXECUTING...';
+            if (numEl) numEl.style.opacity = '0';
+            if (bar)   bar.style.display = 'block';
+            setTimeout(function() {{ if (fill) fill.style.width = '100%'; }}, 30);
+
+            setTimeout(function() {{
+              // Phase 3 — COMPLETE
+              if (phEl)  {{ phEl.textContent = '◉ ' + (cfg.complete || 'COMPLETE'); phEl.style.color = cfg.col; }}
+              if (bar)   bar.style.display = 'none';
+
+              // Phase 4 — retract
+              setTimeout(function() {{
+                card.classList.remove('cc-show');
+                card.classList.add('cc-exit');
+                setTimeout(function() {{
+                  if (card.parentNode) card.parentNode.removeChild(card);
+                  _calloutShowing = false;
+                  setTimeout(_showNextCallout, 80);
+                }}, 240);
+              }}, 900);
+            }}, 1200);
+          }}
+        }}, 400);
       }}
 
-      window._fireCallout = function(badge, sym, detail, col) {{
-        _calloutQ.push({{ badge: badge, sym: sym, detail: detail, col: col || '#ff00cc' }});
+      window._fireCallout = function(badge, sym, detail, col, complete) {{
+        _calloutQ.push({{ badge: badge, sym: sym, detail: detail, col: col || '#ff00cc', complete: complete || 'COMPLETE' }});
         _showNextCallout();
       }};
 
