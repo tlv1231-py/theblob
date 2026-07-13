@@ -4092,7 +4092,7 @@ setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 // ── Smooth ticker-tape scroll — keeps "now" always centered ────────────────────
 var _scrollBusy = false;
 function _recenterOnLatest(_ignored) {{
-  if (_scrollBusy) return;
+  if (_scrollBusy || _userInteracting) return;  // don't snap back if user has panned
   var nowIso   = new Date().toISOString();
   var newStart = _intradayStart();
   var newEnd   = _intradayEnd();
