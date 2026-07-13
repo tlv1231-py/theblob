@@ -1780,10 +1780,18 @@ body::after {{
 #runner-age {{ font:700 9px Consolas,monospace; letter-spacing:.04em; transition:color .4s; }}
 #runner-trades {{ font-size:6.5px; color:#3a1a4a; letter-spacing:.18em; text-transform:uppercase; }}
 /* ── Position age bar ── */
-.pos-age-bar {{ height:2px; margin-top:4px; border-radius:1px; overflow:hidden; background:#0d0020; }}
+.pos-age-bar {{ height:3px; margin-top:4px; border-radius:1px; overflow:hidden; background:rgba(255,255,255,.05); position:relative; }}
 .pos-age-fill {{
   height:100%; border-radius:1px;
-  transition:width .8s linear, background .8s;
+  transition:width .9s linear, background .5s;
+.pos-age-sell {{
+  position:absolute; right:0; top:-9px;
+  font-size:7px; font-weight:900; letter-spacing:.25em;
+  color:#ff3355; opacity:0; pointer-events:none;
+  transition:opacity .2s;
+}}
+.pos-age-sell.show {{ opacity:1; animation:sell-pulse .5s ease-in-out infinite; }}
+@keyframes sell-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.35}} }}
 /* ── Stop / Target range bar ── */
 }}
 .pos-range-bar {{
@@ -5522,7 +5530,7 @@ window.addEventListener('resize', function() {{
         + '</div>'
         + '<div class="pos-hold active">··········</div>'
         + rangeHtml
-        + '<div class="pos-age-bar" title="time in trade"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
+        + '<div class="pos-age-bar" title="cooldown"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" style="width:' + (100 - agePct) + '%;background:rgba(255,255,255,.55)"></div></div>';
       el.appendChild(inner);
       // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
@@ -5622,8 +5630,11 @@ window.addEventListener('resize', function() {{
       var fill = el.querySelector('.pos-age-fill');
       if (fill) {{
         var agePct = Math.min(age / 90 * 100, 100);
-        fill.style.width  = agePct + '%';
-        fill.style.background = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+        var rem = 100 - agePct;
+        fill.style.width = rem + '%';
+        fill.style.background = rem > 40 ? 'rgba(255,255,255,.55)' : rem > 15 ? 'rgba(255,160,0,.8)' : 'rgba(255,51,80,.9)';
+        var sellLbl = el.querySelector('.pos-age-sell');
+        if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
       }}
     }}
 
@@ -6028,9 +6039,12 @@ window.addEventListener('resize', function() {{
         var age = (Date.now() - new Date(enteredAt)) / 60000;
         var fill = el.querySelector('.pos-age-fill');
         if (fill) {{
-          var agePct = Math.min(age / 12 * 100, 100);
-          fill.style.width = agePct + '%';
-          fill.style.background = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
+          var agePct = Math.min(age / 2 * 100, 100);
+          var rem = 100 - agePct;
+          fill.style.width = rem + '%';
+          fill.style.background = rem > 40 ? 'rgba(255,255,255,.55)' : rem > 15 ? 'rgba(255,160,0,.8)' : 'rgba(255,51,80,.9)';
+          var sellLbl = el.querySelector('.pos-age-sell');
+          if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
         }}
       }});
     }}, 30000);
