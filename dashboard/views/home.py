@@ -3790,39 +3790,31 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return ms >= winStart && ms <= winEnd;
     }});
     if (pts.length < 1) {{
-      // No history yet — just draw the dot at center so something is visible
+      // No history yet — dot at exact center
       if (curNav) {{
-        var dotCX = W / 2, dotCY = H / 2;
-        ctx.beginPath(); ctx.arc(dotCX, dotCY, 5, 0, Math.PI*2);
+        ctx.beginPath(); ctx.arc(W/2, H/2, 5, 0, Math.PI*2);
         ctx.fillStyle = '#ff00cc'; ctx.fill();
       }}
       return;
     }}
 
-    // Y range — auto-scale tight to visible data
-    var minY = Infinity, maxY = -Infinity;
+    // Y range — symmetric around curNav so it always maps to H/2 (dot = visual center)
+    var base = curNav || 100000;
+    var spread = 0;
     pts.forEach(function(p) {{
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
+      var d = Math.abs(p.y - base);
+      if (d > spread) spread = d;
     }});
-    var spread = maxY - minY;
-    var base   = curNav || 100000;
-    var minSpread = base * 0.003; // at least 0.3% of NAV visible
-    if (spread < minSpread) {{
-      var mid = (minY + maxY) / 2;
-      minY = mid - minSpread / 2;
-      maxY = mid + minSpread / 2;
-      spread = minSpread;
-    }}
-    var pad = spread * 0.35;
-    minY -= pad; maxY += pad;
+    var minSpread = base * 0.002; // floor: 0.2% of NAV so flat line stays visible
+    var halfRange = Math.max(spread * 1.4, minSpread);
+    var minY = base - halfRange, maxY = base + halfRange;
 
-    // Coordinate mappers — current moment always at W/2
+    // Coordinate mappers — current moment always at W/2, curNav always at H/2
     function tx(isoStr) {{
       var ms = new Date(isoStr).getTime();
       return (ms - winStart) / (winEnd - winStart) * W;
     }}
-    function ty(v) {{ return H - (v - minY) / (maxY - minY) * H; }}
+    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
     var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
 
@@ -5106,73 +5098,58 @@ window.addEventListener('resize', function() {{
             }}, _batchDur + 900);
           }}
 
-          // P&L combo chip (exits) + sounds + main number update on fade
+          // P&L combo chip + sounds
           if (_exitCount > 0) {{
             var _isPos = _batchPnl >= 0;
+
+            // Show batch delta chip — visual only, no arithmetic on main number
             _showChip('batch-pnl-chip',
               (_isPos ? '+' : '') + _batchPnl.toFixed(2),
-              _isPos ? '#00c880' : '#e03355',
-              function() {{
-                // Update Total P&L display when chip fades
-                var _pv = document.getElementById('total-pnl-val');
-                if (_pv) {{
-                  var _prev = parseFloat(_pv.getAttribute('data-raw') || '0');
-                  var _next = _prev + _batchPnl;
-                  _pv.setAttribute('data-raw', _next);
-                  var _pos = _next >= 0;
-                  _pv.style.color = _pos ? '#00c880' : '#e03355';
-                  _pv.textContent = (_pos ? '+$' : '-$') + Math.abs(_next).toLocaleString('en-US', {{minimumFractionDigits:0, maximumFractionDigits:0}});
-                }}
-              }});
+              _isPos ? '#00c880' : '#e03355', null);
 
-            // Play batch exit sound — one sound per batch, not per trade
+            // Sound: one per batch
             if (_isPos && window._soundWin) window._soundWin();
             else if (!_isPos && window._soundLoss) window._soundLoss();
 
-            // Trades combo chip — update count on fade
-            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', function() {{
-              var _td = document.getElementById('om-today');
-              if (_td) _td.textContent = parseInt(_td.textContent || '0', 10) + _tradeCount;
-            }});
-
-            // Open positions delta chip — update count on fade
-            var _posDelta = _entryCount - _exitCount;
-            if (_posDelta !== 0) {{
-              _showChip('pos-combo-chip',
-                (_posDelta > 0 ? '+' : '') + _posDelta,
-                _posDelta > 0 ? '#00e5ff' : '#ff4466',
-                function() {{
-                  var _op = document.getElementById('om-openpos');
-                  if (_op) {{
-                    var _cur = parseInt(_op.textContent || '0', 10);
-                    _op.textContent = Math.max(0, _cur + _posDelta);
-                  }}
-                }});
-            }}
-
-            // Alpaca NAV verification after batch settles
+            // After stagger + chip settle: fetch real totals from DB (single source of truth)
             setTimeout(function() {{
-              var url = SUPA_URL + '/rest/v1/portfolio_snapshots'
-                + '?strategy=eq.crypto_momentum&order=recorded_at.desc&limit=1'
-                + '&select=total_value,recorded_at';
-              fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+              // Total P&L from fills table
+              var pnlUrl = SUPA_URL + '/rest/v1/fills'
+                + '?select=pnl&strategy=eq.crypto_momentum';
+              fetch(pnlUrl, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
               .then(function(r) {{ return r.json(); }})
-              .then(function(snaps) {{
-                if (!Array.isArray(snaps) || !snaps.length) return;
-                var _alpacaNav = parseFloat(snaps[0].total_value);
-                if (isNaN(_alpacaNav)) return;
-                // Update wallet display if differs by more than $1
-                var _walEl = document.querySelector('[data-val]');
-                var _dispEl = document.getElementById('wallet-val');
-                if (_dispEl) {{
-                  var _cur = parseFloat((_dispEl.getAttribute('data-val') || '').replace(/[^0-9.-]/g,''));
-                  if (Math.abs(_alpacaNav - _cur) > 1) {{
-                    _dispEl.setAttribute('data-val', '$' + _alpacaNav.toLocaleString('en-US', {{minimumFractionDigits:2}}));
-                    _dispEl.textContent  = '$' + Math.round(_alpacaNav).toLocaleString('en-US');
-                  }}
+              .then(function(rows) {{
+                if (!Array.isArray(rows)) return;
+                var total = rows.reduce(function(s, r) {{ return s + (parseFloat(r.pnl) || 0); }}, 0);
+                var pv = document.getElementById('total-pnl-val');
+                if (pv) {{
+                  pv.setAttribute('data-raw', total);
+                  var pos = total >= 0;
+                  pv.style.color = pos ? '#00c880' : '#e03355';
+                  pv.textContent = (pos ? '+$' : '-$') + Math.abs(total).toLocaleString('en-US', {{maximumFractionDigits:0}});
                 }}
               }}).catch(function() {{}});
-            }}, _exitCount * 180 + 1200);
+            }}, _batchDur + 1000);
+          }}
+
+          // Trades combo chip — update count on fade
+          if (_tradeCount > 0) {{
+            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', function() {{
+              var td = document.getElementById('om-today');
+              if (td) td.textContent = parseInt(td.textContent || '0', 10) + _tradeCount;
+            }});
+          }}
+
+          // Open positions delta chip — update count on fade
+          var _posDelta = _entryCount - _exitCount;
+          if (_posDelta !== 0) {{
+            _showChip('pos-combo-chip',
+              (_posDelta > 0 ? '+' : '') + _posDelta,
+              _posDelta > 0 ? '#00e5ff' : '#ff4466',
+              function() {{
+                var op = document.getElementById('om-openpos');
+                if (op) op.textContent = Math.max(0, parseInt(op.textContent || '0', 10) + _posDelta);
+              }});
           }}
         }}
 
