@@ -2422,6 +2422,15 @@ var layout = {{
   }},
   yaxis:{{
     autorange:false,
+    range: (function() {{
+      var _v = {port_values_j};
+      var _clean = _v.filter(function(x){{ return x > 0; }});
+      if (!_clean.length) return [90000, 110000];
+      var _lo = Math.min.apply(null, _clean), _hi = Math.max.apply(null, _clean);
+      var _spread = Math.max(_hi - _lo, _lo * 0.004, 200);
+      var _c = (_lo + _hi) / 2;
+      return [_c - _spread * 0.7, _c + _spread * 0.7];
+    }})(),
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
     tickformat:'$,.0f',
