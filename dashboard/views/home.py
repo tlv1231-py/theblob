@@ -2243,6 +2243,13 @@ body::after {{
         <span id="mute-icon">♪</span>
         <span id="mute-label">ON</span>
       </button>
+      <button id="fs-btn2" onclick="_toggleFullscreen()" title="Fullscreen — keeps screen on, click other monitors freely" style="
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);
+        cursor:pointer;padding:4px 9px;display:flex;align-items:center;gap:4px;
+        font-family:Consolas,'Courier New',monospace;font-size:9px;font-weight:700;
+        letter-spacing:.18em;color:rgba(255,255,255,.55);transition:all .15s;
+        pointer-events:auto;margin-left:4px;
+      ">⛶</button>
     </div>
   </div>
 
@@ -3300,29 +3307,36 @@ async function _acquireWakeLock() {{
     }}
   }} catch(e) {{}}
 }}
+function _fsSetActive(on) {{
+  var btn  = document.getElementById('fs-btn');
+  var btn2 = document.getElementById('fs-btn2');
+  if (on) {{
+    if (btn)  {{ btn.textContent = '⛶ EXIT'; btn.style.color = '#ff00cc'; btn.style.borderColor = '#ff00cc'; btn.style.boxShadow = '0 0 6px rgba(255,0,204,.4)'; }}
+    if (btn2) {{ btn2.textContent = '⛶'; btn2.style.color = '#ff00cc'; btn2.style.borderColor = '#ff00cc'; btn2.style.boxShadow = '0 0 6px rgba(255,0,204,.35)'; }}
+  }} else {{
+    if (btn)  {{ btn.textContent = '⛶ FS'; btn.style.color = '#3a1a5a'; btn.style.borderColor = '#2a003d'; btn.style.boxShadow = 'none'; }}
+    if (btn2) {{ btn2.textContent = '⛶'; btn2.style.color = 'rgba(255,255,255,.55)'; btn2.style.borderColor = 'rgba(255,255,255,.12)'; btn2.style.boxShadow = 'none'; }}
+  }}
+}}
 function _toggleFullscreen() {{
-  var btn = document.getElementById('fs-btn');
   if (!document.fullscreenElement) {{
     document.documentElement.requestFullscreen().then(function() {{
-      if (btn) {{ btn.textContent = '⛶ EXIT'; btn.style.color = '#ff00cc'; btn.style.borderColor = '#ff00cc'; btn.style.boxShadow = '0 0 6px rgba(255,0,204,.4)'; }}
+      _fsSetActive(true);
       _acquireWakeLock();
     }}).catch(function() {{}});
   }} else {{
     document.exitFullscreen().then(function() {{
-      if (btn) {{ btn.textContent = '⛶ FS'; btn.style.color = '#3a1a5a'; btn.style.borderColor = '#2a003d'; btn.style.boxShadow = 'none'; }}
+      _fsSetActive(false);
       if (_wakeLock) {{ _wakeLock.release(); _wakeLock = null; }}
     }}).catch(function() {{}});
   }}
 }}
-// Re-acquire wake lock if it gets released automatically (screen dimming prevention)
 document.addEventListener('visibilitychange', function() {{
   if (document.visibilityState === 'visible' && document.fullscreenElement) _acquireWakeLock();
 }});
-// ESC exits fullscreen (browser built-in) — sync button state
 document.addEventListener('fullscreenchange', function() {{
-  var btn = document.getElementById('fs-btn');
   if (!document.fullscreenElement) {{
-    if (btn) {{ btn.textContent = '⛶ FS'; btn.style.color = '#3a1a5a'; btn.style.borderColor = '#2a003d'; btn.style.boxShadow = 'none'; }}
+    _fsSetActive(false);
     if (_wakeLock) {{ _wakeLock.release(); _wakeLock = null; }}
   }}
 }});
@@ -5946,14 +5960,16 @@ window.addEventListener('resize', function() {{
           + '</div>';
       }}
       var entryDisp = entry > 0 ? (entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2)) : '—';
+      var _symId = p.symbol.replace(/[^A-Za-z0-9]/g,'_');
       var inner = document.createElement('div');
       inner.innerHTML = '<div class="pos-top">'
         + '<span class="pos-sym" style="color:' + col + '">···</span>'
         + '<span class="pos-val">··········</span>'
         + '</div>'
-        + '<div class="pos-hold active">··········</div>'
+        + '<div class="pos-hold active" id="hold-state-' + _symId + '">··········</div>'
+        + '<div class="pos-hold-sub" id="hold-sub-' + _symId + '" style="font:600 6.5px Consolas,monospace;letter-spacing:.07em;color:#3a1a4a;margin-top:1px;min-height:9px">···</div>'
         + rangeHtml
-        + '<div class="pos-age-bar" title="cooldown"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" style="width:' + (100 - agePct) + '%;background:#00c8ff;box-shadow:0 0 7px rgba(0,200,255,.75)"></div></div>';
+        + '<div class="pos-age-bar" title="hold duration"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" id="age-fill-' + _symId + '" style="width:' + (100 - agePct) + '%;background:#00c8ff;box-shadow:0 0 7px rgba(0,200,255,.75)"></div></div>';
       el.appendChild(inner);
       // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
@@ -6003,13 +6019,14 @@ window.addEventListener('resize', function() {{
           return v < 0.01 ? '$' + v.toFixed(6) : v < 1 ? '$' + v.toFixed(4) : '$' + entry.toLocaleString('en-US', {{maximumFractionDigits:2}});
         }});
       }}, 520);
-      // Phase 4 (720ms): stop/target line resolves
+      // Phase 4 (720ms): stop/target resolves as $ values
       setTimeout(function() {{
         var holdEl = inner.querySelector('.pos-hold');
         if (holdEl) {{
           holdEl.style.opacity = '1';
-          var tgtPct = tgt > 0 ? ((tgt - entry) / entry * 100).toFixed(1) : '—';
-          _scramble(holdEl, 'STP ' + stopPct + '%   TGT +' + tgtPct + '%', 180);
+          var tgtStr = tgt > 0 ? (tgt < 1 ? '$' + tgt.toFixed(4) : '$' + tgt.toLocaleString('en-US', {{maximumFractionDigits:2}})) : '—';
+          var stpStr = stop > 0 ? (stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toLocaleString('en-US', {{maximumFractionDigits:2}})) : '—';
+          _scramble(holdEl, '→ ' + tgtStr + '  stp ' + stpStr, 180);
         }}
       }}, 720);
       // Phase 5 (920ms): proximity bar fills to position, overlay becomes "OPEN" — blue
@@ -6042,23 +6059,49 @@ window.addEventListener('resize', function() {{
     function _updateCard(el, p) {{
       var entry   = parseFloat(p.entry_price);
       var stop    = parseFloat(p.stop_price);
-      var age     = p.entered_at ? (Date.now() - new Date(p.entered_at)) / 60000 : 0;
-      var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
-      var hold = el.querySelector('.pos-hold');
-      if (hold) hold.textContent = stopPct + '% stop · ' + Math.floor(age) + 'm';
+      var tgt     = parseFloat(p.target_price || 0) || (entry > 0 ? entry * 1.008 : 0);
+      var ageSec  = p.entered_at ? (Date.now() - new Date(p.entered_at)) / 1000 : 0;
+      var ageMin  = ageSec / 60;
+      var symId   = (p.symbol || el.getAttribute('data-sym') || '').replace(/[^A-Za-z0-9]/g,'_');
+
+      // Hold-state line: target + stop as $ values
+      var holdEl = document.getElementById('hold-state-' + symId) || el.querySelector('.pos-hold');
+      if (holdEl) {{
+        var tgtStr = tgt > 0 ? (tgt < 1 ? '$' + tgt.toFixed(4) : '$' + tgt.toLocaleString('en-US',{{maximumFractionDigits:2}})) : '—';
+        var stpStr = stop > 0 ? (stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toLocaleString('en-US',{{maximumFractionDigits:2}})) : '—';
+        holdEl.textContent = '→ ' + tgtStr + '  stp ' + stpStr;
+      }}
+
+      // Sub-line: hold timer + eval countdown (4 min max hold)
+      var subEl = document.getElementById('hold-sub-' + symId);
+      if (subEl) {{
+        var heldStr = ageSec < 60 ? Math.floor(ageSec) + 's'
+          : (ageSec < 3600 ? Math.floor(ageMin) + 'm ' + Math.floor(ageSec % 60) + 's'
+          : Math.floor(ageMin/60) + 'h ' + Math.floor(ageMin%60) + 'm');
+        var maxHoldSec = 4 * 60;
+        var remain = maxHoldSec - ageSec;
+        if (remain > 0) {{
+          var remStr = remain >= 60 ? Math.floor(remain/60) + 'm ' + Math.floor(remain%60) + 's' : Math.floor(remain) + 's';
+          subEl.textContent = 'held ' + heldStr + '  ·  eval in ' + remStr;
+          subEl.style.color = remain < 30 ? '#ff9900' : '#3a1a4a';
+        }} else {{
+          subEl.textContent = 'held ' + heldStr + '  ·  watching exit';
+          subEl.style.color = '#ff9900';
+        }}
+      }}
+
       var valEl = el.querySelector('.pos-val');
       if (valEl && entry > 0) {{
         valEl.textContent = entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2);
       }}
-      var fill = el.querySelector('.pos-age-fill');
+      var fill = document.getElementById('age-fill-' + symId) || el.querySelector('.pos-age-fill');
       if (fill) {{
-        var agePct = Math.min(age / 90 * 100, 100);
-        var rem = 100 - agePct;
+        var rem = Math.max(0, 100 - (ageMin / 4 * 100));
         fill.style.width = rem + '%';
-        fill.style.background = rem > 40 ? '#00c8ff' : rem > 15 ? '#ffaa00' : '#ff2844';
-          fill.style.boxShadow = rem > 40 ? '0 0 7px rgba(0,200,255,.75)' : rem > 15 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
+        fill.style.background = rem > 50 ? '#00c8ff' : rem > 20 ? '#ffaa00' : '#ff2844';
+        fill.style.boxShadow = rem > 50 ? '0 0 7px rgba(0,200,255,.75)' : rem > 20 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
         var sellLbl = el.querySelector('.pos-age-sell');
-        if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
+        if (sellLbl) sellLbl.classList.toggle('show', rem <= 10);
       }}
     }}
 
@@ -6228,6 +6271,15 @@ window.addEventListener('resize', function() {{
       setInterval(_pollPositions, 2000);
     }}, 2000);
 
+    // Tick card hold timers every second (smooth countdown independent of DB poll)
+    setInterval(function() {{
+      var posMap = window._cryptoPositionsMap || {{}};
+      Object.keys(posMap).forEach(function(sym) {{
+        var el = (typeof _cryptoCardEls !== 'undefined') ? _cryptoCardEls[sym] : null;
+        if (el) _updateCard(el, posMap[sym]);
+      }});
+    }}, 1000);
+
     // ── Live crypto price poller — updates proximity meters in real time ──────
     var _CG_SYM_MAP = {{
       'BTC/USD':'bitcoin','ETH/USD':'ethereum','SOL/USD':'solana',
@@ -6283,6 +6335,24 @@ window.addEventListener('resize', function() {{
           live.setAttribute('data-raw', pnlPct);
           live.textContent = arrow + sign + pnlPct.toFixed(2) + '%';
           live.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
+        }}
+
+        // Strategy state overlay: contextual message when near boundary
+        var symId2 = sym.replace(/[^A-Za-z0-9]/g,'_');
+        var holdEl2 = document.getElementById('hold-state-' + symId2);
+        if (holdEl2) {{
+          var tgtDisp = tgt < 1 ? '$' + tgt.toFixed(4) : '$' + tgt.toLocaleString('en-US',{{maximumFractionDigits:2}});
+          var stpDisp = stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toLocaleString('en-US',{{maximumFractionDigits:2}});
+          if (t > 0.85) {{
+            holdEl2.textContent = '◉ sell ' + tgtDisp + ' approaching';
+            holdEl2.style.color = '#00ff9d';
+          }} else if (t < 0.15) {{
+            holdEl2.textContent = '◉ stop ' + stpDisp + ' watch';
+            holdEl2.style.color = '#ff3366';
+          }} else {{
+            holdEl2.textContent = '→ ' + tgtDisp + '  stp ' + stpDisp;
+            holdEl2.style.color = '';
+          }}
         }}
       }});
     }}
