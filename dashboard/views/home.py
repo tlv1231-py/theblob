@@ -2292,31 +2292,41 @@ function _datePlus_from(isoDateStr, days) {{
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
 // Intraday sliding window — "now" always at center
 var _CENTER_DAYS = 1;
-var _HALF_WIN_MS = 45 * 60 * 1000;  // 45 min each side
+var _HALF_WIN_MS = 20 * 60 * 1000;  // 20 min each side — tight, makes movement dramatic
 function _intradayStart() {{ return new Date(Date.now() - _HALF_WIN_MS).toISOString(); }}
 function _intradayEnd()   {{ return new Date(Date.now() + _HALF_WIN_MS).toISOString(); }}
 var xStart = _intradayStart();
 var xEnd   = _intradayEnd();
 
-// Tight Y range for the visible window
+// Dynamic Y range: only portfolio line in the visible window, tight padding
+// so even a $50 move fills most of the vertical space
 function yRange(x0, x1) {{
   var minV = Infinity, maxV = -Infinity;
-  var series = [
-    [portDates, portValues],
-    [spyDates,  spyNorm],
-    [qqqDates,  qqqNorm],
-  ];
-  series.forEach(function(s) {{
-    var dates = s[0], vals = s[1];
-    for (var i=0; i<dates.length; i++) {{
-      if ((!x0 || dates[i] >= x0) && (!x1 || dates[i] <= x1)) {{
-        if (vals[i] < minV) minV = vals[i];
-        if (vals[i] > maxV) maxV = vals[i];
-      }}
+  // Only use the portfolio line — benchmarks are normalized and would warp the scale
+  var dates = portDates, vals = portValues;
+  for (var i = 0; i < dates.length; i++) {{
+    if ((!x0 || dates[i] >= x0) && (!x1 || dates[i] <= x1)) {{
+      if (vals[i] < minV) minV = vals[i];
+      if (vals[i] > maxV) maxV = vals[i];
     }}
-  }});
+  }}
+  // Also include the live endpoint if it's in window
+  if (window._lastKnownNav) {{
+    if (window._lastKnownNav < minV) minV = window._lastKnownNav;
+    if (window._lastKnownNav > maxV) maxV = window._lastKnownNav;
+  }}
   if (minV === Infinity) return [null, null];
-  var pad = (maxV - minV) * 0.18 || 2000;
+  var spread = maxV - minV;
+  // Minimum visible spread: 0.3% of NAV so a dead-flat session still shows a line
+  var minSpread = (window._lastKnownNav || 100000) * 0.003;
+  if (spread < minSpread) {{
+    var mid = (minV + maxV) / 2;
+    minV = mid - minSpread / 2;
+    maxV = mid + minSpread / 2;
+    spread = minSpread;
+  }}
+  // Padding: 40% of spread above+below so the line swings dramatically but doesn't clip
+  var pad = spread * 0.4;
   return [minV - pad, maxV + pad];
 }}
 
@@ -3675,23 +3685,14 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   setTimeout(showCrosshair, 1500);
   // Mark initial layout complete so the pan tracker ignores programmatic events
   setTimeout(function() {{ _initLayoutDone = true; }}, 500);
-  // Force intraday zoom + tight y-axis centered on current NAV
+  // Force intraday zoom — dynamic Y scales to whatever moved in the last 20 min
   setTimeout(function() {{
     _programmaticRelayout = true;
-    var centerNav = window._lastKnownNav || {last_nav};
-    // Use actual data spread to set zoom — tight like a Bloomberg intraday chart
-    var _vals = portValues.filter(function(v) {{ return v > 0; }});
-    var _dataSpread = _vals.length > 1
-      ? Math.max.apply(null, _vals) - Math.min.apply(null, _vals)
-      : 0;
-    // Show at most 2× the actual data range, or at minimum ±0.4% of NAV
-    var pad = Math.max(_dataSpread * 0.6, centerNav * 0.004, 200);
-    Plotly.relayout(gd, {{
-      'xaxis.range': [_intradayStart(), _intradayEnd()],
-      'yaxis.range': [centerNav - pad, centerNav + pad]
-    }}).then(function() {{
-      _programmaticRelayout = false;
-    }});
+    var _xs = _intradayStart(), _xe = _intradayEnd();
+    var _yr = yRange(_xs, new Date().toISOString());
+    var _layout = {{ 'xaxis.range': [_xs, _xe] }};
+    if (_yr[0] !== null) {{ _layout['yaxis.range'] = _yr; _layout['yaxis.autorange'] = false; }}
+    Plotly.relayout(gd, _layout).then(function() {{ _programmaticRelayout = false; }});
   }}, 600);
 }});
 
@@ -4104,7 +4105,14 @@ function _recenterOnLatest(_ignored) {{
 
   _scrollBusy = true;
   _programmaticRelayout = true;
-  Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
+  // Recompute Y range from the live 20-min window every tick
+  var yr = yRange(newStart, nowIso);
+  var layoutUpdate = {{ 'xaxis.range': [newStart, newEnd] }};
+  if (yr[0] !== null) {{
+    layoutUpdate['yaxis.range'] = yr;
+    layoutUpdate['yaxis.autorange'] = false;
+  }}
+  Plotly.relayout(gd, layoutUpdate).then(function() {{
     _scrollBusy = false;
     setTimeout(function() {{ _programmaticRelayout = false; }}, 80);
   }}).catch(function() {{ _scrollBusy = false; _programmaticRelayout = false; }});
@@ -5370,11 +5378,8 @@ window.addEventListener('resize', function() {{
         window._lastKnownTs = isoTs;
         // Extend ghost (3) + portfolio (4) simultaneously
         Plotly.extendTraces(gd, {{x:[[isoTs],[isoTs]], y:[[nav],[nav]]}}, [3,4]);
-        // Re-center y-axis on current NAV
-        if (!_userPanned) {{
-          var _yPad = Math.max(nav * 0.04, 800);
-          Plotly.relayout(gd, {{ 'yaxis.range': [nav - _yPad, nav + _yPad] }});
-        }}
+        // Re-scale y-axis to dynamic window range (let _recenterOnLatest handle it each 10s)
+        // No per-NAV relayout here — avoids fighting the scroll timer
         // Endpoint dot
         _updateEndpointDot(nav, isoTs);
         // ATH check
