@@ -2057,7 +2057,7 @@ body::after {{
     </div>
     <div class="om-row">
       <span class="om-label">TOTAL P&amp;L</span>
-      <span class="om-val" style="color:{_pnl_col}">{_pnl_str}</span>
+      <span class="om-val" id="om-total-pnl" style="color:{_pnl_col}">{_pnl_str}</span>
     </div>
   </div>
   <div class="legend-strip">
@@ -4682,15 +4682,6 @@ window.addEventListener('resize', function() {{
           var display;
           if (row.event_type === 'TRADE' && (raw.indexOf('ENTER') !== -1 || raw.indexOf('EXIT') !== -1)) {{
             var isEntry = raw.indexOf('ENTER') !== -1;
-            // Sound — only on live events (not history replay)
-            if (!isHistory) {{
-              if (isEntry) {{ if (window._soundEntry) window._soundEntry(); }}
-              else {{
-                var pnlMsnd = raw.match(/pnl\s*([+-][\d,.]+)/);
-                if (pnlMsnd && pnlMsnd[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
-                else {{ if (window._soundLoss) window._soundLoss(); }}
-              }}
-            }}
             // Flash the terminal border — live events only
             var ovl = !isHistory && document.getElementById('term-overlay');
             if (ovl) {{
@@ -4724,11 +4715,25 @@ window.addEventListener('resize', function() {{
                 window._recordStreakResult(pnlM[1][0] === '+');
               }}
               if (window._orbTradeFlash) window._orbTradeFlash(isEntry);
+              // Sound
               if (isEntry) {{
                 if (window._soundEntry) window._soundEntry();
               }} else if (pnlM) {{
                 if (pnlM[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
                 else {{ if (window._soundLoss) window._soundLoss(); }}
+              }}
+              // Immediately update total P&L display — don't wait for NAV poll
+              if (!isEntry && pnlM) {{
+                var _pnlEl = document.getElementById('om-total-pnl');
+                if (_pnlEl) {{
+                  var _curPnl = parseFloat((_pnlEl.textContent || '0').replace(/[^0-9.+-]/g,'')) || 0;
+                  if (_pnlEl.textContent.indexOf('−') !== -1 || _pnlEl.textContent.indexOf('-') !== -1) _curPnl = -Math.abs(_curPnl);
+                  var _delta = parseFloat(pnlM[1].replace(/,/g,'')) || 0;
+                  var _newPnl = _curPnl + _delta;
+                  var _sign = _newPnl >= 0 ? '+' : '−';
+                  _pnlEl.textContent = _sign + '$' + Math.abs(_newPnl).toLocaleString('en-US', {{maximumFractionDigits:0}});
+                  _pnlEl.style.color = _newPnl >= 0 ? '#00ff9d' : '#ff3366';
+                }}
               }}
             }}
             // Wallet canvas trade burst
