@@ -4087,7 +4087,7 @@ setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 // ── Smooth ticker-tape scroll — Plotly.animate keeps "now" always centered ────
 var _scrollBusy = false;
 function _recenterOnLatest(_ignored) {{
-  if (_userInteracting || _scrollBusy) return;
+  if (_scrollBusy) return;  // only block on our own busy state, not user-interaction
   var newStart = _intradayStart();
   var newEnd   = _intradayEnd();
   _defaultXRange = [newStart, newEnd];
@@ -4097,8 +4097,9 @@ function _recenterOnLatest(_ignored) {{
     {{ layout: {{ xaxis: {{ range: [newStart, newEnd] }} }} }},
     {{ transition: {{ duration: 1300, easing: 'linear' }}, frame: {{ duration: 1300, redraw: false }} }}
   ).then(function() {{
-    _programmaticRelayout = false;
     _scrollBusy = false;
+    // Keep programmatic flag true a bit longer to swallow the post-animation relayout event
+    setTimeout(function() {{ _programmaticRelayout = false; }}, 80);
   }});
 }}
 // Drive the scroll forward continuously — every 1.3s keeps transition seamless
