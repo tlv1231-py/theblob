@@ -3777,7 +3777,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var winEnd   = nowMs + halfWin;
 
     // Include current nav as a synthetic "now" point
-    var pts = history.slice(); // [{x: ISO, y: nav}]
+    var pts = history.slice(); // array of {{x:ISO, y:nav}}
     if (curNav) {{
       var last = pts[pts.length - 1];
       var nowIso = new Date(nowMs).toISOString();
