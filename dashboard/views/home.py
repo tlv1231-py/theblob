@@ -89,7 +89,7 @@ html,body{{height:100%;background:#040006;font-family:Consolas,'Courier New',mon
       display:flex;align-items:center;gap:10px}}
 .dot{{width:6px;height:6px;border-radius:50%;background:#ff00cc;
       box-shadow:0 0 6px #ff00cc;animation:bl 2s ease-in-out infinite}}
-#body{{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:4px 0}}
+#body{{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:46px 0 0}}
 .bt-e{{padding:4px 18px 3px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
 .bt-m{{font-size:13px;font-weight:600;line-height:1.4;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
@@ -1160,11 +1160,12 @@ body::after {{
    STRATAGEM HUD — Helldivers-style process-status bar
    ═══════════════════════════════════════════════════════════════ */
 #strat-bar {{
-  flex-shrink:0; height:46px;
+  height:46px;
   display:flex; align-items:stretch;
   background:linear-gradient(180deg,rgba(2,0,12,.98) 0%,rgba(5,0,18,.95) 100%);
   border-bottom:1px solid rgba(148,0,255,.18);
-  position:relative; z-index:99999;
+  position:fixed; top:0; left:0; right:0;
+  z-index:99999;
   gap:0;
 }}
 /* scanline overlay */
@@ -1216,9 +1217,9 @@ body::after {{
 
 /* ── Callout rail — fixed to viewport, JS pins top to strat-bar bottom once on load ─ */
 #callout-rail {{
-  position:fixed; left:50%; top:120px; /* rAF loop overrides top every frame */
+  position:fixed; left:50%; top:46px; /* exactly strat-bar height — no JS needed */
   transform:translateX(-50%);
-  z-index:9998; /* strat-bar is 99999, always on top */
+  z-index:9998;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
   width:380px;
@@ -6959,18 +6960,6 @@ window.addEventListener('resize', function() {{
 
       // ── Callout system — stackable drop-in notifications ────────
       var _calloutRail = document.getElementById('callout-rail');
-
-      // Continuously pin rail to strat-bar bottom via rAF — handles layout shifts and Streamlit reflows
-      (function _pinRail() {{
-        var sb = document.getElementById('strat-bar');
-        if (sb && _calloutRail) {{
-          var b = sb.getBoundingClientRect().bottom;
-          if (b > 0 && _calloutRail.style.top !== b + 'px') {{
-            _calloutRail.style.top = b + 'px';
-          }}
-        }}
-        requestAnimationFrame(_pinRail);
-      }})();
 
       function _spawnCallout(cfg) {{
         var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
