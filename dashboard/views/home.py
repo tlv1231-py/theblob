@@ -734,18 +734,23 @@ def _build_daw_html(data: dict) -> str:
                 date_label = ev_date
             term_rows += f'<div class="te-date">{date_label}</div>'
 
-        # Convert UTC → NYC (ET = UTC-5 standard, UTC-4 daylight)
+        # Convert UTC → NYC (EDT = UTC-4; EST = UTC-5)
+        hhmm = ""
         if len(ts_raw) >= 16:
             try:
-                from datetime import timezone as _tz, timedelta as _tdd
-                _utc_dt = _dt.fromisoformat(ts_raw.replace("Z","").split(".")[0])
-                import time as _time_mod
-                _is_dst = bool(_time_mod.daylight) and bool(_time_mod.localtime().tm_isdst)
-                _et_offset = -4 if True else -5  # EDT (summer) always for NYC
-                _et_dt = _utc_dt + _tdd(hours=_et_offset)
-                hhmm = _et_dt.strftime("%H:%M")
+                import re as _re2
+                from datetime import timedelta as _tdd2
+                _m = _re2.match(r'(\d{4})-(\d{2})-(\d{2})[\sT](\d{2}):(\d{2}):(\d{2})', ts_raw)
+                if _m:
+                    _utc_dt = _dt(*[int(x) for x in _m.groups()])
+                    # DST: second Sunday March → first Sunday November (approx: months 4-10 = EDT)
+                    _is_edt = 3 < _utc_dt.month < 11
+                    _et_dt  = _utc_dt + _tdd2(hours=-4 if _is_edt else -5)
+                    hhmm = _et_dt.strftime("%H:%M")
             except Exception:
-                hhmm = ts_raw[11:16]
+                pass
+        if not hhmm and len(ts_raw) >= 16:
+            hhmm = ts_raw[11:16]  # fallback: raw UTC HH:MM
         else:
             hhmm = ""
 
@@ -764,7 +769,7 @@ def _build_daw_html(data: dict) -> str:
         tw = ' id="te-newest" style="opacity:0;color:#00ff41;text-shadow:0 0 8px rgba(0,255,65,.6)"' if is_newest else ''
         term_rows += (
             f'<div class="te"{tw}>'
-            f'<span class="te-ts">{hhmm}&nbsp;&nbsp;</span>'
+            f'<span class="te-ts">{hhmm}<span style="font-size:7px;opacity:.4;letter-spacing:.08em"> ET</span>&nbsp;&nbsp;</span>'
             f'{prose}'
             f'</div>'
         )
@@ -1121,20 +1126,20 @@ body::after {{
   opacity:0;
 }}
 @keyframes veil-entry {{
-  0%   {{ opacity:.22; background:radial-gradient(ellipse at 50% 50%, rgba(0,255,157,.35) 0%, rgba(0,255,157,0) 70%); }}
+  0%   {{ opacity:.28; background:radial-gradient(ellipse at 50% 50%, rgba(255,255,255,.38) 0%, rgba(255,255,255,0) 70%); }}
   100% {{ opacity:0; }}
 }}
 @keyframes veil-win {{
-  0%   {{ opacity:.28; background:radial-gradient(ellipse at 50% 50%, rgba(0,255,157,.4) 0%, rgba(0,255,157,0) 70%); }}
+  0%   {{ opacity:.30; background:radial-gradient(ellipse at 50% 50%, rgba(0,255,157,.42) 0%, rgba(0,255,157,0) 70%); }}
   100% {{ opacity:0; }}
 }}
 @keyframes veil-loss {{
-  0%   {{ opacity:.28; background:radial-gradient(ellipse at 50% 50%, rgba(255,51,102,.4) 0%, rgba(255,51,102,0) 70%); }}
+  0%   {{ opacity:.30; background:radial-gradient(ellipse at 50% 50%, rgba(255,51,102,.42) 0%, rgba(255,51,102,0) 70%); }}
   100% {{ opacity:0; }}
 }}
-#trade-veil.veil-entry {{ animation:veil-entry .5s ease-out forwards; }}
-#trade-veil.veil-win   {{ animation:veil-win   .5s ease-out forwards; }}
-#trade-veil.veil-loss  {{ animation:veil-loss  .5s ease-out forwards; }}
+#trade-veil.veil-entry {{ animation:veil-entry .85s ease-out forwards; }}
+#trade-veil.veil-win   {{ animation:veil-win   .85s ease-out forwards; }}
+#trade-veil.veil-loss  {{ animation:veil-loss  .85s ease-out forwards; }}
 /* CRT scanlines */
 #term-overlay::before {{
   content:'';
@@ -1879,6 +1884,10 @@ body::after {{
   text-align:center; font-size:7px; font-weight:700; letter-spacing:.04em;
   font-family:Consolas,monospace; transition:color .4s;
 }}
+@keyframes prox-tick-up {{ 0%{{transform:translateY(0)}} 35%{{transform:translateY(-2px)}} 100%{{transform:translateY(0)}} }}
+@keyframes prox-tick-dn {{ 0%{{transform:translateY(0)}} 35%{{transform:translateY(2px)}} 100%{{transform:translateY(0)}} }}
+.prox-tick-up {{ animation:prox-tick-up .22s ease-out; }}
+.prox-tick-dn {{ animation:prox-tick-dn .22s ease-out; }}
 /* ── Equity pipeline countdown ── */
 #equity-countdown {{
   padding:6px 12px 4px; font-size:7px; letter-spacing:.18em;
@@ -2133,8 +2142,16 @@ body::after {{
     <div>
       <div id="runner-age" style="color:#3a1a5a">—</div>
       <div id="runner-trades" class="runner-trades">0 trades today</div>
+      <div id="runner-countdown" style="font:700 8px Consolas,monospace;letter-spacing:.06em;color:#2a1040">next: —</div>
     </div>
   </div>
+  <div class="tb-sep"></div>
+  <button id="fs-btn" onclick="_toggleFullscreen()" title="Fullscreen (borderless)" style="
+    background:none;border:1px solid #2a003d;color:#3a1a5a;cursor:pointer;
+    font:700 8px Consolas,monospace;letter-spacing:.12em;padding:3px 7px;
+    border-radius:2px;transition:color .2s,border-color .2s,box-shadow .2s;
+    flex-shrink:0;text-transform:uppercase;
+  ">⛶ FS</button>
 </div>
 <!-- Cyberpunk cycle bar — orange, sits between header and chart -->
 <div id="tracker-bar">
@@ -2658,7 +2675,7 @@ window.addEventListener('resize', resizeCanvas);
 var pulseTargets = [];
 
 // ── Orb state ─────────────────────────────────────────────────────────────────
-var _orbFlash = {{ active: false, isEntry: true, t: 0, dur: 900 }};
+var _orbFlash = {{ active: false, isEntry: true, isWin: false, t: 0, dur: 1400 }};
 var _orbBurstCount = 0;
 var _liveTip = {{ pts: [] }};
 
@@ -2707,20 +2724,19 @@ window._spawnNavParticles = function(cx, cy, isUp) {{
   if (_navParticles.length > 120) _navParticles = _navParticles.slice(-120);
 }};
 
-window._orbTradeFlash = function(isEntry) {{
+window._orbTradeFlash = function(isEntry, isWin) {{
   _orbFlash.active = true;
   _orbFlash.isEntry = isEntry;
+  _orbFlash.isWin   = isWin;
   _orbFlash.t = Date.now();
   _orbBurstCount = isEntry ? 6 : 5;
-  // Spawn 5 shockwave rings staggered
-  var portT = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
-  if (portT) {{
+  // Spawn 5 shockwave rings staggered — use nav-canvas center (same coord space)
+  {{
     try {{
-      var fl = gd._fullLayout;
-      var scx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
-      var scy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
+      var scx = window._navOrbCanvasX !== undefined ? window._navOrbCanvasX : canvas.width/2;
+      var scy = window._navOrbCanvasY !== undefined ? window._navOrbCanvasY : canvas.height/2;
       if (isFinite(scx) && isFinite(scy)) {{
-        var scol = isEntry ? [0,255,157] : [255,51,102];
+        var scol = isEntry ? [255,255,255] : (isWin ? [0,255,157] : [255,51,102]);
         for (var si=0; si<5; si++) {{
           (function(delay,offset) {{
             setTimeout(function() {{
@@ -2767,6 +2783,11 @@ function buildTargets() {{
       pulseTargets[pi].y = intra.y[intra.y.length-1];
     }}
   }}
+  // Portfolio trace [4] is an empty stub — synthesize portT from live nav so orb still works
+  var _hasPortT = pulseTargets.some(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
+  if (!_hasPortT && window._lastKnownNav && window._lastKnownTs) {{
+    pulseTargets.push({{ x: window._lastKnownTs, y: window._lastKnownNav, rgb: [255,0,204] }});
+  }}
   positionPnlFloat();
 }}
 
@@ -2804,7 +2825,7 @@ function drawPulse() {{
     var elapsed = Date.now() - _orbFlash.t;
     flashAlpha = Math.max(0, 1 - elapsed / _orbFlash.dur);
     if (flashAlpha <= 0) {{ _orbFlash.active = false; _orbBurstCount = 0; }}
-    else flashRgb = _orbFlash.isEntry ? [0,255,157] : [255,51,102];
+    else flashRgb = _orbFlash.isEntry ? [255,255,255] : (_orbFlash.isWin ? [0,255,157] : [255,51,102]);
   }}
 
   // Pressure 0=calm, 1=danger — modulates ring speed, color, tightness
@@ -2840,10 +2861,20 @@ function drawPulse() {{
   var portT = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
   if (portT) {{
     try {{
-      var fl = gd._fullLayout;
-      if (!fl || !fl.xaxis || !fl.yaxis) throw '';
-      var _rawPcx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
-      var _rawPcy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
+      // Nav-canvas always draws curNav at (W/2, H/2) of main-area.
+      // Pulse-canvas shares the same coordinate space (both inset:0 in #main-area).
+      // Use nav-canvas center directly — avoids Plotly yaxis mismatch (NAV $66K vs SPY $750).
+      var _rawPcx, _rawPcy;
+      if (window._navOrbCanvasX !== undefined) {{
+        _rawPcx = window._navOrbCanvasX;
+        _rawPcy = window._navOrbCanvasY;
+      }} else {{
+        // Fallback: center of main-area via Plotly chart dimensions
+        var fl0 = gd._fullLayout;
+        if (!fl0) throw '';
+        _rawPcx = (fl0.width  || canvas.width)  / 2;
+        _rawPcy = (fl0.height || canvas.height) / 2;
+      }}
       if (!isFinite(_rawPcx) || !isFinite(_rawPcy)) throw '';
       // Lerp toward true position — smooths discrete Plotly axis jumps
       var _lerpK = 0.12;
@@ -2928,6 +2959,16 @@ function drawPulse() {{
       ctx.shadowBlur=0;
       ctx.beginPath(); ctx.arc(pcx,pcy,2.5,0,Math.PI*2);
       ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fill();
+
+      // ── Scanning pulse — slow dim ring between trades ─────────────────────
+      if (!_orbFlash.active || flashAlpha < 0.05) {{
+        var scanPhase = (phase * 0.12) % 1;
+        var scanR = 10 + scanPhase * 52;
+        var scanOp = 0.20 * (1 - scanPhase) * (1 - pressure * 0.5);
+        ctx.beginPath(); ctx.arc(pcx, pcy, scanR, 0, Math.PI*2);
+        ctx.strokeStyle = 'rgba(255,0,204,' + scanOp.toFixed(3) + ')';
+        ctx.lineWidth = 1.2; ctx.stroke();
+      }}
 
       // ── Satellite dots — one per open position (crypto + equity) ─────────
       var cryptoMap  = window._cryptoPositionsMap  || {{}};
@@ -3112,9 +3153,8 @@ function drawPulse() {{
   // ── Brownian live-tip ─────────────────────────────────────────────────────
   if (portT) {{
     try {{
-      var fl2 = gd._fullLayout;
-      var tcx  = fl2.xaxis.l2p(fl2.xaxis.d2l(portT.x)) + fl2.margin.l;
-      var tcy  = fl2.yaxis.l2p(fl2.yaxis.d2l(portT.y)) + fl2.margin.t;
+      var tcx = window._navOrbCanvasX !== undefined ? window._navOrbCanvasX : canvas.width/2;
+      var tcy = window._navOrbCanvasY !== undefined ? window._navOrbCanvasY : canvas.height/2;
       if (isFinite(tcx) && isFinite(tcy)) {{
         if (!_liveTip.pts.length) _liveTip.pts.push({{dx:0,dy:0}});
         var last2 = _liveTip.pts[_liveTip.pts.length-1];
@@ -3250,6 +3290,42 @@ window._soundLoss = function() {{
     }});
   }} catch(e) {{}}
 }};
+
+// ── Fullscreen mode (borderless — keeps screen active, click-through to other monitors) ─
+var _wakeLock = null;
+async function _acquireWakeLock() {{
+  try {{
+    if (navigator.wakeLock) {{
+      _wakeLock = await navigator.wakeLock.request('screen');
+    }}
+  }} catch(e) {{}}
+}}
+function _toggleFullscreen() {{
+  var btn = document.getElementById('fs-btn');
+  if (!document.fullscreenElement) {{
+    document.documentElement.requestFullscreen().then(function() {{
+      if (btn) {{ btn.textContent = '⛶ EXIT'; btn.style.color = '#ff00cc'; btn.style.borderColor = '#ff00cc'; btn.style.boxShadow = '0 0 6px rgba(255,0,204,.4)'; }}
+      _acquireWakeLock();
+    }}).catch(function() {{}});
+  }} else {{
+    document.exitFullscreen().then(function() {{
+      if (btn) {{ btn.textContent = '⛶ FS'; btn.style.color = '#3a1a5a'; btn.style.borderColor = '#2a003d'; btn.style.boxShadow = 'none'; }}
+      if (_wakeLock) {{ _wakeLock.release(); _wakeLock = null; }}
+    }}).catch(function() {{}});
+  }}
+}}
+// Re-acquire wake lock if it gets released automatically (screen dimming prevention)
+document.addEventListener('visibilitychange', function() {{
+  if (document.visibilityState === 'visible' && document.fullscreenElement) _acquireWakeLock();
+}});
+// ESC exits fullscreen (browser built-in) — sync button state
+document.addEventListener('fullscreenchange', function() {{
+  var btn = document.getElementById('fs-btn');
+  if (!document.fullscreenElement) {{
+    if (btn) {{ btn.textContent = '⛶ FS'; btn.style.color = '#3a1a5a'; btn.style.borderColor = '#2a003d'; btn.style.boxShadow = 'none'; }}
+    if (_wakeLock) {{ _wakeLock.release(); _wakeLock = null; }}
+  }}
+}});
 
 // ── Wallet canvas engine ──────────────────────────────────────────────────────
 (function() {{
@@ -3789,6 +3865,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       var ms = new Date(p.x).getTime();
       return ms >= winStart && ms <= winEnd;
     }});
+    // Always expose the orb position for pulse-canvas to use (current nav = center)
+    window._navOrbCanvasX = W / 2;
+    window._navOrbCanvasY = H / 2;
+
     if (pts.length < 1) {{
       // No history yet — dot at exact center
       if (curNav) {{
@@ -4165,12 +4245,10 @@ window._pushIntradayPoint = function(isoTs, val) {{
       buildTargets();
       // Spawn particles if NAV moved
       if (_lastNavForParticles !== null && window._spawnNavParticles) {{
-        var pt = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
-        if (pt) {{
+        var px = window._navOrbCanvasX !== undefined ? window._navOrbCanvasX : canvas.width/2;
+        var py = window._navOrbCanvasY !== undefined ? window._navOrbCanvasY : canvas.height/2;
+        if (true) {{
           try {{
-            var fl = gd._fullLayout;
-            var px = fl.xaxis.l2p(fl.xaxis.d2l(pt.x)) + fl.margin.l;
-            var py = fl.yaxis.l2p(fl.yaxis.d2l(pt.y)) + fl.margin.t;
             if (isFinite(px) && isFinite(py)) {{
               window._spawnNavParticles(px, py, val >= _lastNavForParticles);
             }}
@@ -4831,8 +4909,8 @@ window.addEventListener('resize', function() {{
         row.className = 'te te-new';
         var _isEntry  = _h.indexOf('>enter<') !== -1;
         var _isWin    = !_isEntry && (_h.indexOf('color:#00ff9d') !== -1);
-        var _flashCol = _isEntry ? '#00e5ff' : (_isWin ? '#00ff9d' : '#ff4466');
-        var _dimCol   = _isEntry ? 'rgba(0,180,220,.55)' : (_isWin ? 'rgba(0,210,130,.55)' : 'rgba(255,60,80,.55)');
+        var _flashCol = _isEntry ? '#ffffff' : (_isWin ? '#00ff9d' : '#ff4466');
+        var _dimCol   = _isEntry ? 'rgba(200,200,220,.55)' : (_isWin ? 'rgba(0,210,130,.55)' : 'rgba(255,60,80,.55)');
         row.style.color = _flashCol;
         row.style.textShadow = '0 0 10px ' + _flashCol;
         setTimeout(function() {{
@@ -4845,7 +4923,7 @@ window.addEventListener('resize', function() {{
         row.style.color = '#4a3060';
         row.style.textShadow = 'none';
       }}
-      row.innerHTML = '<span class="te-ts">' + hhmm + '</span>' + _h;
+      row.innerHTML = '<span class="te-ts">' + hhmm + '<span style="font-size:7px;opacity:.4;letter-spacing:.08em"> ET</span>&nbsp;&nbsp;</span>' + _h;
       tb.insertBefore(row, tb.firstChild);
       // Keep viewport on newest (top) if user hasn't scrolled down intentionally
       if (tb.scrollTop < 40) tb.scrollTop = 0;
@@ -4881,7 +4959,8 @@ window.addEventListener('resize', function() {{
         var emptyCol  = 'rgba(255,255,255,.18)';
         var filledBar = '<span style="color:' + filledCol + ';font-size:9px;letter-spacing:.04em">' + '▓'.repeat(filled) + '</span>';
         var emptyBar  = '<span style="color:' + emptyCol + ';font-size:9px;letter-spacing:.04em">' + '░'.repeat(_BLOCKS - filled) + '</span>';
-        clk.innerHTML = '<span style="color:#fff;font-size:9px;margin-right:6px">' + hhmm + '</span>'
+        clk.innerHTML = '<span style="color:#fff;font-size:9px;margin-right:3px">' + hhmm + '</span>'
+          + '<span style="color:rgba(255,255,255,.28);font-size:7px;letter-spacing:.12em;margin-right:6px">ET</span>'
           + filledBar + emptyBar
           + '<span style="color:rgba(255,255,255,.35);font-size:9px;letter-spacing:.1em;margin-left:5px">' + remStr + '</span>';
       }}
@@ -5095,7 +5174,7 @@ window.addEventListener('resize', function() {{
             setTimeout(function() {{
               c.style.opacity = '0';
               if (onFade) onFade();
-            }}, _batchDur + 900);
+            }}, _batchDur + 3500);
           }}
 
           // P&L combo chip + sounds
@@ -5222,7 +5301,7 @@ window.addEventListener('resize', function() {{
                   _veilX.classList.add(_isWin ? 'veil-win' : 'veil-loss');
                 }}
                 // 2. Orb bloom
-                if (window._orbTradeFlash) window._orbTradeFlash(false);
+                if (window._orbTradeFlash) window._orbTradeFlash(false, _isWin);
                 // 3. Sound
                 if (pnlM) {{
                   if (_isWin) {{ if (window._soundWin) window._soundWin(); }}
@@ -6187,11 +6266,21 @@ window.addEventListener('resize', function() {{
             cursor.style.animation  = 'none';
           }}
         }}
-        // Live P&L
+        // Live P&L with micro-movement direction flash
         if (live) {{
-          var pnlPct = entry > 0 ? ((price - entry)/entry*100) : 0;
-          var sign   = pnlPct >= 0 ? '+' : '';
-          live.textContent = sign + pnlPct.toFixed(2) + '%';
+          var pnlPct  = entry > 0 ? ((price - entry)/entry*100) : 0;
+          var prevRaw = parseFloat(live.getAttribute('data-raw') || 'NaN');
+          var sign    = pnlPct >= 0 ? '+' : '';
+          var arrow   = '';
+          if (!isNaN(prevRaw) && pnlPct !== prevRaw) {{
+            arrow = pnlPct > prevRaw ? '▲ ' : '▼ ';
+            var dir = pnlPct > prevRaw ? 'up' : 'dn';
+            live.classList.remove('prox-tick-up', 'prox-tick-dn');
+            void live.offsetWidth;
+            live.classList.add('prox-tick-' + dir);
+          }}
+          live.setAttribute('data-raw', pnlPct);
+          live.textContent = arrow + sign + pnlPct.toFixed(2) + '%';
           live.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
         }}
       }});
@@ -6379,6 +6468,18 @@ window.addEventListener('resize', function() {{
         }}
       }}).catch(function() {{}});
     }}
+    var _runnerCdSecs = 15;
+    var _runnerCdEl = document.getElementById('runner-countdown');
+    function _resetRunnerCd() {{
+      _runnerCdSecs = 15;
+      if (_runnerCdEl) _runnerCdEl.textContent = 'next: 15s';
+    }}
+    setInterval(function() {{
+      if (_runnerCdSecs > 0) _runnerCdSecs--;
+      if (_runnerCdEl) _runnerCdEl.textContent = 'next: ' + _runnerCdSecs + 's';
+    }}, 1000);
+    var _origPollStats = _pollStats;
+    _pollStats = function() {{ _resetRunnerCd(); _origPollStats(); }};
     setTimeout(function() {{ _pollStats(); setInterval(_pollStats, 15000); }}, 6000);
 
     // Tick age bars every 30s without a network call
