@@ -1782,14 +1782,14 @@ body::after {{
 /* ── Position age bar ── */
 .pos-age-bar {{
   height:4px; margin-top:5px; border-radius:2px;
-  background:rgba(255,255,255,.06);
+  background:rgba(255,255,255,.14);
   position:relative; overflow:visible;
 }}
 .pos-age-fill {{
   height:100%; border-radius:2px;
-  transition:width 1s linear, background .4s, box-shadow .4s;
-  background:rgba(0,200,255,.8);
-  box-shadow:0 0 6px rgba(0,200,255,.5);
+  transition:width 1.2s linear, background .4s, box-shadow .4s;
+  background:#00c8ff;
+  box-shadow:0 0 7px rgba(0,200,255,.75);
 }}
 .pos-age-sell {{
   position:absolute; right:0; top:-10px;
@@ -2266,12 +2266,10 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Scrolling window — "now" at the right edge with a small look-ahead buffer
+// Date-range window — show last 30 days with today at the right edge + small buffer
 var _CENTER_DAYS = 1;
-var _WIN_MS      = 90 * 60 * 1000;  // 90 min of history visible
-var _BUF_MS      =  4 * 60 * 1000;  // 4 min buffer past "now" on right edge
-function _intradayStart() {{ return new Date(Date.now() - _WIN_MS).toISOString(); }}
-function _intradayEnd()   {{ return new Date(Date.now() + _BUF_MS).toISOString(); }}
+function _intradayStart() {{ return _dateMinus(_datePlus(0), 30); }}
+function _intradayEnd()   {{ return _datePlus(2); }}
 var xStart = _intradayStart();
 var xEnd   = _intradayEnd();
 
@@ -5538,7 +5536,7 @@ window.addEventListener('resize', function() {{
         + '</div>'
         + '<div class="pos-hold active">··········</div>'
         + rangeHtml
-        + '<div class="pos-age-bar" title="cooldown"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" style="width:' + (100 - agePct) + '%;background:rgba(0,200,255,.8);box-shadow:0 0 6px rgba(0,200,255,.5)"></div></div>';
+        + '<div class="pos-age-bar" title="cooldown"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" style="width:' + (100 - agePct) + '%;background:#00c8ff;box-shadow:0 0 7px rgba(0,200,255,.75)"></div></div>';
       el.appendChild(inner);
       // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
@@ -5640,8 +5638,8 @@ window.addEventListener('resize', function() {{
         var agePct = Math.min(age / 90 * 100, 100);
         var rem = 100 - agePct;
         fill.style.width = rem + '%';
-        fill.style.background = rem > 40 ? 'rgba(0,200,255,.8)' : rem > 15 ? 'rgba(255,160,0,.85)' : 'rgba(255,40,70,.9)';
-          fill.style.boxShadow = rem > 40 ? '0 0 6px rgba(0,200,255,.5)' : rem > 15 ? '0 0 6px rgba(255,160,0,.5)' : '0 0 8px rgba(255,40,70,.7)';
+        fill.style.background = rem > 40 ? '#00c8ff' : rem > 15 ? '#ffaa00' : '#ff2844';
+          fill.style.boxShadow = rem > 40 ? '0 0 7px rgba(0,200,255,.75)' : rem > 15 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
         var sellLbl = el.querySelector('.pos-age-sell');
         if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
       }}
@@ -6051,8 +6049,8 @@ window.addEventListener('resize', function() {{
           var agePct = Math.min(age / 2 * 100, 100);
           var rem = 100 - agePct;
           fill.style.width = rem + '%';
-          fill.style.background = rem > 40 ? 'rgba(0,200,255,.8)' : rem > 15 ? 'rgba(255,160,0,.85)' : 'rgba(255,40,70,.9)';
-          fill.style.boxShadow = rem > 40 ? '0 0 6px rgba(0,200,255,.5)' : rem > 15 ? '0 0 6px rgba(255,160,0,.5)' : '0 0 8px rgba(255,40,70,.7)';
+          fill.style.background = rem > 40 ? '#00c8ff' : rem > 15 ? '#ffaa00' : '#ff2844';
+          fill.style.boxShadow = rem > 40 ? '0 0 7px rgba(0,200,255,.75)' : rem > 15 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
           var sellLbl = el.querySelector('.pos-age-sell');
           if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
         }}
