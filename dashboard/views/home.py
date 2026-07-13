@@ -4926,8 +4926,10 @@ window.addEventListener('resize', function() {{
                       target_price: _priceE * 1.006, entered_at: new Date().toISOString()
                     }};
                     var _el = window._makeCard(_ep);
-                    _el.classList.add('pos-card-entering');
                     _sec.appendChild(_el);
+                    void _el.offsetWidth;
+                    _el.classList.add('pos-card-entering');
+                    setTimeout(function() {{ _el.classList.remove('pos-card-entering'); }}, 220);
                     _cryptoCardEls[_symE] = _el;
                     var _flat = document.getElementById('pos-crypto-flat');
                     if (_flat) _flat.style.display = 'none';
@@ -5660,8 +5662,10 @@ window.addEventListener('resize', function() {{
       fetch(url, {{
         headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }}
       }})
-      .then(function(r) {{ return r.json(); }})
+      .then(function(r) {{ return r.ok ? r.json() : r.json().then(function(e) {{ console.error('[crypto_positions] HTTP', r.status, e); return null; }}); }})
       .then(function(rows) {{
+        if (!Array.isArray(rows)) return; // error response — don't touch existing cards
+        console.log('[crypto_positions] rows:', rows.length);
         var section = document.getElementById('pos-crypto-section');
         if (!section) return;
         var flat = document.getElementById('pos-crypto-flat');
@@ -5709,6 +5713,7 @@ window.addEventListener('resize', function() {{
             setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 450);
           }});
           _cryptoCardEls = {{}};
+          _updateOverlayWidth();
           if (!flat) {{
             var f = document.createElement('div');
             f.id = 'pos-crypto-flat'; f.className = 'pos-hold';
@@ -5745,8 +5750,10 @@ window.addEventListener('resize', function() {{
             _updateCard(_cryptoCardEls[p.symbol], p);
           }} else {{
             var el = _makeCard(p);
-            el.classList.add('pos-card-entering');
             section.appendChild(el);
+            void el.offsetWidth;
+            el.classList.add('pos-card-entering');
+            setTimeout(function() {{ el.classList.remove('pos-card-entering'); }}, 220);
             _cryptoCardEls[p.symbol] = el;
           }}
         }});
@@ -5815,12 +5822,15 @@ window.addEventListener('resize', function() {{
     }}, 2000);
 
     // ── Live crypto price poller — updates proximity meters in real time ──────
-    var _BINANCE_SYM_MAP = {{
-      'BTC/USD':'BTCUSDT','ETH/USD':'ETHUSDT','SOL/USD':'SOLUSDT',
-      'AVAX/USD':'AVAXUSDT','LINK/USD':'LINKUSDT','DOGE/USD':'DOGEUSDT',
-      'BCH/USD':'BCHUSDT','UNI/USD':'UNIUSDT','CRV/USD':'CRVUSDT',
-      'ADA/USD':'ADAUSDT','MATIC/USD':'MATICUSDT','DOT/USD':'DOTUSDT',
+    var _CG_SYM_MAP = {{
+      'BTC/USD':'bitcoin','ETH/USD':'ethereum','SOL/USD':'solana',
+      'AVAX/USD':'avalanche-2','LINK/USD':'chainlink','DOGE/USD':'dogecoin',
+      'BCH/USD':'bitcoin-cash','XTZ/USD':'tezos','CRV/USD':'curve-dao-token',
+      'UNI/USD':'uniswap','ADA/USD':'cardano','MATIC/USD':'matic-network',
+      'DOT/USD':'polkadot',
     }};
+    var _CG_ID_TO_SYM = {{}};
+    Object.keys(_CG_SYM_MAP).forEach(function(s) {{ _CG_ID_TO_SYM[_CG_SYM_MAP[s]] = s; }});
     function _updateProxMeters(priceMap) {{
       document.querySelectorAll('.pos-prox-wrap[data-entry]').forEach(function(wrap) {{
         var card = wrap.closest('.pos-card[data-sym]');
@@ -5867,18 +5877,16 @@ window.addEventListener('resize', function() {{
         if (card) openSyms.push(card.getAttribute('data-sym'));
       }});
       if (!openSyms.length) return;
-      var bSyms = openSyms.map(function(s) {{ return _BINANCE_SYM_MAP[s] || s.replace('/',''); }})
-                          .filter(Boolean);
-      if (!bSyms.length) return;
-      var encoded = encodeURIComponent('["' + bSyms.join('","') + '"]');
-      fetch('https://api.binance.com/api/v3/ticker/price?symbols=' + encoded)
-        .then(function(r) {{ return r.json(); }})
-        .then(function(rows) {{
-          if (!Array.isArray(rows)) return;
+      var cgIds = openSyms.map(function(s) {{ return _CG_SYM_MAP[s]; }}).filter(Boolean);
+      if (!cgIds.length) return;
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=' + cgIds.join(',') + '&vs_currencies=usd')
+        .then(function(r) {{ return r.ok ? r.json() : null; }})
+        .then(function(data) {{
+          if (!data) return;
           var priceMap = {{}};
-          rows.forEach(function(r) {{
-            var rev = Object.entries(_BINANCE_SYM_MAP).find(function(kv) {{ return kv[1] === r.symbol; }});
-            if (rev) priceMap[rev[0]] = parseFloat(r.price);
+          Object.keys(data).forEach(function(id) {{
+            var sym = _CG_ID_TO_SYM[id];
+            if (sym && data[id] && data[id].usd) priceMap[sym] = data[id].usd;
           }});
           window._liveProxPrices = priceMap; // expose for satellite dots in drawPulse
           _updateProxMeters(priceMap);

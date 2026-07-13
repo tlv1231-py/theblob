@@ -341,25 +341,32 @@ def run() -> None:
 
     # ── Manage open positions ─────────────────────────────────────────────────
     for sym, pos in list(positions.items()):
+        entered = pos["entered_at"]
+        if entered.tzinfo is None:
+            entered = entered.replace(tzinfo=timezone.utc)
+        age = (now - entered).total_seconds() / 60
+
         m = min_bars.get(sym, [])
-        if not m:
-            continue
-        close = m[-1]["close"]
-        age   = (now - pos["entered_at"].replace(tzinfo=timezone.utc)).total_seconds() / 60
-        d     = pos["direction"]
+        d = pos["direction"]
         reason = None
 
-        # Stop loss (price-based — no EMA reversal exit; avoid 1-min noise exits)
-        if d == "long"  and close <= pos["stop_price"]: reason = "stop"
-        if d == "short" and close >= pos["stop_price"]: reason = "stop"
+        if m:
+            close = m[-1]["close"]
+            # Stop loss
+            if d == "long"  and close <= pos["stop_price"]: reason = "stop"
+            if d == "short" and close >= pos["stop_price"]: reason = "stop"
+            # Profit target
+            if reason is None and target_pc > 0:
+                if d == "long"  and close >= pos["entry_price"] * (1 + target_pc): reason = "target"
+                if d == "short" and close <= pos["entry_price"] * (1 - target_pc): reason = "target"
+        else:
+            # No bar data — use entry price as exit price, exit by age only
+            close = float(pos["entry_price"])
+            logger.warning(f"[exit] no bars for {sym} age={age:.1f}m — age-only exit check")
 
-        # Profit target
-        if reason is None and target_pc > 0:
-            if d == "long"  and close >= pos["entry_price"] * (1 + target_pc): reason = "target"
-            if d == "short" and close <= pos["entry_price"] * (1 - target_pc): reason = "target"
-
-        # Max hold
-        if reason is None and age >= max_hold: reason = "timeout"
+        # Max hold fires regardless of bar availability
+        if reason is None and age >= max_hold:
+            reason = "timeout"
 
         if reason:
             exit_price = close * (1 - _SLIPPAGE) if d == "long" else close * (1 + _SLIPPAGE)
