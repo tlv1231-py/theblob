@@ -1487,7 +1487,7 @@ body::after {{
 /* ── HUD — fixed just below the topbar, horizontally centered ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
-  left:50%; top:48px; transform:translateX(-50%);
+  left:50%; top:68px; transform:translateX(-50%);
   background:rgba(4,0,10,.88); border:1px solid #2a003d; border-top:2px solid #ff00cc;
   backdrop-filter:blur(14px);
   padding:8px 20px 10px;
@@ -2308,34 +2308,36 @@ function _intradayEnd()   {{ return new Date(Date.now() + _HALF_WIN_MS).toISOStr
 var xStart = _intradayStart();
 var xEnd   = _intradayEnd();
 
-// Dynamic Y range: only portfolio line in the visible window, tight padding
-// so even a $50 move fills most of the vertical space
+// Dynamic Y range from _navHistory — uses only data within the visible window
 function yRange(x0, x1) {{
+  var history = window._navHistory || [];
   var minV = Infinity, maxV = -Infinity;
-  // Only use the portfolio line — benchmarks are normalized and would warp the scale
-  var dates = portDates, vals = portValues;
-  for (var i = 0; i < dates.length; i++) {{
-    if ((!x0 || dates[i] >= x0) && (!x1 || dates[i] <= x1)) {{
-      if (vals[i] < minV) minV = vals[i];
-      if (vals[i] > maxV) maxV = vals[i];
+  for (var i = 0; i < history.length; i++) {{
+    var p = history[i];
+    if ((!x0 || p.x >= x0) && (!x1 || p.x <= x1)) {{
+      if (p.y < minV) minV = p.y;
+      if (p.y > maxV) maxV = p.y;
     }}
   }}
-  // Also include the live endpoint if it's in window
-  if (window._lastKnownNav) {{
-    if (window._lastKnownNav < minV) minV = window._lastKnownNav;
-    if (window._lastKnownNav > maxV) maxV = window._lastKnownNav;
+  // Always include current NAV in range
+  var curNav = window._lastKnownNav;
+  if (curNav) {{
+    if (curNav < minV) minV = curNav;
+    if (curNav > maxV) maxV = curNav;
   }}
-  if (minV === Infinity) return [null, null];
+  if (minV === Infinity) {{
+    // No history yet — center on current NAV with a 0.3% window
+    var base = curNav || 100000;
+    return [base * 0.997, base * 1.003];
+  }}
   var spread = maxV - minV;
-  // Minimum visible spread: 0.3% of NAV so a dead-flat session still shows a line
-  var minSpread = (window._lastKnownNav || 100000) * 0.003;
+  var minSpread = (curNav || 100000) * 0.003;
   if (spread < minSpread) {{
     var mid = (minV + maxV) / 2;
     minV = mid - minSpread / 2;
     maxV = mid + minSpread / 2;
     spread = minSpread;
   }}
-  // Padding: 40% of spread above+below so the line swings dramatically but doesn't clip
   var pad = spread * 0.4;
   return [minV - pad, maxV + pad];
 }}
@@ -2381,18 +2383,17 @@ var traces = [
     name:'QQQ (norm)',
     hovertemplate:'<b style="color:#9400ff">QQQ $%{{y:,.0f}}</b><extra></extra>',
   }},
-  // Portfolio on top — solid, brightest
-  // Ghost glow — wide blurred trace drawn BELOW portfolio for depth
+  // Ghost glow (trace 3) — starts empty, populated by _navHistory
   {{
-    x: portDates, y: portValues,
+    x: [], y: [],
     type:'scatter', mode:'lines',
     line:{{ color:'rgba(255,0,204,0.18)', width:20 }},
     fill:'none',
     name:'ghost', hoverinfo:'skip', showlegend:false,
   }},
-  // PORTFOLIO — main line with area fill (trace index 4)
+  // PORTFOLIO main line (trace 4) — starts empty, populated by _navHistory
   {{
-    x: portDates, y: portValues,
+    x: [], y: [],
     type:'scatter', mode:'lines',
     line:{{ color:'#ff00cc', width:3 }},
     fill:'tozeroy',
@@ -4145,45 +4146,29 @@ var _scrollBusy = false;
 // Smoothed Y bounds — lerp toward target each tick so chart doesn't snap violently
 var _smoothYMin = null, _smoothYMax = null;
 function _recenterOnLatest(_ignored) {{
-  if (_scrollBusy || _userInteracting) return;  // don't snap back if user has panned
+  if (_scrollBusy || _userInteracting) return;
   var nowIso   = new Date().toISOString();
   var newStart = _intradayStart();
   var newEnd   = _intradayEnd();
   _defaultXRange = [newStart, newEnd];
 
-  // Keep portfolio line endpoint at current time so it stays connected to the orb
-  var _nav = window._lastKnownNav;
-  if (_nav && gd && gd.data && gd.data.length >= 5) {{
-    var _portX = (gd.data[3].x || []).slice();
-    var _portY = (gd.data[3].y || []).slice();
-    if (_portX.length > 0) {{
-      _portX[_portX.length - 1] = nowIso;
-      _portY[_portY.length - 1] = _nav;
-      Plotly.restyle(gd, {{ x: [_portX, _portX], y: [_portY, _portY] }}, [3, 4]);
-      _updateEndpointDot(_nav, nowIso);
-    }}
-  }}
-
   _scrollBusy = true;
   _programmaticRelayout = true;
   var layoutUpdate = {{ 'xaxis.range': [newStart, newEnd] }};
-  // Smooth Y: lerp 25% toward target each 10s tick — no violent jumps
+  // Smooth Y: lerp 25% toward target each tick — no violent jumps
   var yr = yRange(newStart, nowIso);
-  if (yr[0] !== null) {{
-    if (_smoothYMin === null) {{ _smoothYMin = yr[0]; _smoothYMax = yr[1]; }}
-    else {{
-      _smoothYMin = _smoothYMin * 0.75 + yr[0] * 0.25;
-      _smoothYMax = _smoothYMax * 0.75 + yr[1] * 0.25;
-    }}
-    layoutUpdate['yaxis.range'] = [_smoothYMin, _smoothYMax];
-    layoutUpdate['yaxis.autorange'] = false;
+  if (_smoothYMin === null) {{ _smoothYMin = yr[0]; _smoothYMax = yr[1]; }}
+  else {{
+    _smoothYMin = _smoothYMin * 0.75 + yr[0] * 0.25;
+    _smoothYMax = _smoothYMax * 0.75 + yr[1] * 0.25;
   }}
+  layoutUpdate['yaxis.range'] = [_smoothYMin, _smoothYMax];
+  layoutUpdate['yaxis.autorange'] = false;
   Plotly.relayout(gd, layoutUpdate).then(function() {{
     _scrollBusy = false;
     setTimeout(function() {{ _programmaticRelayout = false; }}, 80);
   }}).catch(function() {{ _scrollBusy = false; _programmaticRelayout = false; }});
 }}
-// Advance every 10s — smooth enough, no animation overhead
 setInterval(function() {{ _recenterOnLatest(null); }}, 10000);
 
 // ── Wallet selector ───────────────────────────────────────────────────────────
@@ -5466,20 +5451,31 @@ window.addEventListener('resize', function() {{
       if (legVals[0]) legVals[0].textContent = _fmt(nav);
       if (legRets[0]) {{ legRets[0].textContent = ret; legRets[0].style.color = col; }}
 
-      // Extend the Plotly chart with this new data point
-      var gd = document.getElementById('chart');
-      if (gd && gd.data && gd.data.length > 0) {{
-        var isoTs = ts || new Date().toISOString();
-        window._lastKnownTs = isoTs;
-        // Extend ghost (3) + portfolio (4) simultaneously
-        Plotly.extendTraces(gd, {{x:[[isoTs],[isoTs]], y:[[nav],[nav]]}}, [3,4]);
-        // Re-scale y-axis to dynamic window range (let _recenterOnLatest handle it each 10s)
-        // No per-NAV relayout here — avoids fighting the scroll timer
-        // Endpoint dot
-        _updateEndpointDot(nav, isoTs);
-        // ATH check
-        _updateAthShape(nav, isoTs);
+      // Push to _navHistory and redraw cleanly — no extendTraces, no type mixing
+      var isoTs = ts || new Date().toISOString();
+      window._lastKnownTs = isoTs;
+      if (!window._navHistory) window._navHistory = [];
+      // Deduplicate: don't push same timestamp twice
+      var _last = window._navHistory[window._navHistory.length - 1];
+      if (!_last || _last.x !== isoTs) {{
+        window._navHistory.push({{ x: isoTs, y: nav }});
+      }} else {{
+        _last.y = nav; // update in place if same tick
       }}
+      // Trim to 2 hours of history — enough context, never stale
+      var _cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) {{
+        window._navHistory.shift();
+      }}
+      // Restyle both traces from the clean history array
+      var _gd = document.getElementById('chart');
+      if (_gd && _gd.data && _gd.data.length > 3) {{
+        var _xs = window._navHistory.map(function(p) {{ return p.x; }});
+        var _ys = window._navHistory.map(function(p) {{ return p.y; }});
+        Plotly.restyle(_gd, {{ x: [_xs, _xs], y: [_ys, _ys] }}, [3, 4]);
+      }}
+      _updateEndpointDot(nav, isoTs);
+      _updateAthShape(nav, isoTs);
     }}
 
     function _pollNav() {{
@@ -5500,6 +5496,38 @@ window.addEventListener('resize', function() {{
       }})
       .catch(function() {{}});
     }}
+
+    // Seed _navHistory from today's snapshots so the chart has data immediately on load
+    (function() {{
+      window._navHistory = [];
+      var today = new Date().toISOString().split('T')[0];
+      var seedUrl = SUPA_URL + '/rest/v1/portfolio_snapshots'
+        + '?select=total_value,recorded_at'
+        + '&strategy=eq.crypto_momentum'
+        + '&recorded_at=gte.' + today + 'T00:00:00Z'
+        + '&order=recorded_at.asc&limit=500';
+      fetch(seedUrl, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows)) return;
+        rows.forEach(function(r) {{
+          var x = r.recorded_at.replace(' ','T').replace('+00:00','Z');
+          var y = parseFloat(r.total_value);
+          if (!isNaN(y)) window._navHistory.push({{ x: x, y: y }});
+        }});
+        // Draw immediately after seeding
+        var _gd = document.getElementById('chart');
+        if (_gd && _gd.data && _gd.data.length > 3 && window._navHistory.length) {{
+          var _xs = window._navHistory.map(function(p) {{ return p.x; }});
+          var _ys = window._navHistory.map(function(p) {{ return p.y; }});
+          Plotly.restyle(_gd, {{ x: [_xs, _xs], y: [_ys, _ys] }}, [3, 4]);
+          // Init smoothed Y from seeded data
+          var _yr = yRange(_intradayStart(), new Date().toISOString());
+          _smoothYMin = _yr[0]; _smoothYMax = _yr[1];
+          _recenterOnLatest(null);
+        }}
+      }}).catch(function() {{}});
+    }})();
 
     setTimeout(function() {{
       _pollNav();
