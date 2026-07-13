@@ -318,21 +318,36 @@ def _load_chart_data() -> dict:
                     entry_pnl   = value - entry_cost if entry_cost else 0.0
                     entry_pnl_pct = (entry_pnl / entry_cost * 100) if entry_cost else 0.0
 
+                    rank = sig["rank"] if sig else None
                     if sig:
-                        rank = sig["rank"]
                         hold_text = f"ranked #{rank} · stays in until it drops out of top 5"
                     else:
                         hold_text = f"fell out of top 5 · the blob sells this at {_next_td_str} close"
 
+                    # Days held
+                    from datetime import date as _date_cls
+                    try:
+                        _entry_d = _date_cls.fromisoformat(str(entry_date))
+                        days_held = (_date_cls.today() - _entry_d).days
+                    except Exception:
+                        days_held = 0
+
+                    # Stop / target for proximity bar
+                    stop_price   = entry_price * 0.95 if entry_price else 0
+                    target_price = entry_price * 1.10 if entry_price else 0
+
                     positions_data.append({
                         "sym": sym, "qty": qty, "price": price,
                         "value": value, "hold_text": hold_text,
-                        "in_signal": bool(sig),
+                        "in_signal": bool(sig), "rank": rank,
                         "entry_price": entry_price,
                         "entry_date": entry_date,
                         "entry_cost": entry_cost,
                         "entry_pnl": entry_pnl,
                         "entry_pnl_pct": entry_pnl_pct,
+                        "days_held": days_held,
+                        "stop_price": stop_price,
+                        "target_price": target_price,
                     })
                 positions_data.sort(key=lambda x: -x["value"])
 
@@ -788,33 +803,83 @@ def _build_daw_html(data: dict) -> str:
     pos_cards = ""
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     for p in data.get("positions_data", []):
-        tcol = _TICKER_PAL[hash(p["sym"]) % len(_TICKER_PAL)]
-        hold_cls = "active" if p["in_signal"] else "exiting"
-        ep = p["entry_price"]
-        ec = p["entry_cost"]
-        epnl = p["entry_pnl"]
-        epct = p["entry_pnl_pct"]
+        tcol   = _TICKER_PAL[hash(p["sym"]) % len(_TICKER_PAL)]
+        ep     = p["entry_price"]
+        epnl   = p["entry_pnl"]
+        epct   = p["entry_pnl_pct"]
         pnl_col = "#00ff9d" if epnl >= 0 else "#ff3366"
-        pnl_sign = "+" if epnl >= 0 else "−"
-        pnl_line = (
-            f'<div class="pos-pnl-line" style="color:{pnl_col}">'
-            f'{pnl_sign}${abs(epnl):,.0f} &nbsp;<span style="color:{pnl_col};opacity:.7">({epct:+.1f}%)</span>'
+        pnl_arrow = "▲" if epnl >= 0 else "▼"
+        pnl_sign  = "+" if epnl >= 0 else "−"
+
+        # Status badge
+        if p["in_signal"]:
+            rank_n = p.get("rank") or "?"
+            badge_html = f'<span class="pc-badge pc-badge-hold">▶ #{rank_n}</span>'
+        else:
+            badge_html = '<span class="pc-badge pc-badge-sell">⚠ SELL</span>'
+
+        # Proximity bar: 0=at stop, 1=at target
+        prox_pct = 0
+        stop_p  = p.get("stop_price", 0)
+        tgt_p   = p.get("target_price", 0)
+        cur_p   = p.get("price", ep or 0)
+        if tgt_p > stop_p > 0 and cur_p:
+            prox_pct = max(0, min(100, (cur_p - stop_p) / (tgt_p - stop_p) * 100))
+        prox_col = ("#ff3366" if prox_pct < 33 else "#ff9900" if prox_pct < 66 else "#00ff9d")
+        prox_bar = (
+            f'<div class="pc-prox-wrap">'
+            f'  <div class="pc-prox-labels">'
+            f'    <span class="pc-prox-stop">STP ${stop_p:,.0f}</span>'
+            f'    <span class="pc-prox-cur" style="left:{max(5,min(90,prox_pct)):.0f}%">${cur_p:,.0f}</span>'
+            f'    <span class="pc-prox-tgt">TGT ${tgt_p:,.0f}</span>'
+            f'  </div>'
+            f'  <div class="pc-prox-track">'
+            f'    <div class="pc-prox-fill" style="width:{prox_pct:.1f}%;background:{prox_col};box-shadow:0 0 6px {prox_col}88"></div>'
+            f'    <div class="pc-prox-dot" style="left:{max(0,min(100,prox_pct)):.1f}%;background:{prox_col};box-shadow:0 0 8px {prox_col}"></div>'
+            f'  </div>'
             f'</div>'
         ) if ep else ""
+
+        # Days held ticker
+        days = p.get("days_held", 0)
+        day_lbl = "day" if days == 1 else "days"
+        entry_fmt = f'${ep:,.2f}' if ep else "—"
+        edate_raw = str(p.get("entry_date","—"))
+        try:
+            from datetime import date as _dc
+            _ed = _dc.fromisoformat(edate_raw)
+            edate_fmt = _ed.strftime("%-d %b")
+        except Exception:
+            edate_fmt = edate_raw[:7]
+
         pos_cards += (
-            f'<div class="pos-card pos-card-active pos-card-entering" data-sym="{p["sym"]}"'
-            f' style="border-left:3px solid {tcol};position:relative;overflow:hidden;transform-origin:center top">'
+            f'<div class="pos-card pc-eq pos-card-active pos-card-entering" data-sym="{p["sym"]}"'
+            f' style="border-left:3px solid {tcol}">'
             f'<span class="pos-corner tl" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner tr" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner bl" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner br" style="border-color:{tcol}"></span>'
-            f'<div class="pos-top">'
-            f'<span class="pos-sym" style="color:{tcol}">{p["sym"]}</span>'
-            f'<span class="pos-qty">{p["qty"]} sh</span>'
-            f'<span class="pos-val">${p["value"]:,.0f}</span>'
+            # Row 1: sym + badge + value
+            f'<div class="pc-row1">'
+            f'  <span class="pc-sym" style="color:{tcol}">{p["sym"]}</span>'
+            f'  {badge_html}'
+            f'  <span class="pc-val">${p["value"]:,.0f}</span>'
             f'</div>'
-            f'{pnl_line}'
-            f'<div class="pos-hold {hold_cls}">{p["hold_text"]}</div>'
+            # Row 2: P&L
+            f'<div class="pc-pnl" style="color:{pnl_col}">'
+            f'  {pnl_arrow} {pnl_sign}${abs(epnl):,.0f}'
+            f'  <span class="pc-pnl-pct">({epct:+.1f}%)</span>'
+            f'</div>'
+            # Proximity bar
+            f'{prox_bar}'
+            # Row 3: hold timer + entry info
+            f'<div class="pc-meta">'
+            f'  <span class="pc-days" data-days="{days}">⏱ {days} {day_lbl}</span>'
+            f'  <span class="pc-entry">entered {entry_fmt} · {edate_fmt}</span>'
+            f'</div>'
+            f'<div class="pc-status {"pc-status-hold" if p["in_signal"] else "pc-status-sell"}">'
+            f'  {p["hold_text"]}'
+            f'</div>'
             f'</div>'
         )
     equity_label = '<div class="pos-section-label">equity</div>'
@@ -1539,6 +1604,98 @@ body::after {{
 .pos-section-label {{ display:none; }}
 .pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden;
              background:rgba(6,0,8,.38); backdrop-filter:blur(2px); border-bottom:1px solid #0d0020; }}
+
+/* ── Equity position cards (right panel) ── */
+.pc-eq {{
+  padding:8px 10px 8px 12px !important;
+  background:rgba(4,0,12,.55) !important;
+  backdrop-filter:blur(4px) !important;
+  border-bottom:1px solid rgba(30,0,50,.7) !important;
+}}
+.pc-row1 {{
+  display:flex; align-items:center; gap:5px; margin-bottom:3px;
+}}
+.pc-sym {{
+  font-family:Consolas,monospace; font-size:13px; font-weight:700;
+  letter-spacing:.04em; flex-shrink:0;
+}}
+.pc-badge {{
+  font-size:7px; font-weight:700; letter-spacing:.14em; padding:1px 5px;
+  border-radius:2px; flex-shrink:0; font-family:Consolas,monospace;
+}}
+.pc-badge-hold {{
+  background:rgba(0,255,157,.12); color:#00ff9d; border:1px solid rgba(0,255,157,.3);
+  animation:badge-hold-pulse 2.4s ease-in-out infinite;
+}}
+.pc-badge-sell {{
+  background:rgba(255,153,0,.15); color:#ff9900; border:1px solid rgba(255,153,0,.4);
+  animation:badge-sell-pulse 1s ease-in-out infinite;
+}}
+@keyframes badge-hold-pulse {{ 0%,100%{{box-shadow:none}} 50%{{box-shadow:0 0 6px rgba(0,255,157,.35)}} }}
+@keyframes badge-sell-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.6}} }}
+.pc-val {{
+  margin-left:auto; font-family:Consolas,monospace; font-size:11px;
+  font-weight:700; color:rgba(200,180,255,.85); letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;
+}}
+.pc-pnl {{
+  font-family:Consolas,monospace; font-size:12px; font-weight:700;
+  letter-spacing:.02em; margin-bottom:5px; font-variant-numeric:tabular-nums;
+}}
+.pc-pnl-pct {{
+  font-size:10px; opacity:.75; margin-left:4px;
+}}
+/* Proximity bar */
+.pc-prox-wrap {{
+  position:relative; margin-bottom:5px;
+}}
+.pc-prox-labels {{
+  display:flex; justify-content:space-between; align-items:center;
+  position:relative; height:12px; margin-bottom:2px;
+}}
+.pc-prox-stop,.pc-prox-tgt {{
+  font-family:Consolas,monospace; font-size:7px; color:rgba(120,90,160,.7);
+  letter-spacing:.04em;
+}}
+.pc-prox-cur {{
+  position:absolute; transform:translateX(-50%);
+  font-family:Consolas,monospace; font-size:7.5px; font-weight:700;
+  color:rgba(255,255,255,.8); white-space:nowrap;
+}}
+.pc-prox-track {{
+  position:relative; height:4px; background:rgba(255,255,255,.06);
+  border-radius:2px; overflow:visible;
+}}
+.pc-prox-fill {{
+  height:100%; border-radius:2px; transition:width .6s ease;
+}}
+.pc-prox-dot {{
+  position:absolute; top:50%; transform:translate(-50%,-50%);
+  width:8px; height:8px; border-radius:50%;
+  border:1.5px solid rgba(0,0,0,.6);
+  transition:left .6s ease;
+}}
+/* Meta row */
+.pc-meta {{
+  display:flex; justify-content:space-between; align-items:center;
+  margin-top:5px; margin-bottom:3px;
+}}
+.pc-days {{
+  font-family:Consolas,monospace; font-size:8px; color:#00e5ff;
+  letter-spacing:.06em;
+}}
+.pc-entry {{
+  font-family:Consolas,monospace; font-size:7.5px; color:rgba(120,90,160,.6);
+  letter-spacing:.02em;
+}}
+/* Status line */
+.pc-status {{
+  font-size:7.5px; letter-spacing:.04em; padding-top:3px;
+  border-top:1px solid rgba(255,255,255,.04);
+  font-family:Consolas,monospace; line-height:1.4;
+}}
+.pc-status-hold {{ color:rgba(0,200,120,.55); }}
+.pc-status-sell {{ color:rgba(255,153,0,.7); }}
 
 /* ── Crypto card redesign — minimal, flush, data-forward ── */
 #pos-left .pos-card {{
@@ -4463,6 +4620,28 @@ window.addEventListener('resize', function() {{
 
     // Expose globally so the feed poller (separate IIFE) can reset it
     window._resetRunTimer = _resetRunTimer;
+
+    // ── Equity position hold-timer tick ──────────────────────────────────────
+    // `.pc-days` elements have data-days (integer days from Python).
+    // This ticks up the displayed seconds within today so it feels live.
+    (function() {{
+      var _dayStart = new Date(); _dayStart.setHours(0,0,0,0);
+      setInterval(function() {{
+        var secsToday = Math.floor((Date.now() - _dayStart.getTime()) / 1000);
+        document.querySelectorAll('.pc-days[data-days]').forEach(function(el) {{
+          var d = parseInt(el.getAttribute('data-days'), 10) || 0;
+          var totalSecs = d * 86400 + secsToday;
+          var dd = Math.floor(totalSecs / 86400);
+          var hh = Math.floor((totalSecs % 86400) / 3600);
+          var mm = Math.floor((totalSecs % 3600) / 60);
+          var ss = totalSecs % 60;
+          el.textContent = '⏱ ' + dd + 'd ' +
+            String(hh).padStart(2,'0') + ':' +
+            String(mm).padStart(2,'0') + ':' +
+            String(ss).padStart(2,'0');
+        }});
+      }}, 1000);
+    }})();
 
     // Wire the crypto-cycle chip bar to _lastRunAt
     setInterval(function() {{
