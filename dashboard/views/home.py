@@ -4323,20 +4323,17 @@ window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 // ── Intraday "marked the book" trace — live portfolio value within today ──────
 function _fetchIntradayMarks() {{
   var today = new Date().toISOString().slice(0,10);
+  // Only fetch "marked the book" rows for the chart — filter by message to keep row count small
   var url = SUPA_URL + '/rest/v1/pipeline_events'
-    + '?recorded_at=gte.' + today + 'T00:00:00Z'
-    + '&order=recorded_at.asc&limit=2000';
+    + '?select=message,recorded_at&recorded_at=gte.' + today + 'T00:00:00Z'
+    + '&message=ilike.*marked%20the%20book*&order=recorded_at.asc&limit=500';
   fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
     if (!Array.isArray(rows)) return;
     var xs = [], ys = [];
-    var tradeCountToday = 0, wins = 0, losses = 0;
-    var tradeTs = [];
     rows.forEach(function(row) {{
       var msg = row.message || '';
-      var ts  = row.recorded_at ? new Date(row.recorded_at).getTime() : 0;
-      // Intraday portfolio value
       var m = msg.match(/marked the book at \$?([\d,]+)/);
       if (m) {{
         var v = parseFloat(m[1].replace(/,/g,''));
@@ -4345,21 +4342,8 @@ function _fetchIntradayMarks() {{
           ys.push(v);
         }}
       }}
-      // Count trades for metrics panel + collect trade timestamps for TRADES/HR
-      if (msg.match(/ENTER|enter/)) {{
-        tradeCountToday++;
-        if (ts) tradeTs.push(ts);
-      }}
-      if (msg.match(/EXIT|exit/)) {{
-        tradeCountToday++;
-        if (ts) tradeTs.push(ts);
-        var pnlM = msg.match(/pnl\s*([+-][\d.]+)/);
-        if (pnlM) {{ if (parseFloat(pnlM[1]) >= 0) wins++; else losses++; }}
-      }}
     }});
-    // Expose trade timestamps so TRADES/HR works across blocks
-    window._tradeTs = tradeTs;
-    // Update intraday trace (index 6) from DB marks only — live prices extend it via _pushIntradayPoint
+    // Update intraday trace
     if (xs.length && gd && gd.data && gd.data.length >= 7) {{
       Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]).then(function() {{
         var lastV = ys[ys.length-1], lastT = xs[xs.length-1];
@@ -4368,10 +4352,20 @@ function _fetchIntradayMarks() {{
         buildTargets();
       }});
     }}
-    // Recenter chart on today (intraday default) unless user has panned
     _recenterOnLatest(xs.length > 0 ? xs[xs.length - 1] : null);
-    // Update metrics panel
-    _updateOrbMetrics(tradeCountToday, wins, losses);
+  }}).catch(function() {{}});
+
+  // Separate HEAD request for accurate TRADE count (bypasses row limit)
+  var urlCount = SUPA_URL + '/rest/v1/pipeline_events'
+    + '?select=id&event_type=eq.TRADE&recorded_at=gte.' + today + 'T00:00:00Z&limit=1';
+  fetch(urlCount, {{ method:'HEAD', headers: {{
+    'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Prefer': 'count=exact'
+  }} }})
+  .then(function(r) {{
+    var ct = r.headers.get('content-range');
+    if (!ct) return;
+    var total = parseInt(ct.split('/')[1], 10);
+    if (!isNaN(total)) _updateOrbMetrics(total, 0, 0);
   }}).catch(function() {{}});
 }}
 setTimeout(_fetchIntradayMarks, 3000);
@@ -6614,17 +6608,20 @@ window.addEventListener('resize', function() {{
         age.style.color = cls === 'ok' ? '#00ff9d' : cls === 'warn' ? '#ff9900' : '#ff3366';
       }}).catch(function() {{}});
 
-      // Trade count today
+      // Trade count today — HEAD request with Prefer:count=exact avoids row limit
       var todayStr = new Date().toISOString().split('T')[0];
       var urlTc = SUPA_URL + '/rest/v1/pipeline_events'
-        + '?select=id&event_type=eq.TRADE&recorded_at=gte.' + todayStr + 'T00:00:00Z';
-      fetch(urlTc + '&limit=2000', {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
-      .then(function(r) {{ return r.json(); }})
-      .then(function(rows) {{
-        if (!Array.isArray(rows)) return;
+        + '?select=id&event_type=eq.TRADE&recorded_at=gte.' + todayStr + 'T00:00:00Z&limit=1';
+      fetch(urlTc, {{ method:'HEAD', headers: {{
+        'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+        'Prefer': 'count=exact'
+      }} }})
+      .then(function(r) {{
+        var ct = r.headers.get('content-range'); // e.g. "0-0/1842"
+        if (!ct) return;
+        var total = ct.split('/')[1];
         var el = document.getElementById('runner-trades');
-        if (el) el.textContent = rows.length + ' trades today';
-        // om-today is owned by _updateOrbMetrics (via _fetchIntradayMarks) — do not write here
+        if (el && total) el.textContent = total + ' trades today';
       }}).catch(function() {{}});
 
       // Daily bar: today's fills pnl proxy — compare earliest vs latest portfolio snapshot today
