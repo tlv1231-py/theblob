@@ -1939,8 +1939,18 @@ body::after {{
   100% {{ opacity:0; max-height:0; padding:0; }}
 }}
 /* card-entering — JS orchestrates phases; CSS provides initial clip */
-.pos-card-entering {{ clip-path:inset(0 0 100% 0); animation:card-clip-reveal .18s ease-out forwards; transform-origin:top; }}
-@keyframes card-clip-reveal {{ from{{clip-path:inset(0 0 100% 0)}} to{{clip-path:inset(0 0 0% 0)}} }}
+.pos-card-entering {{
+  clip-path:inset(0 0 100% 0);
+  animation:card-clip-reveal .32s cubic-bezier(.22,1,.36,1) forwards;
+  transform-origin:top;
+  box-shadow:0 0 0 1px rgba(0,180,255,0);
+}}
+@keyframes card-clip-reveal {{
+  0%   {{ clip-path:inset(0 0 100% 0); box-shadow:0 0 0 1px rgba(0,180,255,0); filter:brightness(2.5) saturate(0); }}
+  30%  {{ box-shadow:0 0 20px 2px rgba(0,180,255,.55), inset 0 0 12px rgba(0,180,255,.15); filter:brightness(1.8) saturate(1.5); }}
+  70%  {{ clip-path:inset(0 0 0% 0); box-shadow:0 0 12px 1px rgba(0,180,255,.3); filter:brightness(1.2) saturate(1.2); }}
+  100% {{ clip-path:inset(0 0 0% 0); box-shadow:none; filter:brightness(1) saturate(1); }}
+}}
 .pos-card-exiting  {{ animation:card-exit-stop .42s ease-in forwards; overflow:hidden; }}
 .pos-card-exit-target  {{ animation:card-exit-target  .52s cubic-bezier(.55,0,1,.45) forwards; overflow:hidden; }}
 .pos-card-exit-stop    {{ animation:card-exit-stop    .42s ease-in forwards; overflow:hidden; }}
@@ -5490,14 +5500,15 @@ window.addEventListener('resize', function() {{
           if (f >= steps) {{ domEl.textContent = fmt(end); clearInterval(iv); }}
         }}, 20);
       }}
-      // Phase 1 (180ms): "◈ ACQUIRING" overlay flashes
+      // Phase 1 (180ms): "◈ ACQUIRING" overlay flashes — blue entry theme
       setTimeout(function() {{
         flash.textContent = '◈ ACQUIRING';
-        flash.style.color = col;
+        flash.style.color = '#00b4ff';
         flash.style.fontSize = '8px';
         flash.style.letterSpacing = '.22em';
         flash.classList.add('show');
-        el.style.boxShadow = '0 0 18px ' + col + '55, inset 0 0 12px ' + col + '18';
+        el.style.boxShadow = '0 0 18px rgba(0,180,255,.45), inset 0 0 12px rgba(0,180,255,.15)';
+        el.style.borderLeftColor = '#00b4ff';
       }}, 180);
       // Phase 2 (360ms): sym scrambles in
       setTimeout(function() {{
@@ -5523,13 +5534,14 @@ window.addEventListener('resize', function() {{
           _scramble(holdEl, 'STP ' + stopPct + '%   TGT +' + tgtPct + '%', 180);
         }}
       }}, 720);
-      // Phase 5 (920ms): proximity bar fills to position, overlay becomes "OPEN"
+      // Phase 5 (920ms): proximity bar fills to position, overlay becomes "OPEN" — blue
       setTimeout(function() {{
         flash.textContent = '● OPEN';
-        flash.style.color = '#00ff9d';
+        flash.style.color = '#00e5ff';
         flash.style.fontSize = '9px';
         flash.style.letterSpacing = '.3em';
-        el.style.boxShadow = '0 0 24px ' + col + '44, inset 0 0 8px ' + col + '10';
+        el.style.boxShadow = '0 0 16px rgba(0,180,255,.3), inset 0 0 6px rgba(0,180,255,.08)';
+        el.style.borderLeftColor = col;
         // Fill proximity bar
         var pFill = el.querySelector('.pos-prox-fill');
         var pCursor = el.querySelector('.pos-prox-cursor');
