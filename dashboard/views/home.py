@@ -204,6 +204,7 @@ def _load_chart_data() -> dict:
             pipe_rows = s.execute(text("""
                 SELECT event_type, symbol, message, detail, recorded_at as ts
                 FROM pipeline_events
+                WHERE event_type != 'UPDATE'
                 ORDER BY recorded_at DESC LIMIT 500
             """)).fetchall()
             for r in pipe_rows:
@@ -3385,10 +3386,15 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   setTimeout(showCrosshair, 1500);
   // Mark initial layout complete so the pan tracker ignores programmatic events
   setTimeout(function() {{ _initLayoutDone = true; }}, 500);
-  // Force intraday zoom — Plotly may autorange if no data falls in today's window
+  // Force intraday zoom + center y-axis on current NAV
   setTimeout(function() {{
     _programmaticRelayout = true;
-    Plotly.relayout(gd, {{ 'xaxis.range': [_intradayStart(), _intradayEnd()] }}).then(function() {{
+    var centerNav = window._lastKnownNav || {last_nav};
+    var pad = Math.max(centerNav * 0.04, 800);
+    Plotly.relayout(gd, {{
+      'xaxis.range': [_intradayStart(), _intradayEnd()],
+      'yaxis.range': [centerNav - pad, centerNav + pad]
+    }}).then(function() {{
       _programmaticRelayout = false;
     }});
   }}, 600);
@@ -4871,6 +4877,11 @@ window.addEventListener('resize', function() {{
         window._lastKnownTs = isoTs;
         // Extend ghost (3) + portfolio (4) simultaneously
         Plotly.extendTraces(gd, {{x:[[isoTs],[isoTs]], y:[[nav],[nav]]}}, [3,4]);
+        // Re-center y-axis on current NAV
+        if (!_userPanned) {{
+          var _yPad = Math.max(nav * 0.04, 800);
+          Plotly.relayout(gd, {{ 'yaxis.range': [nav - _yPad, nav + _yPad] }});
+        }}
         // Endpoint dot
         _updateEndpointDot(nav, isoTs);
         // ATH check
