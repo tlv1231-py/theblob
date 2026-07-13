@@ -2125,10 +2125,11 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Default to 90-min-back / 30-min-forward intraday sliding window
+// Centered sliding window — "now" always at horizontal center
 var _CENTER_DAYS = 1;  // fallback for _dateMinus / _datePlus_from helpers
-function _intradayStart() {{ return new Date(Date.now() - 90 * 60 * 1000).toISOString(); }}
-function _intradayEnd()   {{ return new Date(Date.now() + 30 * 60 * 1000).toISOString(); }}
+var _HALF_WIN_MS = 45 * 60 * 1000;  // 45 min each side
+function _intradayStart() {{ return new Date(Date.now() - _HALF_WIN_MS).toISOString(); }}
+function _intradayEnd()   {{ return new Date(Date.now() + _HALF_WIN_MS).toISOString(); }}
 var xStart = _intradayStart();
 var xEnd   = _intradayEnd();
 
@@ -3385,52 +3386,106 @@ function _navAtTime(isoTs) {{
 }}
 
 function _spawnTradeChip(isoTs, sym, isEntry, price) {{
-  // Floating animated chip on the chart area
+  var fl = gd._fullLayout;
   var gRect = gd.getBoundingClientRect();
-  var xaxis = gd._fullLayout.xaxis;
-  var yaxis = gd._fullLayout.yaxis;
-  if (!xaxis || !yaxis) return;
+  if (!fl || !fl.xaxis || !fl.yaxis) return;
 
+  var navY = _navAtTime(isoTs) || window._lastKnownNav || 100000;
+  var col  = isEntry ? [0,255,157] : [255,51,102];
+  var rgb  = 'rgb(' + col.join(',') + ')';
+  var rgba = function(a) {{ return 'rgba(' + col.join(',') + ',' + a + ')'; }};
+
+  // Pixel position on screen (chart-relative + viewport offset)
+  var px = gRect.left, py = gRect.top + gRect.height * 0.5;
+  try {{
+    px = fl.xaxis.l2p(fl.xaxis.d2l(isoTs)) + fl.margin.l + gRect.left;
+    py = fl.yaxis.l2p(fl.yaxis.d2l(navY))  + fl.margin.t + gRect.top;
+  }} catch(e) {{}}
+
+  // 1. Expanding ring pulses — 3 rings staggered 160ms apart
+  for (var ri = 0; ri < 3; ri++) {{
+    (function(delay) {{
+      setTimeout(function() {{
+        var ring = document.createElement('div');
+        ring.style.cssText =
+          'position:fixed;pointer-events:none;z-index:283;border-radius:50%;' +
+          'border:2px solid ' + rgb + ';' +
+          'width:12px;height:12px;' +
+          'left:' + (px-6) + 'px;top:' + (py-6) + 'px;' +
+          'opacity:.85;transition:transform .75s cubic-bezier(.16,1,.3,1), opacity .75s ease';
+        document.body.appendChild(ring);
+        requestAnimationFrame(function() {{ requestAnimationFrame(function() {{
+          ring.style.transform = 'scale(' + (6 + ri*2) + ')';
+          ring.style.opacity = '0';
+        }}); }});
+        setTimeout(function() {{ ring.remove(); }}, 850);
+      }}, delay);
+    }})(ri * 160);
+  }}
+
+  // 2. Flash dot at marker
+  var dot = document.createElement('div');
+  dot.style.cssText =
+    'position:fixed;pointer-events:none;z-index:290;border-radius:50%;' +
+    'width:8px;height:8px;left:' + (px-4) + 'px;top:' + (py-4) + 'px;' +
+    'background:' + rgb + ';box-shadow:0 0 24px 8px ' + rgba(.65) + ';' +
+    'opacity:1;transition:transform .55s ease, opacity .55s ease';
+  document.body.appendChild(dot);
+  requestAnimationFrame(function() {{ requestAnimationFrame(function() {{
+    dot.style.transform = 'scale(3)';
+    dot.style.opacity = '0';
+  }}); }});
+  setTimeout(function() {{ dot.remove(); }}, 650);
+
+  // 3. Floating label chip — zooms in then drifts and fades
+  var label = (isEntry ? '▲ ENTER ' : '&#9660; EXIT ') + sym.replace('/USD','') +
+              (price ? '  $' + parseFloat(price||0).toFixed(sym.indexOf('USD')!==-1?4:2) : '');
   var chip = document.createElement('div');
-  chip.style.cssText = [
-    'position:fixed',
-    'pointer-events:none',
-    'z-index:290',
-    'font-family:Consolas,monospace',
-    'font-size:9px',
-    'font-weight:700',
-    'letter-spacing:.08em',
-    'padding:3px 7px 3px 5px',
-    'border-radius:2px',
-    'white-space:nowrap',
-    isEntry
-      ? 'color:#00ff9d;background:rgba(0,255,157,.1);border:1px solid rgba(0,255,157,.3);box-shadow:0 0 12px rgba(0,255,157,.25)'
-      : 'color:#ff3366;background:rgba(255,51,102,.1);border:1px solid rgba(255,51,102,.3);box-shadow:0 0 12px rgba(255,51,102,.25)',
-    'opacity:0',
-    'transform:translateY(0px)',
-    'transition:opacity .25s ease, transform 1.4s cubic-bezier(.22,1,.36,1)',
-  ].join(';');
-  chip.textContent = (isEntry ? '▲ ' : '▼ ') + sym.replace('/USD','') + '  $' + parseFloat(price||0).toFixed(sym.indexOf('USD')!==-1?4:2);
+  chip.innerHTML = label;
+  chip.style.cssText =
+    'position:fixed;pointer-events:none;z-index:296;' +
+    'font-family:Consolas,monospace;font-size:9.5px;font-weight:800;letter-spacing:.09em;' +
+    'padding:4px 10px 4px 7px;border-radius:2px;white-space:nowrap;' +
+    'color:' + rgb + ';background:' + rgba(.07) + ';' +
+    'border:1px solid ' + rgba(.45) + ';' +
+    'box-shadow:0 0 20px ' + rgba(.35) + ',0 0 50px ' + rgba(.1) + ';' +
+    'left:' + (px + 14) + 'px;top:' + (py - 12) + 'px;' +
+    'opacity:0;transform:scale(.5) translateY(' + (isEntry ? 10 : -10) + 'px);' +
+    'transition:opacity .18s ease, transform .42s cubic-bezier(.22,1,.36,1)';
   document.body.appendChild(chip);
-
-  // Position near chart right edge / current time
-  var pxX = gRect.left + gRect.width * 0.78;
-  var pxY = gRect.top  + gRect.height * (isEntry ? 0.45 : 0.55);
-  chip.style.left = pxX + 'px';
-  chip.style.top  = pxY + 'px';
-
-  requestAnimationFrame(function() {{
-    requestAnimationFrame(function() {{
-      chip.style.opacity = '1';
-      chip.style.transform = 'translateY(' + (isEntry ? -28 : 28) + 'px)';
-    }});
-  }});
-
+  requestAnimationFrame(function() {{ requestAnimationFrame(function() {{
+    chip.style.opacity = '1';
+    chip.style.transform = 'scale(1) translateY(0)';
+  }}); }});
   setTimeout(function() {{
-    chip.style.transition = 'opacity .6s ease';
+    chip.style.transition = 'opacity 1.1s ease, transform 3.5s ease';
     chip.style.opacity = '0';
-    setTimeout(function() {{ if (chip.parentNode) chip.parentNode.removeChild(chip); }}, 700);
-  }}, 3500);
+    chip.style.transform = 'scale(.95) translateY(' + (isEntry ? -52 : 52) + 'px)';
+    setTimeout(function() {{ chip.remove(); }}, 1200);
+  }}, 2600);
+
+  // 4. Spark burst — 8-12 particles radiate outward
+  var sparkCount = 8 + Math.floor(Math.random()*5);
+  for (var si = 0; si < sparkCount; si++) {{
+    (function() {{
+      var angle = Math.random() * Math.PI * 2;
+      var dist  = 18 + Math.random() * 38;
+      var spark = document.createElement('div');
+      spark.style.cssText =
+        'position:fixed;pointer-events:none;z-index:287;border-radius:50%;' +
+        'width:3px;height:3px;' +
+        'left:' + (px-1.5) + 'px;top:' + (py-1.5) + 'px;' +
+        'background:' + rgb + ';box-shadow:0 0 5px ' + rgb + ';' +
+        'opacity:.95;transition:transform .65s cubic-bezier(.22,1,.36,1), opacity .65s ease';
+      document.body.appendChild(spark);
+      requestAnimationFrame(function() {{ requestAnimationFrame(function() {{
+        spark.style.transform =
+          'translate(' + (Math.cos(angle)*dist) + 'px,' + (Math.sin(angle)*dist) + 'px) scale(.25)';
+        spark.style.opacity = '0';
+      }}); }});
+      setTimeout(function() {{ spark.remove(); }}, 750);
+    }})();
+  }}
 }}
 
 function _fetchTradeEvents() {{
@@ -3678,24 +3733,25 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
 }}
 setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 
-// ── Chart re-center — sliding 90-min intraday window ──────────────────────────
-var _lastRecenter = 0;
+// ── Smooth ticker-tape scroll — Plotly.animate keeps "now" always centered ────
+var _scrollBusy = false;
 function _recenterOnLatest(_ignored) {{
-  if (_userInteracting) return;
-  // Throttle: max once per 4s to avoid thrashing Plotly
-  var now = Date.now();
-  if (now - _lastRecenter < 4000) return;
-  _lastRecenter = now;
+  if (_userInteracting || _scrollBusy) return;
   var newStart = _intradayStart();
   var newEnd   = _intradayEnd();
   _defaultXRange = [newStart, newEnd];
+  _scrollBusy = true;
   _programmaticRelayout = true;
-  Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
+  Plotly.animate(gd,
+    {{ layout: {{ xaxis: {{ range: [newStart, newEnd] }} }} }},
+    {{ transition: {{ duration: 1300, easing: 'linear' }}, frame: {{ duration: 1300, redraw: false }} }}
+  ).then(function() {{
     _programmaticRelayout = false;
+    _scrollBusy = false;
   }});
 }}
-// Keep chart sliding forward even when no new data arrives
-setInterval(function() {{ _recenterOnLatest(null); }}, 10000);
+// Drive the scroll forward continuously — every 1.3s keeps transition seamless
+setInterval(function() {{ _recenterOnLatest(null); }}, 1300);
 
 // ── Wallet selector ───────────────────────────────────────────────────────────
 var _walletModes = ['PAPER', 'LIVE ●'];
