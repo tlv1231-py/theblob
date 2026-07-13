@@ -4473,13 +4473,17 @@ window.addEventListener('resize', function() {{
                       (_h.indexOf('@') !== -1); // must have a price
         if (isTrade) {{
           row.className = 'te te-trade';
-          // Trade entries: flash bright, then dim to readable green after 3s
-          row.style.color = '#00ff9d';
+          var _isEntryRow = _h.indexOf('>enter<') !== -1 || _h.indexOf('ENTER') !== -1;
+          var _isWinRow   = _h.indexOf('color:#00ff9d') !== -1 || (_h.indexOf('+') !== -1 && _h.indexOf('pnl') !== -1);
+          var _flashCol   = _isEntryRow ? '#00e5ff' : (_isWinRow ? '#00ff9d' : '#ff3366');
+          var _dimCol     = _isEntryRow ? 'rgba(0,180,220,.4)' : (_isWinRow ? 'rgba(0,200,120,.4)' : 'rgba(255,60,80,.4)');
+          row.style.color = _flashCol;
+          row.style.textShadow = '0 0 8px ' + _flashCol;
           setTimeout(function() {{
             row.style.transition = 'color 1.5s ease, text-shadow 1.5s ease';
-            row.style.color = 'rgba(0,200,120,.45)';
+            row.style.color = _dimCol;
             row.style.textShadow = 'none';
-          }}, 3200);
+          }}, 2800);
         }} else {{
           row.className = 'te';
           row.style.color = '#00ff41';
@@ -4958,6 +4962,32 @@ window.addEventListener('resize', function() {{
           setTimeout(function() {{ pnlBox.classList.remove('nudge-up','nudge-down'); }}, 700);
         }}
       }}
+      // ── Total P&L odometer — update on every NAV poll ────────────────────
+      (function() {{
+        var _el  = document.getElementById('total-pnl-val');
+        var _sub = document.getElementById('total-pnl-sub');
+        if (!_el) return;
+        var _prev = parseFloat(_el.getAttribute('data-raw') || '0');
+        if (Math.abs(_prev - pnl) < 0.01) return; // no change
+        _el.setAttribute('data-raw', pnl);
+        var _col = pnl >= 0 ? '#00ff9d' : '#ff3366';
+        _el.style.color = _col;
+        if (_sub) _sub.style.color = _col;
+        var _t0 = performance.now(), _dur = 500, _from = _prev;
+        function _roll(now) {{
+          var p = Math.min(1, (now - _t0) / _dur);
+          var v = _from + (pnl - _from) * (1 - Math.pow(1-p, 3));
+          var s = v >= 0 ? '+' : '−';
+          _el.textContent = s + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+          if (_sub) {{
+            var pct = (v / 100000) * 100;
+            _sub.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% since $100K start';
+          }}
+          if (p < 1) requestAnimationFrame(_roll);
+        }}
+        requestAnimationFrame(_roll);
+      }})();
+
       // ── Recovery meter / profit display ──────────────────────────────────
       var subRoot = document.getElementById('pnl-sub-root');
       if (subRoot) {{
