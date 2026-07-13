@@ -4093,9 +4093,24 @@ setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 var _scrollBusy = false;
 function _recenterOnLatest(_ignored) {{
   if (_scrollBusy) return;
+  var nowIso   = new Date().toISOString();
   var newStart = _intradayStart();
   var newEnd   = _intradayEnd();
   _defaultXRange = [newStart, newEnd];
+
+  // Keep portfolio line endpoint at current time so it stays connected to the orb
+  var _nav = window._lastKnownNav;
+  if (_nav && gd && gd.data && gd.data.length >= 5) {{
+    var _portX = (gd.data[3].x || []).slice();
+    var _portY = (gd.data[3].y || []).slice();
+    if (_portX.length > 0) {{
+      _portX[_portX.length - 1] = nowIso;
+      _portY[_portY.length - 1] = _nav;
+      Plotly.restyle(gd, {{ x: [_portX, _portX], y: [_portY, _portY] }}, [3, 4]);
+      _updateEndpointDot(_nav, nowIso);
+    }}
+  }}
+
   _scrollBusy = true;
   _programmaticRelayout = true;
   Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{

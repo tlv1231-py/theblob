@@ -2,14 +2,19 @@ name: crypto_momentum runner
 
 on:
   schedule:
-    # Restart the long-running loop every 6 hours
-    - cron: '0 */6 * * *'
+    # Two overlapping schedules — no gap between jobs
+    - cron: '0 */5 * * *'   # fires at 0,5,10,15,20 UTC
+    - cron: '30 2,7,12,17,22 * * *'  # fires at 2:30,7:30,12:30,17:30,22:30 UTC — safety net
   workflow_dispatch:
+
+concurrency:
+  group: crypto-runner
+  cancel-in-progress: false  # queue next run; don't cancel the running one
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 350   # 5h50m — safely under GitHub's 6h job limit
+    timeout-minutes: 310   # 5h10m — overlaps with next 5h cron fire
 
     steps:
       - uses: actions/checkout@v4
