@@ -2459,6 +2459,11 @@ var _liveTip = {{ pts: [] }};
 // Shockwaves: array of {{age, col, cx, cy}}
 var _shockWaves = [];
 
+// Smoothed orb position — lerped toward true Plotly position each frame
+var _smoothPcx = null, _smoothPcy = null;
+// Smoothed orbit radii per symbol
+var _smoothOrbitR = {{}};
+
 // Combo streak display
 var _comboCount = 0;
 var _comboFlash = null; // {{age, text, col}}
@@ -2657,9 +2662,15 @@ function drawPulse() {{
     try {{
       var fl = gd._fullLayout;
       if (!fl || !fl.xaxis || !fl.yaxis) throw '';
-      var pcx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
-      var pcy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
-      if (!isFinite(pcx) || !isFinite(pcy)) throw '';
+      var _rawPcx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
+      var _rawPcy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
+      if (!isFinite(_rawPcx) || !isFinite(_rawPcy)) throw '';
+      // Lerp toward true position — smooths discrete Plotly axis jumps
+      var _lerpK = 0.12;
+      if (_smoothPcx === null) {{ _smoothPcx = _rawPcx; _smoothPcy = _rawPcy; }}
+      _smoothPcx += (_rawPcx - _smoothPcx) * _lerpK;
+      _smoothPcy += (_rawPcy - _smoothPcy) * _lerpK;
+      var pcx = _smoothPcx, pcy = _smoothPcy;
 
       // ── Comet trail — leftward gradient fade behind the dot ──────────────
       var trailLen = 220;
@@ -2759,8 +2770,11 @@ function drawPulse() {{
         var range  = tgt - stop;
         var t2     = range ? Math.max(0, Math.min(1, (price-stop)/range)) : 0.5;
 
-        // Orbit radius: 20px (at stop) → 44px (at target)
-        var orbitR = 20 + t2 * 24;
+        // Orbit radius: 20px (at stop) → 44px (at target) — lerped for smoothness
+        var _targetR = 20 + t2 * 24;
+        if (_smoothOrbitR[sym] === undefined) _smoothOrbitR[sym] = _targetR;
+        _smoothOrbitR[sym] += (_targetR - _smoothOrbitR[sym]) * 0.06;
+        var orbitR = _smoothOrbitR[sym];
 
         // Speed: faster near stop, slower near target
         var satSpeed = 0.012 + (1-t2)*0.022 + pressure*0.018;
@@ -5306,6 +5320,7 @@ window.addEventListener('resize', function() {{
               sb: Math.round(102*(1-t2))
             }};
             delete _satAngles[sym];
+            delete _smoothOrbitR[sym];
           }}
         }});
 
