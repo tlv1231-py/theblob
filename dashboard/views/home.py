@@ -1499,6 +1499,27 @@ body::after {{
   font-size:7px; letter-spacing:.18em; color:rgba(190,150,255,.75); white-space:nowrap;
   font-family:Consolas,monospace; text-transform:uppercase;
 }}
+#total-pnl-block {{
+  margin-top:6px; padding:8px 0 2px; text-align:right;
+}}
+#total-pnl-label {{
+  font-size:6.5px; letter-spacing:.22em; color:rgba(190,150,255,.6);
+  font-family:Consolas,monospace; text-transform:uppercase; margin-bottom:3px;
+}}
+#total-pnl-val {{
+  font-family:Consolas,monospace; font-size:22px; font-weight:700;
+  letter-spacing:-.01em; line-height:1;
+  text-shadow:0 0 18px currentColor;
+  transition:color .3s ease;
+}}
+#total-pnl-sub {{
+  font-family:Consolas,monospace; font-size:7.5px; letter-spacing:.06em;
+  opacity:.7; margin-top:3px; transition:color .3s ease;
+}}
+@keyframes pnl-flash-pos {{ 0%{{text-shadow:0 0 28px #00ff9d,0 0 6px #00ff9d}} 100%{{text-shadow:0 0 18px currentColor}} }}
+@keyframes pnl-flash-neg {{ 0%{{text-shadow:0 0 28px #ff3366,0 0 6px #ff3366}} 100%{{text-shadow:0 0 18px currentColor}} }}
+.pnl-flash-pos {{ animation:pnl-flash-pos .7s ease-out forwards; }}
+.pnl-flash-neg {{ animation:pnl-flash-neg .7s ease-out forwards; }}
 .om-val {{
   font-size:11px; font-weight:700; font-family:Consolas,monospace;
   color:#ff00cc; letter-spacing:.04em; white-space:nowrap;
@@ -2055,9 +2076,11 @@ body::after {{
       <span class="om-label">OPEN POS</span>
       <span class="om-val" id="om-openpos">{n_positions}</span>
     </div>
-    <div class="om-row">
-      <span class="om-label">TOTAL P&amp;L</span>
-      <span class="om-val" id="om-total-pnl" style="color:{_pnl_col}">{_pnl_str}</span>
+    <div class="om-divider"></div>
+    <div id="total-pnl-block">
+      <div id="total-pnl-label">TOTAL P&amp;L</div>
+      <div id="total-pnl-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
+      <div id="total-pnl-sub" style="color:{_pnl_col}">{_pnl_pct_str}</div>
     </div>
   </div>
   <div class="legend-strip">
@@ -4722,17 +4745,57 @@ window.addEventListener('resize', function() {{
                 if (pnlM[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
                 else {{ if (window._soundLoss) window._soundLoss(); }}
               }}
-              // Immediately update total P&L display — don't wait for NAV poll
-              if (!isEntry && pnlM) {{
-                var _pnlEl = document.getElementById('om-total-pnl');
-                if (_pnlEl) {{
-                  var _curPnl = parseFloat((_pnlEl.textContent || '0').replace(/[^0-9.+-]/g,'')) || 0;
-                  if (_pnlEl.textContent.indexOf('−') !== -1 || _pnlEl.textContent.indexOf('-') !== -1) _curPnl = -Math.abs(_curPnl);
-                  var _delta = parseFloat(pnlM[1].replace(/,/g,'')) || 0;
-                  var _newPnl = _curPnl + _delta;
-                  var _sign = _newPnl >= 0 ? '+' : '−';
-                  _pnlEl.textContent = _sign + '$' + Math.abs(_newPnl).toLocaleString('en-US', {{maximumFractionDigits:0}});
-                  _pnlEl.style.color = _newPnl >= 0 ? '#00ff9d' : '#ff3366';
+              // Sync all exit effects: satellite despawn + P&L odometer — same tick
+              if (!isEntry) {{
+                // Trigger satellite exit directly (don't wait for positions poll)
+                var _exitSymFull = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
+                var _satKey = _satAngles[_exitSymFull] !== undefined ? _exitSymFull
+                            : _satAngles[sym] !== undefined ? sym : null;
+                if (_satKey) {{
+                  var _isWin = pnlM && pnlM[1][0] === '+';
+                  _satExiting[_satKey] = {{
+                    angle: _satAngles[_satKey],
+                    orbitR: _smoothOrbitR[_satKey] || 32,
+                    age: 0,
+                    sr: _isWin ? 0 : 255, sg: _isWin ? 255 : 51, sb: _isWin ? 157 : 102
+                  }};
+                  delete _satAngles[_satKey];
+                  delete _smoothOrbitR[_satKey];
+                }}
+                // Odometer roll for total P&L
+                if (pnlM) {{
+                  var _pnlEl  = document.getElementById('total-pnl-val');
+                  var _subEl  = document.getElementById('total-pnl-sub');
+                  if (_pnlEl) {{
+                    var _raw   = parseFloat(_pnlEl.getAttribute('data-raw') || '0') || 0;
+                    var _delta = parseFloat(pnlM[1].replace(/,/g,'')) || 0;
+                    var _target = _raw + _delta;
+                    _pnlEl.setAttribute('data-raw', _target);
+                    var _isPos  = _target >= 0;
+                    var _col    = _isPos ? '#00ff9d' : '#ff3366';
+                    _pnlEl.style.color = _col;
+                    if (_subEl) _subEl.style.color = _col;
+                    // Flash animation
+                    _pnlEl.classList.remove('pnl-flash-pos','pnl-flash-neg');
+                    void _pnlEl.offsetWidth;
+                    _pnlEl.classList.add(_isPos ? 'pnl-flash-pos' : 'pnl-flash-neg');
+                    // Odometer: roll from _raw to _target over 600ms
+                    var _odoStart = _raw, _odoEnd = _target, _odoT0 = performance.now();
+                    var _odoDur = 600;
+                    function _odoFrame(now) {{
+                      var p = Math.min(1, (now - _odoT0) / _odoDur);
+                      var ease = 1 - Math.pow(1-p, 3);
+                      var v = _odoStart + (_odoEnd - _odoStart) * ease;
+                      var sign = v >= 0 ? '+' : '−';
+                      _pnlEl.textContent = sign + '$' + Math.abs(Math.round(v)).toLocaleString('en-US');
+                      if (_subEl) {{
+                        var pct = (v / 100000) * 100;
+                        _subEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% since $100K start';
+                      }}
+                      if (p < 1) requestAnimationFrame(_odoFrame);
+                    }}
+                    requestAnimationFrame(_odoFrame);
+                  }}
                 }}
               }}
             }}
