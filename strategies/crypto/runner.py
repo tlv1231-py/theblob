@@ -68,6 +68,8 @@ def _fetch_bars(timeframe: str, lookback_minutes: int) -> dict[str, list]:
 
     if timeframe == "1Min":
         tf = TimeFrame.Minute
+    elif timeframe == "5Min":
+        tf = TimeFrame(5, TimeFrameUnit.Minute)
     elif timeframe == "15Min":
         tf = TimeFrame(15, TimeFrameUnit.Minute)
     else:
@@ -330,9 +332,13 @@ def run() -> None:
 
     logger.info(f"[crypto] run @ {now.isoformat()} | NAV=${nav:,.2f}")
 
-    # Single fetch: 3 hours of 1-min bars covers signal + stop checks
+    # Fetch bars — timeframe from config; lookback covers signal window + stop checks
+    bar_size = _SIG.get("bar_size", "5Min")
+    bar_mins = int(bar_size.replace("Min", "").replace("Hour", "60")) if "Min" in bar_size else 60
+    needed_bars = max(_SIG["vwap_window_bars"] + _SIG["breakout_bars"] + 25, 80)
+    lookback = needed_bars * bar_mins + 30  # +30min buffer
     try:
-        min_bars = _fetch_bars("1Min", 180)
+        min_bars = _fetch_bars(bar_size, lookback)
     except Exception as e:
         logger.error(f"[crypto] Bar fetch failed: {e}")
         return
