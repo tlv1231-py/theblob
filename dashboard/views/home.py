@@ -1131,69 +1131,7 @@ body::after {{
 #vert-drag:hover, #vert-drag.dragging {{ background:rgba(0,255,65,.2); }}
 
 /* ── Tracker bar — orange bar between header and chart ── */
-#tracker-bar {{
-  flex-shrink:0;
-  background:rgba(8,3,0,.95);
-  border-top:1px solid #2a1000;
-  border-bottom:1px solid #ff6600;
-  padding:0 16px;
-  height:24px;
-  display:flex;
-  align-items:center;
-  gap:20px;
-  z-index:5;
-}}
-/* CYCLE block */
-#run-progress-wrap {{
-  display:inline-flex; align-items:center; gap:7px;
-  flex-shrink:0; transition:opacity .3s;
-}}
-#run-progress-wrap.hidden {{ opacity:0; pointer-events:none; }}
-#run-progress-track {{
-  width:140px; height:6px; background:#0a0500;
-  border:1px solid #3a1800;
-  overflow:hidden; position:relative;
-  /* vertical scanlines — the grid */
-  background-image:repeating-linear-gradient(
-    90deg,
-    transparent 0px, transparent 7px,
-    rgba(255,102,0,.08) 7px, rgba(255,102,0,.08) 8px
-  );
-}}
-#run-progress-fill {{
-  height:100%; width:0%;
-  background:linear-gradient(90deg, #ff3300 0%, #ff6600 55%, #ffaa00 100%);
-  box-shadow:0 0 10px rgba(255,102,0,.8), 0 0 3px rgba(255,180,0,.5);
-  transition:width .9s linear;
-  position:relative;
-}}
-/* scanline shimmer over the fill */
-#run-progress-fill::after {{
-  content:'';
-  position:absolute; inset:0;
-  background:repeating-linear-gradient(
-    0deg,
-    transparent 0px, transparent 1px,
-    rgba(0,0,0,.35) 1px, rgba(0,0,0,.35) 2px
-  );
-  animation:vp-shimmer 1.8s linear infinite;
-}}
-@keyframes vp-shimmer {{
-  from {{ background-position:0 0; }}
-  to   {{ background-position:0 8px; }}
-}}
-@keyframes fill-fire {{
-  0%,100% {{ box-shadow:0 0 10px rgba(255,102,0,.8),0 0 3px rgba(255,180,0,.5); }}
-  50%      {{ box-shadow:0 0 22px rgba(255,60,0,1),0 0 8px rgba(255,200,0,.9); }}
-}}
-#run-progress-fill.firing {{ animation:fill-fire .4s ease-in-out infinite; }}
-#run-progress-label {{
-  font-size:9px; letter-spacing:.18em; white-space:nowrap;
-  font-family:Consolas,monospace;
-  color:#ff6600;
-  text-shadow:0 0 8px rgba(255,102,0,.8);
-  min-width:28px; text-align:right;
-}}
+#tracker-bar {{ display:none; }}
 /* ── Terminal row appear ── */
 @keyframes te-appear {{
   from {{ opacity:0; transform:translateY(-6px); }}
@@ -4679,11 +4617,22 @@ window.addEventListener('resize', function() {{
     // Live clock at top of terminal
     (function() {{
       var clk = document.getElementById('term-clock');
+      var _BLOCKS = 12;
       function _tickClock() {{
         if (!clk) return;
-        var now = new Date();
-        var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
-        clk.innerHTML = '<span style="color:#fff;font-size:9px;margin-right:4px">' + hhmm + '</span><span id="term-cursor" style="color:#fff">█</span>';
+        var now   = new Date();
+        var hhmm  = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
+        var elapsed = window._lastRunAt ? (Date.now() - window._lastRunAt) / 1000 : 0;
+        var pct     = Math.min(elapsed / (_RUN_INTERVAL || 75), 1);
+        var filled  = Math.round(pct * _BLOCKS);
+        var bar     = '▓'.repeat(filled) + '░'.repeat(_BLOCKS - filled);
+        var rem     = Math.max(0, Math.round((_RUN_INTERVAL || 75) - elapsed));
+        var remStr  = pct >= 1 ? '▸▸▸' : String(rem).padStart(3,'0') + 's';
+        var barCol  = pct >= 0.9 ? 'rgba(255,120,0,.9)' : 'rgba(255,255,255,.28)';
+        clk.innerHTML = '<span style="color:#fff;font-size:9px;margin-right:6px">' + hhmm + '</span>'
+          + '<span style="color:' + barCol + ';font-size:9px;letter-spacing:.04em;margin-right:5px">' + bar + '</span>'
+          + '<span style="color:rgba(255,255,255,.35);font-size:9px;letter-spacing:.1em;margin-right:6px">' + remStr + '</span>'
+          + '<span id="term-cursor" style="color:#fff">█</span>';
       }}
       _tickClock();
       setInterval(_tickClock, 1000);
