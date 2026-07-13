@@ -2487,6 +2487,8 @@ var _shockWaves = [];
 var _smoothPcx = null, _smoothPcy = null;
 // Smoothed orbit radii per symbol
 var _smoothOrbitR = {{}};
+// Entry age per symbol (frames since first seen) — drives fade-in
+var _satEntryAge = {{}};
 
 // Combo streak display
 var _comboCount = 0;
@@ -2807,7 +2809,13 @@ function drawPulse() {{
           ? 0.004 + pressure*0.004
           : 0.012 + (1-t2)*0.022 + pressure*0.018;
 
-        if (!_satAngles[sym]) _satAngles[sym] = idx * (Math.PI*2/Math.max(posSyms.length,1));
+        if (_satAngles[sym] === undefined) {{
+          // New satellite — spawn far out and spiral in
+          _satAngles[sym] = idx * (Math.PI*2/Math.max(posSyms.length,1));
+          _smoothOrbitR[sym] = _targetR * 3.5;
+          _satEntryAge[sym] = 0;
+        }}
+        if (_satEntryAge[sym] !== undefined && _satEntryAge[sym] < 60) _satEntryAge[sym]++;
         _satAngles[sym] += satSpeed;
 
         var sx = pcx + Math.cos(_satAngles[sym]) * orbitR;
@@ -2826,24 +2834,41 @@ function drawPulse() {{
           sb = Math.round(102*(1-t2));
         }}
 
+        // Entry fade-in opacity (0→1 over 40 frames)
+        var entryAge = _satEntryAge[sym] !== undefined ? _satEntryAge[sym] : 60;
+        var entryOp  = Math.min(1, entryAge / 40);
+        var isEntering = entryAge < 40;
+
         // Faint orbit trail
         ctx.beginPath();
         ctx.arc(pcx, pcy, orbitR, 0, Math.PI*2);
-        ctx.strokeStyle='rgba('+sr+','+sg+','+sb+',.06)';
+        ctx.strokeStyle='rgba('+sr+','+sg+','+sb+','+(0.06*entryOp)+')';
         ctx.lineWidth=.5; ctx.stroke();
+
+        // Entry streak — bright trail behind satellite as it spirals in
+        if (isEntering) {{
+          var streakLen = (1 - entryOp) * 0.6;
+          var sx2 = pcx + Math.cos(_satAngles[sym] - streakLen) * (orbitR * 1.15);
+          var sy2 = pcy + Math.sin(_satAngles[sym] - streakLen) * (orbitR * 1.15);
+          var sg2 = ctx.createLinearGradient(sx2, sy2, sx, sy);
+          sg2.addColorStop(0, 'rgba('+sr+','+sg+','+sb+',0)');
+          sg2.addColorStop(1, 'rgba('+sr+','+sg+','+sb+','+(0.7*entryOp)+')');
+          ctx.beginPath(); ctx.moveTo(sx2, sy2); ctx.lineTo(sx, sy);
+          ctx.strokeStyle = sg2; ctx.lineWidth = 1.5; ctx.stroke();
+        }}
 
         // Satellite dot
         var satPulse = (Math.sin(phase*4 + idx*2.1)+1)/2;
-        var satSize  = 2.5 + satPulse*1.5 + (pressure>0.7&&t2<0.2 ? satPulse*2 : 0);
+        var satSize  = (2.5 + satPulse*1.5 + (pressure>0.7&&t2<0.2 ? satPulse*2 : 0)) * entryOp;
         ctx.shadowColor='rgba('+sr+','+sg+','+sb+',1)';
-        ctx.shadowBlur = 8 + t2*4;
-        ctx.beginPath(); ctx.arc(sx,sy,satSize,0,Math.PI*2);
-        ctx.fillStyle='rgba('+sr+','+sg+','+sb+',.92)'; ctx.fill();
+        ctx.shadowBlur = (8 + t2*4) * entryOp;
+        ctx.beginPath(); ctx.arc(sx,sy,Math.max(0.1,satSize),0,Math.PI*2);
+        ctx.fillStyle='rgba('+sr+','+sg+','+sb+','+(0.92*entryOp)+')'; ctx.fill();
         ctx.shadowBlur=0;
 
         // Connector thread to orb
         ctx.beginPath(); ctx.moveTo(pcx,pcy); ctx.lineTo(sx,sy);
-        ctx.strokeStyle='rgba('+sr+','+sg+','+sb+',.08)';
+        ctx.strokeStyle='rgba('+sr+','+sg+','+sb+','+(0.08*entryOp)+')';
         ctx.lineWidth=.5; ctx.stroke();
       }});
 
@@ -5453,6 +5478,7 @@ window.addEventListener('resize', function() {{
             }};
             delete _satAngles[sym];
             delete _smoothOrbitR[sym];
+            delete _satEntryAge[sym];
           }}
         }});
 
