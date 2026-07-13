@@ -1733,18 +1733,15 @@ body::after {{
 #pos-left .pos-prox-labels {{ display:none; }}
 #pos-left .pos-age-bar {{ margin-top:3px; }}
 
-/* Tasteful scan — single hairline at 18% opacity, slow drift */
-@keyframes card-scan-sweep {{
-  0%   {{ top:-1px; opacity:0; }}
-  12%  {{ opacity:.18; }}
-  88%  {{ opacity:.18; }}
-  100% {{ top:calc(100% + 1px); opacity:0; }}
+/* Scan spark — tiny white flare on proximity dot */
+@keyframes prox-dot-spark {{
+  0%   {{ box-shadow:0 0 0 0 rgba(255,255,255,0); transform:translate(-50%,-50%) scale(1); }}
+  25%  {{ box-shadow:0 0 6px 3px rgba(255,255,255,.55); transform:translate(-50%,-50%) scale(1.55); }}
+  100% {{ box-shadow:0 0 0 0 rgba(255,255,255,0); transform:translate(-50%,-50%) scale(1); }}
 }}
-.pos-card-scanning::after {{
-  content:''; position:absolute; pointer-events:none; z-index:20;
-  left:0; right:0; height:1px; top:-1px;
-  background:rgba(200,200,220,.6);
-  animation:card-scan-sweep 1.1s linear forwards;
+.pos-card-scanning .pos-prox-dot,
+.pos-card-scanning .pc-prox-dot {{
+  animation:prox-dot-spark .55s ease-out forwards;
 }}
 
 .pos-top {{ display:flex; align-items:baseline; gap:6px; line-height:1.3; }}
@@ -2002,19 +1999,8 @@ body::after {{
   100% {{ opacity:0; max-height:0; padding:0; }}
 }}
 /* card-entering — JS orchestrates phases; CSS provides initial clip */
-@keyframes card-scan-line {{
-  0%   {{ top:-2px; opacity:.9; }}
-  100% {{ top:100%; opacity:0; }}
-}}
 .pos-card-entering {{ clip-path:inset(0 0 100% 0); animation:card-clip-reveal .18s ease-out forwards; transform-origin:top; }}
 @keyframes card-clip-reveal {{ from{{clip-path:inset(0 0 100% 0)}} to{{clip-path:inset(0 0 0% 0)}} }}
-.pc-scan-line {{
-  position:absolute; left:0; right:0; height:1.5px; top:-2px; z-index:30;
-  background:linear-gradient(90deg,transparent,var(--scan-col,#00e5ff),transparent);
-  box-shadow:0 0 10px 2px var(--scan-col,#00e5ff);
-  animation:card-scan-line var(--scan-dur,.22s) linear forwards;
-  pointer-events:none;
-}}
 .pos-card-exiting  {{ animation:card-exit-stop .42s ease-in forwards; overflow:hidden; }}
 .pos-card-exit-target  {{ animation:card-exit-target  .52s cubic-bezier(.55,0,1,.45) forwards; overflow:hidden; }}
 .pos-card-exit-stop    {{ animation:card-exit-stop    .42s ease-in forwards; overflow:hidden; }}
@@ -5576,13 +5562,6 @@ window.addEventListener('resize', function() {{
           if (f >= steps) {{ domEl.textContent = fmt(end); clearInterval(iv); }}
         }}, 20);
       }}
-      // Phase 0 (0ms): card clips in (CSS), scan line sweeps
-      var scanLine = document.createElement('div');
-      scanLine.className = 'pc-scan-line';
-      scanLine.style.setProperty('--scan-col', col);
-      scanLine.style.setProperty('--scan-dur', '.20s');
-      el.appendChild(scanLine);
-      setTimeout(function() {{ if (scanLine.parentNode) scanLine.parentNode.removeChild(scanLine); }}, 250);
       // Phase 1 (180ms): "◈ ACQUIRING" overlay flashes
       setTimeout(function() {{
         flash.textContent = '◈ ACQUIRING';
