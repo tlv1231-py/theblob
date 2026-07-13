@@ -1230,12 +1230,13 @@ body::after {{
   padding:7px 12px 7px 10px;
   background:rgba(2,0,12,.98); backdrop-filter:blur(8px);
   border:1px solid rgba(148,0,255,.2); border-left:3px solid;
-  transform:translateY(-10px); opacity:0;
-  transition:transform .25s cubic-bezier(.22,1,.36,1), opacity .2s ease;
+  /* unfurl downward from HUD bottom edge */
+  transform:scaleY(0); transform-origin:top center; opacity:0;
+  transition:transform .22s cubic-bezier(.22,1,.36,1), opacity .18s ease;
   pointer-events:none;
 }}
-.callout-card.cc-show {{ transform:translateY(0); opacity:1; }}
-.callout-card.cc-exit {{ transform:translateY(-10px); opacity:0; transition:transform .18s ease-in, opacity .15s ease-in; }}
+.callout-card.cc-show {{ transform:scaleY(1); opacity:1; }}
+.callout-card.cc-exit {{ transform:scaleY(0); opacity:0; transition:transform .16s ease-in, opacity .14s ease-in; }}
 .cc-badge {{
   font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 6px;
   border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.9;
