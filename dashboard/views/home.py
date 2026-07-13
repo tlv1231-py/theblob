@@ -240,8 +240,8 @@ def _load_chart_data() -> dict:
                 term_events.append({"cls":"ev-snapshot","sym":"PORTFOLIO",
                     "line1":f"valued at ${int(r.nav):,}","line2":"end of day snapshot","ts":r.ts,"tag":"NAV"})
 
-    term_events.sort(key=lambda e: e["ts"] if e["ts"] else "")  # oldest first → newest at bottom
-    term_events = term_events[-200:]
+    term_events.sort(key=lambda e: e["ts"] if e["ts"] else "", reverse=True)  # newest first → newest at top
+    term_events = term_events[:200]
 
     # Next trading day (for plain-English position subtext)
     from datetime import timedelta as _td
@@ -703,7 +703,7 @@ def _build_daw_html(data: dict) -> str:
         return f'<span style="color:#5a3a7a">{msg}</span>'
 
     _term_evs  = data.get("term_events", [])
-    _last_ev_i = len(_term_evs) - 1
+    _last_ev_i = 0
 
     # Collect NAV values oldest-first for up/down coloring
     _snap_vals: list[float] = []
