@@ -993,8 +993,17 @@ body::after {{
 #feed-overlay #term-body::-webkit-scrollbar {{ display:none; }}
 #feed-overlay .te {{ padding:3px 6px; font-size:11px; }}
 #feed-bottom-bar {{ flex-shrink:0; padding:4px 8px; pointer-events:auto; display:flex; align-items:center; }}
-#mute-btn {{ background:none; border:none; cursor:pointer; font-size:12px; opacity:.45; padding:2px 4px; transition:opacity .2s; }}
-#mute-btn:hover {{ opacity:.9; }}
+#mute-btn {{
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.12);
+  cursor:pointer; padding:4px 10px; display:flex; align-items:center; gap:5px;
+  font-family:Consolas,'Courier New',monospace; font-size:9px; font-weight:700;
+  letter-spacing:.18em; color:rgba(255,255,255,.55); transition:all .15s;
+  pointer-events:auto;
+}}
+#mute-btn:hover {{ background:rgba(255,255,255,.09); color:#fff; border-color:rgba(255,255,255,.3); }}
+#mute-btn.muted {{ color:rgba(255,255,255,.2); border-color:rgba(255,255,255,.06); background:transparent; }}
+#mute-icon {{ font-size:11px; }}
+#mute-label {{ font-size:8px; letter-spacing:.22em; }}
 
 /* ── Right positions overlay ── */
 #pos-overlay {{
@@ -2204,7 +2213,10 @@ body::after {{
     </div>
     <div id="feed-bottom-bar">
       <span id="feed-last-ago" style="font:700 7px Consolas,monospace;letter-spacing:.14em;color:#3a1a5a;flex:1">—</span>
-      <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">&#128266;</button>
+      <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">
+        <span id="mute-icon">♪</span>
+        <span id="mute-label">ON</span>
+      </button>
     </div>
   </div>
 
@@ -3169,8 +3181,12 @@ _unlockAudio();
 }});
 function _toggleMute() {{
   _audioMuted = !_audioMuted;
-  var btn = document.getElementById('mute-btn');
-  if (btn) btn.innerHTML = _audioMuted ? '&#128263;' : '&#128266;';
+  var btn   = document.getElementById('mute-btn');
+  var icon  = document.getElementById('mute-icon');
+  var label = document.getElementById('mute-label');
+  if (btn)   btn.classList.toggle('muted', _audioMuted);
+  if (icon)  icon.textContent = _audioMuted ? '♪' : '♪';
+  if (label) label.textContent = _audioMuted ? 'OFF' : 'ON';
   if (!_audioMuted) _unlockAudio();
 }}
 function _playTones(freqs, dur, type, stagger, vol) {{
