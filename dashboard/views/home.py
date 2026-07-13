@@ -4747,14 +4747,6 @@ window.addEventListener('resize', function() {{
           var display;
           if (row.event_type === 'TRADE' && (raw.indexOf('ENTER') !== -1 || raw.indexOf('EXIT') !== -1)) {{
             var isEntry = raw.indexOf('ENTER') !== -1;
-            // Flash the terminal border — live events only
-            var ovl = !isHistory && document.getElementById('term-overlay');
-            if (ovl) {{
-              ovl.classList.remove('flash-entry','flash-exit');
-              void ovl.offsetWidth; // force reflow to restart animation
-              ovl.classList.add(isEntry ? 'flash-entry' : 'flash-exit');
-              setTimeout(function() {{ ovl.classList.remove('flash-entry','flash-exit'); }}, 1300);
-            }}
             var verbPlain = isEntry ? 'enter' : 'exit';
             var verbHtml  = isEntry ? '<span style="color:#00ff9d">enter</span>' : '<span style="color:#ff9900">exit</span>';
             var priceM    = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
@@ -4765,56 +4757,65 @@ window.addEventListener('resize', function() {{
             var plain     = verbPlain + ' ' + sym;
             var html      = verbHtml + ' ' + sym + priceS + pnlHtml;
             if (window._postToFeed) window._postToFeed(plain, _parseTs(row.recorded_at), html);
-            // Trigger reason-aware exit animation on live events
-            if (!isHistory && !isEntry && window._triggerCardExit) {{
-              var reasonM = raw.match(/·\s*(target|stop|timeout|reversal|signal)\s*$/i);
-              var exitReason = reasonM ? reasonM[1].toLowerCase() : (pnlM && pnlM[1][0] === '+' ? 'target' : 'stop');
-              var pnlVal = pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null;
-              window._triggerCardExit(sym, exitReason, pnlVal);
-            }}
-            // (heartbeat replaced by shockwave rings in drawPulse)
-            // Gauge + streak + orb flash on live trades
+            // All visual + audio effects fire in one synchronous block — no gaps
             if (!isHistory) {{
               if (window._recordTradeForGauge) window._recordTradeForGauge();
               if (!isEntry && pnlM && window._recordStreakResult) {{
                 window._recordStreakResult(pnlM[1][0] === '+');
               }}
-              if (window._orbTradeFlash) window._orbTradeFlash(isEntry);
-              // Sound
               if (isEntry) {{
-                if (window._soundEntry) window._soundEntry();
-              }} else if (pnlM) {{
-                if (pnlM[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
-                else {{ if (window._soundLoss) window._soundLoss(); }}
-              }}
-              // On ENTER: immediately insert card — don't wait for positions poll
-              if (isEntry && window._makeCard) {{
-                var _sec = document.getElementById('pos-crypto-section');
-                var _symE = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
-                if (_sec && !_cryptoCardEls[_symE]) {{
-                  var _priceE = priceM ? parseFloat(priceM[1].replace(/,/g,'')) : 0;
-                  var _now = new Date().toISOString();
-                  var _ep = {{
-                    symbol: _symE, direction: 'long', qty: 0,
-                    entry_price: _priceE, stop_price: _priceE * 0.997,
-                    target_price: _priceE * 1.006, entered_at: _now
-                  }};
-                  var _el = window._makeCard(_ep);
-                  _el.classList.add('pos-card-entering');
-                  _sec.appendChild(_el);
-                  _cryptoCardEls[_symE] = _el;
-                  var _flat = document.getElementById('pos-crypto-flat');
-                  if (_flat) _flat.style.display = 'none';
+                // ── ENTRY: terminal flash + orb bloom + sound + card insert ──
+                var _ovlE = document.getElementById('term-overlay');
+                if (_ovlE) {{
+                  _ovlE.classList.remove('flash-entry','flash-exit');
+                  void _ovlE.offsetWidth;
+                  _ovlE.classList.add('flash-entry');
+                  setTimeout(function() {{ _ovlE.classList.remove('flash-entry'); }}, 1300);
                 }}
-              }}
-              // Sync all exit effects: satellite despawn + P&L odometer — same tick
-              if (!isEntry) {{
-                // Trigger satellite exit directly (don't wait for positions poll)
+                if (window._orbTradeFlash) window._orbTradeFlash(true);
+                if (window._soundEntry) window._soundEntry();
+                if (window._makeCard) {{
+                  var _sec = document.getElementById('pos-crypto-section');
+                  var _symE = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
+                  if (_sec && !_cryptoCardEls[_symE]) {{
+                    var _priceE = priceM ? parseFloat(priceM[1].replace(/,/g,'')) : 0;
+                    var _ep = {{
+                      symbol: _symE, direction: 'long', qty: 0,
+                      entry_price: _priceE, stop_price: _priceE * 0.997,
+                      target_price: _priceE * 1.006, entered_at: new Date().toISOString()
+                    }};
+                    var _el = window._makeCard(_ep);
+                    _el.classList.add('pos-card-entering');
+                    _sec.appendChild(_el);
+                    _cryptoCardEls[_symE] = _el;
+                    var _flat = document.getElementById('pos-crypto-flat');
+                    if (_flat) _flat.style.display = 'none';
+                  }}
+                }}
+              }} else {{
+                // ── EXIT: ALL effects fire simultaneously — terminal flash + orb bloom +
+                //          sound + satellite shoot-out + P&L odometer — one atomic block ──
+                var _isWin = pnlM && pnlM[1][0] === '+';
+                // 1. Terminal border flash
+                var _ovlX = document.getElementById('term-overlay');
+                if (_ovlX) {{
+                  _ovlX.classList.remove('flash-entry','flash-exit');
+                  void _ovlX.offsetWidth;
+                  _ovlX.classList.add('flash-exit');
+                  setTimeout(function() {{ _ovlX.classList.remove('flash-exit'); }}, 1300);
+                }}
+                // 2. Orb bloom
+                if (window._orbTradeFlash) window._orbTradeFlash(false);
+                // 3. Sound
+                if (pnlM) {{
+                  if (_isWin) {{ if (window._soundWin) window._soundWin(); }}
+                  else {{ if (window._soundLoss) window._soundLoss(); }}
+                }}
+                // 4. Satellite shoot-out
                 var _exitSymFull = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
                 var _satKey = _satAngles[_exitSymFull] !== undefined ? _exitSymFull
                             : _satAngles[sym] !== undefined ? sym : null;
                 if (_satKey) {{
-                  var _isWin = pnlM && pnlM[1][0] === '+';
                   _satExiting[_satKey] = {{
                     angle: _satAngles[_satKey],
                     orbitR: _smoothOrbitR[_satKey] || 32,
@@ -4824,28 +4825,25 @@ window.addEventListener('resize', function() {{
                   delete _satAngles[_satKey];
                   delete _smoothOrbitR[_satKey];
                 }}
-                // Odometer roll for total P&L
+                // 5. P&L odometer — starts same RAF tick as satellite
                 if (pnlM) {{
-                  var _pnlEl  = document.getElementById('total-pnl-val');
-                  var _subEl  = document.getElementById('total-pnl-sub');
+                  var _pnlEl = document.getElementById('total-pnl-val');
+                  var _subEl = document.getElementById('total-pnl-sub');
                   if (_pnlEl) {{
-                    var _raw   = parseFloat(_pnlEl.getAttribute('data-raw') || '0') || 0;
-                    var _delta = parseFloat(pnlM[1].replace(/,/g,'')) || 0;
+                    var _raw    = parseFloat(_pnlEl.getAttribute('data-raw') || '0') || 0;
+                    var _delta  = parseFloat(pnlM[1].replace(/,/g,'')) || 0;
                     var _target = _raw + _delta;
                     _pnlEl.setAttribute('data-raw', _target);
                     var _isPos  = _target >= 0;
                     var _col    = _isPos ? '#00ff9d' : '#ff3366';
                     _pnlEl.style.color = _col;
                     if (_subEl) _subEl.style.color = _col;
-                    // Flash animation
                     _pnlEl.classList.remove('pnl-flash-pos','pnl-flash-neg');
                     void _pnlEl.offsetWidth;
                     _pnlEl.classList.add(_isPos ? 'pnl-flash-pos' : 'pnl-flash-neg');
-                    // Odometer: roll from _raw to _target over 600ms
                     var _odoStart = _raw, _odoEnd = _target, _odoT0 = performance.now();
-                    var _odoDur = 600;
                     function _odoFrame(now) {{
-                      var p = Math.min(1, (now - _odoT0) / _odoDur);
+                      var p = Math.min(1, (now - _odoT0) / 600);
                       var ease = 1 - Math.pow(1-p, 3);
                       var v = _odoStart + (_odoEnd - _odoStart) * ease;
                       var sign = v >= 0 ? '+' : '−';
@@ -4858,6 +4856,12 @@ window.addEventListener('resize', function() {{
                     }}
                     requestAnimationFrame(_odoFrame);
                   }}
+                }}
+                // 6. Card exit animation
+                if (window._triggerCardExit) {{
+                  var _reasonM = raw.match(/·\s*(target|stop|timeout|reversal|signal)\s*$/i);
+                  var _exitReason = _reasonM ? _reasonM[1].toLowerCase() : (_isWin ? 'target' : 'stop');
+                  window._triggerCardExit(sym, _exitReason, pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null);
                 }}
               }}
             }}
