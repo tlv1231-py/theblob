@@ -6194,6 +6194,7 @@ window.addEventListener('resize', function() {{
       el.setAttribute('data-sym', p.symbol);
       el.setAttribute('data-entered', p.entered_at || '');
       el.setAttribute('data-qty', qty || 0);
+      el.setAttribute('data-entry', entry || 0);
       el.style.borderLeft = '2px solid ' + col;
       el.style.position = 'relative';
       el.style.overflow = 'hidden';
@@ -6635,7 +6636,9 @@ window.addEventListener('resize', function() {{
             var hvalEl = document.getElementById('hval-' + symId);
             if (!hvalEl) return;
             var posData = posMap[sym];
-            var qty = posData ? parseFloat(posData.qty || 0) : 0;
+            // Fall back to data-qty on the card if map not yet populated
+            var qty = posData ? parseFloat(posData.qty || 0)
+                              : parseFloat(card.getAttribute('data-qty') || 0);
             if (qty > 0) {{
               var holdVal = qty * price;
               hvalEl.textContent = holdVal >= 1000
@@ -6644,8 +6647,9 @@ window.addEventListener('resize', function() {{
             }}
             // Also update P&L for cards without prox-wrap
             var pnlEl = document.getElementById('pnl-live-' + symId);
-            if (pnlEl && posData) {{
-              var entry = parseFloat(posData.entry_price || 0);
+            var entryFallback = parseFloat(card.getAttribute('data-entry') || 0);
+            if (pnlEl && (posData || entryFallback)) {{
+              var entry = posData ? parseFloat(posData.entry_price || 0) : entryFallback;
               if (entry > 0) {{
                 var pnlPct = (price - entry) / entry * 100;
                 var prevRaw = parseFloat(pnlEl.getAttribute('data-raw') || 'NaN');
