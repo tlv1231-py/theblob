@@ -1019,18 +1019,26 @@ body::after {{
 #term-overlay {{
   display:none !important;
 }}
-@keyframes trade-entry-flash {{
-  0%   {{ box-shadow:inset 0 0 0 2px rgba(0,255,157,0), border-color:#00ff41; }}
-  15%  {{ box-shadow:inset 0 0 40px 6px rgba(0,255,157,.45); border-color:#00ff9d; }}
-  100% {{ box-shadow:inset 0 0 0 2px rgba(0,255,157,0); border-color:#00ff41; }}
+/* ── Trade veil — full chart-area flash on every trade ── */
+#trade-veil {{
+  position:absolute; inset:0; pointer-events:none; z-index:50;
+  opacity:0;
 }}
-@keyframes trade-exit-flash {{
-  0%   {{ box-shadow:inset 0 0 0 2px rgba(255,153,0,0); border-color:#00ff41; }}
-  15%  {{ box-shadow:inset 0 0 40px 6px rgba(255,153,0,.45); border-color:#ff9900; }}
-  100% {{ box-shadow:inset 0 0 0 2px rgba(255,153,0,0); border-color:#00ff41; }}
+@keyframes veil-entry {{
+  0%   {{ opacity:.22; background:radial-gradient(ellipse at 50% 50%, rgba(0,255,157,.35) 0%, rgba(0,255,157,0) 70%); }}
+  100% {{ opacity:0; }}
 }}
-#term-overlay.flash-entry {{ animation:trade-entry-flash 1.2s ease-out forwards; }}
-#term-overlay.flash-exit  {{ animation:trade-exit-flash  1.2s ease-out forwards; }}
+@keyframes veil-win {{
+  0%   {{ opacity:.28; background:radial-gradient(ellipse at 50% 50%, rgba(0,255,157,.4) 0%, rgba(0,255,157,0) 70%); }}
+  100% {{ opacity:0; }}
+}}
+@keyframes veil-loss {{
+  0%   {{ opacity:.28; background:radial-gradient(ellipse at 50% 50%, rgba(255,51,102,.4) 0%, rgba(255,51,102,0) 70%); }}
+  100% {{ opacity:0; }}
+}}
+#trade-veil.veil-entry {{ animation:veil-entry .5s ease-out forwards; }}
+#trade-veil.veil-win   {{ animation:veil-win   .5s ease-out forwards; }}
+#trade-veil.veil-loss  {{ animation:veil-loss  .5s ease-out forwards; }}
 /* CRT scanlines */
 #term-overlay::before {{
   content:'';
@@ -1469,8 +1477,8 @@ body::after {{
   transition:opacity .4s ease, transform .6s cubic-bezier(.22,1,.36,1);
 }}
 #pnl-float.visible {{ opacity:1; }}
-#pnl-float.nudge-up   {{ transform:translate(-50%, -100%) translateY(-28px); }}
-#pnl-float.nudge-down {{ transform:translate(-50%, -100%) translateY(-10px); }}
+#pnl-float.nudge-up   {{ transform:translate(-50%, -100%) translateY(-96px); }}
+#pnl-float.nudge-down {{ transform:translate(-50%, -100%) translateY(-96px); }}
 .om-row {{
   display:flex; align-items:baseline; justify-content:space-between; gap:10px;
   padding:1.5px 0;
@@ -1496,10 +1504,18 @@ body::after {{
   font-family:Consolas,monospace; font-size:7.5px; letter-spacing:.06em;
   opacity:.7; margin-top:3px; transition:color .3s ease;
 }}
-@keyframes pnl-flash-pos {{ 0%{{text-shadow:0 0 28px #00ff9d,0 0 6px #00ff9d}} 100%{{text-shadow:0 0 18px currentColor}} }}
-@keyframes pnl-flash-neg {{ 0%{{text-shadow:0 0 28px #ff3366,0 0 6px #ff3366}} 100%{{text-shadow:0 0 18px currentColor}} }}
-.pnl-flash-pos {{ animation:pnl-flash-pos .7s ease-out forwards; }}
-.pnl-flash-neg {{ animation:pnl-flash-neg .7s ease-out forwards; }}
+@keyframes pnl-flash-pos {{
+  0%   {{ text-shadow:0 0 60px #00ff9d,0 0 24px #00ff9d,0 0 6px #fff; transform:scale(1.18); }}
+  40%  {{ text-shadow:0 0 40px #00ff9d,0 0 12px #00ff9d; transform:scale(1.06); }}
+  100% {{ text-shadow:0 0 14px currentColor; transform:scale(1); }}
+}}
+@keyframes pnl-flash-neg {{
+  0%   {{ text-shadow:0 0 60px #ff3366,0 0 24px #ff3366,0 0 6px #fff; transform:scale(1.18); }}
+  40%  {{ text-shadow:0 0 40px #ff3366,0 0 12px #ff3366; transform:scale(1.06); }}
+  100% {{ text-shadow:0 0 14px currentColor; transform:scale(1); }}
+}}
+.pnl-flash-pos {{ animation:pnl-flash-pos .55s cubic-bezier(.22,1,.36,1) forwards; }}
+.pnl-flash-neg {{ animation:pnl-flash-neg .55s cubic-bezier(.22,1,.36,1) forwards; }}
 .om-val {{
   font-size:11px; font-weight:700; font-family:Consolas,monospace;
   color:#ff00cc; letter-spacing:.04em; white-space:nowrap;
@@ -2027,6 +2043,7 @@ body::after {{
   <div id="chart"></div>
   <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
+  <div id="trade-veil"></div>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
     <div class="om-row">
@@ -2519,7 +2536,7 @@ window.addEventListener('resize', resizeCanvas);
 var pulseTargets = [];
 
 // ── Orb state ─────────────────────────────────────────────────────────────────
-var _orbFlash = {{ active: false, isEntry: true, t: 0, dur: 2200 }};
+var _orbFlash = {{ active: false, isEntry: true, t: 0, dur: 900 }};
 var _orbBurstCount = 0;
 var _liveTip = {{ pts: [] }};
 
@@ -2659,7 +2676,7 @@ function positionPnlFloat() {{
       pf.style.transform = 'translate(-50%, 0)';
     }} else {{
       pf.style.top = cy + 'px';
-      pf.style.transform = 'translate(-50%, -100%) translateY(-18px)';
+      pf.style.transform = 'translate(-50%, -100%) translateY(-96px)';
     }}
     pf.classList.add('visible');
   }} catch(e) {{}}
@@ -3078,9 +3095,9 @@ function _playTones(freqs, dur, type) {{
     }});
   }} catch(e) {{}}
 }}
-window._soundEntry = function() {{ _playTones([440, 660], 0.12); }};
-window._soundWin   = function() {{ _playTones([523, 659, 784], 0.18); }};
-window._soundLoss  = function() {{ _playTones([330, 247], 0.22, 'triangle'); }};
+window._soundEntry = function() {{ _playTones([440, 660], 0.10); }};
+window._soundWin   = function() {{ _playTones([523, 659, 784, 1047], 0.16); }};
+window._soundLoss  = function() {{ _playTones([280, 210], 0.20, 'sawtooth'); }};
 
 // ── Wallet canvas engine ──────────────────────────────────────────────────────
 (function() {{
@@ -4724,13 +4741,12 @@ window.addEventListener('resize', function() {{
                 window._recordStreakResult(pnlM[1][0] === '+');
               }}
               if (isEntry) {{
-                // ── ENTRY: terminal flash + orb bloom + sound + card insert ──
-                var _ovlE = document.getElementById('term-overlay');
-                if (_ovlE) {{
-                  _ovlE.classList.remove('flash-entry','flash-exit');
-                  void _ovlE.offsetWidth;
-                  _ovlE.classList.add('flash-entry');
-                  setTimeout(function() {{ _ovlE.classList.remove('flash-entry'); }}, 1300);
+                // ── ENTRY: veil flash + orb bloom + sound + card insert ──
+                var _veilE = document.getElementById('trade-veil');
+                if (_veilE) {{
+                  _veilE.classList.remove('veil-entry','veil-win','veil-loss');
+                  void _veilE.offsetWidth;
+                  _veilE.classList.add('veil-entry');
                 }}
                 if (window._orbTradeFlash) window._orbTradeFlash(true);
                 if (window._soundEntry) window._soundEntry();
@@ -4756,13 +4772,12 @@ window.addEventListener('resize', function() {{
                 // ── EXIT: ALL effects fire simultaneously — terminal flash + orb bloom +
                 //          sound + satellite shoot-out + P&L odometer — one atomic block ──
                 var _isWin = pnlM && pnlM[1][0] === '+';
-                // 1. Terminal border flash
-                var _ovlX = document.getElementById('term-overlay');
-                if (_ovlX) {{
-                  _ovlX.classList.remove('flash-entry','flash-exit');
-                  void _ovlX.offsetWidth;
-                  _ovlX.classList.add('flash-exit');
-                  setTimeout(function() {{ _ovlX.classList.remove('flash-exit'); }}, 1300);
+                // 1. Veil flash — full chart area
+                var _veilX = document.getElementById('trade-veil');
+                if (_veilX) {{
+                  _veilX.classList.remove('veil-entry','veil-win','veil-loss');
+                  void _veilX.offsetWidth;
+                  _veilX.classList.add(_isWin ? 'veil-win' : 'veil-loss');
                 }}
                 // 2. Orb bloom
                 if (window._orbTradeFlash) window._orbTradeFlash(false);
