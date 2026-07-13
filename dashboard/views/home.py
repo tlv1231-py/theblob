@@ -3173,26 +3173,31 @@ function _toggleMute() {{
   if (btn) btn.innerHTML = _audioMuted ? '&#128263;' : '&#128266;';
   if (!_audioMuted) _unlockAudio();
 }}
-function _playTones(freqs, dur, type) {{
+function _playTones(freqs, dur, type, stagger, vol) {{
   if (_audioMuted || !_audioReady || !_audioCtx) return;
   try {{
     if (_audioCtx.state === 'suspended') {{ _audioCtx.resume(); return; }}
+    var _stagger = stagger !== undefined ? stagger : 0.09;
+    var _vol     = vol     !== undefined ? vol     : 0.12;
     freqs.forEach(function(f, i) {{
       var osc = _audioCtx.createOscillator(), g = _audioCtx.createGain();
       osc.connect(g); g.connect(_audioCtx.destination);
       osc.type = type || 'sine';
       osc.frequency.value = f;
-      var t0 = _audioCtx.currentTime + i * 0.09;
+      var t0 = _audioCtx.currentTime + i * _stagger;
       g.gain.setValueAtTime(0, t0);
-      g.gain.linearRampToValueAtTime(0.12, t0 + 0.01);
-      g.gain.linearRampToValueAtTime(0, t0 + dur);
+      g.gain.linearRampToValueAtTime(_vol, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       osc.start(t0); osc.stop(t0 + dur + 0.05);
     }});
   }} catch(e) {{}}
 }}
-window._soundEntry = function() {{ _playTones([440, 660], 0.10); }};
-window._soundWin   = function() {{ _playTones([523, 659, 784, 1047], 0.16); }};
-window._soundLoss  = function() {{ _playTones([280, 210], 0.20, 'sawtooth'); }};
+// Entry: single clean tick
+window._soundEntry = function() {{ _playTones([880], 0.07, 'sine', 0, 0.10); }};
+// Win exit: ascending arpeggio — G4 C5 E5 A5
+window._soundWin   = function() {{ _playTones([392, 523, 659, 880], 0.18, 'sine', 0.10, 0.13); }};
+// Loss exit: descending drop — G4 Eb4 B3 G3
+window._soundLoss  = function() {{ _playTones([392, 311, 247, 196], 0.22, 'triangle', 0.10, 0.11); }};
 
 // ── Wallet canvas engine ──────────────────────────────────────────────────────
 (function() {{
