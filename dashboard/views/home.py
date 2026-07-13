@@ -4880,7 +4880,9 @@ window.addEventListener('resize', function() {{
         var isHistory = !_lastSeen;
         if (isHistory) rows = rows.slice().reverse(); // DESC → chronological
         if (window._resetRunTimer) window._resetRunTimer();
-        rows.forEach(function(row) {{
+        // Stagger live batches so events drip in one-by-one (history: instant)
+        var _staggerMs = isHistory ? 0 : 90;
+        rows.forEach(function(row, _ri) {{ setTimeout(function() {{
           _lastSeen = row.recorded_at;
           var raw = row.message || '';
           var sym = row.symbol || '';
@@ -5030,16 +5032,16 @@ window.addEventListener('resize', function() {{
             var txt   = raw || (label + (sym ? ' · ' + sym : ''));
             if (window._postToFeed) window._postToFeed(txt, _parseTs(row.recorded_at));
           }}
-        }});
+        }}, _ri * _staggerMs); }}); // end stagger setTimeout + forEach
       }})
       .catch(function() {{}}); // silent — offline or auth issue
     }}
 
-    // Wait for feed to initialise then start polling every 5s
+    // Poll every 2s — smaller batches = more live, less bulk-load feel
     setTimeout(function() {{
       _poll();
-      setInterval(_poll, 5000);
-    }}, 3000);
+      setInterval(_poll, 2000);
+    }}, 2000);
   }})();
 
   // ── Live NAV poller — updates chart + all NAV displays in-place ─────────────
