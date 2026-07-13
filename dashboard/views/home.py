@@ -1058,6 +1058,21 @@ body::after {{
 }}
 #wallet-selector.live #wallet-mode-icon,
 #wallet-selector.live #wallet-mode-label {{ color:#00e564; text-shadow:0 0 8px rgba(0,229,100,.7); }}
+#strat-health {{
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 8px; border:1px solid rgba(255,255,255,.08);
+  cursor:default;
+}}
+#strat-health-dot {{
+  width:7px; height:7px; border-radius:50%;
+  background:#3a3a3a;
+  transition:background .4s, box-shadow .4s;
+}}
+#strat-health-dot.green  {{ background:#00c880; box-shadow:0 0 6px rgba(0,200,128,.7); animation:health-pulse 2s ease-in-out infinite; }}
+#strat-health-dot.yellow {{ background:#ffaa00; box-shadow:0 0 6px rgba(255,170,0,.7); animation:health-pulse 1s ease-in-out infinite; }}
+#strat-health-dot.red    {{ background:#e03355; box-shadow:0 0 8px rgba(224,51,85,.8); animation:health-pulse .5s ease-in-out infinite; }}
+@keyframes health-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.45}} }}
+#strat-health-label {{ font-size:8px; letter-spacing:.2em; color:rgba(255,255,255,.35); font-family:Consolas,monospace; }}
 
 /* ── NAV card (top-left of main-area) ── */
 .nav-card {{
@@ -2022,6 +2037,10 @@ body::after {{
     <span id="wallet-mode-icon">◈</span>
     <span id="wallet-mode-label">PAPER</span>
     <span id="wallet-mode-chevron">▾</span>
+  </div>
+  <div id="strat-health" title="Strategy health">
+    <div id="strat-health-dot"></div>
+    <span id="strat-health-label">—</span>
   </div>
   <div class="spacer"></div>
   <div class="tb-stat">
@@ -4467,6 +4486,38 @@ window.addEventListener('resize', function() {{
     else if (diff < 30) ago.style.color = '#9400ff';
   }}
 
+  // ── Strategy health indicator ──────────────────────────────────────────────────
+  (function() {{
+    var _dot   = document.getElementById('strat-health-dot');
+    var _label = document.getElementById('strat-health-label');
+    var _lastTradeMs = window._lastFeedEventMs || Date.now();
+    // Also track only trade events (not all feed events)
+    var _origPost = window._postToFeed;
+    window._postToFeed = function(plain, ts, html) {{
+      if (_origPost) _origPost(plain, ts, html);
+      var _h = html || plain;
+      if (_h.indexOf('>enter<') !== -1 || _h.indexOf('>exit<') !== -1) {{
+        _lastTradeMs = Date.now();
+      }}
+    }};
+    function _tickHealth() {{
+      if (!_dot || !_label) return;
+      var age = (Date.now() - _lastTradeMs) / 1000;
+      var cls, txt;
+      if (age < 300) {{        // < 5 min: healthy
+        cls = 'green';  txt = 'LIVE';
+      }} else if (age < 900) {{ // 5–15 min: warning
+        cls = 'yellow'; txt = 'SLOW';
+      }} else {{                // > 15 min: stale
+        cls = 'red';    txt = 'IDLE';
+      }}
+      _dot.className = cls;
+      _label.textContent = txt;
+    }}
+    _tickHealth();
+    setInterval(_tickHealth, 10000);
+  }})();
+
   // ── Position card scan animation — staggered sweeps across all visible cards ──
   function _scanPositionCards() {{
     var cards = document.querySelectorAll('#pos-overlay .pos-card');
@@ -4816,14 +4867,20 @@ window.addEventListener('resize', function() {{
           if (row.event_type === 'TRADE' && (raw.indexOf('ENTER') !== -1 || raw.indexOf('EXIT') !== -1)) {{
             var isEntry = raw.indexOf('ENTER') !== -1;
             var verbPlain = isEntry ? 'enter' : 'exit';
-            var verbHtml  = isEntry ? '<span style="color:#00ff9d">enter</span>' : '<span style="color:#ff9900">exit</span>';
+            var verbCol   = isEntry ? '#00b4ff' : '#ff9900';
+            var verbHtml  = '<span style="color:' + verbCol + '">' + verbPlain + '</span>';
+            var symCol    = (function(s) {{
+              var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffff;
+              var hue = (h % 360 + 360) % 360; return 'hsl(' + hue + ',70%,62%)';
+            }})(sym);
+            var symHtml   = '<span style="color:' + symCol + ';font-weight:700">' + sym + '</span>';
             var priceM    = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
-            var priceS    = priceM ? ' @ $' + priceM[1] : '';
+            var priceS    = priceM ? ' @ <span style="color:rgba(255,255,255,.55)">$' + priceM[1] + '</span>' : '';
             var pnlM      = raw.match(/pnl\s*([+-][\d,.]+)/);
-            var pnlCol    = pnlM && pnlM[1][0] === '+' ? '#00ff9d' : '#ff4444';
-            var pnlHtml   = pnlM ? ' · pnl <span style="color:' + pnlCol + '">' + pnlM[1] + '</span>' : '';
+            var pnlCol    = pnlM && pnlM[1][0] === '+' ? '#00c880' : '#e03355';
+            var pnlHtml   = pnlM ? ' · <span style="color:' + pnlCol + '">' + pnlM[1] + '</span>' : '';
             var plain     = verbPlain + ' ' + sym;
-            var html      = verbHtml + ' ' + sym + priceS + pnlHtml;
+            var html      = verbHtml + ' ' + symHtml + priceS + pnlHtml;
             if (window._postToFeed) window._postToFeed(plain, _parseTs(row.recorded_at), html);
             // All visual + audio effects fire in one synchronous block — no gaps
             if (!isHistory) {{
