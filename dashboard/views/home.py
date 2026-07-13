@@ -1164,7 +1164,7 @@ body::after {{
   display:flex; align-items:stretch;
   background:linear-gradient(180deg,rgba(2,0,12,.98) 0%,rgba(5,0,18,.95) 100%);
   border-bottom:1px solid rgba(148,0,255,.18);
-  position:relative; z-index:9001; /* above fixed callout-rail z-index:9000 */
+  position:relative; z-index:99999;
   gap:0;
 }}
 /* scanline overlay */
@@ -1216,9 +1216,9 @@ body::after {{
 
 /* ── Callout rail — fixed to viewport, JS pins top to strat-bar bottom once on load ─ */
 #callout-rail {{
-  position:fixed; left:50%; top:120px; /* JS overrides top immediately */
+  position:fixed; left:50%; top:120px; /* rAF loop overrides top every frame */
   transform:translateX(-50%);
-  z-index:9000;
+  z-index:9998; /* strat-bar is 99999, always on top */
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
   width:380px;
@@ -6942,17 +6942,17 @@ window.addEventListener('resize', function() {{
       // ── Callout system — stackable drop-in notifications ────────
       var _calloutRail = document.getElementById('callout-rail');
 
-      // Pin rail to bottom of strat-bar using fixed positioning (parent overflow:hidden clips relative/absolute)
-      function _pinRail() {{
+      // Continuously pin rail to strat-bar bottom via rAF — handles layout shifts and Streamlit reflows
+      (function _pinRail() {{
         var sb = document.getElementById('strat-bar');
         if (sb && _calloutRail) {{
-          _calloutRail.style.top = sb.getBoundingClientRect().bottom + 'px';
+          var b = sb.getBoundingClientRect().bottom;
+          if (b > 0 && _calloutRail.style.top !== b + 'px') {{
+            _calloutRail.style.top = b + 'px';
+          }}
         }}
-      }}
-      // Run once after layout settles, then on any resize
-      setTimeout(_pinRail, 100);
-      setTimeout(_pinRail, 500);
-      window.addEventListener('resize', _pinRail);
+        requestAnimationFrame(_pinRail);
+      }})();
 
       function _spawnCallout(cfg) {{
         var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
