@@ -2832,17 +2832,16 @@ function drawPulse() {{
     }} catch(e) {{}}
   }}
 
-  // ── Shockwave rings ───────────────────────────────────────────────────────
+  // ── Shockwave rings — small, local, subtle ───────────────────────────────
   _shockWaves = _shockWaves.filter(function(w) {{ return w.age < 1; }});
   _shockWaves.forEach(function(w) {{
-    w.age += 0.016;
-    var maxR = Math.max(canvas.width, canvas.height) * 1.1;
-    var radius = w.age * maxR;
-    var alpha  = Math.pow(1-w.age, 2) * 0.65;
+    w.age += 0.04;
+    var radius = w.age * 40;
+    var alpha  = Math.pow(1-w.age, 2) * 0.3;
     ctx.beginPath();
     ctx.arc(w.cx, w.cy, radius, 0, Math.PI*2);
     ctx.strokeStyle='rgba('+w.col[0]+','+w.col[1]+','+w.col[2]+','+alpha+')';
-    ctx.lineWidth = Math.max(0.5, 2*(1-w.age));
+    ctx.lineWidth = 1;
     ctx.stroke();
   }});
 
