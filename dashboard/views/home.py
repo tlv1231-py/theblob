@@ -776,12 +776,13 @@ def _build_daw_html(data: dict) -> str:
     import json as _json
     _eq_pos_js = _json.dumps({
         p["sym"]: {
-            "entry_price": float(p["entry_price"] or 0),
-            "stop_price":  float(p["entry_price"] or 0) * 0.95,
-            "target_price": float(p["entry_price"] or 0) * 1.10,
+            "entry_price":  float(p["entry_price"] or p.get("value") or 1),
+            "stop_price":   float(p["entry_price"] or p.get("value") or 1) * 0.95,
+            "target_price": float(p["entry_price"] or p.get("value") or 1) * 1.10,
             "current_value": float(p["value"] or 0),
+            "is_equity": True,
         }
-        for p in data.get("positions_data", []) if p.get("entry_price")
+        for p in data.get("positions_data", [])
     })
 
     pos_cards = ""
@@ -2776,31 +2777,35 @@ function drawPulse() {{
       var cryptoMap  = window._cryptoPositionsMap  || {{}};
       var equityMap  = window._equityPositionsMap  || {{}};
       var posMap = Object.assign({{}}, cryptoMap);
-      // Merge equity: use current_value as proxy price, entry ±5/10% for stop/target
       Object.keys(equityMap).forEach(function(sym) {{
-        var ep = equityMap[sym];
-        posMap[sym] = {{ entry_price: ep.entry_price, stop_price: ep.stop_price, target_price: ep.target_price }};
+        posMap[sym] = equityMap[sym];
       }});
       var prices  = window._liveProxPrices    || {{}};
       var posSyms = Object.keys(posMap);
       posSyms.forEach(function(sym, idx) {{
         var pos = posMap[sym];
         if (!pos) return;
+        var isEquity = !!pos.is_equity;
         var entry  = parseFloat(pos.entry_price);
         var stop   = parseFloat(pos.stop_price);
         var tgt    = parseFloat(pos.target_price || 0) || entry*1.008;
-        var price  = prices[sym] || entry;
+        // Equity: use current_value as live price proxy; crypto: use live proxy prices
+        var price  = isEquity ? (parseFloat(pos.current_value) || entry) : (prices[sym] || entry);
         var range  = tgt - stop;
         var t2     = range ? Math.max(0, Math.min(1, (price-stop)/range)) : 0.5;
 
-        // Orbit radius: 20px (at stop) → 44px (at target) — lerped for smoothness
-        var _targetR = 20 + t2 * 24;
+        // Equity orbs orbit further out so they're visually distinct from crypto
+        var _minR = isEquity ? 52 : 20;
+        var _maxR = isEquity ? 68 : 44;
+        var _targetR = _minR + t2 * (_maxR - _minR);
         if (_smoothOrbitR[sym] === undefined) _smoothOrbitR[sym] = _targetR;
         _smoothOrbitR[sym] += (_targetR - _smoothOrbitR[sym]) * 0.06;
         var orbitR = _smoothOrbitR[sym];
 
-        // Speed: faster near stop, slower near target
-        var satSpeed = 0.012 + (1-t2)*0.022 + pressure*0.018;
+        // Speed: equity slower (long-term hold), crypto faster
+        var satSpeed = isEquity
+          ? 0.004 + pressure*0.004
+          : 0.012 + (1-t2)*0.022 + pressure*0.018;
 
         if (!_satAngles[sym]) _satAngles[sym] = idx * (Math.PI*2/Math.max(posSyms.length,1));
         _satAngles[sym] += satSpeed;
@@ -2808,10 +2813,18 @@ function drawPulse() {{
         var sx = pcx + Math.cos(_satAngles[sym]) * orbitR;
         var sy = pcy + Math.sin(_satAngles[sym]) * orbitR;
 
-        // Color: red=near stop, orange=mid, green=near target
-        var sr = Math.round(255*Math.max(0,1-t2*1.5));
-        var sg = Math.round(255*Math.min(1,t2*1.8));
-        var sb = Math.round(102*(1-t2));
+        // Equity: cyan palette. Crypto: red→orange→green by proximity to target
+        var sr, sg, sb;
+        if (isEquity) {{
+          // Cyan-white for equity — always clearly distinct
+          sr = Math.round(0   + t2*40);
+          sg = Math.round(200 + t2*55);
+          sb = Math.round(255);
+        }} else {{
+          sr = Math.round(255*Math.max(0,1-t2*1.5));
+          sg = Math.round(255*Math.min(1,t2*1.8));
+          sb = Math.round(102*(1-t2));
+        }}
 
         // Faint orbit trail
         ctx.beginPath();
