@@ -1215,14 +1215,14 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 
-/* ── Callout rail — positioned by JS flush below #strat-bar ─ */
+/* ── Callout rail — anchored to bottom of strat-bar via absolute positioning ─ */
 #callout-rail {{
-  position:fixed; left:50%; top:0; /* JS sets top dynamically */
+  position:absolute; top:100%; left:50%;
   transform:translateX(-50%);
-  z-index:10; /* below strat-bar z-index:20 so HUD stays on top */
+  z-index:30; /* above strat-bar's z-index:20 children but rail hangs below */
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
-  width:360px;
+  width:380px;
   padding-top:4px;
 }}
 .callout-card {{
@@ -2296,10 +2296,9 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
-<!-- ── Callout rail — fixed below HUD, z-index below strat-bar ── -->
-<div id="callout-rail"></div>
-<!-- ── Stratagem HUD bar ── -->
+<!-- ── Stratagem HUD bar — callout-rail hangs below via position:absolute top:100% ── -->
 <div id="strat-bar">
+  <div id="callout-rail"></div>
   <div class="strat-slot" id="ss-runner">
     <div class="ss-icon">⚡</div>
     <div class="ss-name">RUNNER</div>
@@ -6846,16 +6845,6 @@ window.addEventListener('resize', function() {{
 
       // ── Callout system — stackable drop-in notifications ────────
       var _calloutRail = document.getElementById('callout-rail');
-
-      // Position rail flush below strat-bar
-      (function _positionRail() {{
-        var sb = document.getElementById('strat-bar');
-        if (sb && _calloutRail) {{
-          var r = sb.getBoundingClientRect();
-          _calloutRail.style.top = r.bottom + 'px';
-        }}
-        requestAnimationFrame(_positionRail);
-      }})();
 
       function _spawnCallout(cfg) {{
         var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
