@@ -772,6 +772,18 @@ def _build_daw_html(data: dict) -> str:
     _pnl_str       = f'{_pnl_sign}${abs(_total_pnl):,.0f}'
     _pnl_pct_str   = f'{_total_pnl_pct:+.2f}% since $100K start'
 
+    # Build equity positions map for JS satellites
+    import json as _json
+    _eq_pos_js = _json.dumps({
+        p["sym"]: {
+            "entry_price": float(p["entry_price"] or 0),
+            "stop_price":  float(p["entry_price"] or 0) * 0.95,
+            "target_price": float(p["entry_price"] or 0) * 1.10,
+            "current_value": float(p["value"] or 0),
+        }
+        for p in data.get("positions_data", []) if p.get("entry_price")
+    })
+
     pos_cards = ""
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     for p in data.get("positions_data", []):
@@ -2726,8 +2738,15 @@ function drawPulse() {{
       ctx.beginPath(); ctx.arc(pcx,pcy,2.5,0,Math.PI*2);
       ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fill();
 
-      // ── Satellite dots — one per open position ────────────────────────────
-      var posMap = window._cryptoPositionsMap || {{}};
+      // ── Satellite dots — one per open position (crypto + equity) ─────────
+      var cryptoMap  = window._cryptoPositionsMap  || {{}};
+      var equityMap  = window._equityPositionsMap  || {{}};
+      var posMap = Object.assign({{}}, cryptoMap);
+      // Merge equity: use current_value as proxy price, entry ±5/10% for stop/target
+      Object.keys(equityMap).forEach(function(sym) {{
+        var ep = equityMap[sym];
+        posMap[sym] = {{ entry_price: ep.entry_price, stop_price: ep.stop_price, target_price: ep.target_price }};
+      }});
       var prices  = window._liveProxPrices    || {{}};
       var posSyms = Object.keys(posMap);
       posSyms.forEach(function(sym, idx) {{
@@ -5084,6 +5103,8 @@ window.addEventListener('resize', function() {{
       'signal':   'pos-card-exit-rev'
     }};
     var _EXIT_DUR = {{ 'target':540, 'stop':430, 'timeout':500, 'reversal':510, 'signal':510 }};
+    // ── Equity positions map — server-rendered, for satellite orbs ──────────────
+    window._equityPositionsMap = {_eq_pos_js};
     // ── Equity card map — built from SSR DOM on load ────────────────────────────
     var _equityCardEls = {{}};
     function _buildEquityMap() {{
@@ -5098,10 +5119,21 @@ window.addEventListener('resize', function() {{
       var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD']
              || _equityCardEls[fullSym];
       if (!el) return;
-      // Remove from whichever map owns it
+      // Remove from whichever map owns it; launch satellite exit animation
       if (_cryptoCardEls[fullSym]) delete _cryptoCardEls[fullSym];
       else if (_cryptoCardEls[fullSym + '/USD']) delete _cryptoCardEls[fullSym + '/USD'];
       else if (_equityCardEls[fullSym]) delete _equityCardEls[fullSym];
+      // Satellite exit for both crypto and equity
+      var _exitSym = _cryptoCardEls[fullSym + '/USD'] ? fullSym + '/USD' : fullSym;
+      if (_satAngles[_exitSym] !== undefined) {{
+        var _ep = (window._equityPositionsMap || {{}})[_exitSym] || {{}};
+        _satExiting[_exitSym] = {{
+          angle: _satAngles[_exitSym], orbitR: 32, age: 0,
+          sr: pnl >= 0 ? 0 : 255, sg: pnl >= 0 ? 255 : 51, sb: pnl >= 0 ? 157 : 102
+        }};
+        delete _satAngles[_exitSym];
+        delete (window._equityPositionsMap || {{}})[_exitSym];
+      }}
       el.classList.remove('pos-card-active');
       // Spawn ghost + particles immediately; collapse card after flash plays (280ms)
       _spawnPnlGhost(el, pnl, fullSym);
