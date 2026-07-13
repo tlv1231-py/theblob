@@ -751,8 +751,6 @@ def _build_daw_html(data: dict) -> str:
                 pass
         if not hhmm and len(ts_raw) >= 16:
             hhmm = ts_raw[11:16]  # fallback: raw UTC HH:MM
-        else:
-            hhmm = ""
 
         tag = ev.get("tag", "")
         nav_col = None
@@ -765,10 +763,8 @@ def _build_daw_html(data: dict) -> str:
 
         prose = _humanize(ev, nav_col)
 
-        is_newest = (_ev_i == _last_ev_i)
-        tw = ' id="te-newest" style="opacity:0;color:#00ff41;text-shadow:0 0 8px rgba(0,255,65,.6)"' if is_newest else ''
         term_rows += (
-            f'<div class="te"{tw}>'
+            f'<div class="te">'
             f'<span class="te-ts">{hhmm}<span style="font-size:7px;opacity:.4;letter-spacing:.08em"> ET</span>&nbsp;&nbsp;</span>'
             f'{prose}'
             f'</div>'
@@ -1159,6 +1155,93 @@ body::after {{
 
 /* ── Tracker bar — orange bar between header and chart ── */
 #tracker-bar {{ display:none; }}
+
+/* ═══════════════════════════════════════════════════════════════
+   STRATAGEM HUD — Helldivers-style process-status bar
+   ═══════════════════════════════════════════════════════════════ */
+#strat-bar {{
+  flex-shrink:0; height:46px;
+  display:flex; align-items:stretch;
+  background:linear-gradient(180deg,rgba(2,0,12,.98) 0%,rgba(5,0,18,.95) 100%);
+  border-bottom:1px solid rgba(148,0,255,.18);
+  position:relative; z-index:20; overflow:hidden;
+  gap:0;
+}}
+/* scanline overlay */
+#strat-bar::before {{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.08) 3px,rgba(0,0,0,.08) 4px);
+}}
+.strat-slot {{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:4px 6px; position:relative; cursor:default;
+  border-right:1px solid rgba(148,0,255,.12);
+  transition:background .3s;
+  min-width:0;
+}}
+.strat-slot:last-child {{ border-right:none; }}
+.strat-slot::before {{
+  content:''; position:absolute; left:0; top:0; bottom:0; width:2px;
+  background:var(--sc, rgba(0,180,255,.2));
+  transition:background .4s, box-shadow .4s;
+}}
+.strat-slot.ss-active::before  {{ background:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.9); }}
+.strat-slot.ss-ready::before   {{ background:#00ff9d; box-shadow:0 0 8px rgba(0,255,157,.9); }}
+.strat-slot.ss-exec::before    {{ background:#ffaa00; box-shadow:0 0 12px rgba(255,170,0,1); }}
+.strat-slot.ss-warn::before    {{ background:#ff3366; box-shadow:0 0 10px rgba(255,51,102,.9); }}
+.strat-slot.ss-exec {{ background:rgba(255,170,0,.04); }}
+.strat-slot.ss-ready {{ background:rgba(0,255,157,.03); }}
+.ss-icon {{
+  font-size:13px; line-height:1; margin-bottom:1px;
+  opacity:.55; transition:opacity .3s;
+}}
+.strat-slot.ss-active .ss-icon,
+.strat-slot.ss-exec   .ss-icon,
+.strat-slot.ss-ready  .ss-icon {{ opacity:1; }}
+.ss-name {{
+  font:700 6px Consolas,monospace; letter-spacing:.2em; text-transform:uppercase;
+  color:rgba(255,255,255,.28); margin-bottom:2px;
+}}
+.ss-status {{
+  font:700 9px Consolas,monospace; letter-spacing:.06em;
+  color:rgba(148,0,255,.6); transition:color .3s;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+  text-align:center;
+}}
+.strat-slot.ss-active .ss-status {{ color:#00e5ff; text-shadow:0 0 8px rgba(0,229,255,.5); }}
+.strat-slot.ss-ready  .ss-status {{ color:#00ff9d; text-shadow:0 0 8px rgba(0,255,157,.5); }}
+.strat-slot.ss-exec   .ss-status {{ color:#ffaa00; text-shadow:0 0 10px rgba(255,170,0,.8); animation:ss-exec-pulse .4s ease-in-out infinite alternate; }}
+.strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
+@keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
+
+/* ── Callout rail — drop-in notifications from strat-bar ─────── */
+#callout-rail {{
+  position:absolute; top:0; left:50%; transform:translateX(-50%);
+  z-index:200; display:flex; flex-direction:column; align-items:center;
+  gap:4px; padding-top:4px; pointer-events:none;
+  width:340px;
+}}
+.callout-card {{
+  width:100%; display:flex; align-items:center; gap:8px;
+  padding:7px 14px 7px 10px;
+  background:rgba(2,0,14,.96); backdrop-filter:blur(4px);
+  border:1px solid rgba(148,0,255,.3); border-left:3px solid;
+  transform:translateY(-60px); opacity:0;
+  transition:transform .22s cubic-bezier(.22,1,.36,1), opacity .18s ease;
+  pointer-events:none;
+}}
+.callout-card.cc-show {{ transform:translateY(0); opacity:1; }}
+.callout-card.cc-exit {{ transform:translateY(-60px); opacity:0; transition:transform .2s ease-in, opacity .18s ease-in; }}
+.cc-badge {{
+  font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 5px;
+  border:1px solid; text-transform:uppercase; flex-shrink:0;
+  opacity:.85;
+}}
+.cc-body {{ flex:1; min-width:0; }}
+.cc-sym   {{ font:700 11px Consolas,monospace; letter-spacing:.08em; }}
+.cc-detail {{ font:600 8px Consolas,monospace; letter-spacing:.04em; opacity:.6; }}
+.cc-time  {{ font:600 7px Consolas,monospace; letter-spacing:.1em; opacity:.4; flex-shrink:0; }}
+
 /* ── Terminal row appear ── */
 @keyframes te-appear {{
   from {{ opacity:0; transform:translateY(-6px); }}
@@ -2153,12 +2236,32 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
-<!-- Cyberpunk cycle bar — orange, sits between header and chart -->
-<div id="tracker-bar">
-  <div id="run-progress-wrap">
-    <span style="font:700 7px Consolas,monospace;letter-spacing:.22em;color:#ff6600;text-transform:uppercase;text-shadow:0 0 6px rgba(255,102,0,.6)">CYCLE</span>
-    <div id="run-progress-track"><div id="run-progress-fill"></div></div>
-    <span id="run-progress-label">—</span>
+<!-- ── Stratagem HUD bar ── -->
+<div id="strat-bar">
+  <div class="strat-slot" id="ss-runner">
+    <div class="ss-icon">⚡</div>
+    <div class="ss-name">RUNNER</div>
+    <div class="ss-status" id="ss-runner-st">—</div>
+  </div>
+  <div class="strat-slot" id="ss-pipeline">
+    <div class="ss-icon">⚙</div>
+    <div class="ss-name">PIPELINE</div>
+    <div class="ss-status" id="ss-pipeline-st">—</div>
+  </div>
+  <div class="strat-slot" id="ss-positions">
+    <div class="ss-icon">◉</div>
+    <div class="ss-name">POSITIONS</div>
+    <div class="ss-status" id="ss-positions-st">—</div>
+  </div>
+  <div class="strat-slot" id="ss-price">
+    <div class="ss-icon">↻</div>
+    <div class="ss-name">PRICE</div>
+    <div class="ss-status" id="ss-price-st">—</div>
+  </div>
+  <div class="strat-slot" id="ss-nav">
+    <div class="ss-icon">◈</div>
+    <div class="ss-name">NAV</div>
+    <div class="ss-status" id="ss-nav-st">—</div>
   </div>
 </div>
 
@@ -2169,6 +2272,7 @@ body::after {{
 
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
+  <div id="callout-rail"></div>
   <div id="chart"></div>
   <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
   <canvas id="ambient-canvas"></canvas>
@@ -5278,6 +5382,11 @@ window.addEventListener('resize', function() {{
                   void _veilE.offsetWidth;
                   _veilE.classList.add('veil-entry');
                 }}
+                // Stratagem callout drop-in
+                if (window._fireCallout) {{
+                  var _cPrice = priceM ? ' @$' + parseFloat(priceM[1].replace(/,/g,'')).toFixed(2) : '';
+                  window._fireCallout('ENTER', sym.replace('/USD','') + _cPrice, 'position opened · watching exit', '#00e5ff');
+                }}
                 if (window._orbTradeFlash) window._orbTradeFlash(true);
                 if (window._soundEntry) window._soundEntry();
                 if (window._makeCard) {{
@@ -5313,6 +5422,17 @@ window.addEventListener('resize', function() {{
                   _veilX.classList.remove('veil-entry','veil-win','veil-loss');
                   void _veilX.offsetWidth;
                   _veilX.classList.add(_isWin ? 'veil-win' : 'veil-loss');
+                }}
+                // Stratagem callout drop-in
+                if (window._fireCallout) {{
+                  var _cPnl = pnlM ? ' · pnl ' + pnlM[1] : '';
+                  var _cXPrice = priceM ? ' @$' + parseFloat(priceM[1].replace(/,/g,'')).toFixed(2) : '';
+                  window._fireCallout(
+                    _isWin ? 'WIN' : 'LOSS',
+                    sym.replace('/USD','') + _cXPrice,
+                    'closed' + _cPnl,
+                    _isWin ? '#00ff9d' : '#ff3366'
+                  );
                 }}
                 // 2. Orb bloom
                 if (window._orbTradeFlash) window._orbTradeFlash(false, _isWin);
@@ -6376,6 +6496,7 @@ window.addEventListener('resize', function() {{
             if (sym && data[id] && data[id].usd) priceMap[sym] = data[id].usd;
           }});
           window._liveProxPrices = priceMap; // expose for satellite dots in drawPulse
+          if (window._onPricePoll) window._onPricePoll();
           _updateProxMeters(priceMap);
           // Compute live portfolio NAV and push intraday point
           if (window._pushIntradayPoint) {{
@@ -6551,6 +6672,155 @@ window.addEventListener('resize', function() {{
     var _origPollStats = _pollStats;
     _pollStats = function() {{ _resetRunnerCd(); _origPollStats(); }};
     setTimeout(function() {{ _pollStats(); setInterval(_pollStats, 15000); }}, 6000);
+
+    // ══════════════════════════════════════════════════════════════
+    // STRATAGEM HUD — live slot updates + drop-in callouts
+    // ══════════════════════════════════════════════════════════════
+    (function() {{
+      // ── Slot state helpers ────────────────────────────────────
+      function _ssSet(id, stClass, text) {{
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.parentElement.className = 'strat-slot ' + stClass;
+        el.textContent = text;
+      }}
+      function _fmtCountdown(ms) {{
+        if (ms <= 0) return 'NOW';
+        var s = Math.round(ms / 1000);
+        if (s < 60) return s + 's';
+        var m = Math.floor(s / 60); s = s % 60;
+        if (m < 60) return m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+        var h = Math.floor(m / 60); m = m % 60;
+        return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+      }}
+
+      // ── RUNNER slot — reads from runner-dot age ───────────────
+      function _updateRunnerSlot() {{
+        var dot = document.getElementById('runner-dot');
+        if (!dot) return;
+        var cls = dot.className; // 'ok', 'warn', 'dead'
+        var ageEl = document.getElementById('runner-age');
+        var age = ageEl ? ageEl.textContent : '—';
+        if (cls === 'ok') {{
+          _ssSet('ss-runner-st', 'ss-active', 'ALIVE · ' + age);
+        }} else if (cls === 'warn') {{
+          _ssSet('ss-runner-st', 'ss-warn', 'STALE · ' + age);
+        }} else if (cls === 'dead') {{
+          _ssSet('ss-runner-st', 'ss-warn', 'DEAD · ' + age);
+        }} else {{
+          _ssSet('ss-runner-st', '', '—');
+        }}
+      }}
+
+      // ── PIPELINE slot — equity pipeline 4:05pm ET ─────────────
+      function _nextPipelineEtMs() {{
+        var now = new Date();
+        // DST-aware ET offset
+        var month = now.getUTCMonth() + 1;
+        var etOff = (month > 3 && month < 11) ? -4 : -5; // EDT=-4, EST=-5
+        var etNow = new Date(now.getTime() + etOff * 3600000);
+        var target = new Date(etNow);
+        target.setUTCHours(16 - etOff, 5, 0, 0); // 16:05 ET in local UTC
+        // Rephrase: set to 16:05 ET = 20:05 or 21:05 UTC
+        var pipeHour = 16 + (-etOff); // 20 or 21
+        target = new Date(now);
+        target.setUTCHours(pipeHour, 5, 0, 0);
+        if (now >= target) target.setUTCDate(target.getUTCDate() + 1);
+        return target - now;
+      }}
+      function _updatePipelineSlot() {{
+        var rem = _nextPipelineEtMs();
+        var txt = _fmtCountdown(rem);
+        var cls = rem < 120000 ? 'ss-exec' : rem < 600000 ? 'ss-ready' : '';
+        _ssSet('ss-pipeline-st', cls, cls === 'ss-exec' ? 'EXECUTING' : txt);
+      }}
+
+      // ── POSITIONS slot ────────────────────────────────────────
+      function _updatePositionsSlot() {{
+        var count = Object.keys(window._cryptoPositionsMap || {{}}).length;
+        var eq    = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
+        var total = count + eq;
+        _ssSet('ss-positions-st', total > 0 ? 'ss-active' : '',
+          total > 0 ? total + ' OPEN' : 'FLAT');
+      }}
+
+      // ── PRICE slot — CoinGecko poll every 4s ─────────────────
+      var _lastPriceTs = 0;
+      window._onPricePoll = function() {{ _lastPriceTs = Date.now(); }};
+      function _updatePriceSlot() {{
+        var age = Date.now() - _lastPriceTs;
+        var rem = Math.max(0, 4000 - age);
+        if (rem < 200) {{
+          _ssSet('ss-price-st', 'ss-exec', 'FETCHING');
+        }} else {{
+          _ssSet('ss-price-st', 'ss-active', 'in ' + _fmtCountdown(rem));
+        }}
+      }}
+
+      // ── NAV slot — last known nav ─────────────────────────────
+      function _updateNavSlot() {{
+        var nav = window._lastKnownNav;
+        if (!nav) {{ _ssSet('ss-nav-st', '', '—'); return; }}
+        var fmtd = nav >= 1000
+          ? '$' + (nav / 1000).toFixed(1) + 'K'
+          : '$' + nav.toFixed(0);
+        _ssSet('ss-nav-st', 'ss-active', fmtd);
+      }}
+
+      // ── Callout system — drop-in trade notifications ──────────
+      var _calloutQ = [];
+      var _calloutShowing = false;
+      var _calloutRail = document.getElementById('callout-rail');
+
+      function _showNextCallout() {{
+        if (!_calloutQ.length || _calloutShowing) return;
+        var cfg = _calloutQ.shift();
+        _calloutShowing = true;
+        var card = document.createElement('div');
+        card.className = 'callout-card';
+        card.style.borderLeftColor = cfg.col;
+        var now = new Date();
+        var hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+        card.innerHTML =
+          '<div class="cc-badge" style="color:' + cfg.col + ';border-color:' + cfg.col + '">' + cfg.badge + '</div>' +
+          '<div class="cc-body">' +
+            '<div class="cc-sym" style="color:' + cfg.col + '">' + cfg.sym + '</div>' +
+            '<div class="cc-detail">' + cfg.detail + '</div>' +
+          '</div>' +
+          '<div class="cc-time">' + hhmm + ' ET</div>';
+        if (_calloutRail) _calloutRail.appendChild(card);
+        // Trigger slide-in
+        requestAnimationFrame(function() {{
+          requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
+        }});
+        // Auto-dismiss after 3.5s
+        setTimeout(function() {{
+          card.classList.remove('cc-show');
+          card.classList.add('cc-exit');
+          setTimeout(function() {{
+            if (card.parentNode) card.parentNode.removeChild(card);
+            _calloutShowing = false;
+            setTimeout(_showNextCallout, 80);
+          }}, 220);
+        }}, 3500);
+      }}
+
+      window._fireCallout = function(badge, sym, detail, col) {{
+        _calloutQ.push({{ badge: badge, sym: sym, detail: detail, col: col || '#ff00cc' }});
+        _showNextCallout();
+      }};
+
+      // ── Master tick ───────────────────────────────────────────
+      function _stratTick() {{
+        _updateRunnerSlot();
+        _updatePipelineSlot();
+        _updatePositionsSlot();
+        _updatePriceSlot();
+        _updateNavSlot();
+      }}
+      _stratTick();
+      setInterval(_stratTick, 1000);
+    }})();
 
     // Tick age bars every 30s without a network call
     setInterval(function() {{
