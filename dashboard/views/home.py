@@ -4154,17 +4154,11 @@ function _recenterOnLatest(_ignored) {{
 
   _scrollBusy = true;
   _programmaticRelayout = true;
-  var layoutUpdate = {{ 'xaxis.range': [newStart, newEnd] }};
-  // Smooth Y: lerp 25% toward target each tick — no violent jumps
-  var yr = yRange(newStart, nowIso);
-  if (_smoothYMin === null) {{ _smoothYMin = yr[0]; _smoothYMax = yr[1]; }}
-  else {{
-    _smoothYMin = _smoothYMin * 0.75 + yr[0] * 0.25;
-    _smoothYMax = _smoothYMax * 0.75 + yr[1] * 0.25;
-  }}
-  layoutUpdate['yaxis.range'] = [_smoothYMin, _smoothYMax];
-  layoutUpdate['yaxis.autorange'] = false;
-  Plotly.relayout(gd, layoutUpdate).then(function() {{
+  // Only xaxis here — Y is handled atomically in _redrawNavTraces to avoid fighting
+  Plotly.relayout(gd, {{
+    'xaxis.range': [newStart, newEnd],
+    'xaxis.autorange': false
+  }}).then(function() {{
     _scrollBusy = false;
     setTimeout(function() {{ _programmaticRelayout = false; }}, 80);
   }}).catch(function() {{ _scrollBusy = false; _programmaticRelayout = false; }});
@@ -5467,15 +5461,32 @@ window.addEventListener('resize', function() {{
       while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) {{
         window._navHistory.shift();
       }}
-      // Restyle both traces from the clean history array
-      var _gd = document.getElementById('chart');
-      if (_gd && _gd.data && _gd.data.length > 3) {{
-        var _xs = window._navHistory.map(function(p) {{ return p.x; }});
-        var _ys = window._navHistory.map(function(p) {{ return p.y; }});
-        Plotly.restyle(_gd, {{ x: [_xs, _xs], y: [_ys, _ys] }}, [3, 4]);
-      }}
+      _redrawNavTraces();
       _updateEndpointDot(nav, isoTs);
       _updateAthShape(nav, isoTs);
+    }}
+
+    // Single function for all nav trace redraws — uses Plotly.update (data+layout atomic)
+    // so xaxis.range is never lost to an autorange reset triggered by restyle.
+    function _redrawNavTraces() {{
+      var _gd = document.getElementById('chart');
+      if (!_gd || !_gd.data || _gd.data.length <= 3) return;
+      var _xs = (window._navHistory || []).map(function(p) {{ return p.x; }});
+      var _ys = (window._navHistory || []).map(function(p) {{ return p.y; }});
+      var _ns = _intradayStart(), _ne = _intradayEnd(), _now = new Date().toISOString();
+      var _yr = yRange(_ns, _now);
+      if (_smoothYMin === null && _yr[0] !== null) {{ _smoothYMin = _yr[0]; _smoothYMax = _yr[1]; }}
+      else if (_yr[0] !== null) {{
+        _smoothYMin = _smoothYMin * 0.85 + _yr[0] * 0.15;
+        _smoothYMax = _smoothYMax * 0.85 + _yr[1] * 0.15;
+      }}
+      Plotly.update(_gd,
+        {{ x: [_xs, _xs], y: [_ys, _ys] }},
+        {{ 'xaxis.range': [_ns, _ne], 'xaxis.autorange': false,
+           'yaxis.range': _smoothYMin !== null ? [_smoothYMin, _smoothYMax] : undefined,
+           'yaxis.autorange': _smoothYMin === null }},
+        [3, 4]
+      );
     }}
 
     function _pollNav() {{
@@ -5519,12 +5530,7 @@ window.addEventListener('resize', function() {{
         // Draw immediately after seeding
         var _gd = document.getElementById('chart');
         if (_gd && _gd.data && _gd.data.length > 3 && window._navHistory.length) {{
-          var _xs = window._navHistory.map(function(p) {{ return p.x; }});
-          var _ys = window._navHistory.map(function(p) {{ return p.y; }});
-          Plotly.restyle(_gd, {{ x: [_xs, _xs], y: [_ys, _ys] }}, [3, 4]);
-          // Init smoothed Y from seeded data
-          var _yr = yRange(_intradayStart(), new Date().toISOString());
-          _smoothYMin = _yr[0]; _smoothYMax = _yr[1];
+          _redrawNavTraces();
           _recenterOnLatest(null);
         }}
       }}).catch(function() {{}});
@@ -5548,12 +5554,7 @@ window.addEventListener('resize', function() {{
       // Trim to 30 min — match the visible window
       var cutoff = new Date(Date.now() - 30*60*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
-      var _gd = document.getElementById('chart');
-      if (_gd && _gd.data && _gd.data.length > 3) {{
-        var _xs = window._navHistory.map(function(p) {{ return p.x; }});
-        var _ys = window._navHistory.map(function(p) {{ return p.y; }});
-        Plotly.restyle(_gd, {{ x: [_xs, _xs], y: [_ys, _ys] }}, [3, 4]);
-      }}
+      _redrawNavTraces();
     }}, 15000);
 
     // ── Live positions poller — DOM-diffing with enter/exit animations ───────
