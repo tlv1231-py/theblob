@@ -1780,18 +1780,25 @@ body::after {{
 #runner-age {{ font:700 9px Consolas,monospace; letter-spacing:.04em; transition:color .4s; }}
 #runner-trades {{ font-size:6.5px; color:#3a1a4a; letter-spacing:.18em; text-transform:uppercase; }}
 /* ── Position age bar ── */
-.pos-age-bar {{ height:3px; margin-top:4px; border-radius:1px; overflow:hidden; background:rgba(255,255,255,.05); position:relative; }}
+.pos-age-bar {{
+  height:4px; margin-top:5px; border-radius:2px;
+  background:rgba(255,255,255,.06);
+  position:relative; overflow:visible;
+}}
 .pos-age-fill {{
-  height:100%; border-radius:1px;
-  transition:width .9s linear, background .5s;
+  height:100%; border-radius:2px;
+  transition:width 1s linear, background .4s, box-shadow .4s;
+  background:rgba(0,200,255,.8);
+  box-shadow:0 0 6px rgba(0,200,255,.5);
+}}
 .pos-age-sell {{
-  position:absolute; right:0; top:-9px;
+  position:absolute; right:0; top:-10px;
   font-size:7px; font-weight:900; letter-spacing:.25em;
   color:#ff3355; opacity:0; pointer-events:none;
   transition:opacity .2s;
 }}
-.pos-age-sell.show {{ opacity:1; animation:sell-pulse .5s ease-in-out infinite; }}
-@keyframes sell-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.35}} }}
+.pos-age-sell.show {{ opacity:1; animation:sell-pulse .45s ease-in-out infinite; }}
+@keyframes sell-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.3}} }}
 /* ── Stop / Target range bar ── */
 }}
 .pos-range-bar {{
@@ -2259,11 +2266,12 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Centered sliding window — "now" always at horizontal center
-var _CENTER_DAYS = 1;  // fallback for _dateMinus / _datePlus_from helpers
-var _HALF_WIN_MS = 45 * 60 * 1000;  // 45 min each side
-function _intradayStart() {{ return new Date(Date.now() - _HALF_WIN_MS).toISOString(); }}
-function _intradayEnd()   {{ return new Date(Date.now() + _HALF_WIN_MS).toISOString(); }}
+// Scrolling window — "now" at the right edge with a small look-ahead buffer
+var _CENTER_DAYS = 1;
+var _WIN_MS      = 90 * 60 * 1000;  // 90 min of history visible
+var _BUF_MS      =  4 * 60 * 1000;  // 4 min buffer past "now" on right edge
+function _intradayStart() {{ return new Date(Date.now() - _WIN_MS).toISOString(); }}
+function _intradayEnd()   {{ return new Date(Date.now() + _BUF_MS).toISOString(); }}
 var xStart = _intradayStart();
 var xEnd   = _intradayEnd();
 
@@ -5530,7 +5538,7 @@ window.addEventListener('resize', function() {{
         + '</div>'
         + '<div class="pos-hold active">··········</div>'
         + rangeHtml
-        + '<div class="pos-age-bar" title="cooldown"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" style="width:' + (100 - agePct) + '%;background:rgba(255,255,255,.55)"></div></div>';
+        + '<div class="pos-age-bar" title="cooldown"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" style="width:' + (100 - agePct) + '%;background:rgba(0,200,255,.8);box-shadow:0 0 6px rgba(0,200,255,.5)"></div></div>';
       el.appendChild(inner);
       // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
@@ -5632,7 +5640,8 @@ window.addEventListener('resize', function() {{
         var agePct = Math.min(age / 90 * 100, 100);
         var rem = 100 - agePct;
         fill.style.width = rem + '%';
-        fill.style.background = rem > 40 ? 'rgba(255,255,255,.55)' : rem > 15 ? 'rgba(255,160,0,.8)' : 'rgba(255,51,80,.9)';
+        fill.style.background = rem > 40 ? 'rgba(0,200,255,.8)' : rem > 15 ? 'rgba(255,160,0,.85)' : 'rgba(255,40,70,.9)';
+          fill.style.boxShadow = rem > 40 ? '0 0 6px rgba(0,200,255,.5)' : rem > 15 ? '0 0 6px rgba(255,160,0,.5)' : '0 0 8px rgba(255,40,70,.7)';
         var sellLbl = el.querySelector('.pos-age-sell');
         if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
       }}
@@ -6042,7 +6051,8 @@ window.addEventListener('resize', function() {{
           var agePct = Math.min(age / 2 * 100, 100);
           var rem = 100 - agePct;
           fill.style.width = rem + '%';
-          fill.style.background = rem > 40 ? 'rgba(255,255,255,.55)' : rem > 15 ? 'rgba(255,160,0,.8)' : 'rgba(255,51,80,.9)';
+          fill.style.background = rem > 40 ? 'rgba(0,200,255,.8)' : rem > 15 ? 'rgba(255,160,0,.85)' : 'rgba(255,40,70,.9)';
+          fill.style.boxShadow = rem > 40 ? '0 0 6px rgba(0,200,255,.5)' : rem > 15 ? '0 0 6px rgba(255,160,0,.5)' : '0 0 8px rgba(255,40,70,.7)';
           var sellLbl = el.querySelector('.pos-age-sell');
           if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
         }}
