@@ -1,6 +1,6 @@
 strategy:
   name: crypto_momentum
-  description: "Breakout + VWAP + RVOL scalping — wider target, tighter signal filter"
+  description: "EMA crossover + hourly trend confirmation — 1-min momentum gated by 1-hr bias"
 
 universe:
   - BTC/USD
@@ -14,16 +14,16 @@ universe:
   - CRV/USD
 
 signals:
-  breakout_bars: 10          # close must break N-bar high/low — more bars = cleaner breakout
-  vwap_window_hours: 4       # shorter VWAP window — more responsive to today's trend
-  rvol_min: 1.8              # require 1.8x average volume — only trade high-conviction bars
+  ema_fast: 5                # fast EMA period on 1-min bars
+  ema_slow: 20               # slow EMA period on 1-min bars
+  min_separation: 0.0002     # minimum fast/slow spread (0.02%) to avoid noise trades
 
 position:
-  risk_pct: 0.5              # halved — smaller positions, more room to be wrong
-  max_positions: 5           # focus on top 5 signals at once, not all 15
-  stop_pct: 0.0025           # 0.25% stop — wider than before, gives trade room to breathe
-  target_pct: 0.008          # 0.8% target — 3.2:1 R:R after 10bps slippage round-trip
-  max_hold_minutes: 8        # hold longer to let winners develop
+  risk_pct: 0.5              # 0.5% of NAV per trade — small, survives a run of losers
+  max_positions: 5           # max concurrent open positions
+  stop_pct: 0.0025           # 0.25% stop below entry
+  target_pct: 0.008          # 0.8% target — 3.2:1 R:R after slippage
+  max_hold_minutes: 12       # exit if still open after 12 min regardless
 
 risk:
   max_daily_loss_pct: 0.05   # tighter daily loss limit — 5% of account
