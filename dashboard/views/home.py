@@ -1230,12 +1230,12 @@ body::after {{
   padding:7px 12px 7px 10px;
   background:rgba(2,0,12,.98); backdrop-filter:blur(8px);
   border:1px solid rgba(148,0,255,.2); border-left:3px solid;
-  transform:translateY(-110%); opacity:0;
-  transition:transform .3s cubic-bezier(.22,1,.36,1), opacity .22s ease;
+  transform:translateY(-10px); opacity:0;
+  transition:transform .25s cubic-bezier(.22,1,.36,1), opacity .2s ease;
   pointer-events:none;
 }}
 .callout-card.cc-show {{ transform:translateY(0); opacity:1; }}
-.callout-card.cc-exit {{ transform:translateY(-110%); opacity:0; transition:transform .24s ease-in, opacity .2s ease-in; }}
+.callout-card.cc-exit {{ transform:translateY(-10px); opacity:0; transition:transform .18s ease-in, opacity .15s ease-in; }}
 .cc-badge {{
   font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 6px;
   border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.9;
@@ -1848,16 +1848,8 @@ body::after {{
   display:none;
 }}
 #pos-left .pos-hold-sub {{ display:none; }}
-#pos-left .pos-prox-wrap {{ margin-top:0; padding:0; }}
-/* Hide S/T text labels on crypto prox bar */
-#pos-left .pos-prox-labels {{ display:none; }}
-#pos-left .pos-prox-track {{ height:2px; background:rgba(255,255,255,.06); }}
-#pos-left .pos-prox-fill {{
-  transition:width .8s cubic-bezier(.22,1,.36,1), background .8s;
-}}
-#pos-left .pos-prox-cursor {{ width:5px; height:5px; }}
-#pos-left .pos-prox-labels {{ display:none; }}
-#pos-left .pos-age-bar {{ margin-top:3px; }}
+#pos-left .pos-prox-wrap {{ margin-top:4px; padding:0; }}
+#pos-left .pos-age-bar {{ margin-top:4px; }}
 
 /* Scan spark — tiny white flare on proximity dot */
 @keyframes prox-dot-spark {{
@@ -1971,46 +1963,72 @@ body::after {{
   display:flex; justify-content:space-between;
   font-size:6.5px; color:#2a1a4a; letter-spacing:.03em; margin-top:1px;
 }}
-/* ── Live proximity meter ── */
-.pos-prox-wrap {{
-  margin-top:5px; padding:0 0 2px;
+/* ── Live proximity meter — 3-zone stop/target bar ── */
+.pos-prox-wrap {{ margin-top:5px; padding:0; }}
+.pos-prox-labels-row {{
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:2px; font:600 6.5px Consolas,monospace; letter-spacing:.06em;
 }}
+.prox-lbl-stop  {{ color:#ff3366; opacity:.7; }}
+.prox-lbl-arrow {{ color:rgba(255,255,255,.35); font-size:7px; }}
+.prox-lbl-tgt   {{ color:#00ff9d; opacity:.7; }}
 .pos-prox-track {{
-  position:relative; height:4px; border-radius:2px; overflow:visible;
-  background:rgba(255,255,255,.06);
+  position:relative; height:5px; border-radius:2px; overflow:visible;
+  background:rgba(255,255,255,.05);
 }}
+/* zone segments behind the track */
+.pos-prox-zone-stop {{
+  position:absolute; left:0; top:0; height:100%; border-radius:2px 0 0 2px;
+  background:rgba(255,51,102,.18);
+}}
+.pos-prox-zone-tgt {{
+  position:absolute; right:0; top:0; height:100%; border-radius:0 2px 2px 0;
+  background:rgba(0,255,157,.12);
+}}
+/* animated fill — shimmer flows in direction of momentum */
 .pos-prox-fill {{
   position:absolute; left:0; top:0; height:100%; border-radius:2px;
-  transition:width .6s cubic-bezier(.22,1,.36,1), background .6s;
-  background:linear-gradient(90deg,rgba(255,51,102,.6) 0%,rgba(255,153,0,.7) 50%,rgba(0,255,157,.8) 100%);
-  background-size:200% 100%;
+  transition:width .7s cubic-bezier(.22,1,.36,1), background .5s;
+  background:linear-gradient(90deg,rgba(255,51,102,.55) 0%,rgba(255,153,0,.65) 45%,rgba(0,229,255,.75) 100%);
+  overflow:hidden;
 }}
+.pos-prox-fill::after {{
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.22) 50%,transparent 100%);
+  background-size:200% 100%;
+  animation:prox-shimmer 1.6s linear infinite;
+}}
+@keyframes prox-shimmer {{
+  0%   {{ background-position:200% 0; }}
+  100% {{ background-position:-200% 0; }}
+}}
+/* cursor dot */
 .pos-prox-cursor {{
   position:absolute; top:50%; transform:translate(-50%,-50%);
-  width:6px; height:6px; border-radius:50%;
-  transition:left .6s cubic-bezier(.22,1,.36,1), background .6s, box-shadow .6s;
+  width:7px; height:7px; border-radius:50%;
+  transition:left .7s cubic-bezier(.22,1,.36,1), background .5s, box-shadow .5s;
   background:#fff; box-shadow:0 0 6px #fff;
+  z-index:2;
 }}
 @keyframes prox-danger {{
-  0%,100%{{box-shadow:0 0 4px #ff3366,0 0 10px rgba(255,51,102,.5)}}
-  50%{{box-shadow:0 0 8px #ff3366,0 0 20px rgba(255,51,102,.8)}}
+  0%,100%{{box-shadow:0 0 5px #ff3366,0 0 12px rgba(255,51,102,.6)}}
+  50%{{box-shadow:0 0 10px #ff3366,0 0 22px rgba(255,51,102,.9)}}
 }}
 @keyframes prox-target {{
-  0%,100%{{box-shadow:0 0 4px #00ff9d,0 0 10px rgba(0,255,157,.5)}}
-  50%{{box-shadow:0 0 8px #00ff9d,0 0 20px rgba(0,255,157,.8)}}
+  0%,100%{{box-shadow:0 0 5px #00ff9d,0 0 12px rgba(0,255,157,.6)}}
+  50%{{box-shadow:0 0 10px #00ff9d,0 0 22px rgba(0,255,157,.9)}}
 }}
-.pos-prox-cursor.danger {{ background:#ff3366; animation:prox-danger .8s ease-in-out infinite; }}
-.pos-prox-cursor.target {{ background:#00ff9d; animation:prox-target .8s ease-in-out infinite; }}
-.pos-prox-labels {{
-  display:flex; justify-content:space-between; align-items:center;
-  margin-top:2px; font-size:6px; letter-spacing:.05em; color:#2a1a4a;
-}}
+.pos-prox-cursor.danger {{ background:#ff3366; animation:prox-danger .7s ease-in-out infinite; }}
+.pos-prox-cursor.target {{ background:#00ff9d; animation:prox-target .7s ease-in-out infinite; }}
+/* price label that floats above cursor */
 .pos-prox-live {{
-  text-align:center; font-size:7px; font-weight:700; letter-spacing:.04em;
-  font-family:Consolas,monospace; transition:color .4s;
+  position:absolute; top:-13px; transform:translateX(-50%);
+  font:700 6px Consolas,monospace; letter-spacing:.04em;
+  white-space:nowrap; pointer-events:none;
+  transition:left .7s cubic-bezier(.22,1,.36,1), color .4s;
 }}
-@keyframes prox-tick-up {{ 0%{{transform:translateY(0)}} 35%{{transform:translateY(-2px)}} 100%{{transform:translateY(0)}} }}
-@keyframes prox-tick-dn {{ 0%{{transform:translateY(0)}} 35%{{transform:translateY(2px)}} 100%{{transform:translateY(0)}} }}
+@keyframes prox-tick-up {{ 0%{{transform:translateX(-50%) translateY(0)}} 35%{{transform:translateX(-50%) translateY(-2px)}} 100%{{transform:translateX(-50%) translateY(0)}} }}
+@keyframes prox-tick-dn {{ 0%{{transform:translateX(-50%) translateY(0)}} 35%{{transform:translateX(-50%) translateY(2px)}} 100%{{transform:translateX(-50%) translateY(0)}} }}
 .prox-tick-up {{ animation:prox-tick-up .22s ease-out; }}
 .prox-tick-dn {{ animation:prox-tick-dn .22s ease-out; }}
 /* ── Equity pipeline countdown ── */
@@ -6103,11 +6121,21 @@ window.addEventListener('resize', function() {{
       if ((!tgt || tgt <= 0) && entry > 0) tgt = entry * 1.008;
       var rangeHtml = '';
       if (entry > 0 && stop > 0) {{
+        var stopDisp = stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toFixed(2);
+        var tgtDisp  = tgt  < 1 ? '$' + tgt.toFixed(4)  : '$' + tgt.toFixed(2);
         rangeHtml = '<div class="pos-prox-wrap"'
           + ' data-entry="' + entry + '" data-stop="' + stop + '" data-target="' + tgt + '">'
+          + '<div class="pos-prox-labels-row">'
+          + '<span class="prox-lbl-stop">● ' + stopDisp + '</span>'
+          + '<span class="prox-lbl-arrow" id="prox-arrow-' + _symId + '">—</span>'
+          + '<span class="prox-lbl-tgt">' + tgtDisp + ' ●</span>'
+          + '</div>'
           + '<div class="pos-prox-track">'
+          + '<div class="pos-prox-zone-stop" style="width:20%"></div>'
+          + '<div class="pos-prox-zone-tgt"  style="width:20%"></div>'
           + '<div class="pos-prox-fill" style="width:50%"></div>'
           + '<div class="pos-prox-cursor" style="left:50%"></div>'
+          + '<div class="pos-prox-live" id="prox-live-' + _symId + '" style="left:50%;color:#fff"></div>'
           + '</div>'
           + '</div>';
       }}
@@ -6426,21 +6454,47 @@ window.addEventListener('resize', function() {{
         var fill   = wrap.querySelector('.pos-prox-fill');
         var cursor = wrap.querySelector('.pos-prox-cursor');
         var live   = wrap.querySelector('.pos-prox-live');
-        if (fill)   fill.style.width   = pct + '%';
-        if (cursor) cursor.style.left  = pct + '%';
-        // Color the cursor: danger zone <15%, target zone >85%
+        if (fill)   fill.style.width  = pct + '%';
+        if (cursor) cursor.style.left = pct + '%';
+        // Cursor zone color
         if (cursor) {{
-          cursor.classList.toggle('danger', t < 0.15);
-          cursor.classList.toggle('target', t > 0.85);
-          if (t >= 0.15 && t <= 0.85) {{
+          cursor.classList.toggle('danger', t < 0.18);
+          cursor.classList.toggle('target', t > 0.82);
+          if (t >= 0.18 && t <= 0.82) {{
             cursor.style.background = '#ffffff';
             cursor.style.animation  = 'none';
           }}
         }}
-        // Live P&L — update pnl-live element (in pos-entry-sub row, always visible)
+        // Floating price label above cursor
+        var symId2    = sym.replace(/[^A-Za-z0-9]/g,'_');
+        var proxLive  = document.getElementById('prox-live-' + symId2);
+        if (proxLive) {{
+          var priceDisp = price < 0.01 ? '$' + price.toFixed(6) : price < 1 ? '$' + price.toFixed(4) : '$' + price.toFixed(2);
+          var prevPx = parseFloat(proxLive.getAttribute('data-px') || 'NaN');
+          var pxDir  = !isNaN(prevPx) ? (price > prevPx ? 'up' : price < prevPx ? 'dn' : '') : '';
+          proxLive.setAttribute('data-px', price);
+          proxLive.style.left  = pct + '%';
+          proxLive.style.color = t < 0.18 ? '#ff3366' : t > 0.82 ? '#00ff9d' : '#ffffff';
+          proxLive.textContent = priceDisp;
+          if (pxDir) {{
+            proxLive.classList.remove('prox-tick-up','prox-tick-dn');
+            void proxLive.offsetWidth;
+            proxLive.classList.add('prox-tick-' + pxDir);
+          }}
+        }}
+        // Direction arrow between stop/target labels
+        var arrowEl = document.getElementById('prox-arrow-' + symId2);
+        if (arrowEl) {{
+          var prevT = parseFloat(arrowEl.getAttribute('data-t') || 'NaN');
+          if (!isNaN(prevT) && t !== prevT) {{
+            arrowEl.textContent = t > prevT ? '→' : '←';
+            arrowEl.style.color = t > prevT ? '#00ff9d' : '#ff3366';
+          }}
+          arrowEl.setAttribute('data-t', t);
+        }}
+        // Live P&L in pos-entry-sub row
         var pnlPct  = entry > 0 ? ((price - entry)/entry*100) : 0;
         var pnlSign = pnlPct >= 0 ? '+' : '';
-        var symId2  = sym.replace(/[^A-Za-z0-9]/g,'_');
         var pnlEl   = document.getElementById('pnl-live-' + symId2);
         if (pnlEl) {{
           var prevRaw = parseFloat(pnlEl.getAttribute('data-raw') || 'NaN');
