@@ -853,7 +853,7 @@ def _build_daw_html(data: dict) -> str:
             edate_fmt = edate_raw[:7]
 
         pos_cards += (
-            f'<div class="pos-card pc-eq pos-card-active pos-card-entering" data-sym="{p["sym"]}"'
+            f'<div class="pos-card pc-eq pos-card-active" data-sym="{p["sym"]}"'
             f' style="border-left:3px solid {tcol}">'
             f'<span class="pos-corner tl" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner tr" style="border-color:{tcol}"></span>'
