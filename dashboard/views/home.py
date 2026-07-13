@@ -5035,6 +5035,9 @@ window.addEventListener('resize', function() {{
                       entry_price: _priceE, stop_price: _priceE * 0.997,
                       target_price: _priceE * 1.006, entered_at: new Date().toISOString()
                     }};
+                    // Inject into positions map immediately — satellite spawns next animation frame
+                    if (!window._cryptoPositionsMap) window._cryptoPositionsMap = {{}};
+                    window._cryptoPositionsMap[_symE] = _ep;
                     var _el = window._makeCard(_ep);
                     _sec.appendChild(_el);
                     void _el.offsetWidth;
@@ -5063,7 +5066,7 @@ window.addEventListener('resize', function() {{
                   if (_isWin) {{ if (window._soundWin) window._soundWin(); }}
                   else {{ if (window._soundLoss) window._soundLoss(); }}
                 }}
-                // 4. Satellite shoot-out
+                // 4. Satellite shoot-out + immediate map removal (1:1 with tile)
                 var _exitSymFull = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
                 var _satKey = _satAngles[_exitSymFull] !== undefined ? _exitSymFull
                             : _satAngles[sym] !== undefined ? sym : null;
@@ -5076,6 +5079,11 @@ window.addEventListener('resize', function() {{
                   }};
                   delete _satAngles[_satKey];
                   delete _smoothOrbitR[_satKey];
+                }}
+                // Remove from positions map immediately so count stays 1:1 with tiles
+                if (window._cryptoPositionsMap) {{
+                  delete window._cryptoPositionsMap[_exitSymFull];
+                  delete window._cryptoPositionsMap[sym];
                 }}
                 // 5. P&L odometer — starts same RAF tick as satellite
                 if (pnlM) {{
