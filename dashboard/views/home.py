@@ -1484,19 +1484,38 @@ body::after {{
   font-size:7px; letter-spacing:.2em; color:rgba(0,229,255,.4);
   background:rgba(0,229,255,.03);
 }}
-/* ── Orb metrics panel — replaces old P&L tooltip ── */
+/* ── Orb metrics panel — anchored center, dot is always centered ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
-  background:rgba(4,0,10,.88); border:1px solid #2a003d; border-top:2px solid #ff00cc;
-  backdrop-filter:blur(8px);
-  padding:8px 12px; min-width:130px;
-  transform:translate(-50%, -100%) translateY(-18px);
-  opacity:0;
-  transition:opacity .4s ease, transform .6s cubic-bezier(.22,1,.36,1);
+  left:50%; top:42%; transform:translate(-50%,-50%);
+  background:rgba(4,0,10,.82); border:1px solid #2a003d; border-top:2px solid #ff00cc;
+  backdrop-filter:blur(12px);
+  padding:10px 18px 12px;
+  opacity:0; transition:opacity .4s ease;
 }}
 #pnl-float.visible {{ opacity:1; }}
-#pnl-float.nudge-up   {{ transform:translate(-50%, -100%) translateY(-96px); }}
-#pnl-float.nudge-down {{ transform:translate(-50%, -100%) translateY(-96px); }}
+/* three-column metric layout */
+#pnl-float-cols {{
+  display:flex; align-items:flex-start; gap:20px;
+}}
+.pnl-col {{
+  display:flex; flex-direction:column; align-items:center; gap:2px; min-width:64px;
+}}
+.pnl-col-center {{ min-width:120px; }}
+.pnl-col-label {{
+  font-family:Consolas,monospace; font-size:6.5px; letter-spacing:.22em;
+  color:rgba(190,150,255,.6); text-transform:uppercase; white-space:nowrap;
+}}
+.pnl-col-val {{
+  font-family:Consolas,monospace; font-size:16px; font-weight:700;
+  color:#ff00cc; letter-spacing:.02em; white-space:nowrap;
+}}
+.pnl-col-center .pnl-col-val {{ font-size:26px; }}
+.pnl-combo-chip {{
+  font-family:Consolas,monospace; font-size:11px; font-weight:700;
+  opacity:0; transition:opacity .15s; min-height:14px;
+  text-shadow:0 0 8px currentColor;
+}}
 .om-row {{
   display:flex; align-items:baseline; justify-content:space-between; gap:10px;
   padding:1.5px 0;
@@ -2093,6 +2112,11 @@ body::after {{
     <span class="tb-stat-val" style="color:#9400ff">{qqq_latest}</span>
   </div>
   <div class="tb-sep"></div>
+  <div class="tb-stat">
+    <span class="tb-stat-label">win rate</span>
+    <span class="tb-stat-val" id="hdr-winrate" style="color:#00e5ff">—</span>
+  </div>
+  <div class="tb-sep"></div>
   <div id="streak-chip">
     <span class="streak-label">streak</span>
     <span id="streak-val" class="streak-val" style="color:#3a1a5a">—</span>
@@ -2128,42 +2152,34 @@ body::after {{
   <div id="trade-veil"></div>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <div id="pnl-float">
-    <div class="om-row">
-      <span class="om-label">DAY P&amp;L</span>
-      <span class="om-val" id="om-dpnl" style="color:{_pnl_col}">{dpnl_str}</span>
-    </div>
-    <div class="om-divider"></div>
-    <div class="om-row">
-      <span class="om-label">TRADES/HR</span>
-      <span class="om-val" id="om-tph">—</span>
-    </div>
-    <div class="om-row">
-      <span class="om-label">TODAY</span>
-      <span class="om-val" id="om-today">0</span>
-    </div>
-    <div class="om-divider"></div>
-    <div class="om-row">
-      <span class="om-label">WIN RATE</span>
-      <span class="om-val" id="om-winrate">—</span>
-    </div>
-    <div class="om-row">
-      <span class="om-label">STREAK</span>
-      <span class="om-val" id="om-streak-orb">—</span>
-    </div>
-    <div class="om-divider"></div>
-    <div class="om-row">
-      <span class="om-label">OPEN POS</span>
-      <span class="om-val" id="om-openpos">{n_positions}</span>
-    </div>
-    <div class="om-divider"></div>
-    <div id="total-pnl-block">
-      <div id="total-pnl-label">TOTAL P&amp;L</div>
-      <div style="display:flex;align-items:baseline;gap:8px;justify-content:flex-end">
-        <div id="total-pnl-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
-        <div id="batch-pnl-chip" style="font-family:Consolas,monospace;font-size:13px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none"></div>
+    <div id="pnl-float-cols">
+      <!-- TRADES -->
+      <div class="pnl-col">
+        <div class="pnl-col-label">TRADES</div>
+        <div class="pnl-col-val" id="om-today">0</div>
+        <div class="pnl-combo-chip" id="trades-combo-chip"></div>
       </div>
-      <div id="total-pnl-sub" style="color:{_pnl_col}">{_pnl_pct_str}</div>
+      <!-- TOTAL P&L (center, largest) -->
+      <div class="pnl-col pnl-col-center">
+        <div class="pnl-col-label">TOTAL P&amp;L</div>
+        <div style="display:flex;align-items:baseline;gap:6px">
+          <div id="total-pnl-val" class="pnl-col-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
+          <div id="batch-pnl-chip" class="pnl-combo-chip"></div>
+        </div>
+      </div>
+      <!-- OPEN POS -->
+      <div class="pnl-col">
+        <div class="pnl-col-label">OPEN POS</div>
+        <div class="pnl-col-val" id="om-openpos" style="color:#00e5ff">{n_positions}</div>
+        <div class="pnl-combo-chip" id="pos-combo-chip"></div>
+      </div>
     </div>
+    <!-- hidden compat elements so existing JS refs don't break -->
+    <span id="om-dpnl" style="display:none">{dpnl_str}</span>
+    <span id="om-tph" style="display:none">—</span>
+    <span id="om-winrate" style="display:none">—</span>
+    <span id="om-streak-orb" style="display:none">—</span>
+    <span id="total-pnl-sub" style="display:none">{_pnl_pct_str}</span>
   </div>
   <div class="legend-strip">
     <div class="leg-item">
@@ -2748,37 +2764,9 @@ function buildTargets() {{
 }}
 
 function positionPnlFloat() {{
-  var fl = gd._fullLayout;
+  // Dot is always center-screen — panel is CSS-anchored, just ensure visible
   var pf = document.getElementById('pnl-float');
-  if (!fl || !fl.xaxis || !fl.yaxis || !pf) return;
-  try {{
-    // Use live intraday endpoint if available, else fall back to trace 3
-    var lx = window._lastKnownTs;
-    var ly = window._lastKnownNav;
-    if (!lx || !ly) {{
-      var tr = gd.data[3];
-      if (!tr || !tr.x || !tr.x.length) return;
-      lx = tr.x[tr.x.length-1]; ly = tr.y[tr.y.length-1];
-    }}
-    var cx = fl.xaxis.l2p(fl.xaxis.d2l(lx)) + fl.margin.l;
-    var cy = fl.yaxis.l2p(fl.yaxis.d2l(ly)) + fl.margin.t;
-    if (!isFinite(cx) || !isFinite(cy)) return;
-    // Clamp horizontal so tooltip never overflows right or left edge
-    var pfW = pf.offsetWidth || 160;
-    var pfH = pf.offsetHeight || 200;
-    var chartW = gd.offsetWidth || window.innerWidth;
-    var clampX = Math.max(pfW/2 + 8, Math.min(cx, chartW - pfW/2 - 8));
-    pf.style.left = clampX + 'px';
-    // Flip below dot if there isn't room above
-    if (cy - pfH - 22 < 4) {{
-      pf.style.top = (cy + 14) + 'px';
-      pf.style.transform = 'translate(-50%, 0)';
-    }} else {{
-      pf.style.top = cy + 'px';
-      pf.style.transform = 'translate(-50%, -100%) translateY(-96px)';
-    }}
-    pf.classList.add('visible');
-  }} catch(e) {{}}
+  if (pf) pf.classList.add('visible');
 }}
 
 var phase = 0;
@@ -4055,7 +4043,7 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
   if (el) el.textContent = tph > 0 ? tph.toFixed(0) : '0';
 
   el = document.getElementById('om-today');
-  if (el) el.textContent = _orbTodayTrades > 0 ? _orbTodayTrades + ' trades' : '0';
+  if (el) el.textContent = _orbTodayTrades > 0 ? _orbTodayTrades : '0';
 
   var total = _orbWins + _orbLosses;
   el = document.getElementById('om-winrate');
@@ -4933,29 +4921,45 @@ window.addEventListener('resize', function() {{
             return 0;
           }});
 
-          // Accumulate batch exit PnL before any stagger fires
-          var _batchPnl = 0, _exitCount = 0;
+          // Accumulate batch counts before any stagger fires
+          var _batchPnl = 0, _exitCount = 0, _entryCount = 0, _tradeCount = 0;
           rows.forEach(function(r) {{
-            if ((r.message||'').indexOf('EXIT') !== -1) {{
-              var m = (r.message||'').match(/pnl\s*([+-][\d,.]+)/);
+            var _msg = r.message || '';
+            if (_msg.indexOf('EXIT') !== -1) {{
+              var m = _msg.match(/pnl\s*([+-][\d,.]+)/);
               if (m) {{ _batchPnl += parseFloat(m[1].replace(/,/g,'')); _exitCount++; }}
+              _tradeCount++;
             }}
+            if (_msg.indexOf('ENTER') !== -1) {{ _entryCount++; _tradeCount++; }}
           }});
+          var _batchDur = _tradeCount * 180; // total stagger duration
 
-          // Show batch chip immediately if exits exist
+          function _showChip(id, text, col) {{
+            var c = document.getElementById(id);
+            if (!c) return;
+            c.style.color = col;
+            c.style.textShadow = '0 0 8px ' + col;
+            c.textContent = text;
+            c.style.opacity = '1';
+            setTimeout(function() {{ c.style.opacity = '0'; }}, _batchDur + 900);
+          }}
+
+          // P&L combo chip (exits)
           if (_exitCount > 0) {{
-            var _chip = document.getElementById('batch-pnl-chip');
-            if (_chip) {{
-              var _isPos = _batchPnl >= 0;
-              _chip.style.color = _isPos ? '#00c880' : '#e03355';
-              _chip.style.textShadow = '0 0 10px ' + (_isPos ? 'rgba(0,200,128,.8)' : 'rgba(224,51,85,.8)');
-              _chip.textContent = (_isPos ? '+' : '') + _batchPnl.toFixed(2);
-              _chip.style.opacity = '1';
-              // Fade chip out after last exit stagger fires + 800ms settle
-              setTimeout(function() {{
-                _chip.style.transition = 'opacity .6s';
-                _chip.style.opacity = '0';
-              }}, _exitCount * 180 + 800);
+            var _isPos = _batchPnl >= 0;
+            _showChip('batch-pnl-chip',
+              (_isPos ? '+' : '') + _batchPnl.toFixed(2),
+              _isPos ? '#00c880' : '#e03355');
+
+            // Trades combo chip
+            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900');
+
+            // Open positions delta chip (entries minus exits = net change)
+            var _posDelta = _entryCount - _exitCount;
+            if (_posDelta !== 0) {{
+              _showChip('pos-combo-chip',
+                (_posDelta > 0 ? '+' : '') + _posDelta,
+                _posDelta > 0 ? '#00e5ff' : '#ff4466');
             }}
 
             // Alpaca NAV verification after batch settles
@@ -6073,12 +6077,17 @@ window.addEventListener('resize', function() {{
         }}
         // Win rate per symbol → store as map for _pollPositions to use
         window._winRates = {{}};
+        var _totalW = 0, _totalT = 0;
         rows.forEach(function(row) {{
           var sym = row.symbol || '';
           if (!window._winRates[sym]) window._winRates[sym] = {{w:0,t:0}};
           window._winRates[sym].t++;
-          if (row.message.indexOf('✓') !== -1) window._winRates[sym].w++;
+          _totalT++;
+          if (row.message.indexOf('✓') !== -1) {{ window._winRates[sym].w++; _totalW++; }}
         }});
+        // Update header win rate
+        var _hwrEl = document.getElementById('hdr-winrate');
+        if (_hwrEl) _hwrEl.textContent = _totalT > 0 ? Math.round(_totalW/_totalT*100) + '%' : '—';
       }}).catch(function() {{}});
 
       // Runner health — fetch most recent UPDATE event (heartbeat) and compute age
@@ -6104,8 +6113,11 @@ window.addEventListener('resize', function() {{
       fetch(urlTc + '&limit=500', {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
+        if (!Array.isArray(rows)) return;
         var el = document.getElementById('runner-trades');
-        if (el && Array.isArray(rows)) el.textContent = rows.length + ' trades today';
+        if (el) el.textContent = rows.length + ' trades today';
+        var omEl = document.getElementById('om-today');
+        if (omEl) omEl.textContent = rows.length;
       }}).catch(function() {{}});
 
       // Daily bar: today's fills pnl proxy — compare earliest vs latest portfolio snapshot today
