@@ -5487,10 +5487,28 @@ window.addEventListener('resize', function() {{
                       entry_price: _priceE, stop_price: _priceE * 0.997,
                       target_price: _priceE * 1.006, entered_at: new Date().toISOString()
                     }};
-                    // Inject into positions map immediately — satellite spawns next animation frame
                     if (!window._cryptoPositionsMap) window._cryptoPositionsMap = {{}};
                     window._cryptoPositionsMap[_symE] = _ep;
                     var _el = window._makeCard(_ep);
+                    // Fetch real qty from DB and backfill card + positionsMap
+                    (function(_s, _card) {{
+                      var _qurl = 'https://seeevuklabvhkawawtxn.supabase.co/rest/v1/crypto_positions'
+                        + '?select=qty,stop_price,target_price&symbol=eq.' + encodeURIComponent(_s);
+                      fetch(_qurl, {{ headers: {{ 'apikey': 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY',
+                        'Authorization': 'Bearer sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY' }} }})
+                      .then(function(r) {{ return r.json(); }})
+                      .then(function(rows) {{
+                        if (!Array.isArray(rows) || !rows.length) return;
+                        var row = rows[0];
+                        var realQty = parseFloat(row.qty || 0);
+                        if (window._cryptoPositionsMap[_s]) {{
+                          window._cryptoPositionsMap[_s].qty = realQty;
+                          window._cryptoPositionsMap[_s].stop_price = parseFloat(row.stop_price || 0);
+                          window._cryptoPositionsMap[_s].target_price = parseFloat(row.target_price || 0);
+                        }}
+                        _card.setAttribute('data-qty', realQty);
+                      }}).catch(function() {{}});
+                    }})(_symE, _el);
                     _sec.appendChild(_el);
                     void _el.offsetWidth;
                     _el.classList.add('pos-card-entering');
