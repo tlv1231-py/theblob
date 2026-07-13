@@ -14,22 +14,22 @@ universe:
   - CRV/USD
 
 signals:
-  bar_size: 5Min             # 5-min bars — real structure, not 1-min noise
-  breakout_bars: 10          # close must break 10-bar high (~50 min of structure)
-  min_breakout_pct: 0.20     # must break by at least 0.20% — real move, not a tick
-  vwap_window_bars: 48       # 48 × 5min = 4hr rolling VWAP
-  rvol_min: 1.5              # 1.5x 20-bar avg volume — real conviction
+  bar_size: 1Min             # 1-min bars — maximum signal frequency
+  breakout_bars: 2           # just clear the last 2 bars — fires constantly
+  min_breakout_pct: 0.03     # 0.03% threshold — almost any up-tick qualifies
+  vwap_window_bars: 10       # 10-bar micro-VWAP — easy to be above it
+  rvol_min: 1.0              # any volume — no volume gate
 
 position:
   risk_pct: 1.0              # 1% NAV per trade
-  max_positions: 3           # fewer, higher-quality positions
-  stop_pct: 0.008            # 0.8% stop — wider to survive 5-min bar range
-  target_pct: 0.020          # 2.0% target → 2.5:1 R:R
-  max_hold_minutes: 30       # exit flat after 30 min if neither stop nor target hit
+  max_positions: 9           # all 9 symbols simultaneously
+  stop_pct: 0.003            # 0.3% stop — tight, fast exit
+  target_pct: 0.006          # 0.6% target → 2:1 R:R, quick hits
+  max_hold_minutes: 2        # 2-min max hold — slots turn over constantly
 
 risk:
-  max_daily_loss_pct: 0.05
-  max_daily_trades: 500      # high ceiling — signal quality filters it
+  max_daily_loss_pct: 0.10   # 10% daily loss ceiling
+  max_daily_trades: 9999     # effectively unlimited
 
 execution:
   slippage_bps: 10
