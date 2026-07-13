@@ -89,7 +89,7 @@ html,body{{height:100%;background:#040006;font-family:Consolas,'Courier New',mon
       display:flex;align-items:center;gap:10px}}
 .dot{{width:6px;height:6px;border-radius:50%;background:#ff00cc;
       box-shadow:0 0 6px #ff00cc;animation:bl 2s ease-in-out infinite}}
-#body{{flex:1;overflow:hidden;display:flex;flex-direction:column-reverse;padding:4px 0}}
+#body{{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:4px 0}}
 .bt-e{{padding:4px 18px 3px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
 .bt-m{{font-size:13px;font-weight:600;line-height:1.4;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
@@ -1752,68 +1752,6 @@ body::after {{
 .pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
-/* ── VHS Scan bar ── */
-#vhs-scan-bar {{
-  display:inline-flex; align-items:center; gap:9px;
-  flex-shrink:0; opacity:0; pointer-events:none;
-  transition:opacity .15s;
-}}
-#vhs-scan-bar.active {{ opacity:1; pointer-events:auto; }}
-#vhs-scan-label {{
-  font-size:11px; font-weight:900; letter-spacing:.32em;
-  font-stretch:condensed;
-  color:#00e5ff;
-  text-shadow:0 0 6px rgba(0,229,255,.9), 2px 0 0 rgba(255,0,204,.35), -1px 0 0 rgba(255,0,204,.2);
-  white-space:nowrap;
-  /* VHS horizontal smear */
-  transform:scaleX(1.08) scaleY(.94);
-  transform-origin:left center;
-}}
-#vhs-track {{
-  width:220px; height:10px;
-  background:#000;
-  border:1px solid rgba(255,255,255,.55);
-  overflow:hidden; position:relative;
-  /* vertical stripe grid mimicking VHS tape */
-  background-image:repeating-linear-gradient(
-    90deg,
-    transparent 0px, transparent 5px,
-    rgba(0,229,255,.04) 5px, rgba(0,229,255,.04) 6px
-  );
-}}
-#vhs-fill {{
-  height:100%; width:0%;
-  background:linear-gradient(90deg, rgba(0,229,255,.9) 0%, #00ff9d 70%, #fff 100%);
-  box-shadow:0 0 8px rgba(0,229,255,.8), 0 0 2px #fff;
-  position:relative;
-}}
-/* Horizontal scanline shimmer over fill */
-#vhs-fill::after {{
-  content:'';
-  position:absolute; inset:0;
-  background:repeating-linear-gradient(
-    0deg,
-    transparent 0px, transparent 1px,
-    rgba(0,0,0,.45) 1px, rgba(0,0,0,.45) 2px
-  );
-  animation:vhs-lines 1.2s linear infinite;
-}}
-@keyframes vhs-lines {{
-  from {{ background-position:0 0; }}
-  to   {{ background-position:0 8px; }}
-}}
-/* Leading edge noise blip */
-#vhs-fill::before {{
-  content:'';
-  position:absolute; right:-1px; top:0; bottom:0; width:3px;
-  background:rgba(255,255,255,.85);
-  box-shadow:0 0 4px #fff, 0 0 8px rgba(0,229,255,.9);
-  animation:vhs-blip .08s steps(1) infinite;
-}}
-@keyframes vhs-blip {{
-  0%,100% {{ opacity:1; height:100%; top:0; }}
-  50%      {{ opacity:.7; height:60%; top:20%; }}
-}}
 /* ── Capital floating popup ── */
 #capital-fab {{
   position:fixed; bottom:52px; right:16px; z-index:300;
@@ -2174,10 +2112,6 @@ body::after {{
     <span style="font:700 7px Consolas,monospace;letter-spacing:.22em;color:#ff6600;text-transform:uppercase;text-shadow:0 0 6px rgba(255,102,0,.6)">CYCLE</span>
     <div id="run-progress-track"><div id="run-progress-fill"></div></div>
     <span id="run-progress-label">—</span>
-  </div>
-  <div id="vhs-scan-bar">
-    <span id="vhs-scan-label">SCAN:</span>
-    <div id="vhs-track"><div id="vhs-fill"></div></div>
   </div>
 </div>
 
@@ -5310,28 +5244,6 @@ window.addEventListener('resize', function() {{
         }}, i * 90);
       }});
 
-      // ── VHS tracking bar ──────────────────────────────────────────────────────
-      var vhsBar  = document.getElementById('vhs-scan-bar');
-      var vhsFill = document.getElementById('vhs-fill');
-      if (!vhsBar || !vhsFill) return;
-
-      // Show, reset, fill, hide
-      vhsBar.classList.add('active');
-      vhsFill.style.transition = 'none';
-      vhsFill.style.width = '0%';
-
-      requestAnimationFrame(function() {{
-        requestAnimationFrame(function() {{
-          vhsFill.style.transition = 'width 1.35s cubic-bezier(.15,.8,.35,1)';
-          vhsFill.style.width = '100%';
-        }});
-      }});
-
-      setTimeout(function() {{
-        vhsFill.style.transition = 'width .22s ease-in';
-        vhsFill.style.width = '0%';
-        setTimeout(function() {{ vhsBar.classList.remove('active'); }}, 240);
-      }}, 1650);
     }};
 
     // ── Video-game card exit ────────────────────────────────────────────────────
