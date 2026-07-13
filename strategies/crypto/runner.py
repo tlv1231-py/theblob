@@ -254,11 +254,8 @@ def _submit_order(symbol: str, side: str, qty: float) -> str | None:
 # ── Signal computation ────────────────────────────────────────────────────────
 
 def _compute_signal(min_bars: list[dict], _unused=None) -> str | None:
-    """Max-throughput signal: enter on any up bar (close > open)."""
-    if len(min_bars) < 2:
-        return None
-    bar = min_bars[-1]
-    return "long" if bar["close"] > bar["open"] else None
+    """Max-throughput: always enter. Position manager handles exits."""
+    return "long"
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────
@@ -387,7 +384,6 @@ def run() -> None:
         return
 
     # ── Check for new entries ─────────────────────────────────────────────────
-    logger.info(f"[entry-gate] positions={len(positions)}/{max_pos} | bars_syms={list(min_bars.keys())[:3]}")
     if len(positions) < max_pos:
         for sym in _UNIVERSE:
             if sym in positions:
@@ -397,7 +393,6 @@ def run() -> None:
 
             m_bars = min_bars.get(sym, [])
             signal = _compute_signal(m_bars)
-            logger.info(f"[signal] {sym} bars={len(m_bars)} signal={signal} last={m_bars[-1] if m_bars else 'none'}")
             if not signal:
                 continue
 
