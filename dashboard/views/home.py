@@ -2530,12 +2530,20 @@ function positionPnlFloat() {{
     var cx = fl.xaxis.l2p(fl.xaxis.d2l(lx)) + fl.margin.l;
     var cy = fl.yaxis.l2p(fl.yaxis.d2l(ly)) + fl.margin.t;
     if (!isFinite(cx) || !isFinite(cy)) return;
-    // Clamp so tooltip never overflows right or left edge
+    // Clamp horizontal so tooltip never overflows right or left edge
     var pfW = pf.offsetWidth || 160;
+    var pfH = pf.offsetHeight || 200;
     var chartW = gd.offsetWidth || window.innerWidth;
     var clampX = Math.max(pfW/2 + 8, Math.min(cx, chartW - pfW/2 - 8));
     pf.style.left = clampX + 'px';
-    pf.style.top  = cy + 'px';
+    // Flip below dot if there isn't room above
+    if (cy - pfH - 22 < 4) {{
+      pf.style.top = (cy + 14) + 'px';
+      pf.style.transform = 'translate(-50%, 0)';
+    }} else {{
+      pf.style.top = cy + 'px';
+      pf.style.transform = 'translate(-50%, -100%) translateY(-18px)';
+    }}
     pf.classList.add('visible');
   }} catch(e) {{}}
 }}
@@ -4540,6 +4548,12 @@ window.addEventListener('resize', function() {{
                 window._recordStreakResult(pnlM[1][0] === '+');
               }}
               if (window._orbTradeFlash) window._orbTradeFlash(isEntry);
+              if (isEntry) {{
+                if (window._soundEntry) window._soundEntry();
+              }} else if (pnlM) {{
+                if (pnlM[1][0] === '+') {{ if (window._soundWin) window._soundWin(); }}
+                else {{ if (window._soundLoss) window._soundLoss(); }}
+              }}
             }}
             // Wallet canvas trade burst
             if (!isHistory && window._walletTrade) {{
