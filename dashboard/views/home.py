@@ -930,7 +930,7 @@ body::after {{
   -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
   mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
 }}
-#pos-left {{ flex-direction:row !important; overflow-x:hidden; overflow-y:hidden !important; flex:0 0 auto !important; width:0; transition:width .4s cubic-bezier(.22,1,.36,1); }}
+#pos-left {{ flex:0 0 auto !important; overflow:hidden; width:0; transition:width .4s cubic-bezier(.22,1,.36,1); }}
 #pos-left .pos-section-label {{ display:none; }}
 #pos-overlay #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
@@ -1449,14 +1449,10 @@ body::after {{
   display:flex; flex-direction:column; padding-bottom:6px; min-height:0;
 }}
 #pos-left {{ border-right:none; }}
-/* Crypto cards — narrow floating tiles, left accent only */
+/* Crypto cards — transparent column, left accent stripe only */
 #pos-left .pos-card {{
-  min-width:118px; max-width:118px; flex-shrink:0;
-  border-left:3px solid; border-right:none; border-top:none; border-bottom:none;
-  height:auto; align-self:flex-start; box-sizing:border-box;
-  display:flex; flex-direction:column; justify-content:flex-start;
+  border-left:3px solid; border-right:none; border-top:none; border-bottom:1px solid rgba(13,0,32,.4);
   background:transparent !important; backdrop-filter:none !important;
-  padding:6px 10px 8px;
 }}
 #pos-overlay {{ transition:width .4s cubic-bezier(.22,1,.36,1); }}
 #pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ width:2px; }}
@@ -2088,6 +2084,10 @@ body::after {{
 
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script>
+// Supabase credentials — declared here so all block-1 functions can reach them
+var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
+var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
+
 var portDates  = {port_dates_j};
 var portValues = {port_values_j};
 // Strip initial inflated value from May 2026 double-run (> 1.5x starting capital)
@@ -2125,11 +2125,12 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Default to today's intraday window — minute-by-minute view
-var _CENTER_DAYS = 1;
-var _todayStr = new Date().toISOString().slice(0,10);
-var xStart = _dateMinus(_todayStr, _CENTER_DAYS);
-var xEnd   = _datePlus_from(_todayStr, _CENTER_DAYS);
+// Default to 90-min-back / 30-min-forward intraday sliding window
+var _CENTER_DAYS = 1;  // fallback for _dateMinus / _datePlus_from helpers
+function _intradayStart() {{ return new Date(Date.now() - 90 * 60 * 1000).toISOString(); }}
+function _intradayEnd()   {{ return new Date(Date.now() + 30 * 60 * 1000).toISOString(); }}
+var xStart = _intradayStart();
+var xEnd   = _intradayEnd();
 
 // Tight Y range for the visible window
 function yRange(x0, x1) {{
@@ -3279,7 +3280,7 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   // Force intraday zoom — Plotly may autorange if no data falls in today's window
   setTimeout(function() {{
     _programmaticRelayout = true;
-    Plotly.relayout(gd, {{ 'xaxis.range': [xStart, xEnd] }}).then(function() {{
+    Plotly.relayout(gd, {{ 'xaxis.range': [_intradayStart(), _intradayEnd()] }}).then(function() {{
       _programmaticRelayout = false;
     }});
   }}, 600);
@@ -3301,16 +3302,24 @@ var _tradeEventIds = new Set(); // track seen event IDs to avoid re-adding
 var _tradeDropLines = []; // shapes for vertical drop lines
 
 function _navAtTime(isoTs) {{
-  // Find the closest portfolio value by date
-  if (!portDates.length) return null;
-  var d = isoTs.slice(0,10);
+  var tsMs = new Date(isoTs).getTime();
+  // Check live intraday pts first (most precise — within seconds)
+  if (_intradayPts.length) {{
+    var closest = null, closestDiff = Infinity;
+    for (var j=0; j<_intradayPts.length; j++) {{
+      var diff = Math.abs(new Date(_intradayPts[j].t).getTime() - tsMs);
+      if (diff < closestDiff) {{ closestDiff = diff; closest = _intradayPts[j].v; }}
+    }}
+    if (closest !== null) return closest;
+  }}
+  // Fall back to daily portfolio snapshots
+  if (!portDates.length) return window._lastKnownNav || null;
   var best = null, bestDiff = Infinity;
   for (var i=0; i<portDates.length; i++) {{
-    var diff = Math.abs(new Date(portDates[i]).getTime() - new Date(d).getTime());
-    if (diff < bestDiff) {{ bestDiff = diff; best = portValues[i]; }}
+    var d = Math.abs(new Date(portDates[i]).getTime() - tsMs);
+    if (d < bestDiff) {{ bestDiff = d; best = portValues[i]; }}
   }}
-  // If we have a live NAV that's more recent, prefer it for today
-  if (window._lastKnownNav && d >= (portDates[portDates.length-1]||'')) best = window._lastKnownNav;
+  if (window._lastKnownNav) best = window._lastKnownNav;
   return best;
 }}
 
@@ -3449,13 +3458,12 @@ setInterval(_fetchTradeEvents, 10000);
 window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 
 // ── Intraday "marked the book" trace — live portfolio value within today ──────
-var _SUPA_URL_REF = SUPA_URL, _SUPA_KEY_REF = SUPA_KEY;
 function _fetchIntradayMarks() {{
   var today = new Date().toISOString().slice(0,10);
-  var url = _SUPA_URL_REF + '/rest/v1/pipeline_events'
+  var url = SUPA_URL + '/rest/v1/pipeline_events'
     + '?run_date=eq.' + today
     + '&order=recorded_at.asc&limit=2000';
-  fetch(url, {{ headers: {{ 'apikey': _SUPA_KEY_REF, 'Authorization': 'Bearer ' + _SUPA_KEY_REF }} }})
+  fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
     if (!Array.isArray(rows)) return;
@@ -3490,7 +3498,12 @@ function _fetchIntradayMarks() {{
     window._tradeTs = tradeTs;
     // Update intraday trace (index 6) from DB marks only — live prices extend it via _pushIntradayPoint
     if (xs.length && gd && gd.data && gd.data.length >= 7) {{
-      Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]);
+      Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]).then(function() {{
+        var lastV = ys[ys.length-1], lastT = xs[xs.length-1];
+        window._lastKnownNav = lastV; window._lastKnownTs = lastT;
+        _updateEndpointDot(lastV, lastT);
+        buildTargets();
+      }});
     }}
     // Recenter chart on today (intraday default) unless user has panned
     _recenterOnLatest(xs.length > 0 ? xs[xs.length - 1] : null);
@@ -3519,12 +3532,19 @@ window._pushIntradayPoint = function(isoTs, val) {{
     _intradayPts.push({{ t: isoTs, v: val }});
   }}
   window._lastKnownNav = val;
+  window._lastKnownTs  = isoTs;
   if (gd && gd.data && gd.data.length >= 7) {{
     Plotly.restyle(gd, {{
       x: [_intradayPts.map(function(p) {{ return p.t; }})],
       y: [_intradayPts.map(function(p) {{ return p.v; }})]
-    }}, [6]);
+    }}, [6]).then(function() {{
+      // Move the endpoint dot + orb to the live NAV position
+      _updateEndpointDot(val, isoTs);
+      buildTargets();
+    }});
   }}
+  // Slide the chart window forward with each new point
+  _recenterOnLatest(isoTs);
 }};
 
 // ── Orb metrics panel updates ─────────────────────────────────────────────────
@@ -3574,21 +3594,24 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
 }}
 setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 
-// ── Chart re-center on latest point ──────────────────────────────────────────
-function _recenterOnLatest(latestIsoTs) {{
+// ── Chart re-center — sliding 90-min intraday window ──────────────────────────
+var _lastRecenter = 0;
+function _recenterOnLatest(_ignored) {{
   if (_userInteracting) return;
-  // Prefer intraday mark → today → last portfolio snapshot (in that priority order)
-  var today = new Date().toISOString().slice(0,10);
-  var anchor = latestIsoTs ? latestIsoTs.slice(0,10) : today;
-  if (!anchor) return;
-  var newStart = _dateMinus(anchor, _CENTER_DAYS);
-  var newEnd   = _datePlus_from(anchor, _CENTER_DAYS);
+  // Throttle: max once per 4s to avoid thrashing Plotly
+  var now = Date.now();
+  if (now - _lastRecenter < 4000) return;
+  _lastRecenter = now;
+  var newStart = _intradayStart();
+  var newEnd   = _intradayEnd();
   _defaultXRange = [newStart, newEnd];
   _programmaticRelayout = true;
   Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
     _programmaticRelayout = false;
   }});
 }}
+// Keep chart sliding forward even when no new data arrives
+setInterval(function() {{ _recenterOnLatest(null); }}, 10000);
 
 // ── Wallet selector ───────────────────────────────────────────────────────────
 var _walletModes = ['PAPER', 'LIVE ●'];
@@ -4857,17 +4880,16 @@ window.addEventListener('resize', function() {{
       }}, 260);
     }};
 
-    var _CARD_W = 118; // px per crypto card
-    var _EQ_W   = 130; // px for equity column
+    var _CARD_W = 118; // crypto column width
+    var _EQ_W   = 130; // equity column width
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
       var posLeft = document.getElementById('pos-left');
       if (!overlay || !posLeft) return;
       var count = Object.keys(_cryptoCardEls).length;
-      var leftW = count > 0 ? count * _CARD_W : 0;
-      var totalW = leftW + _EQ_W;
+      var leftW = count > 0 ? _CARD_W : 0;  // single column regardless of count
       posLeft.style.width = leftW + 'px';
-      overlay.style.width = Math.min(totalW, 650) + 'px';
+      overlay.style.width = (leftW + _EQ_W) + 'px';
     }}
 
     function _makeCard(p) {{
