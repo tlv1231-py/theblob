@@ -5132,24 +5132,17 @@ window.addEventListener('resize', function() {{
             }}, _batchDur + 1000);
           }}
 
-          // Trades combo chip — update count on fade
+          // Trades combo chip — flash only, _pollStats owns the persistent count
           if (_tradeCount > 0) {{
-            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', function() {{
-              var td = document.getElementById('om-today');
-              if (td) td.textContent = parseInt(td.textContent || '0', 10) + _tradeCount;
-            }});
+            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', null);
           }}
 
-          // Open positions delta chip — update count on fade
+          // Open positions delta chip — flash only, _pollPositions owns the persistent count
           var _posDelta = _entryCount - _exitCount;
           if (_posDelta !== 0) {{
             _showChip('pos-combo-chip',
               (_posDelta > 0 ? '+' : '') + _posDelta,
-              _posDelta > 0 ? '#00e5ff' : '#ff4466',
-              function() {{
-                var op = document.getElementById('om-openpos');
-                if (op) op.textContent = Math.max(0, parseInt(op.textContent || '0', 10) + _posDelta);
-              }});
+              _posDelta > 0 ? '#00e5ff' : '#ff4466', null);
           }}
         }}
 
