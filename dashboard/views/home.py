@@ -4163,7 +4163,7 @@ window._onLiveTrade = function() {{ setTimeout(_fetchTradeEvents, 1500); }};
 function _fetchIntradayMarks() {{
   var today = new Date().toISOString().slice(0,10);
   var url = SUPA_URL + '/rest/v1/pipeline_events'
-    + '?run_date=eq.' + today
+    + '?recorded_at=gte.' + today + 'T00:00:00Z'
     + '&order=recorded_at.asc&limit=2000';
   fetch(url, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
   .then(function(r) {{ return r.json(); }})
@@ -5426,8 +5426,9 @@ window.addEventListener('resize', function() {{
     // Rolling nav history for velocity computation
     if (!window._navHistory) window._navHistory = [];
     function _trackNav(nav, ts) {{
-      window._navHistory.unshift({{ nav: nav, ts: new Date(ts).getTime() }});
-      if (window._navHistory.length > 20) window._navHistory.pop();
+      window._navHistory.push({{ x: new Date(ts).toISOString(), y: parseFloat(nav) }});
+      // keep last 200 points (canvas draw uses _navHistory as source of truth)
+      if (window._navHistory.length > 200) window._navHistory.shift();
     }}
 
     function _updateNavDisplays(nav, ts) {{
@@ -6427,14 +6428,13 @@ window.addEventListener('resize', function() {{
       var todayStr = new Date().toISOString().split('T')[0];
       var urlTc = SUPA_URL + '/rest/v1/pipeline_events'
         + '?select=id&event_type=eq.TRADE&recorded_at=gte.' + todayStr + 'T00:00:00Z';
-      fetch(urlTc + '&limit=500', {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      fetch(urlTc + '&limit=2000', {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
         if (!Array.isArray(rows)) return;
         var el = document.getElementById('runner-trades');
         if (el) el.textContent = rows.length + ' trades today';
-        var omEl = document.getElementById('om-today');
-        if (omEl) omEl.textContent = rows.length;
+        // om-today is owned by _updateOrbMetrics (via _fetchIntradayMarks) — do not write here
       }}).catch(function() {{}});
 
       // Daily bar: today's fills pnl proxy — compare earliest vs latest portfolio snapshot today
