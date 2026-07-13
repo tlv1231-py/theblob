@@ -5587,11 +5587,69 @@ window.addEventListener('resize', function() {{
       .catch(function() {{}}); // silent — offline or auth issue
     }}
 
-    // Poll every 2s — smaller batches = more live, less bulk-load feel
+    // Poll every 3s as fallback — Realtime WebSocket triggers _poll instantly on insert
     setTimeout(function() {{
       _poll();
-      setInterval(_poll, 2000);
+      setInterval(_poll, 3000);
     }}, 2000);
+
+    // ── Supabase Realtime — instant push on pipeline_events INSERT ──────────────
+    // Uses Phoenix channel protocol over WebSocket (no SDK required, free tier)
+    (function() {{
+      var WS_URL = 'wss://seeevuklabvhkawawtxn.supabase.co/realtime/v1/websocket'
+        + '?apikey=sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY&vsn=1.0.0';
+      var _ref = 0;
+      var _ws, _hbTimer, _reconnTimer;
+
+      function _send(obj) {{
+        if (_ws && _ws.readyState === 1) _ws.send(JSON.stringify(obj));
+      }}
+
+      function _connect() {{
+        try {{ _ws = new WebSocket(WS_URL); }} catch(e) {{ return; }}
+
+        _ws.onopen = function() {{
+          // Join postgres_changes channel for pipeline_events INSERTs
+          _send({{
+            topic: 'realtime:public:pipeline_events',
+            event: 'phx_join',
+            payload: {{
+              config: {{
+                broadcast: {{ self: false }},
+                postgres_changes: [{{ event: 'INSERT', schema: 'public', table: 'pipeline_events' }}]
+              }}
+            }},
+            ref: String(++_ref)
+          }});
+          // Heartbeat every 25s to keep connection alive
+          clearInterval(_hbTimer);
+          _hbTimer = setInterval(function() {{
+            _send({{ topic: 'phoenix', event: 'heartbeat', payload: {{}}, ref: String(++_ref) }});
+          }}, 25000);
+        }};
+
+        _ws.onmessage = function(e) {{
+          try {{
+            var msg = JSON.parse(e.data);
+            // postgres_changes INSERT fires _poll immediately for zero-lag feed update
+            if (msg.event === 'postgres_changes' &&
+                msg.payload && msg.payload.data &&
+                msg.payload.data.type === 'INSERT') {{
+              _poll();
+            }}
+          }} catch(_) {{}}
+        }};
+
+        _ws.onclose = function() {{
+          clearInterval(_hbTimer);
+          // Reconnect after 5s
+          clearTimeout(_reconnTimer);
+          _reconnTimer = setTimeout(_connect, 5000);
+        }};
+      }}
+
+      _connect();
+    }})();
   }})();
 
   // ── Live NAV poller — updates chart + all NAV displays in-place ─────────────
