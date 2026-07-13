@@ -6778,6 +6778,9 @@ window.addEventListener('resize', function() {{
 
       function _spawnCallout(cfg) {{
         var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
+        var hasCountdown = cfg.countdown && cfg.countdown > 0;
+        var initCount = hasCountdown ? Math.round(cfg.countdown) : 0;
+
         var card = document.createElement('div');
         card.className = 'callout-card';
         card.style.borderLeftColor = cfg.col;
@@ -6785,10 +6788,10 @@ window.addEventListener('resize', function() {{
           '<div class="cc-badge" style="color:' + cfg.col + ';border-color:' + cfg.col + '">' + cfg.badge + '</div>' +
           '<div class="cc-body">' +
             '<div class="cc-ticker" style="color:' + cfg.col + '">' + cfg.sym + '</div>' +
-            '<div class="cc-phase" id="ph-' + uid + '">SCANNING \xb7 <span id="ct-' + uid + '">5</span></div>' +
+            '<div class="cc-phase" id="ph-' + uid + '">' + (cfg.detail || '') + '</div>' +
             '<div class="cc-exec-bar"><div class="cc-exec-fill" id="fl-' + uid + '" style="background:' + cfg.col + '"></div></div>' +
           '</div>' +
-          '<div class="cc-count" style="color:' + cfg.col + '" id="nm-' + uid + '">5</div>';
+          (hasCountdown ? '<div class="cc-count" style="color:' + cfg.col + '" id="nm-' + uid + '">' + initCount + '</div>' : '');
 
         if (_calloutRail) _calloutRail.appendChild(card);
         requestAnimationFrame(function() {{
@@ -6796,44 +6799,55 @@ window.addEventListener('resize', function() {{
         }});
 
         var phEl  = document.getElementById('ph-' + uid);
-        var ctEl  = document.getElementById('ct-' + uid);
         var numEl = document.getElementById('nm-' + uid);
         var fill  = document.getElementById('fl-' + uid);
         var bar   = fill ? fill.parentNode : null;
 
-        // Phase 1 — SCANNING countdown 5→1
-        var count = 5;
-        var countInt = setInterval(function() {{
-          count--;
-          if (count > 0) {{
-            if (ctEl)  ctEl.textContent  = count;
-            if (numEl) numEl.textContent = count;
-          }} else {{
-            clearInterval(countInt);
-            // Phase 2 — EXECUTING + bar
-            if (phEl)  phEl.textContent = 'EXECUTING...';
-            if (numEl) numEl.style.opacity = '0';
-            if (bar)   bar.style.display = 'block';
-            setTimeout(function() {{ if (fill) fill.style.width = '100%'; }}, 30);
+        function _retract() {{
+          setTimeout(function() {{
+            card.classList.remove('cc-show');
+            card.classList.add('cc-exit');
             setTimeout(function() {{
-              // Phase 3 — COMPLETE
-              if (phEl)  {{ phEl.textContent = '◉ ' + (cfg.complete || 'COMPLETE'); phEl.style.color = cfg.col; }}
-              if (bar)   bar.style.display = 'none';
-              // Phase 4 — retract
-              setTimeout(function() {{
-                card.classList.remove('cc-show');
-                card.classList.add('cc-exit');
-                setTimeout(function() {{
-                  if (card.parentNode) card.parentNode.removeChild(card);
-                }}, 240);
-              }}, 900);
-            }}, 1200);
-          }}
-        }}, 400);
+              if (card.parentNode) card.parentNode.removeChild(card);
+            }}, 240);
+          }}, 900);
+        }}
+
+        function _execPhase() {{
+          // EXECUTING bar → COMPLETE → retract
+          if (phEl)  phEl.textContent = 'EXECUTING...';
+          if (numEl) numEl.style.opacity = '0';
+          if (bar)   bar.style.display = 'block';
+          setTimeout(function() {{ if (fill) fill.style.width = '100%'; }}, 30);
+          setTimeout(function() {{
+            if (phEl) {{ phEl.textContent = '◉ ' + (cfg.complete || 'COMPLETE'); phEl.style.color = cfg.col; }}
+            if (bar)  bar.style.display = 'none';
+            _retract();
+          }}, 1200);
+        }}
+
+        if (hasCountdown) {{
+          // Accurate per-second countdown to a real future event
+          var count = initCount;
+          var countInt = setInterval(function() {{
+            count--;
+            if (count > 0) {{
+              if (numEl) numEl.textContent = count;
+            }} else {{
+              clearInterval(countInt);
+              _execPhase();
+            }}
+          }}, 1000);
+        }} else {{
+          // Already happened — show result immediately, no fake countdown
+          if (phEl) {{ phEl.textContent = '◉ ' + (cfg.complete || cfg.detail || 'COMPLETE'); phEl.style.color = cfg.col; }}
+          _retract();
+        }}
       }}
 
-      window._fireCallout = function(badge, sym, detail, col, complete) {{
-        _spawnCallout({{ badge: badge, sym: sym, detail: detail, col: col || '#ff00cc', complete: complete || 'COMPLETE' }});
+      // countdown: seconds until the event fires (omit or 0 for past/instant events)
+      window._fireCallout = function(badge, sym, detail, col, complete, countdown) {{
+        _spawnCallout({{ badge:badge, sym:sym, detail:detail, col:col||'#ff00cc', complete:complete||'COMPLETE', countdown:countdown||0 }});
       }};
 
       // ── Master tick ───────────────────────────────────────────
