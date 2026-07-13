@@ -1,6 +1,6 @@
 strategy:
   name: crypto_momentum
-  description: "EMA crossover + hourly trend confirmation — 1-min momentum gated by 1-hr bias"
+  description: "15-min EMA trend + 1-hour confirmation — aligned with 60s polling cadence"
 
 universe:
   - BTC/USD
@@ -10,25 +10,37 @@ universe:
   - LINK/USD
   - DOGE/USD
   - BCH/USD
-  - UNI/USD
-  - CRV/USD
 
 signals:
-  ema_fast: 5                # fast EMA period on 1-min bars
-  ema_slow: 20               # slow EMA period on 1-min bars
-  min_separation: 0.0002     # minimum fast/slow spread (0.02%) to avoid noise trades
+  # Primary: 15-min EMA crossover (each bar = 15 polls — crossovers are real)
+  ema_fast: 9
+  ema_slow: 21
+  min_separation: 0.0008     # 0.08% separation required — filters noise crossovers
+
+  # Trend confirmation: 1-hour trend must agree
+  hour_ema_fast: 4
+  hour_ema_slow: 9
+
+  # RSI filter: only enter in momentum zone, not overbought/oversold crash
+  rsi_period: 14
+  rsi_min: 40                # don't buy free-falling
+  rsi_max: 65                # don't chase overbought
+
+  # Consecutive confirmation: require N bars above slow EMA before entry
+  consec_confirm: 2          # 2 × 15-min bars = 30 min of trend momentum required
 
 position:
-  risk_pct: 0.5              # 0.5% of NAV per trade — small, survives a run of losers
-  max_positions: 5           # max concurrent open positions
-  stop_pct: 0.0025           # 0.25% stop below entry
-  target_pct: 0.008          # 0.8% target — 3.2:1 R:R after slippage
-  max_hold_minutes: 12       # exit if still open after 12 min regardless
+  risk_pct: 1.5              # bigger per trade — fewer, higher-conviction trades
+  max_positions: 2           # concentrate capital; don't spread across 5 losers
+  stop_pct: 0.012            # 1.2% stop — survivable on 15-min bars (avg range ~0.5-1%)
+  target_pct: 0.028          # 2.8% target → ~2.3:1 R:R after slippage
+  max_hold_minutes: 90       # 6 × 15-min bars — give trade room to develop
+  min_reentry_minutes: 45    # no re-entry within 45 min of an exit on same symbol
 
 risk:
-  max_daily_loss_pct: 0.05   # tighter daily loss limit — 5% of account
-  max_daily_trades: 200      # still high ceiling — signal quality filters it naturally
+  max_daily_loss_pct: 0.04   # 4% daily loss halt
+  max_daily_trades: 20       # sanity cap — should be 3-8 trades/day on 15-min
 
 execution:
-  slippage_bps: 10           # realistic for top-tier crypto on Alpaca (was 15, too pessimistic)
+  slippage_bps: 10
   paper: true

@@ -64,10 +64,16 @@ def _data_client():
 def _fetch_bars(timeframe: str, lookback_minutes: int) -> dict[str, list]:
     """Fetch bars for all universe symbols over a trailing time window."""
     from alpaca.data.requests import CryptoBarsRequest
-    from alpaca.data.timeframe import TimeFrame
+    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
-    tf  = TimeFrame.Minute if timeframe == "1Min" else TimeFrame.Hour
-    end = datetime.now(timezone.utc)
+    if timeframe == "1Min":
+        tf = TimeFrame.Minute
+    elif timeframe == "15Min":
+        tf = TimeFrame(15, TimeFrameUnit.Minute)
+    else:
+        tf = TimeFrame.Hour
+
+    end   = datetime.now(timezone.utc)
     start = end - timedelta(minutes=lookback_minutes)
     client = _data_client()
     req = CryptoBarsRequest(
@@ -246,7 +252,6 @@ def _submit_order(symbol: str, side: str, qty: float) -> str | None:
 # ── Signal computation ────────────────────────────────────────────────────────
 
 def _ema(values: list[float], period: int) -> float:
-    """Exponential moving average of last N values."""
     k = 2 / (period + 1)
     e = values[0]
     for v in values[1:]:
@@ -254,45 +259,95 @@ def _ema(values: list[float], period: int) -> float:
     return e
 
 
-def _compute_signal(min_bars: list[dict], hour_bars: list[dict]) -> str | None:
-    """Two-layer trend filter: 1-min EMA crossover gated by 1-hour trend.
+def _rsi(closes: list[float], period: int) -> float:
+    if len(closes) < period + 1:
+        return 50.0
+    gains, losses = [], []
+    for i in range(1, period + 1):
+        d = closes[-period - 1 + i] - closes[-period - 2 + i]
+        (gains if d >= 0 else losses).append(abs(d))
+    ag = sum(gains) / period if gains else 0.0
+    al = sum(losses) / period if losses else 0.0
+    return 100 - (100 / (1 + ag / al)) if al > 0 else 100.0
 
-    Entry requires ALL of:
-    1. 1-min fast EMA > slow EMA  (momentum present)
-    2. Separation >= 0.02%        (not a marginal/noisy crossover)
-    3. 1-hour EMA(3) > EMA(8)     (macro trend confirms — don't fight the tide)
+
+def _compute_signal(bars_15m: list[dict], hour_bars: list[dict]) -> str | None:
+    """Three-layer signal on 15-min bars — designed for 60s polling cadence.
+
+    Each bar represents 15 polling cycles, so crossovers are structurally
+    meaningful rather than 1-min noise.
+
+    Requires ALL of:
+    1. 15-min EMA(fast) > EMA(slow) for the last consec_confirm bars
+    2. EMA separation >= min_separation (filters marginal crossovers)
+    3. RSI in [rsi_min, rsi_max] (not crashing, not overbought)
+    4. 1-hour EMA confirms uptrend
     """
-    fast_period = _SIG["ema_fast"]
-    slow_period = _SIG["ema_slow"]
+    fast_p   = _SIG["ema_fast"]
+    slow_p   = _SIG["ema_slow"]
+    sep_min  = _SIG["min_separation"]
+    consec   = _SIG["consec_confirm"]
+    rsi_p    = _SIG["rsi_period"]
+    rsi_lo   = _SIG["rsi_min"]
+    rsi_hi   = _SIG["rsi_max"]
+    h_fast_p = _SIG["hour_ema_fast"]
+    h_slow_p = _SIG["hour_ema_slow"]
 
-    if len(min_bars) < slow_period + 1:
+    min_bars_needed = slow_p + consec + rsi_p + 2
+    if len(bars_15m) < min_bars_needed:
         return None
 
-    # Layer 1: 1-min momentum
-    closes = [b["close"] for b in min_bars]
-    fast   = _ema(closes, fast_period)
-    slow   = _ema(closes, slow_period)
+    closes = [b["close"] for b in bars_15m]
 
-    if fast <= slow:
+    # Layer 1: consec_confirm consecutive bars must all have fast > slow
+    for lag in range(consec):
+        subset = closes[:len(closes) - lag]
+        fast = _ema(subset, fast_p)
+        slow = _ema(subset, slow_p)
+        if fast <= slow:
+            return None
+        # Only check separation on the most recent bar
+        if lag == 0:
+            separation = (fast - slow) / slow
+            if separation < sep_min:
+                return None
+
+    # Layer 2: RSI momentum zone
+    rsi = _rsi(closes, rsi_p)
+    if not (rsi_lo <= rsi <= rsi_hi):
         return None
 
-    # Layer 2: signal must be meaningful, not a dust-level crossover
-    strength = (fast - slow) / slow
-    if strength < 0.0002:          # < 0.02% separation → skip
-        return None
-
-    # Layer 3: 1-hour trend must agree — only long when hourly is bullish
-    if len(hour_bars) >= 8:
+    # Layer 3: hourly trend confirmation
+    if len(hour_bars) >= h_slow_p:
         h_closes = [b["close"] for b in hour_bars]
-        h_fast = _ema(h_closes, 3)
-        h_slow = _ema(h_closes, 8)
+        h_fast = _ema(h_closes, h_fast_p)
+        h_slow = _ema(h_closes, h_slow_p)
         if h_fast < h_slow:
-            return None            # hourly trend is down — skip long
+            return None
 
     return "long"
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────
+
+def _recent_exits(lookback_minutes: int) -> dict[str, datetime]:
+    """Return {symbol: last_exit_time} for exits within lookback_minutes."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=lookback_minutes)
+    try:
+        with get_session() as s:
+            rows = s.execute(text("""
+                SELECT symbol, MAX(recorded_at) as last_exit
+                FROM pipeline_events
+                WHERE event_type = 'TRADE'
+                  AND message LIKE '%EXIT%'
+                  AND recorded_at >= :cutoff
+                GROUP BY symbol
+            """), {"cutoff": cutoff}).fetchall()
+            return {r.symbol: r.last_exit for r in rows}
+    except Exception as e:
+        logger.warning(f"Cooldown query failed: {e}")
+        return {}
+
 
 def run() -> None:
     now      = datetime.now(timezone.utc)
@@ -302,13 +357,15 @@ def run() -> None:
     target_pc= _POS.get("target_pct", 0.0)
     max_pos  = _POS["max_positions"]
     max_hold = _POS["max_hold_minutes"]
+    cooldown = _POS.get("min_reentry_minutes", 45)
 
     logger.info(f"[crypto] run @ {now.isoformat()} | NAV=${nav:,.2f}")
 
-    # Fetch bars (2 API calls, all symbols batched)
+    # Fetch bars — 15-min primary for signals, 1-min for stop checks, 1-hour for trend
     try:
-        min_bars  = _fetch_bars("1Min",  180)     # last 3 hours of 1-min bars
-        hour_bars = _fetch_bars("1Hour", 1500)    # last 25 hours of 1-hr bars
+        bars_15m  = _fetch_bars("15Min", 600)    # 10 hours → ~40 bars (need slow_p + consec + rsi)
+        min_bars  = _fetch_bars("1Min",  30)     # last 30 min for current price / stop check
+        hour_bars = _fetch_bars("1Hour", 600)    # last 10 hours of hourly bars
     except Exception as e:
         logger.error(f"[crypto] Bar fetch failed: {e}")
         return
@@ -349,20 +406,21 @@ def run() -> None:
     except Exception as e:
         logger.warning(f"[reconcile] Could not fetch Alpaca positions: {e}")
 
-    daily_pnl = 0.0
+    daily_pnl   = 0.0
+    recent_exits = _recent_exits(cooldown)
 
-    # ── Manage open positions ─────────────────────────────────────────────────
+    # ── Manage open positions — use 1-min close for stop/target checks ────────
     for sym, pos in list(positions.items()):
-        bars = min_bars.get(sym, [])
-        if not bars:
+        # Use 1-min bars for the current price; fall back to 15-min if missing
+        m = min_bars.get(sym, []) or bars_15m.get(sym, [])
+        if not m:
             continue
-        close  = bars[-1]["close"]
-        age    = (now - pos["entered_at"].replace(tzinfo=timezone.utc)).total_seconds() / 60
-        d      = pos["direction"]
-        signal = _compute_signal(bars, hour_bars.get(sym, []))
+        close = m[-1]["close"]
+        age   = (now - pos["entered_at"].replace(tzinfo=timezone.utc)).total_seconds() / 60
+        d     = pos["direction"]
         reason = None
 
-        # Stop loss
+        # Stop loss (price-based — no EMA reversal exit; avoid 1-min noise exits)
         if d == "long"  and close <= pos["stop_price"]: reason = "stop"
         if d == "short" and close >= pos["stop_price"]: reason = "stop"
 
@@ -371,12 +429,8 @@ def run() -> None:
             if d == "long"  and close >= pos["entry_price"] * (1 + target_pc): reason = "target"
             if d == "short" and close <= pos["entry_price"] * (1 - target_pc): reason = "target"
 
-        # Max hold exceeded
+        # Max hold
         if reason is None and age >= max_hold: reason = "timeout"
-
-        # EMA flipped — exit and let entry loop reverse
-        if reason is None and signal != d:
-            reason = "reversal"
 
         if reason:
             exit_price = close * (1 - _SLIPPAGE) if d == "long" else close * (1 + _SLIPPAGE)
@@ -395,7 +449,12 @@ def run() -> None:
                 f"age={age:.0f}m daily_pnl={daily_pnl:+,.2f}")
             logger.info(f"[exit] {sym} {reason} pnl={pnl:+,.4f}")
 
-    # ── Check for new entries ─────────────────────────────────────────────────
+    # Daily loss halt
+    if nav > 0 and daily_pnl / nav <= -_CFG["risk"]["max_daily_loss_pct"] / 100:
+        _post_event("RISK", "", f"daily loss limit hit · halted · pnl={daily_pnl:+.2f}")
+        return
+
+    # ── Check for new entries — use 15-min bars for signal quality ────────────
     if len(positions) < max_pos:
         for sym in _UNIVERSE:
             if sym in positions:
@@ -403,17 +462,28 @@ def run() -> None:
             if len(positions) >= max_pos:
                 break
 
-            m_bars = min_bars.get(sym, [])
+            # Cooldown: skip if we exited this symbol recently
+            if sym in recent_exits:
+                logger.debug(f"[cooldown] {sym} skipped — exited within {cooldown}m")
+                continue
+
+            s15 = bars_15m.get(sym, [])
             h_bars = hour_bars.get(sym, [])
-            signal = _compute_signal(m_bars, h_bars)
+            signal = _compute_signal(s15, h_bars)
             if not signal:
                 continue
 
-            price  = m_bars[-1]["close"] if m_bars else 0
+            # Use 1-min close as entry price if available, else last 15-min close
+            m_bars = min_bars.get(sym, [])
+            price = m_bars[-1]["close"] if m_bars else (s15[-1]["close"] if s15 else 0)
             if price <= 0:
                 continue
 
-            qty    = round((nav * risk_pc) / price, 8)
+            qty = round((nav * risk_pc) / price, 8)
+            if qty <= 0:
+                logger.warning(f"[entry] {sym} qty=0 (price={price}, nav={nav}, risk={risk_pc})")
+                continue
+
             filled = price * (1 + _SLIPPAGE) if signal == "long" else price * (1 - _SLIPPAGE)
             stop   = filled * (1 - stop_pc)  if signal == "long" else filled * (1 + stop_pc)
             target = filled * (1 + target_pc) if signal == "long" else filled * (1 - target_pc)
