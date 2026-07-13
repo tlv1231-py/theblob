@@ -2266,10 +2266,11 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Date-range window — show last 30 days with today at the right edge + small buffer
+// Intraday sliding window — "now" always at center
 var _CENTER_DAYS = 1;
-function _intradayStart() {{ return _dateMinus(_datePlus(0), 30); }}
-function _intradayEnd()   {{ return _datePlus(2); }}
+var _HALF_WIN_MS = 45 * 60 * 1000;  // 45 min each side
+function _intradayStart() {{ return new Date(Date.now() - _HALF_WIN_MS).toISOString(); }}
+function _intradayEnd()   {{ return new Date(Date.now() + _HALF_WIN_MS).toISOString(); }}
 var xStart = _intradayStart();
 var xEnd   = _intradayEnd();
 
@@ -3661,14 +3662,18 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   applyPortfolioGlow();
   if (rafId) cancelAnimationFrame(rafId);
   drawPulse();
-  // Seed endpoint dot from server-rendered data
+  // Seed endpoint dot — extend portfolio line to "now" so orb lands in intraday window
   if (portDates.length && portValues.length) {{
     var initNav = portValues[portValues.length - 1];
-    var initTs  = portDates[portDates.length - 1];
+    var nowIso  = new Date().toISOString();
+    // Extend the portfolio line (ghost trace 3, main trace 4) to current time
+    var extDates  = portDates.concat([nowIso]);
+    var extValues = portValues.concat([initNav]);
+    Plotly.restyle(gd, {{ x: [extDates, extDates], y: [extValues, extValues] }}, [3, 4]);
     window._lastKnownNav = initNav;
-    window._lastKnownTs  = initTs;
-    setTimeout(function() {{ _updateEndpointDot(initNav, initTs); }}, 200);
-    setTimeout(function() {{ _updateAthShape(initNav, initTs); }}, 250);
+    window._lastKnownTs  = nowIso;
+    setTimeout(function() {{ _updateEndpointDot(initNav, nowIso); }}, 200);
+    setTimeout(function() {{ _updateAthShape(initNav, nowIso); }}, 250);
   }}
   // Crosshair on load: show → zoom in after crosshair fades
   setTimeout(showCrosshair, 1500);
