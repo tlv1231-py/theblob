@@ -1524,27 +1524,54 @@ body::after {{
   font-family:Consolas,monospace;
 }}
 /* pos-cards */
-.pos-section-label {{
-  font-size:7px; letter-spacing:.22em; color:#2a1a3a;
-  padding:4px 12px 2px; text-transform:uppercase; border-bottom:1px solid #0d0020;
-}}
-#pos-equity-section .pos-section-label {{ border-top:1px solid #0d0020; margin-top:2px; }}
+.pos-section-label {{ display:none; }}
 .pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden;
              background:rgba(6,0,8,.72); backdrop-filter:blur(6px); border-bottom:1px solid #0d0020; }}
-/* scan sweep */
+
+/* ── Crypto card redesign — minimal, flush, data-forward ── */
+#pos-left .pos-card {{
+  padding:5px 8px 5px 10px;
+  background:transparent !important; backdrop-filter:none !important;
+  border-left:2px solid; border-right:none; border-top:none;
+  border-bottom:1px solid rgba(255,255,255,.035);
+}}
+#pos-left .pos-corner {{ display:none; }}
+#pos-left .pos-acq-flash {{ font-size:7px; letter-spacing:.2em; }}
+#pos-left .pos-top {{
+  display:flex; justify-content:space-between; align-items:baseline; gap:4px; line-height:1.25;
+}}
+#pos-left .pos-sym {{ font-size:11px; font-weight:800; letter-spacing:.04em; }}
+#pos-left .pos-qty {{ display:none; }}
+#pos-left .pos-val {{
+  font-size:8px; font-weight:700; font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,.42); margin-left:auto;
+}}
+#pos-left .pos-hold {{
+  font-size:7.5px; color:rgba(255,255,255,.28); margin-top:1px; letter-spacing:.01em;
+}}
+#pos-left .pos-prox-wrap {{ margin-top:4px; padding:0; }}
+#pos-left .pos-prox-track {{ height:2px; background:rgba(255,255,255,.06); }}
+#pos-left .pos-prox-fill {{
+  transition:width .8s cubic-bezier(.22,1,.36,1), background .8s;
+}}
+#pos-left .pos-prox-cursor {{ width:5px; height:5px; }}
+#pos-left .pos-prox-labels {{ display:none; }}
+#pos-left .pos-age-bar {{ margin-top:3px; }}
+
+/* Tasteful scan — single hairline at 18% opacity, slow drift */
 @keyframes card-scan-sweep {{
-  0%   {{ top:-3px; opacity:0; }}
-  8%   {{ opacity:1; }}
-  92%  {{ opacity:1; }}
-  100% {{ top:calc(100% + 3px); opacity:0; }}
+  0%   {{ top:-1px; opacity:0; }}
+  12%  {{ opacity:.18; }}
+  88%  {{ opacity:.18; }}
+  100% {{ top:calc(100% + 1px); opacity:0; }}
 }}
 .pos-card-scanning::after {{
   content:''; position:absolute; pointer-events:none; z-index:20;
-  left:-5%; right:-5%; height:2px; top:-3px;
-  background:linear-gradient(90deg,transparent 0%,rgba(0,255,157,.65) 20%,#00e5ff 50%,rgba(0,255,157,.65) 80%,transparent 100%);
-  box-shadow:0 0 6px #00ff9d,0 0 16px rgba(0,229,255,.7);
-  animation:card-scan-sweep .65s ease-in-out forwards;
+  left:0; right:0; height:1px; top:-1px;
+  background:rgba(200,200,220,.6);
+  animation:card-scan-sweep 1.1s linear forwards;
 }}
+
 .pos-top {{ display:flex; align-items:baseline; gap:6px; line-height:1.3; }}
 .pos-sym {{ font-weight:700; font-size:15px; }}
 .pos-qty {{ color:#3a1a5a; font-size:10px; }}
@@ -5058,23 +5085,16 @@ window.addEventListener('resize', function() {{
       el.className = 'pos-card';
       el.setAttribute('data-sym', p.symbol);
       el.setAttribute('data-entered', p.entered_at || '');
-      el.style.borderLeft = '3px solid ' + col;
+      el.style.borderLeft = '2px solid ' + col;
       el.style.position = 'relative';
       el.style.overflow = 'hidden';
       el.style.transformOrigin = 'center top';
-      var agePct  = Math.min(age / 12 * 100, 100);
+      var agePct  = Math.min(age / 90 * 100, 100);
       var ageBg   = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
-      // Corner brackets
-      ['tl','tr','bl','br'].forEach(function(pos) {{
-        var c = document.createElement('span');
-        c.className = 'pos-corner ' + pos;
-        c.style.borderColor = col;
-        el.appendChild(c);
-      }});
       // Acquired flash overlay
       var flash = document.createElement('div');
       flash.className = 'pos-acq-flash';
-      flash.textContent = '⌐ ACQUIRED ¬';
+      flash.textContent = 'ACQUIRED';
       flash.style.color = col;
       el.appendChild(flash);
       // Live proximity meter (stop → current → target)
@@ -5098,16 +5118,15 @@ window.addEventListener('resize', function() {{
           + '</div>'
           + '</div>';
       }}
+      var entryDisp = entry > 0 ? (entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2)) : '—';
       var inner = document.createElement('div');
       inner.innerHTML = '<div class="pos-top">'
         + '<span class="pos-sym" style="color:' + col + '">···</span>'
-        + '<span class="pos-qty">' + qtyStr + '</span>'
-        + '<span class="pos-val" style="color:#cc00ff;font-size:10px">▲ LONG</span>'
-        + wrHtml
+        + '<span class="pos-val">··········</span>'
         + '</div>'
         + '<div class="pos-hold active">··········</div>'
         + rangeHtml
-        + '<div class="pos-age-bar"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
+        + '<div class="pos-age-bar" title="time in trade"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
       el.appendChild(inner);
       // Orchestrate entry: flash → scramble sym → resolve price
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
@@ -5127,10 +5146,12 @@ window.addEventListener('resize', function() {{
         flash.classList.add('show');
         el.classList.add('pos-card-active');
         var symEl = inner.querySelector('.pos-sym');
-        _scramble(symEl, p.symbol.replace('/USD',''), 280);
+        _scramble(symEl, p.symbol.replace('/USD',''), 260);
+        var valEl = inner.querySelector('.pos-val');
+        setTimeout(function() {{ _scramble(valEl, entryDisp, 180); }}, 80);
         var holdEl = inner.querySelector('.pos-hold');
-        var holdTarget = '$' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '%';
-        setTimeout(function() {{ _scramble(holdEl, holdTarget, 220); }}, 150);
+        var holdTarget = stopPct + '% stop · ' + age + 'm';
+        setTimeout(function() {{ _scramble(holdEl, holdTarget, 180); }}, 160);
       }}, 90);
       return el;
     }}
@@ -5141,10 +5162,14 @@ window.addEventListener('resize', function() {{
       var age     = p.entered_at ? (Date.now() - new Date(p.entered_at)) / 60000 : 0;
       var stopPct = entry > 0 ? ((stop - entry) / entry * 100).toFixed(1) : '—';
       var hold = el.querySelector('.pos-hold');
-      if (hold) hold.textContent = '$' + entry.toFixed(entry < 0.01 ? 6 : 4) + ' · stop ' + stopPct + '%';
+      if (hold) hold.textContent = stopPct + '% stop · ' + Math.floor(age) + 'm';
+      var valEl = el.querySelector('.pos-val');
+      if (valEl && entry > 0) {{
+        valEl.textContent = entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2);
+      }}
       var fill = el.querySelector('.pos-age-fill');
       if (fill) {{
-        var agePct = Math.min(age / 12 * 100, 100);
+        var agePct = Math.min(age / 90 * 100, 100);
         fill.style.width  = agePct + '%';
         fill.style.background = agePct < 60 ? '#00ff9d' : agePct < 85 ? '#ff9900' : '#ff3366';
       }}
