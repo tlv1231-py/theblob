@@ -2327,16 +2327,17 @@ var traces = [
   {{
     x: portDates, y: portValues,
     type:'scatter', mode:'lines',
-    line:{{ color:'rgba(255,0,204,0.06)', width:14 }},
+    line:{{ color:'rgba(255,0,204,0.18)', width:20 }},
     fill:'none',
     name:'ghost', hoverinfo:'skip', showlegend:false,
   }},
-  // PORTFOLIO — main line (trace index 4)
+  // PORTFOLIO — main line with area fill (trace index 4)
   {{
     x: portDates, y: portValues,
     type:'scatter', mode:'lines',
-    line:{{ color:'#ff00cc', width:2.5 }},
-    fill:'none',
+    line:{{ color:'#ff00cc', width:3 }},
+    fill:'tozeroy',
+    fillcolor:'rgba(255,0,204,0.07)',
     name:'PORTFOLIO',
     hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
   }},
@@ -2420,12 +2421,12 @@ var layout = {{
     tickformat:'%b %d', zeroline:false, showline:false, type:'date', fixedrange:false,
   }},
   yaxis:{{
-    autorange:true,
-    showgrid:true, gridcolor:'rgba(42,0,61,0.35)',
+    autorange:false,
+    showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
     tickformat:'$,.0f',
     zeroline:false, showline:false, fixedrange:true,
-    tickprefix:'',
+    tickprefix:'', nticks:6,
   }},
 
   shapes, annotations,
@@ -3650,11 +3651,17 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
   setTimeout(showCrosshair, 1500);
   // Mark initial layout complete so the pan tracker ignores programmatic events
   setTimeout(function() {{ _initLayoutDone = true; }}, 500);
-  // Force intraday zoom + center y-axis on current NAV
+  // Force intraday zoom + tight y-axis centered on current NAV
   setTimeout(function() {{
     _programmaticRelayout = true;
     var centerNav = window._lastKnownNav || {last_nav};
-    var pad = Math.max(centerNav * 0.04, 800);
+    // Use actual data spread to set zoom — tight like a Bloomberg intraday chart
+    var _vals = portValues.filter(function(v) {{ return v > 0; }});
+    var _dataSpread = _vals.length > 1
+      ? Math.max.apply(null, _vals) - Math.min.apply(null, _vals)
+      : 0;
+    // Show at most 2× the actual data range, or at minimum ±0.4% of NAV
+    var pad = Math.max(_dataSpread * 0.6, centerNav * 0.004, 200);
     Plotly.relayout(gd, {{
       'xaxis.range': [_intradayStart(), _intradayEnd()],
       'yaxis.range': [centerNav - pad, centerNav + pad]
