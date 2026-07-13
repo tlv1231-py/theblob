@@ -1484,37 +1484,43 @@ body::after {{
   font-size:7px; letter-spacing:.2em; color:rgba(0,229,255,.4);
   background:rgba(0,229,255,.03);
 }}
-/* ── Orb metrics panel — anchored center, dot is always centered ── */
+/* ── HUD — fixed just below the topbar, horizontally centered ── */
 #pnl-float {{
   position:absolute; pointer-events:none;
-  left:50%; top:42%; transform:translate(-50%,-50%);
-  background:rgba(4,0,10,.82); border:1px solid #2a003d; border-top:2px solid #ff00cc;
-  backdrop-filter:blur(12px);
-  padding:10px 18px 12px;
+  left:50%; top:48px; transform:translateX(-50%);
+  background:rgba(4,0,10,.88); border:1px solid #2a003d; border-top:2px solid #ff00cc;
+  backdrop-filter:blur(14px);
+  padding:8px 20px 10px;
   opacity:0; transition:opacity .4s ease;
+  z-index:120;
 }}
 #pnl-float.visible {{ opacity:1; }}
 /* three-column metric layout */
 #pnl-float-cols {{
-  display:flex; align-items:flex-start; gap:20px;
+  display:flex; align-items:flex-start; gap:24px;
 }}
 .pnl-col {{
-  display:flex; flex-direction:column; align-items:center; gap:2px; min-width:64px;
+  display:flex; flex-direction:column; align-items:center; gap:1px; min-width:64px;
 }}
 .pnl-col-center {{ min-width:120px; }}
 .pnl-col-label {{
   font-family:Consolas,monospace; font-size:6.5px; letter-spacing:.22em;
   color:rgba(190,150,255,.6); text-transform:uppercase; white-space:nowrap;
 }}
+/* value + combo chip sit inline */
+.pnl-val-row {{
+  display:flex; align-items:baseline; gap:5px;
+}}
 .pnl-col-val {{
   font-family:Consolas,monospace; font-size:16px; font-weight:700;
   color:#ff00cc; letter-spacing:.02em; white-space:nowrap;
+  transition:color .3s;
 }}
 .pnl-col-center .pnl-col-val {{ font-size:26px; }}
 .pnl-combo-chip {{
   font-family:Consolas,monospace; font-size:11px; font-weight:700;
-  opacity:0; transition:opacity .15s; min-height:14px;
-  text-shadow:0 0 8px currentColor;
+  opacity:0; transition:opacity .15s; min-height:14px; min-width:1px;
+  text-shadow:0 0 8px currentColor; white-space:nowrap;
 }}
 .om-row {{
   display:flex; align-items:baseline; justify-content:space-between; gap:10px;
@@ -2156,13 +2162,15 @@ body::after {{
       <!-- TRADES -->
       <div class="pnl-col">
         <div class="pnl-col-label">TRADES</div>
-        <div class="pnl-col-val" id="om-today">0</div>
-        <div class="pnl-combo-chip" id="trades-combo-chip"></div>
+        <div class="pnl-val-row">
+          <div class="pnl-col-val" id="om-today">0</div>
+          <div class="pnl-combo-chip" id="trades-combo-chip"></div>
+        </div>
       </div>
       <!-- TOTAL P&L (center, largest) -->
       <div class="pnl-col pnl-col-center">
         <div class="pnl-col-label">TOTAL P&amp;L</div>
-        <div style="display:flex;align-items:baseline;gap:6px">
+        <div class="pnl-val-row">
           <div id="total-pnl-val" class="pnl-col-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
           <div id="batch-pnl-chip" class="pnl-combo-chip"></div>
         </div>
@@ -2170,8 +2178,10 @@ body::after {{
       <!-- OPEN POS -->
       <div class="pnl-col">
         <div class="pnl-col-label">OPEN POS</div>
-        <div class="pnl-col-val" id="om-openpos" style="color:#00e5ff">{n_positions}</div>
-        <div class="pnl-combo-chip" id="pos-combo-chip"></div>
+        <div class="pnl-val-row">
+          <div class="pnl-col-val" id="om-openpos" style="color:#00e5ff">{n_positions}</div>
+          <div class="pnl-combo-chip" id="pos-combo-chip"></div>
+        </div>
       </div>
     </div>
     <!-- hidden compat elements so existing JS refs don't break -->
@@ -3198,12 +3208,61 @@ function _playTones(freqs, dur, type, stagger, vol) {{
     }});
   }} catch(e) {{}}
 }}
-// Entry: single clean tick
-window._soundEntry = function() {{ _playTones([880], 0.07, 'sine', 0, 0.10); }};
-// Win exit: ascending arpeggio — G4 C5 E5 A5
-window._soundWin   = function() {{ _playTones([392, 523, 659, 880], 0.18, 'sine', 0.10, 0.13); }};
-// Loss exit: descending drop — G4 Eb4 B3 G3
-window._soundLoss  = function() {{ _playTones([392, 311, 247, 196], 0.22, 'triangle', 0.10, 0.11); }};
+// Entry: short analog relay click — noise burst through low-pass
+window._soundEntry = function() {{
+  if (_audioMuted || !_audioReady || !_audioCtx) return;
+  try {{
+    var ctx = _audioCtx;
+    if (ctx.state === 'suspended') {{ ctx.resume(); return; }}
+    var len = Math.floor(ctx.sampleRate * 0.055);
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.exp(-i/(ctx.sampleRate*0.012));
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    var lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=520;
+    var g = ctx.createGain(); g.gain.value = 0.22;
+    src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+    src.start();
+  }} catch(e) {{}}
+}};
+// Win exit: bright two-tone chime (major third up — C5→E5) with fast decay
+window._soundWin = function() {{
+  if (_audioMuted || !_audioReady || !_audioCtx) return;
+  try {{
+    var ctx = _audioCtx;
+    if (ctx.state === 'suspended') {{ ctx.resume(); return; }}
+    [[523, 0], [659, 0.13]].forEach(function(p) {{
+      var osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = p[0];
+      var t = ctx.currentTime + p[1];
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.14, t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.38);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(t); osc.stop(t+0.42);
+    }});
+  }} catch(e) {{}}
+}};
+// Loss exit: dull descending thud (minor sixth down — G4→Bb3) — muted, no zing
+window._soundLoss = function() {{
+  if (_audioMuted || !_audioReady || !_audioCtx) return;
+  try {{
+    var ctx = _audioCtx;
+    if (ctx.state === 'suspended') {{ ctx.resume(); return; }}
+    [[392, 0], [233, 0.16]].forEach(function(p) {{
+      var osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.type = 'triangle'; osc.frequency.value = p[0];
+      var lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=600;
+      var t = ctx.currentTime + p[1];
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.11, t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.45);
+      osc.connect(lp); lp.connect(g); g.connect(ctx.destination);
+      osc.start(t); osc.stop(t+0.50);
+    }});
+  }} catch(e) {{}}
+}};
 
 // ── Wallet canvas engine ──────────────────────────────────────────────────────
 (function() {{
@@ -4083,6 +4142,8 @@ setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 
 // ── Smooth ticker-tape scroll — keeps "now" always centered ────────────────────
 var _scrollBusy = false;
+// Smoothed Y bounds — lerp toward target each tick so chart doesn't snap violently
+var _smoothYMin = null, _smoothYMax = null;
 function _recenterOnLatest(_ignored) {{
   if (_scrollBusy || _userInteracting) return;  // don't snap back if user has panned
   var nowIso   = new Date().toISOString();
@@ -4105,11 +4166,16 @@ function _recenterOnLatest(_ignored) {{
 
   _scrollBusy = true;
   _programmaticRelayout = true;
-  // Recompute Y range from the live 20-min window every tick
-  var yr = yRange(newStart, nowIso);
   var layoutUpdate = {{ 'xaxis.range': [newStart, newEnd] }};
+  // Smooth Y: lerp 25% toward target each 10s tick — no violent jumps
+  var yr = yRange(newStart, nowIso);
   if (yr[0] !== null) {{
-    layoutUpdate['yaxis.range'] = yr;
+    if (_smoothYMin === null) {{ _smoothYMin = yr[0]; _smoothYMax = yr[1]; }}
+    else {{
+      _smoothYMin = _smoothYMin * 0.75 + yr[0] * 0.25;
+      _smoothYMax = _smoothYMax * 0.75 + yr[1] * 0.25;
+    }}
+    layoutUpdate['yaxis.range'] = [_smoothYMin, _smoothYMax];
     layoutUpdate['yaxis.autorange'] = false;
   }}
   Plotly.relayout(gd, layoutUpdate).then(function() {{
@@ -4942,32 +5008,61 @@ window.addEventListener('resize', function() {{
           }});
           var _batchDur = _tradeCount * 180; // total stagger duration
 
-          function _showChip(id, text, col) {{
+          function _showChip(id, text, col, onFade) {{
             var c = document.getElementById(id);
             if (!c) return;
             c.style.color = col;
             c.style.textShadow = '0 0 8px ' + col;
             c.textContent = text;
             c.style.opacity = '1';
-            setTimeout(function() {{ c.style.opacity = '0'; }}, _batchDur + 900);
+            setTimeout(function() {{
+              c.style.opacity = '0';
+              if (onFade) onFade();
+            }}, _batchDur + 900);
           }}
 
-          // P&L combo chip (exits)
+          // P&L combo chip (exits) + sounds + main number update on fade
           if (_exitCount > 0) {{
             var _isPos = _batchPnl >= 0;
             _showChip('batch-pnl-chip',
               (_isPos ? '+' : '') + _batchPnl.toFixed(2),
-              _isPos ? '#00c880' : '#e03355');
+              _isPos ? '#00c880' : '#e03355',
+              function() {{
+                // Update Total P&L display when chip fades
+                var _pv = document.getElementById('total-pnl-val');
+                if (_pv) {{
+                  var _prev = parseFloat(_pv.getAttribute('data-raw') || '0');
+                  var _next = _prev + _batchPnl;
+                  _pv.setAttribute('data-raw', _next);
+                  var _pos = _next >= 0;
+                  _pv.style.color = _pos ? '#00c880' : '#e03355';
+                  _pv.textContent = (_pos ? '+$' : '-$') + Math.abs(_next).toLocaleString('en-US', {{minimumFractionDigits:0, maximumFractionDigits:0}});
+                }}
+              }});
 
-            // Trades combo chip
-            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900');
+            // Play batch exit sound — one sound per batch, not per trade
+            if (_isPos && window._soundWin) window._soundWin();
+            else if (!_isPos && window._soundLoss) window._soundLoss();
 
-            // Open positions delta chip (entries minus exits = net change)
+            // Trades combo chip — update count on fade
+            _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', function() {{
+              var _td = document.getElementById('om-today');
+              if (_td) _td.textContent = parseInt(_td.textContent || '0', 10) + _tradeCount;
+            }});
+
+            // Open positions delta chip — update count on fade
             var _posDelta = _entryCount - _exitCount;
             if (_posDelta !== 0) {{
               _showChip('pos-combo-chip',
                 (_posDelta > 0 ? '+' : '') + _posDelta,
-                _posDelta > 0 ? '#00e5ff' : '#ff4466');
+                _posDelta > 0 ? '#00e5ff' : '#ff4466',
+                function() {{
+                  var _op = document.getElementById('om-openpos');
+                  if (_op) {{
+                    var _cur = parseInt(_op.textContent || '0', 10);
+                    _op.textContent = Math.max(0, _cur + _posDelta);
+                  }}
+                }});
             }}
 
             // Alpaca NAV verification after batch settles
