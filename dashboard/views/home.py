@@ -985,8 +985,8 @@ body::after {{
   display:flex; flex-direction:column;
   background:linear-gradient(90deg,rgba(1,0,6,.9) 0%,rgba(1,0,6,.55) 75%,transparent 100%);
   pointer-events:none;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 100%);
-  mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 100%);
+  -webkit-mask-image:linear-gradient(to bottom,black 0%,black 80%,transparent 100%);
+  mask-image:linear-gradient(to bottom,black 0%,black 80%,transparent 100%);
 }}
 #feed-overlay .panel-hdr {{ pointer-events:auto; flex-shrink:0; padding:6px 8px 5px; border-bottom:1px solid #1a0022; }}
 #feed-overlay #term-body {{ flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:4px 0 6px; scrollbar-width:none; background:transparent; }}
@@ -2187,6 +2187,7 @@ body::after {{
   <div id="feed-overlay">
     <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
     <div id="term-body">
+      <div id="term-clock" class="te" style="color:#ffffff;opacity:.9;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:5px;margin-bottom:2px"></div>
       {term_rows}
     </div>
     <div id="feed-bottom-bar">
@@ -4641,6 +4642,19 @@ window.addEventListener('resize', function() {{
     if (tb) {{
       tb.querySelectorAll('.te').forEach(function(el) {{ el.style.opacity = '1'; }});
     }}
+
+    // Live clock at top of terminal
+    (function() {{
+      var clk = document.getElementById('term-clock');
+      function _tickClock() {{
+        if (!clk) return;
+        var now = new Date();
+        var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}});
+        clk.innerHTML = '<span class="te-ts" style="color:#ffffff;font-size:9px">' + hhmm + '</span><span style="color:rgba(255,255,255,.35);font-size:9px;letter-spacing:.18em">NOW</span>';
+      }}
+      _tickClock();
+      setInterval(_tickClock, 1000);
+    }})();
 
     // Kick off the progress bar — inside IIFE where _tickProgress is in scope
     _tickProgress();
