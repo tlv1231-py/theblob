@@ -1483,7 +1483,7 @@ body::after {{
   padding:1.5px 0;
 }}
 .om-label {{
-  font-size:7px; letter-spacing:.18em; color:#4a2a6a; white-space:nowrap;
+  font-size:7px; letter-spacing:.18em; color:rgba(190,150,255,.75); white-space:nowrap;
   font-family:Consolas,monospace; text-transform:uppercase;
 }}
 .om-val {{
@@ -2425,6 +2425,32 @@ var _comboFlash = null; // {{age, text, col}}
 // Satellite orbit angles: symbol → angle (radians)
 var _satAngles = {{}};
 
+// NAV particle system — small sparks that react to live price ticks
+var _navParticles = [];  // {{x,y,vx,vy,life,maxLife,r,g,b,size}}
+var _lastNavForParticles = null;
+
+window._spawnNavParticles = function(cx, cy, isUp) {{
+  var col = isUp ? [0,255,157] : [255,51,102];
+  var count = 6 + Math.floor(Math.random()*4);
+  for (var i=0; i<count; i++) {{
+    var angle  = Math.random() * Math.PI * 2;
+    var speed  = 0.4 + Math.random() * 1.2;
+    var drift  = isUp ? -1 : 1;  // float up for gains, fall for losses
+    _navParticles.push({{
+      x: cx + (Math.random()-0.5)*8,
+      y: cy + (Math.random()-0.5)*8,
+      vx: Math.cos(angle)*speed*0.6,
+      vy: Math.sin(angle)*speed*0.4 + drift*(0.3+Math.random()*0.5),
+      life: 1.0,
+      decay: 0.018 + Math.random()*0.012,
+      r: col[0], g: col[1], b: col[2],
+      size: 1.2 + Math.random()*1.8,
+    }});
+  }}
+  // Trim to max 120 particles
+  if (_navParticles.length > 120) _navParticles = _navParticles.slice(-120);
+}};
+
 window._orbTradeFlash = function(isEntry) {{
   _orbFlash.active = true;
   _orbFlash.isEntry = isEntry;
@@ -2490,14 +2516,25 @@ function buildTargets() {{
 
 function positionPnlFloat() {{
   var fl = gd._fullLayout;
-  var tr = gd.data[3]; // PORTFOLIO trace
   var pf = document.getElementById('pnl-float');
-  if (!fl || !tr || !tr.x || !tr.x.length || !pf) return;
+  if (!fl || !fl.xaxis || !fl.yaxis || !pf) return;
   try {{
-    var cx = fl.xaxis.l2p(fl.xaxis.d2l(tr.x[tr.x.length-1])) + fl.margin.l;
-    var cy = fl.yaxis.l2p(fl.yaxis.d2l(tr.y[tr.y.length-1])) + fl.margin.t;
+    // Use live intraday endpoint if available, else fall back to trace 3
+    var lx = window._lastKnownTs;
+    var ly = window._lastKnownNav;
+    if (!lx || !ly) {{
+      var tr = gd.data[3];
+      if (!tr || !tr.x || !tr.x.length) return;
+      lx = tr.x[tr.x.length-1]; ly = tr.y[tr.y.length-1];
+    }}
+    var cx = fl.xaxis.l2p(fl.xaxis.d2l(lx)) + fl.margin.l;
+    var cy = fl.yaxis.l2p(fl.yaxis.d2l(ly)) + fl.margin.t;
     if (!isFinite(cx) || !isFinite(cy)) return;
-    pf.style.left = cx + 'px';
+    // Clamp so tooltip never overflows right or left edge
+    var pfW = pf.offsetWidth || 160;
+    var chartW = gd.offsetWidth || window.innerWidth;
+    var clampX = Math.max(pfW/2 + 8, Math.min(cx, chartW - pfW/2 - 8));
+    pf.style.left = clampX + 'px';
     pf.style.top  = cy + 'px';
     pf.classList.add('visible');
   }} catch(e) {{}}
@@ -2712,6 +2749,22 @@ function drawPulse() {{
     ctx.strokeStyle='rgba('+w.col[0]+','+w.col[1]+','+w.col[2]+','+alpha+')';
     ctx.lineWidth = Math.max(0.5, 2*(1-w.age));
     ctx.stroke();
+  }});
+
+  // ── NAV particles — sparks reacting to live price ticks ─────────────────
+  _navParticles = _navParticles.filter(function(p) {{ return p.life > 0; }});
+  _navParticles.forEach(function(p) {{
+    p.life -= p.decay;
+    p.x += p.vx; p.y += p.vy;
+    p.vy *= 0.97; p.vx *= 0.96;
+    var alpha = p.life * p.life;
+    ctx.shadowColor = 'rgba('+p.r+','+p.g+','+p.b+','+(alpha*.9)+')';
+    ctx.shadowBlur  = 6 + (1-p.life)*4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size*(0.4+p.life*0.6), 0, Math.PI*2);
+    ctx.fillStyle = 'rgba('+p.r+','+p.g+','+p.b+','+alpha+')';
+    ctx.fill();
+    ctx.shadowBlur = 0;
   }});
 
   // ── Brownian live-tip ─────────────────────────────────────────────────────
@@ -3541,6 +3594,21 @@ window._pushIntradayPoint = function(isoTs, val) {{
       // Move the endpoint dot + orb to the live NAV position
       _updateEndpointDot(val, isoTs);
       buildTargets();
+      // Spawn particles if NAV moved
+      if (_lastNavForParticles !== null && window._spawnNavParticles) {{
+        var pt = pulseTargets.find(function(t) {{ return t.rgb[0]===255 && t.rgb[2]===204; }});
+        if (pt) {{
+          try {{
+            var fl = gd._fullLayout;
+            var px = fl.xaxis.l2p(fl.xaxis.d2l(pt.x)) + fl.margin.l;
+            var py = fl.yaxis.l2p(fl.yaxis.d2l(pt.y)) + fl.margin.t;
+            if (isFinite(px) && isFinite(py)) {{
+              window._spawnNavParticles(px, py, val >= _lastNavForParticles);
+            }}
+          }} catch(e) {{}}
+        }}
+      }}
+      _lastNavForParticles = val;
     }});
   }}
   // Slide the chart window forward with each new point
@@ -3582,6 +3650,14 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
       el.textContent = '—';
       el.style.color = '';
     }}
+  }}
+
+  // Update DAY P&L live from intraday NAV delta
+  el = document.getElementById('om-dpnl');
+  if (el && window._portfolioBaseline && window._lastKnownNav) {{
+    var liveDayPnl = window._lastKnownNav - window._portfolioBaseline;
+    el.textContent = (liveDayPnl >= 0 ? '+$' : '-$') + Math.abs(liveDayPnl).toLocaleString('en-US', {{maximumFractionDigits:0}});
+    el.style.color = liveDayPnl >= 0 ? '#00ff9d' : '#ff3366';
   }}
 
   // Update open position count from live card state
