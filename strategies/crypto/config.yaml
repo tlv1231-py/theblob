@@ -14,10 +14,10 @@ universe:
   - CRV/USD
 
 signals:
-  breakout_bars: 8           # close must break 8-bar high — clean momentum, not noise
-  min_breakout_pct: 0.12     # must break by at least 0.12% — filters dust crossovers
-  vwap_window_bars: 60       # 60-bar (~1hr) rolling VWAP — price must be above it
-  rvol_min: 1.6              # volume >= 1.6x 20-bar avg — only trade on conviction bars
+  breakout_bars: 3           # close must break 3-bar high — still real momentum, much more frequent
+  min_breakout_pct: 0.06     # must break by at least 0.06% — filters pure noise
+  vwap_window_bars: 30       # 30-bar (~30min) rolling VWAP — tighter, more responsive
+  rvol_min: 1.2              # volume >= 1.2x 20-bar avg — modest conviction bar
 
 position:
   risk_pct: 1.0              # 1% NAV per trade
