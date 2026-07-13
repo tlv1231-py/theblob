@@ -1805,10 +1805,32 @@ body::after {{
   font-size:8px; font-weight:600; font-variant-numeric:tabular-nums;
   color:rgba(255,255,255,.38); margin-left:auto;
 }}
+/* Holdings value (green, top-right) */
+#pos-left .pos-hval {{
+  font:700 9px Consolas,monospace; font-variant-numeric:tabular-nums;
+  color:#00ff9d; margin-left:auto; letter-spacing:.03em;
+  text-shadow:0 0 6px rgba(0,255,157,.35);
+}}
+/* Entry price + live P&L row */
+#pos-left .pos-entry-sub {{
+  display:flex; justify-content:space-between; align-items:baseline;
+  margin-top:1px; margin-bottom:3px;
+}}
+#pos-left .pos-epx {{
+  font:600 7px Consolas,monospace; letter-spacing:.03em; opacity:.85;
+}}
+#pos-left .pos-pnl-live {{
+  font:700 7.5px Consolas,monospace; letter-spacing:.03em;
+  transition:color .3s;
+}}
 #pos-left .pos-hold {{
   font-size:7px; color:rgba(200,180,255,.22); margin-top:2px; letter-spacing:.02em;
+  display:none;
 }}
-#pos-left .pos-prox-wrap {{ margin-top:4px; padding:0; }}
+#pos-left .pos-hold-sub {{ display:none; }}
+#pos-left .pos-prox-wrap {{ margin-top:0; padding:0; }}
+/* Hide S/T text labels on crypto prox bar */
+#pos-left .pos-prox-labels {{ display:none; }}
 #pos-left .pos-prox-track {{ height:2px; background:rgba(255,255,255,.06); }}
 #pos-left .pos-prox-fill {{
   transition:width .8s cubic-bezier(.22,1,.36,1), background .8s;
@@ -6046,6 +6068,7 @@ window.addEventListener('resize', function() {{
       el.className = 'pos-card';
       el.setAttribute('data-sym', p.symbol);
       el.setAttribute('data-entered', p.entered_at || '');
+      el.setAttribute('data-qty', qty || 0);
       el.style.borderLeft = '2px solid ' + col;
       el.style.position = 'relative';
       el.style.overflow = 'hidden';
@@ -6064,32 +6087,29 @@ window.addEventListener('resize', function() {{
       if ((!tgt || tgt <= 0) && entry > 0) tgt = entry * 1.008;
       var rangeHtml = '';
       if (entry > 0 && stop > 0) {{
-        var tgtPct = ((tgt - entry)/entry*100).toFixed(1);
-        var proxId = 'prox-live-' + p.symbol.replace(/[^A-Za-z0-9]/g,'_');
         rangeHtml = '<div class="pos-prox-wrap"'
           + ' data-entry="' + entry + '" data-stop="' + stop + '" data-target="' + tgt + '">'
           + '<div class="pos-prox-track">'
           + '<div class="pos-prox-fill" style="width:50%"></div>'
           + '<div class="pos-prox-cursor" style="left:50%"></div>'
           + '</div>'
-          + '<div class="pos-prox-labels">'
-          + '<span style="color:#ff3366">S ' + stopPct + '%</span>'
-          + '<span class="pos-prox-live" id="' + proxId + '">——</span>'
-          + '<span style="color:#00ff9d">T +' + tgtPct + '%</span>'
-          + '</div>'
           + '</div>';
       }}
       var entryDisp = entry > 0 ? (entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2)) : '—';
       var _symId = p.symbol.replace(/[^A-Za-z0-9]/g,'_');
+      // Age bar: fills left→right over 4h to show how long position has been held
+      var ageBarPct = Math.min(agePct / 2 * 100, 100); // agePct is 0-100 over 2min — rescale
       var inner = document.createElement('div');
       inner.innerHTML = '<div class="pos-top">'
         + '<span class="pos-sym" style="color:' + col + '">···</span>'
-        + '<span class="pos-val">··········</span>'
+        + '<span class="pos-hval" id="hval-' + _symId + '">$—</span>'
         + '</div>'
-        + '<div class="pos-hold active" id="hold-state-' + _symId + '">··········</div>'
-        + '<div class="pos-hold-sub" id="hold-sub-' + _symId + '" style="font:600 6.5px Consolas,monospace;letter-spacing:.07em;color:#3a1a4a;margin-top:1px;min-height:9px">···</div>'
+        + '<div class="pos-entry-sub">'
+        + '<span class="pos-epx" id="epx-' + _symId + '" style="color:' + col + '">···</span>'
+        + '<span class="pos-pnl-live" id="pnl-live-' + _symId + '">——</span>'
+        + '</div>'
         + rangeHtml
-        + '<div class="pos-age-bar" title="hold duration"><span class="pos-age-sell">SELL</span><div class="pos-age-fill" id="age-fill-' + _symId + '" style="width:' + (100 - agePct) + '%;background:#00c8ff;box-shadow:0 0 7px rgba(0,200,255,.75)"></div></div>';
+        + '<div class="pos-age-bar" title="time held"><div class="pos-age-fill" id="age-fill-' + _symId + '" style="width:0%;background:#00c8ff;box-shadow:0 0 7px rgba(0,200,255,.75)"></div></div>';
       el.appendChild(inner);
       // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
@@ -6130,25 +6150,13 @@ window.addEventListener('resize', function() {{
         symEl.style.opacity = '1';
         _scramble(symEl, p.symbol.replace('/USD',''), 220);
       }}, 360);
-      // Phase 3 (520ms): entry price counts up
+      // Phase 3 (520ms): entry price scrambles into pos-epx in ticker color
       setTimeout(function() {{
-        var valEl = inner.querySelector('.pos-val');
-        valEl.style.opacity = '1';
-        var endVal = entry > 0 ? entry : 0;
-        _countUp(valEl, 0, endVal, 280, function(v) {{
-          return v < 0.01 ? '$' + v.toFixed(6) : v < 1 ? '$' + v.toFixed(4) : '$' + entry.toLocaleString('en-US', {{maximumFractionDigits:2}});
-        }});
+        var epxEl = document.getElementById('epx-' + _symId);
+        if (epxEl) _scramble(epxEl, entryDisp, 220);
       }}, 520);
-      // Phase 4 (720ms): stop/target resolves as $ values
-      setTimeout(function() {{
-        var holdEl = inner.querySelector('.pos-hold');
-        if (holdEl) {{
-          holdEl.style.opacity = '1';
-          var tgtStr = tgt > 0 ? (tgt < 1 ? '$' + tgt.toFixed(4) : '$' + tgt.toLocaleString('en-US', {{maximumFractionDigits:2}})) : '—';
-          var stpStr = stop > 0 ? (stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toLocaleString('en-US', {{maximumFractionDigits:2}})) : '—';
-          _scramble(holdEl, '→ ' + tgtStr + '  stp ' + stpStr, 180);
-        }}
-      }}, 720);
+      // Phase 4 (720ms): prox bar labels — nothing visible to show, skip
+      setTimeout(function() {{ }}, 720);
       // Phase 5 (920ms): proximity bar fills to position, overlay becomes "OPEN" — blue
       setTimeout(function() {{
         flash.textContent = '● OPEN';
@@ -6178,50 +6186,24 @@ window.addEventListener('resize', function() {{
 
     function _updateCard(el, p) {{
       var entry   = parseFloat(p.entry_price);
-      var stop    = parseFloat(p.stop_price);
-      var tgt     = parseFloat(p.target_price || 0) || (entry > 0 ? entry * 1.008 : 0);
       var ageSec  = p.entered_at ? (Date.now() - new Date(p.entered_at)) / 1000 : 0;
-      var ageMin  = ageSec / 60;
+      var ageHrs  = ageSec / 3600;
       var symId   = (p.symbol || el.getAttribute('data-sym') || '').replace(/[^A-Za-z0-9]/g,'_');
 
-      // Hold-state line: target + stop as $ values
-      var holdEl = document.getElementById('hold-state-' + symId) || el.querySelector('.pos-hold');
-      if (holdEl) {{
-        var tgtStr = tgt > 0 ? (tgt < 1 ? '$' + tgt.toFixed(4) : '$' + tgt.toLocaleString('en-US',{{maximumFractionDigits:2}})) : '—';
-        var stpStr = stop > 0 ? (stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toLocaleString('en-US',{{maximumFractionDigits:2}})) : '—';
-        holdEl.textContent = '→ ' + tgtStr + '  stp ' + stpStr;
+      // Entry price in ticker color (pos-epx)
+      var epxEl = document.getElementById('epx-' + symId);
+      if (epxEl && entry > 0) {{
+        epxEl.textContent = entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2);
       }}
 
-      // Sub-line: hold timer + eval countdown (4 min max hold)
-      var subEl = document.getElementById('hold-sub-' + symId);
-      if (subEl) {{
-        var heldStr = ageSec < 60 ? Math.floor(ageSec) + 's'
-          : (ageSec < 3600 ? Math.floor(ageMin) + 'm ' + Math.floor(ageSec % 60) + 's'
-          : Math.floor(ageMin/60) + 'h ' + Math.floor(ageMin%60) + 'm');
-        var maxHoldSec = 4 * 60;
-        var remain = maxHoldSec - ageSec;
-        if (remain > 0) {{
-          var remStr = remain >= 60 ? Math.floor(remain/60) + 'm ' + Math.floor(remain%60) + 's' : Math.floor(remain) + 's';
-          subEl.textContent = 'held ' + heldStr + '  ·  eval in ' + remStr;
-          subEl.style.color = remain < 30 ? '#ff9900' : '#3a1a4a';
-        }} else {{
-          subEl.textContent = 'held ' + heldStr + '  ·  watching exit';
-          subEl.style.color = '#ff9900';
-        }}
-      }}
-
-      var valEl = el.querySelector('.pos-val');
-      if (valEl && entry > 0) {{
-        valEl.textContent = entry < 0.01 ? '$' + entry.toFixed(6) : entry < 1 ? '$' + entry.toFixed(4) : '$' + entry.toFixed(2);
-      }}
+      // Age bar: fills left→right, full at 4 hours — purely visual sense of how long held
       var fill = document.getElementById('age-fill-' + symId) || el.querySelector('.pos-age-fill');
       if (fill) {{
-        var rem = Math.max(0, 100 - (ageMin / 4 * 100));
-        fill.style.width = rem + '%';
-        fill.style.background = rem > 50 ? '#00c8ff' : rem > 20 ? '#ffaa00' : '#ff2844';
-        fill.style.boxShadow = rem > 50 ? '0 0 7px rgba(0,200,255,.75)' : rem > 20 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
-        var sellLbl = el.querySelector('.pos-age-sell');
-        if (sellLbl) sellLbl.classList.toggle('show', rem <= 10);
+        var pct = Math.min(ageHrs / 4 * 100, 100); // 4h = full bar
+        fill.style.width = pct + '%';
+        // Color: cyan (fresh) → orange (aging) → red (very long)
+        fill.style.background = pct < 33 ? '#00c8ff' : pct < 66 ? '#ffaa00' : '#ff2844';
+        fill.style.boxShadow = pct < 33 ? '0 0 7px rgba(0,200,255,.75)' : pct < 66 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
       }}
     }}
 
@@ -6391,14 +6373,14 @@ window.addEventListener('resize', function() {{
       setInterval(_pollPositions, 2000);
     }}, 2000);
 
-    // Tick card hold timers every second (smooth countdown independent of DB poll)
+    // Tick age bars every 30s (entry price + hold bar — no need for per-second update)
     setInterval(function() {{
       var posMap = window._cryptoPositionsMap || {{}};
       Object.keys(posMap).forEach(function(sym) {{
         var el = (typeof _cryptoCardEls !== 'undefined') ? _cryptoCardEls[sym] : null;
         if (el) _updateCard(el, posMap[sym]);
       }});
-    }}, 1000);
+    }}, 30000);
 
     // ── Live crypto price poller — updates proximity meters in real time ──────
     var _CG_SYM_MAP = {{
@@ -6439,40 +6421,35 @@ window.addEventListener('resize', function() {{
             cursor.style.animation  = 'none';
           }}
         }}
-        // Live P&L with micro-movement direction flash
-        if (live) {{
-          var pnlPct  = entry > 0 ? ((price - entry)/entry*100) : 0;
-          var prevRaw = parseFloat(live.getAttribute('data-raw') || 'NaN');
-          var sign    = pnlPct >= 0 ? '+' : '';
-          var arrow   = '';
+        // Live P&L — update pnl-live element (in pos-entry-sub row, always visible)
+        var pnlPct  = entry > 0 ? ((price - entry)/entry*100) : 0;
+        var pnlSign = pnlPct >= 0 ? '+' : '';
+        var symId2  = sym.replace(/[^A-Za-z0-9]/g,'_');
+        var pnlEl   = document.getElementById('pnl-live-' + symId2);
+        if (pnlEl) {{
+          var prevRaw = parseFloat(pnlEl.getAttribute('data-raw') || 'NaN');
+          var arrow = '';
           if (!isNaN(prevRaw) && pnlPct !== prevRaw) {{
             arrow = pnlPct > prevRaw ? '▲ ' : '▼ ';
             var dir = pnlPct > prevRaw ? 'up' : 'dn';
-            live.classList.remove('prox-tick-up', 'prox-tick-dn');
-            void live.offsetWidth;
-            live.classList.add('prox-tick-' + dir);
+            pnlEl.classList.remove('prox-tick-up', 'prox-tick-dn');
+            void pnlEl.offsetWidth;
+            pnlEl.classList.add('prox-tick-' + dir);
           }}
-          live.setAttribute('data-raw', pnlPct);
-          live.textContent = arrow + sign + pnlPct.toFixed(2) + '%';
-          live.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
+          pnlEl.setAttribute('data-raw', pnlPct);
+          pnlEl.textContent = arrow + pnlSign + pnlPct.toFixed(2) + '%';
+          pnlEl.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
         }}
 
-        // Strategy state overlay: contextual message when near boundary
-        var symId2 = sym.replace(/[^A-Za-z0-9]/g,'_');
-        var holdEl2 = document.getElementById('hold-state-' + symId2);
-        if (holdEl2) {{
-          var tgtDisp = tgt < 1 ? '$' + tgt.toFixed(4) : '$' + tgt.toLocaleString('en-US',{{maximumFractionDigits:2}});
-          var stpDisp = stop < 1 ? '$' + stop.toFixed(4) : '$' + stop.toLocaleString('en-US',{{maximumFractionDigits:2}});
-          if (t > 0.85) {{
-            holdEl2.textContent = '◉ sell ' + tgtDisp + ' approaching';
-            holdEl2.style.color = '#00ff9d';
-          }} else if (t < 0.15) {{
-            holdEl2.textContent = '◉ stop ' + stpDisp + ' watch';
-            holdEl2.style.color = '#ff3366';
-          }} else {{
-            holdEl2.textContent = '→ ' + tgtDisp + '  stp ' + stpDisp;
-            holdEl2.style.color = '';
-          }}
+        // Holdings value: qty × live price → pos-hval (green, top-right)
+        var posData = (window._cryptoPositionsMap || {{}})[sym];
+        var qty = posData ? parseFloat(posData.qty || 0) : 0;
+        var hvalEl = document.getElementById('hval-' + symId2);
+        if (hvalEl && qty > 0 && price > 0) {{
+          var holdVal = qty * price;
+          hvalEl.textContent = holdVal >= 1000
+            ? '$' + (holdVal / 1000).toFixed(2) + 'K'
+            : '$' + holdVal.toFixed(2);
         }}
       }});
     }}
@@ -6822,26 +6799,7 @@ window.addEventListener('resize', function() {{
       setInterval(_stratTick, 1000);
     }})();
 
-    // Tick age bars every 30s without a network call
-    setInterval(function() {{
-      Object.keys(_cryptoCardEls).forEach(function(sym) {{
-        var el = _cryptoCardEls[sym];
-        if (!el) return;
-        var enteredAt = el.getAttribute('data-entered');
-        if (!enteredAt) return;
-        var age = (Date.now() - new Date(enteredAt)) / 60000;
-        var fill = el.querySelector('.pos-age-fill');
-        if (fill) {{
-          var agePct = Math.min(age / 2 * 100, 100);
-          var rem = 100 - agePct;
-          fill.style.width = rem + '%';
-          fill.style.background = rem > 40 ? '#00c8ff' : rem > 15 ? '#ffaa00' : '#ff2844';
-          fill.style.boxShadow = rem > 40 ? '0 0 7px rgba(0,200,255,.75)' : rem > 15 ? '0 0 7px rgba(255,170,0,.7)' : '0 0 9px rgba(255,40,70,.85)';
-          var sellLbl = el.querySelector('.pos-age-sell');
-          if (sellLbl) sellLbl.classList.toggle('show', rem <= 15);
-        }}
-      }});
-    }}, 30000);
+    // (age bars now updated by _updateCard via _pollPositions every 2s)
 
   }})();
 
