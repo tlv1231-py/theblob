@@ -1995,7 +1995,20 @@ body::after {{
   30%  {{ filter:brightness(3) hue-rotate(180deg); background:rgba(0,229,255,.08); }}
   100% {{ opacity:0; max-height:0; padding:0; }}
 }}
-.pos-card-entering {{ animation:card-enter .45s cubic-bezier(.22,1,.36,1) forwards; transform-origin:center top; }}
+/* card-entering — JS orchestrates phases; CSS provides initial clip */
+@keyframes card-scan-line {{
+  0%   {{ top:-2px; opacity:.9; }}
+  100% {{ top:100%; opacity:0; }}
+}}
+.pos-card-entering {{ clip-path:inset(0 0 100% 0); animation:card-clip-reveal .18s ease-out forwards; transform-origin:top; }}
+@keyframes card-clip-reveal {{ from{{clip-path:inset(0 0 100% 0)}} to{{clip-path:inset(0 0 0% 0)}} }}
+.pc-scan-line {{
+  position:absolute; left:0; right:0; height:1.5px; top:-2px; z-index:30;
+  background:linear-gradient(90deg,transparent,var(--scan-col,#00e5ff),transparent);
+  box-shadow:0 0 10px 2px var(--scan-col,#00e5ff);
+  animation:card-scan-line var(--scan-dur,.22s) linear forwards;
+  pointer-events:none;
+}}
 .pos-card-exiting  {{ animation:card-exit-stop .42s ease-in forwards; overflow:hidden; }}
 .pos-card-exit-target  {{ animation:card-exit-target  .52s cubic-bezier(.55,0,1,.45) forwards; overflow:hidden; }}
 .pos-card-exit-stop    {{ animation:card-exit-stop    .42s ease-in forwards; overflow:hidden; }}
@@ -2034,6 +2047,10 @@ body::after {{
 .pnl-ghost .pg-label {{
   font:600 7px Consolas,monospace; letter-spacing:.3em; opacity:.55;
   text-transform:uppercase; margin-top:1px;
+}}
+.pnl-ghost .pg-price {{
+  font:600 9px Consolas,monospace; letter-spacing:.08em; opacity:.75;
+  margin-top:3px;
 }}
 .pnl-particle {{
   position:fixed; pointer-events:none; z-index:9998; border-radius:50%;
@@ -4978,11 +4995,12 @@ window.addEventListener('resize', function() {{
                     requestAnimationFrame(_odoFrame);
                   }}
                 }}
-                // 6. Card exit animation
+                // 6. Card exit animation (with sell price)
                 if (window._triggerCardExit) {{
                   var _reasonM = raw.match(/·\s*(target|stop|timeout|reversal|signal)\s*$/i);
                   var _exitReason = _reasonM ? _reasonM[1].toLowerCase() : (_isWin ? 'target' : 'stop');
-                  window._triggerCardExit(sym, _exitReason, pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null);
+                  var _exitPrice = priceM ? priceM[1] : null;
+                  window._triggerCardExit(sym, _exitReason, pnlM ? parseFloat(pnlM[1].replace(/,/g,'')) : null, _exitPrice);
                 }}
               }}
             }}
@@ -5321,7 +5339,7 @@ window.addEventListener('resize', function() {{
     }};
 
     // ── Video-game card exit ────────────────────────────────────────────────────
-    function _spawnPnlGhost(el, pnl, sym) {{
+    function _spawnPnlGhost(el, pnl, sym, exitPrice) {{
       if (!el) return;
       var hasPnl = (pnl !== null && pnl !== undefined);
       var r    = el.getBoundingClientRect();
@@ -5386,7 +5404,15 @@ window.addEventListener('resize', function() {{
       lbl.className = 'pg-label';
       lbl.textContent = hasPnl ? (isWin ? 'PROFIT' : 'LOSS') : 'EXIT';
 
+      var priceEl = document.createElement('div');
+      priceEl.className = 'pg-price';
+      if (exitPrice) {{
+        var ep = parseFloat(exitPrice.toString().replace(/,/g,''));
+        priceEl.textContent = '@ $' + (ep > 1 ? ep.toLocaleString('en-US',{{maximumFractionDigits:2}}) : ep.toFixed(4));
+      }}
+
       g.appendChild(symEl); g.appendChild(valEl); g.appendChild(lbl);
+      if (exitPrice) g.appendChild(priceEl);
       document.body.appendChild(g);
       setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1200);
     }}
@@ -5409,7 +5435,7 @@ window.addEventListener('resize', function() {{
     }}
     setTimeout(_buildEquityMap, 500);
 
-    window._triggerCardExit = function(fullSym, reason, pnl) {{
+    window._triggerCardExit = function(fullSym, reason, pnl, exitPrice) {{
       // Check crypto map first (fullSym may be "BTC/USD" or just "BTC"), then equity map
       var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD']
              || _equityCardEls[fullSym];
@@ -5431,7 +5457,7 @@ window.addEventListener('resize', function() {{
       }}
       el.classList.remove('pos-card-active');
       // Spawn ghost + particles immediately; collapse card after flash plays (280ms)
-      _spawnPnlGhost(el, pnl, fullSym);
+      _spawnPnlGhost(el, pnl, fullSym, exitPrice);
       var cls = _EXIT_CLASS[reason] || 'pos-card-exit-stop';
       var dur = _EXIT_DUR[reason] || 500;
       setTimeout(function() {{
@@ -5517,31 +5543,92 @@ window.addEventListener('resize', function() {{
         + rangeHtml
         + '<div class="pos-age-bar" title="time in trade"><div class="pos-age-fill" style="width:' + agePct + '%;background:' + ageBg + '"></div></div>';
       el.appendChild(inner);
-      // Orchestrate entry: flash → scramble sym → resolve price
+      // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
-      function _scramble(domEl, target, ms) {{
-        var steps = Math.ceil(ms/30); var f = 0;
+      function _scramble(domEl, target, ms, onDone) {{
+        var steps = Math.ceil(ms / 28); var f = 0;
         var iv = setInterval(function() {{
           f++;
           var out = '';
           for (var i = 0; i < target.length; i++) {{
-            out += i / target.length < f / steps ? target[i] : CHARS[Math.floor(Math.random()*CHARS.length)];
+            out += (i / target.length < f / steps) ? target[i] : CHARS[Math.floor(Math.random() * CHARS.length)];
           }}
           domEl.textContent = out;
-          if (f >= steps) {{ domEl.textContent = target; clearInterval(iv); }}
-        }}, 30);
+          if (f >= steps) {{ domEl.textContent = target; clearInterval(iv); if (onDone) onDone(); }}
+        }}, 28);
       }}
+      function _countUp(domEl, start, end, ms, fmt) {{
+        var steps = Math.ceil(ms / 20); var f = 0;
+        var iv = setInterval(function() {{
+          f++;
+          var v = start + (end - start) * (f / steps);
+          domEl.textContent = fmt(v);
+          if (f >= steps) {{ domEl.textContent = fmt(end); clearInterval(iv); }}
+        }}, 20);
+      }}
+      // Phase 0 (0ms): card clips in (CSS), scan line sweeps
+      var scanLine = document.createElement('div');
+      scanLine.className = 'pc-scan-line';
+      scanLine.style.setProperty('--scan-col', col);
+      scanLine.style.setProperty('--scan-dur', '.20s');
+      el.appendChild(scanLine);
+      setTimeout(function() {{ if (scanLine.parentNode) scanLine.parentNode.removeChild(scanLine); }}, 250);
+      // Phase 1 (180ms): "◈ ACQUIRING" overlay flashes
       setTimeout(function() {{
+        flash.textContent = '◈ ACQUIRING';
+        flash.style.color = col;
+        flash.style.fontSize = '8px';
+        flash.style.letterSpacing = '.22em';
         flash.classList.add('show');
-        el.classList.add('pos-card-active');
+        el.style.boxShadow = '0 0 18px ' + col + '55, inset 0 0 12px ' + col + '18';
+      }}, 180);
+      // Phase 2 (360ms): sym scrambles in
+      setTimeout(function() {{
         var symEl = inner.querySelector('.pos-sym');
-        _scramble(symEl, p.symbol.replace('/USD',''), 260);
+        symEl.style.opacity = '1';
+        _scramble(symEl, p.symbol.replace('/USD',''), 220);
+      }}, 360);
+      // Phase 3 (520ms): entry price counts up
+      setTimeout(function() {{
         var valEl = inner.querySelector('.pos-val');
-        setTimeout(function() {{ _scramble(valEl, entryDisp, 180); }}, 80);
+        valEl.style.opacity = '1';
+        var endVal = entry > 0 ? entry : 0;
+        _countUp(valEl, 0, endVal, 280, function(v) {{
+          return v < 0.01 ? '$' + v.toFixed(6) : v < 1 ? '$' + v.toFixed(4) : '$' + entry.toLocaleString('en-US', {{maximumFractionDigits:2}});
+        }});
+      }}, 520);
+      // Phase 4 (720ms): stop/target line resolves
+      setTimeout(function() {{
         var holdEl = inner.querySelector('.pos-hold');
-        var holdTarget = stopPct + '% stop · ' + age + 'm';
-        setTimeout(function() {{ _scramble(holdEl, holdTarget, 180); }}, 160);
-      }}, 90);
+        if (holdEl) {{
+          holdEl.style.opacity = '1';
+          var tgtPct = tgt > 0 ? ((tgt - entry) / entry * 100).toFixed(1) : '—';
+          _scramble(holdEl, 'STP ' + stopPct + '%   TGT +' + tgtPct + '%', 180);
+        }}
+      }}, 720);
+      // Phase 5 (920ms): proximity bar fills to position, overlay becomes "OPEN"
+      setTimeout(function() {{
+        flash.textContent = '● OPEN';
+        flash.style.color = '#00ff9d';
+        flash.style.fontSize = '9px';
+        flash.style.letterSpacing = '.3em';
+        el.style.boxShadow = '0 0 24px ' + col + '44, inset 0 0 8px ' + col + '10';
+        // Fill proximity bar
+        var pFill = el.querySelector('.pos-prox-fill');
+        var pCursor = el.querySelector('.pos-prox-cursor');
+        if (pFill) {{ pFill.style.transition = 'width .4s ease-out'; pFill.style.width = '50%'; }}
+        if (pCursor) {{ pCursor.style.transition = 'left .4s ease-out'; pCursor.style.left = '50%'; }}
+      }}, 920);
+      // Phase 6 (1150ms): overlay fades, glow settles, card goes active
+      setTimeout(function() {{
+        flash.style.transition = 'opacity .4s ease';
+        flash.style.opacity = '0';
+        el.classList.add('pos-card-active');
+        setTimeout(function() {{
+          el.style.boxShadow = '';
+          if (flash.parentNode) flash.style.display = 'none';
+        }}, 420);
+      }}, 1150);
       return el;
     }}
 
