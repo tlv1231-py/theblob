@@ -254,50 +254,11 @@ def _submit_order(symbol: str, side: str, qty: float) -> str | None:
 # ── Signal computation ────────────────────────────────────────────────────────
 
 def _compute_signal(min_bars: list[dict], _unused=None) -> str | None:
-    """1-min breakout + VWAP + volume spike.
-
-    Fires on every genuine momentum bar — designed for rapid trading
-    with 60s polling cadence.
-
-    Requires ALL of:
-    1. Current close > N-bar high (breakout)
-    2. Breakout magnitude >= min_breakout_pct (not a dust move)
-    3. Current volume >= rvol_min × 20-bar avg volume (conviction)
-    4. Price >= rolling VWAP (trading with momentum, not against it)
-    """
-    n         = _SIG["breakout_bars"]
-    min_brk   = _SIG["min_breakout_pct"] / 100.0
-    vwap_win  = _SIG["vwap_window_bars"]
-    rvol_min  = _SIG["rvol_min"]
-
-    needed = max(n + 1, vwap_win + 1, 22)
-    if len(min_bars) < needed:
+    """Max-throughput signal: enter on any up bar (close > open)."""
+    if len(min_bars) < 2:
         return None
-
-    close  = min_bars[-1]["close"]
-    volume = min_bars[-1]["volume"]
-
-    # Breakout above N-bar high (excluding current bar)
-    n_bar_high = max(b["high"] for b in min_bars[-(n + 1):-1])
-    if close <= n_bar_high:
-        return None
-    if (close - n_bar_high) / n_bar_high < min_brk:
-        return None
-
-    # Volume spike
-    avg_vol = sum(b["volume"] for b in min_bars[-21:-1]) / 20
-    if avg_vol > 0 and volume < rvol_min * avg_vol:
-        return None
-
-    # Rolling VWAP: price must be on bullish side
-    w = min_bars[-vwap_win:]
-    tv  = sum(((b["high"] + b["low"] + b["close"]) / 3) * b["volume"] for b in w)
-    vol = sum(b["volume"] for b in w)
-    vwap = tv / vol if vol > 0 else close
-    if close < vwap:
-        return None
-
-    return "long"
+    bar = min_bars[-1]
+    return "long" if bar["close"] > bar["open"] else None
 
 
 # ── Main run ──────────────────────────────────────────────────────────────────
