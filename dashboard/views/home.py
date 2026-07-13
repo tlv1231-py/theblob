@@ -2188,8 +2188,8 @@ body::after {{
   <!-- Left overlay: System Feed -->
   <div id="feed-overlay">
     <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
+    <div id="term-clock" class="te" style="flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:5px;margin-bottom:2px"></div>
     <div id="term-body">
-      <div id="term-clock" class="te" style="flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:5px;margin-bottom:2px"></div>
       {term_rows}
     </div>
     <div id="feed-bottom-bar">
