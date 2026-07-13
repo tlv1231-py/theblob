@@ -1526,7 +1526,7 @@ body::after {{
 /* pos-cards */
 .pos-section-label {{ display:none; }}
 .pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden;
-             background:rgba(6,0,8,.72); backdrop-filter:blur(6px); border-bottom:1px solid #0d0020; }}
+             background:rgba(6,0,8,.38); backdrop-filter:blur(2px); border-bottom:1px solid #0d0020; }}
 
 /* ── Crypto card redesign — minimal, flush, data-forward ── */
 #pos-left .pos-card {{
@@ -2229,7 +2229,7 @@ var traces = [
     x: portDates, y: portValues,
     type:'scatter', mode:'lines',
     line:{{ color:'rgba(255,0,204,0.06)', width:14 }},
-    fill:'tozeroy', fillcolor:'rgba(255,0,204,0.04)',
+    fill:'none',
     name:'ghost', hoverinfo:'skip', showlegend:false,
   }},
   // PORTFOLIO — main line (trace index 4)
@@ -2237,7 +2237,7 @@ var traces = [
     x: portDates, y: portValues,
     type:'scatter', mode:'lines',
     line:{{ color:'#ff00cc', width:2.5 }},
-    fill:'tozeroy', fillcolor:'rgba(255,0,204,0.07)',
+    fill:'none',
     name:'PORTFOLIO',
     hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
   }},
@@ -2645,6 +2645,28 @@ function drawPulse() {{
       var pcx = fl.xaxis.l2p(fl.xaxis.d2l(portT.x)) + fl.margin.l;
       var pcy = fl.yaxis.l2p(fl.yaxis.d2l(portT.y)) + fl.margin.t;
       if (!isFinite(pcx) || !isFinite(pcy)) throw '';
+
+      // ── Comet trail — leftward gradient fade behind the dot ──────────────
+      var trailLen = 220;
+      var trailGrad = ctx.createLinearGradient(pcx - trailLen, pcy, pcx, pcy);
+      trailGrad.addColorStop(0,   'rgba(255,0,204,0)');
+      trailGrad.addColorStop(0.5, 'rgba(255,0,204,0.05)');
+      trailGrad.addColorStop(1,   'rgba(255,0,204,0.28)');
+      // Body of comet — tapered ellipse
+      var halfH = 3.5 + pressure * 3;
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(pcx - trailLen/2, pcy, trailLen/2, halfH, 0, 0, Math.PI*2);
+      ctx.fillStyle = trailGrad;
+      ctx.fill();
+      // Bright leading edge glow
+      var edgeGrad = ctx.createRadialGradient(pcx, pcy, 0, pcx, pcy, 22);
+      edgeGrad.addColorStop(0,   'rgba(255,0,204,0.18)');
+      edgeGrad.addColorStop(1,   'rgba(255,0,204,0)');
+      ctx.beginPath(); ctx.arc(pcx, pcy, 22, 0, Math.PI*2);
+      ctx.fillStyle = edgeGrad; ctx.fill();
+      ctx.restore();
+      // ─────────────────────────────────────────────────────────────────────
 
       // Base color: interpolate pink→red with pressure
       var pr = Math.round(255);
@@ -3356,9 +3378,6 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
     var initTs  = portDates[portDates.length - 1];
     window._lastKnownNav = initNav;
     window._lastKnownTs  = initTs;
-    var initAbove = initNav >= 100000;
-    Plotly.restyle(gd, {{ fillcolor: initAbove ? 'rgba(0,255,157,0.09)' : 'rgba(255,51,102,0.09)' }}, [4]);
-    Plotly.restyle(gd, {{ fillcolor: initAbove ? 'rgba(0,255,157,0.04)' : 'rgba(255,51,102,0.04)' }}, [3]);
     setTimeout(function() {{ _updateEndpointDot(initNav, initTs); }}, 200);
     setTimeout(function() {{ _updateAthShape(initNav, initTs); }}, 250);
   }}
@@ -4852,10 +4871,6 @@ window.addEventListener('resize', function() {{
         window._lastKnownTs = isoTs;
         // Extend ghost (3) + portfolio (4) simultaneously
         Plotly.extendTraces(gd, {{x:[[isoTs],[isoTs]], y:[[nav],[nav]]}}, [3,4]);
-        // Conditional fill only — portfolio line stays magenta always
-        var aboveBase = nav >= 100000;
-        Plotly.restyle(gd, {{ fillcolor: aboveBase ? 'rgba(0,255,157,0.09)' : 'rgba(255,51,102,0.09)' }}, [4]);
-        Plotly.restyle(gd, {{ fillcolor: aboveBase ? 'rgba(0,255,157,0.04)' : 'rgba(255,51,102,0.04)' }}, [3]);
         // Endpoint dot
         _updateEndpointDot(nav, isoTs);
         // ATH check
