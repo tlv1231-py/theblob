@@ -2453,6 +2453,8 @@ var _comboFlash = null; // {{age, text, col}}
 
 // Satellite orbit angles: symbol → angle (radians)
 var _satAngles = {{}};
+// Satellites currently animating out: symbol → {{angle, orbitR, sr, sg, sb, age}}
+var _satExiting = {{}};
 
 // NAV particle system — small sparks that react to live price ticks
 var _navParticles = [];  // {{x,y,vx,vy,life,maxLife,r,g,b,size}}
@@ -2680,11 +2682,22 @@ function drawPulse() {{
         pb = Math.round(pb*(1-flashAlpha) + flashRgb[2]*flashAlpha);
       }}
 
-      // Ring speed and size driven by pressure
+      // ── Trade flash: radiant glow bloom instead of exploding rings ───────────
+      if (flashAlpha > 0) {{
+        var bloomR = 14 + flashAlpha * 18;
+        var bloomG = ctx.createRadialGradient(pcx, pcy, 2, pcx, pcy, bloomR);
+        bloomG.addColorStop(0,   'rgba('+pr+','+pg+','+pb+','+(0.55*flashAlpha)+')');
+        bloomG.addColorStop(0.4, 'rgba('+pr+','+pg+','+pb+','+(0.18*flashAlpha)+')');
+        bloomG.addColorStop(1,   'rgba('+pr+','+pg+','+pb+',0)');
+        ctx.beginPath(); ctx.arc(pcx, pcy, bloomR, 0, Math.PI*2);
+        ctx.fillStyle = bloomG; ctx.fill();
+        if (_orbBurstCount > 0) _orbBurstCount = Math.max(0, _orbBurstCount-0.04);
+      }}
+
+      // Normal pressure rings (always visible, never huge)
       var ringSpeed = 2.0 + pressure * 3.5;
-      var ringMax   = flashAlpha>0 ? 18+flashAlpha*8 : 28 - pressure*8;
-      var ringCount = flashAlpha>0 ? Math.ceil(Math.max(3,_orbBurstCount)) : 3;
-      if (_orbBurstCount > 0) _orbBurstCount = Math.max(0, _orbBurstCount-0.04);
+      var ringMax   = 28 - pressure*8;
+      var ringCount = 3;
 
       for (var k=0; k<ringCount; k++) {{
         var p2 = (Math.sin(phase*ringSpeed - k*0.9)+1)/2;
@@ -2704,9 +2717,9 @@ function drawPulse() {{
       }}
 
       // Core
-      var coreSize = flashAlpha>0 ? 6+flashAlpha*2 : 6;
+      var coreSize = 6;
       ctx.shadowColor='rgba('+pr+','+pg+','+pb+',1)';
-      ctx.shadowBlur = flashAlpha>0 ? 22+flashAlpha*8 : 18+pressure*12;
+      ctx.shadowBlur = 18+pressure*12;
       ctx.beginPath(); ctx.arc(pcx,pcy,coreSize,0,Math.PI*2);
       ctx.fillStyle='rgba('+pr+','+pg+','+pb+',1)'; ctx.fill();
       ctx.shadowBlur=0;
@@ -2763,6 +2776,29 @@ function drawPulse() {{
         ctx.beginPath(); ctx.moveTo(pcx,pcy); ctx.lineTo(sx,sy);
         ctx.strokeStyle='rgba('+sr+','+sg+','+sb+',.08)';
         ctx.lineWidth=.5; ctx.stroke();
+      }});
+
+      // ── Exiting satellites — shoot outward and fade ───────────────────────
+      Object.keys(_satExiting).forEach(function(sym) {{
+        var e = _satExiting[sym];
+        e.age += 0.032;
+        var r  = e.orbitR + e.age * 80;   // shoot outward fast
+        var op = Math.max(0, 1 - e.age * 2.5);
+        if (op <= 0) {{ delete _satExiting[sym]; return; }}
+        var sx = pcx + Math.cos(e.angle) * r;
+        var sy = pcy + Math.sin(e.angle) * r;
+        // Fading streak from orb to satellite
+        var streakG = ctx.createLinearGradient(pcx, pcy, sx, sy);
+        streakG.addColorStop(0,   'rgba('+e.sr+','+e.sg+','+e.sb+','+(op*0.3)+')');
+        streakG.addColorStop(1,   'rgba('+e.sr+','+e.sg+','+e.sb+',0)');
+        ctx.beginPath(); ctx.moveTo(pcx, pcy); ctx.lineTo(sx, sy);
+        ctx.strokeStyle = streakG; ctx.lineWidth = 1.5; ctx.stroke();
+        // Fading dot
+        ctx.shadowColor = 'rgba('+e.sr+','+e.sg+','+e.sb+',1)';
+        ctx.shadowBlur  = 8 * op;
+        ctx.beginPath(); ctx.arc(sx, sy, 2.5*op+0.5, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba('+e.sr+','+e.sg+','+e.sb+','+op+')';
+        ctx.fill(); ctx.shadowBlur = 0;
       }});
 
       // ── Combo streak text above orb ───────────────────────────────────────
@@ -5214,15 +5250,33 @@ window.addEventListener('resize', function() {{
         if (!section) return;
         var flat = document.getElementById('pos-crypto-flat');
 
-        // Expose positions map for dynamic queue timeout countdowns
+        // Expose positions map; detect exits to animate satellites out
+        var oldMap = window._cryptoPositionsMap || {{}};
         if (Array.isArray(rows) && rows.length) {{
           var newMap = {{}};
           rows.forEach(function(p) {{ newMap[p.symbol] = p; }});
           window._cryptoPositionsMap = newMap;
-          window._cryptoPairCount    = 15; // universe size
+          window._cryptoPairCount    = 15;
         }} else {{
           window._cryptoPositionsMap = {{}};
         }}
+        // Launch exit animation for any symbol no longer in map
+        Object.keys(oldMap).forEach(function(sym) {{
+          if (!window._cryptoPositionsMap[sym] && _satAngles[sym] !== undefined) {{
+            var pos = oldMap[sym]; var entry = parseFloat(pos.entry_price||0);
+            var stop = parseFloat(pos.stop_price||0); var tgt = parseFloat(pos.target_price||0)||entry*1.008;
+            var range = tgt - stop; var price = (window._liveProxPrices||{{}})[sym] || entry;
+            var t2 = range ? Math.max(0,Math.min(1,(price-stop)/range)) : 0.5;
+            var orbitR = 20 + t2*24;
+            _satExiting[sym] = {{
+              angle: _satAngles[sym], orbitR: orbitR, age: 0,
+              sr: Math.round(255*Math.max(0,1-t2*1.5)),
+              sg: Math.round(255*Math.min(1,t2*1.8)),
+              sb: Math.round(102*(1-t2))
+            }};
+            delete _satAngles[sym];
+          }}
+        }});
 
         if (!Array.isArray(rows) || !rows.length) {{
           // Exit all existing cards (poll fallback — event-driven already fired for live exits)
