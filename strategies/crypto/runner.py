@@ -386,7 +386,8 @@ def run() -> None:
         _post_event("RISK", "", f"daily loss limit hit · halted · pnl={daily_pnl:+.2f}")
         return
 
-    # ── Check for new entries — use 15-min bars for signal quality ────────────
+    # ── Check for new entries ─────────────────────────────────────────────────
+    logger.info(f"[entry-gate] positions={len(positions)}/{max_pos} | bars_syms={list(min_bars.keys())[:3]}")
     if len(positions) < max_pos:
         for sym in _UNIVERSE:
             if sym in positions:
@@ -396,6 +397,7 @@ def run() -> None:
 
             m_bars = min_bars.get(sym, [])
             signal = _compute_signal(m_bars)
+            logger.info(f"[signal] {sym} bars={len(m_bars)} signal={signal} last={m_bars[-1] if m_bars else 'none'}")
             if not signal:
                 continue
 
