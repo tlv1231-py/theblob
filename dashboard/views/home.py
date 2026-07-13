@@ -1112,33 +1112,12 @@ body::after {{
   text-shadow:0 0 8px rgba(255,102,0,.8);
   min-width:28px; text-align:right;
 }}
-/* ── Status bar (clock / cursor only) ── */
-#status-bar {{
-  position:fixed; bottom:0; left:0; right:0; z-index:200;
-  background:#060010;
-  border-top:1px solid #0d001e;
-  padding:5px 16px;
-  font-size:10px;
-  line-height:1.4;
+/* ── Terminal row slide-in ── */
+@keyframes te-slide-in {{
+  from {{ opacity:0; transform:translateY(6px); }}
+  to   {{ opacity:1; transform:translateY(0); }}
 }}
-#live-clock {{ display:inline; color:#006622; font-size:8.5px; letter-spacing:.04em; }}
-#prompt-sym {{ display:inline; color:#004d18; font-size:10px; user-select:none; margin:0 2px; }}
-#type-preview {{
-  display:inline; color:#00ff41; font-size:10px; letter-spacing:.04em;
-  text-shadow:0 0 8px rgba(0,255,65,.9);
-  white-space:normal; word-break:break-word;
-}}
-#blink-cur {{
-  display:inline; color:#00ff41;
-  text-shadow:0 0 8px rgba(0,255,65,.9);
-  animation:blink-c 1s step-start infinite;
-}}
-@keyframes blink-c {{ 0%,100%{{opacity:1}} 50%{{opacity:0}} }}
-@keyframes enter-flash {{
-  0%   {{ background:rgba(0,255,65,.15); }}
-  100% {{ background:transparent; }}
-}}
-.enter-flash {{ animation:enter-flash 220ms ease-out forwards; }}
+.te-new {{ animation:te-slide-in 120ms ease-out forwards; }}
 /* ── VHS trade flash on enter/exit feed lines ── */
 @keyframes vhs-trade-in {{
   0%   {{ opacity:0; transform:translateX(-4px); filter:brightness(6) saturate(0); }}
@@ -4031,13 +4010,6 @@ window.addEventListener('resize', function() {{
   </div>
 </div>
 
-<!-- Status bar — clock / cursor only (fixed) -->
-<div id="status-bar">
-  <span id="live-clock"></span>
-  <span id="prompt-sym">&gt;</span>
-  <span id="type-preview"></span>
-  <span id="blink-cur">█</span>
-</div>
 <script>
 
   // ── Gauge — avg trades per hour ───────────────────────────────────────────
@@ -4378,45 +4350,9 @@ window.addEventListener('resize', function() {{
   setInterval(function() {{ tick(); _tickFeedAgo(); _updateDynamicQueue(); _syncHud(); _updatePosCounts(); }}, 1000);
   _updateDynamicQueue(); // immediate first render
 
-  // ── Terminal typewriter ──────────────────────────────────────────────────────
+  // ── Terminal feed ─────────────────────────────────────────────────────────────
   (function() {{
 
-    // Machine-types text at the > prompt, then Enter: flash + post to feed.
-    // Used on load for the latest entry; reusable for live events later.
-    function typeAtCursor(text, onDone) {{
-      var preview    = document.getElementById('type-preview');
-      var blinkCur   = document.getElementById('blink-cur');
-      var clockLine  = document.getElementById('status-bar'); // flash status bar on Enter
-      if (!preview) {{ if (onDone) onDone(); return; }}
-
-      // Kill the cursor blink while typing — it trails the text naturally
-      if (blinkCur) blinkCur.style.animation = 'none';
-      preview.textContent = '';
-      var i = 0;
-
-      function tick() {{
-        if (i < text.length) {{
-          preview.textContent += text[i++];
-          // Machine speed: 12 ms/char, rare 55 ms micro-stall (~6% of chars)
-          setTimeout(tick, 12 + (Math.random() < 0.06 ? 55 : 0));
-        }} else {{
-          // Brief hover before Enter
-          setTimeout(function() {{
-            // ENTER — flash the clock-line, clear preview, reveal feed entry
-            if (clockLine) {{
-              clockLine.classList.add('enter-flash');
-              setTimeout(function() {{ clockLine.classList.remove('enter-flash'); }}, 220);
-            }}
-            preview.textContent = '';
-            if (blinkCur) blinkCur.style.animation = '';
-            if (onDone) onDone();
-          }}, 160);
-        }}
-      }}
-      tick();
-    }}
-
-    var _busy      = false;
     var _feedQueue = [];
     // ── Next-run progress bar ─────────────────────────────────────────────────
     var _RUN_INTERVAL = 75;  // seconds — 60s sleep + ~15s execution = loop cycle
@@ -4458,8 +4394,7 @@ window.addEventListener('resize', function() {{
             lbl.style.textShadow = '0 0 ' + (8 + heat * 8) + 'px rgba(' + r + ',0,' + b + ',.9)';
           }}
         }}
-        // hide bar while a message is typing through status
-        if (wrap) wrap.classList.toggle('hidden', _busy);
+        if (wrap) wrap.classList.remove('hidden');
       }}, 1000);
     }}
 
@@ -4479,101 +4414,62 @@ window.addEventListener('resize', function() {{
       eta.textContent = rem + 's';
     }}, 500);
 
-    function startIdle() {{
-      // no-op — progress bar replaced idle phrases
-    }}
-
-    // ── postToFeed: THE single gateway for all System Feed entries ────────────
-    // Every trade, fill, deposit, withdraw, pipeline event goes through here.
-    // Text types through Status first, Enter commits it as a new feed row.
+    // ── postToFeed: instant-append, no queue delay ───────────────────────────
     // postToFeed(plain, timestamp, html)
-    // plain = what types through the status bar cursor (no HTML tags)
-    // html  = what appears in the feed row (may contain spans for color)
     function postToFeed(plain, timestamp, html) {{
-      _feedQueue.push({{plain: plain, html: html || plain, ts: timestamp || null}});
-      _drainQueue();
-    }}
-
-    function _drainQueue() {{
-      if (_busy || !_feedQueue.length) return;
-      _busy = true;
-      var item = _feedQueue.shift();
-      typeAtCursor(item.plain, function() {{
-        // Append new row to System Feed
-        var tb   = document.getElementById('term-body');
-        var now  = item.ts ? new Date(item.ts) : new Date();
-        var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
-        var row  = document.createElement('div');
-        var _h = item.html;
-        // Only flag as trade if it has the colored enter/exit spans (not just the word)
-        var isTrade = (_h.indexOf('>enter<') !== -1 || _h.indexOf('>exit<') !== -1 ||
-                       _h.indexOf('ENTER') !== -1 || _h.indexOf('EXIT') !== -1) &&
-                      (_h.indexOf('@') !== -1); // must have a price
-        if (isTrade) {{
-          row.className = 'te te-trade';
-          var _isEntryRow = _h.indexOf('>enter<') !== -1 || _h.indexOf('ENTER') !== -1;
-          var _isWinRow   = _h.indexOf('color:#00ff9d') !== -1 || (_h.indexOf('+') !== -1 && _h.indexOf('pnl') !== -1);
-          var _flashCol   = _isEntryRow ? '#00e5ff' : (_isWinRow ? '#00ff9d' : '#ff3366');
-          var _dimCol     = _isEntryRow ? 'rgba(0,180,220,.4)' : (_isWinRow ? 'rgba(0,200,120,.4)' : 'rgba(255,60,80,.4)');
-          row.style.color = _flashCol;
-          row.style.textShadow = '0 0 8px ' + _flashCol;
-          setTimeout(function() {{
-            row.style.transition = 'color 1.5s ease, text-shadow 1.5s ease';
-            row.style.color = _dimCol;
-            row.style.textShadow = 'none';
-          }}, 2800);
-        }} else {{
-          row.className = 'te';
-          row.style.color = '#00ff41';
-          row.style.textShadow = '0 0 6px rgba(0,255,65,.5)';
-          row.style.transition = 'color 1200ms ease, text-shadow 1200ms ease';
-          // Fade to dim purple after flash
-          requestAnimationFrame(function() {{
-            requestAnimationFrame(function() {{
-              row.style.color = '#6a4a8a';
-              row.style.textShadow = 'none';
-            }});
-          }});
-        }}
-        row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + _h;
-        if (tb) {{ tb.appendChild(row); tb.scrollTop = tb.scrollHeight; }}
-        // Update "Xs ago" ticker on every new feed entry
-        window._lastFeedEventMs = Date.now();
-        _busy = false;
-        if (_feedQueue.length) {{
-          setTimeout(_drainQueue, 400);
-        }} else {{
-          startIdle();
-        }}
-      }});
-    }}
-
-    // Expose globally — trades, fills, deposits, pipeline events all call this
-    window._postToFeed   = postToFeed;
-    window._typeAtCursor = typeAtCursor;  // raw cursor typing (no feed append)
-
-    // ── On load: type the latest System Feed entry through Status ─────────────
-    var tb      = document.getElementById('term-body');
-    var newest  = document.getElementById('te-newest');
-    if (newest && tb) {{
-      _busy = true;
-      tb.scrollTop = tb.scrollHeight;
-      var plainText = newest.textContent.replace(/\s+/g, ' ').trim();
-      typeAtCursor(plainText, function() {{
-        newest.style.transition = 'opacity 80ms ease, color 1400ms ease, text-shadow 1400ms ease';
-        newest.style.opacity = '1';
-        tb.scrollTop = tb.scrollHeight;
+      var _h  = html || plain;
+      var tb  = document.getElementById('term-body');
+      if (!tb) return;
+      var now  = timestamp ? new Date(timestamp) : new Date();
+      var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
+      var row  = document.createElement('div');
+      // Detect trade rows by html content
+      var isTrade = (_h.indexOf('>enter<') !== -1 || _h.indexOf('>exit<') !== -1) && _h.indexOf('@') !== -1;
+      if (isTrade) {{
+        row.className = 'te te-trade te-new';
+        var _isEntry  = _h.indexOf('>enter<') !== -1;
+        var _isWin    = !_isEntry && _h.indexOf('color:#00ff9d') !== -1;
+        var _flashCol = _isEntry ? '#00e5ff' : (_isWin ? '#00ff9d' : '#ff3366');
+        var _dimCol   = _isEntry ? 'rgba(0,180,220,.4)' : (_isWin ? 'rgba(0,200,120,.4)' : 'rgba(255,60,80,.4)');
+        row.style.color = _flashCol;
+        row.style.textShadow = '0 0 8px ' + _flashCol;
+        setTimeout(function() {{
+          row.style.transition = 'color 1.5s ease, text-shadow 1.5s ease';
+          row.style.color = _dimCol;
+          row.style.textShadow = 'none';
+        }}, 2800);
+      }} else {{
+        row.className = 'te te-new';
+        row.style.color = '#00ff41';
+        row.style.textShadow = '0 0 6px rgba(0,255,65,.5)';
+        row.style.transition = 'color 1200ms ease, text-shadow 1200ms ease';
         requestAnimationFrame(function() {{
           requestAnimationFrame(function() {{
-            newest.style.color = '#9060b8';
-            newest.style.textShadow = 'none';
+            row.style.color = '#6a4a8a';
+            row.style.textShadow = 'none';
           }});
         }});
-        _busy = false;
-        startIdle();
-      }});
-    }} else {{
-      startIdle();
+      }}
+      row.innerHTML = '<span class="te-ts">' + hhmm + '&nbsp;&nbsp;</span>' + _h;
+      tb.appendChild(row);
+      tb.scrollTop = tb.scrollHeight;
+      window._lastFeedEventMs = Date.now();
+    }}
+
+    // Expose globally
+    window._postToFeed = postToFeed;
+
+    // On load: fade in the server-rendered newest entry immediately
+    var tb = document.getElementById('term-body');
+    var newest = document.getElementById('te-newest');
+    if (newest && tb) {{
+      tb.scrollTop = tb.scrollHeight;
+      newest.style.opacity = '1';
+      setTimeout(function() {{
+        newest.style.transition = 'color 1400ms ease, text-shadow 1400ms ease';
+        newest.style.color = '#9060b8';
+        newest.style.textShadow = 'none';
+      }}, 600);
     }}
 
     // Kick off the progress bar — inside IIFE where _tickProgress is in scope
