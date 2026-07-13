@@ -1215,15 +1215,15 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 
-/* ── Callout rail — anchored to bottom of strat-bar via absolute positioning ─ */
+/* ── Callout rail — zero-height sibling after strat-bar, cards overflow downward ─ */
 #callout-rail {{
-  position:absolute; top:100%; left:50%;
-  transform:translateX(-50%);
-  z-index:30; /* above strat-bar's z-index:20 children but rail hangs below */
+  height:0; overflow:visible;
+  position:relative; z-index:30;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
-  width:380px;
+  width:100%;
   padding-top:4px;
+  flex-shrink:0;
 }}
 .callout-card {{
   width:100%; display:flex; align-items:center; gap:8px;
@@ -2297,9 +2297,8 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
-<!-- ── Stratagem HUD bar — callout-rail hangs below via position:absolute top:100% ── -->
+<!-- ── Stratagem HUD bar ── -->
 <div id="strat-bar">
-  <div id="callout-rail"></div>
   <div class="strat-slot" id="ss-runner">
     <div class="ss-icon">⚡</div>
     <div class="ss-name">RUNNER</div>
@@ -2326,6 +2325,8 @@ body::after {{
     <div class="ss-status" id="ss-nav-st">—</div>
   </div>
 </div>
+<!-- ── Callout rail — zero-height, cards overflow downward from here ── -->
+<div id="callout-rail"></div>
 
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
