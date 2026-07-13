@@ -89,7 +89,7 @@ html,body{{height:100%;background:#040006;font-family:Consolas,'Courier New',mon
       display:flex;align-items:center;gap:10px}}
 .dot{{width:6px;height:6px;border-radius:50%;background:#ff00cc;
       box-shadow:0 0 6px #ff00cc;animation:bl 2s ease-in-out infinite}}
-#body{{flex:1;overflow:hidden;display:flex;flex-direction:column;padding:0}}
+#body{{flex:1;overflow:visible;display:flex;flex-direction:column;padding:0}}
 .bt-e{{padding:4px 18px 3px;border-top:1px solid rgba(42,0,61,.3);flex-shrink:0}}
 .bt-m{{font-size:13px;font-weight:600;line-height:1.4;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
