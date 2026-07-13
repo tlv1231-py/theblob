@@ -955,8 +955,12 @@ def _build_daw_html(data: dict) -> str:
 <meta charset="utf-8">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
-html, body {{
+html {{
   background:#060008; overflow:hidden;
+  height:100vh; width:100vw;
+}}
+body {{
+  background:#060008; overflow:visible;
   font-family:Consolas,'Courier New',monospace;
   color:#f0e0ff; height:100vh; width:100vw;
   display:flex; flex-direction:column;
