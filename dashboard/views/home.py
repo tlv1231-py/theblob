@@ -4089,26 +4089,22 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
 }}
 setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 
-// ── Smooth ticker-tape scroll — Plotly.animate keeps "now" always centered ────
+// ── Smooth ticker-tape scroll — keeps "now" always centered ────────────────────
 var _scrollBusy = false;
 function _recenterOnLatest(_ignored) {{
-  if (_scrollBusy) return;  // only block on our own busy state, not user-interaction
+  if (_scrollBusy) return;
   var newStart = _intradayStart();
   var newEnd   = _intradayEnd();
   _defaultXRange = [newStart, newEnd];
   _scrollBusy = true;
   _programmaticRelayout = true;
-  Plotly.animate(gd,
-    {{ layout: {{ xaxis: {{ range: [newStart, newEnd] }} }} }},
-    {{ transition: {{ duration: 1300, easing: 'linear' }}, frame: {{ duration: 1300, redraw: false }} }}
-  ).then(function() {{
+  Plotly.relayout(gd, {{ 'xaxis.range': [newStart, newEnd] }}).then(function() {{
     _scrollBusy = false;
-    // Keep programmatic flag true a bit longer to swallow the post-animation relayout event
     setTimeout(function() {{ _programmaticRelayout = false; }}, 80);
-  }});
+  }}).catch(function() {{ _scrollBusy = false; _programmaticRelayout = false; }});
 }}
-// Drive the scroll forward continuously — every 1.3s keeps transition seamless
-setInterval(function() {{ _recenterOnLatest(null); }}, 1300);
+// Advance every 10s — smooth enough, no animation overhead
+setInterval(function() {{ _recenterOnLatest(null); }}, 10000);
 
 // ── Wallet selector ───────────────────────────────────────────────────────────
 var _walletModes = ['PAPER', 'LIVE ●'];
@@ -4291,7 +4287,7 @@ window.addEventListener('resize', function() {{
   }};
 
   var b = document.getElementById('term-body');
-  if (b) {{ b.scrollTop = b.scrollHeight; }}
+  if (b) {{ b.scrollTop = 0; }}  // newest entries are at top
 
   // ── Panel resize (horizontal + vertical) ───────────────────────────────
   (function() {{
@@ -4694,6 +4690,8 @@ window.addEventListener('resize', function() {{
       }}
       row.innerHTML = '<span class="te-ts">' + hhmm + '</span>' + _h;
       tb.insertBefore(row, tb.firstChild);
+      // Keep viewport on newest (top) if user hasn't scrolled down intentionally
+      if (tb.scrollTop < 40) tb.scrollTop = 0;
       // Trim oldest entries (now at tail)
       while (tb.children.length > 50) tb.removeChild(tb.lastChild);
       window._lastFeedEventMs = Date.now();
