@@ -1215,15 +1215,15 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 
-/* ── Callout rail — anchored to bottom of strat-bar, drops DOWN ─ */
+/* ── Callout rail — positioned by JS flush below #strat-bar ─ */
 #callout-rail {{
-  /* sits as absolute child of #strat-bar, bottom-edge anchored */
-  position:absolute; bottom:0; left:50%; transform:translateX(-50%);
-  z-index:500; display:flex; flex-direction:column; align-items:center;
-  gap:3px; pointer-events:none;
+  position:fixed; left:50%; top:0; /* JS sets top dynamically */
+  transform:translateX(-50%);
+  z-index:10; /* below strat-bar z-index:20 so HUD stays on top */
+  display:flex; flex-direction:column; align-items:center;
+  gap:4px; pointer-events:none;
   width:360px;
-  /* translate down so cards start at the bar's bottom edge */
-  transform:translateX(-50%) translateY(100%);
+  padding-top:4px;
 }}
 .callout-card {{
   width:100%; display:flex; align-items:center; gap:8px;
@@ -2278,9 +2278,10 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
-<!-- ── Stratagem HUD bar — callout-rail is a child so cards drop from its bottom ── -->
+<!-- ── Callout rail — fixed below HUD, z-index below strat-bar ── -->
+<div id="callout-rail"></div>
+<!-- ── Stratagem HUD bar ── -->
 <div id="strat-bar">
-  <div id="callout-rail"></div>
   <div class="strat-slot" id="ss-runner">
     <div class="ss-icon">⚡</div>
     <div class="ss-name">RUNNER</div>
@@ -6765,16 +6766,21 @@ window.addEventListener('resize', function() {{
         _ssSet('ss-nav-st', 'ss-active', fmtd);
       }}
 
-      // ── Callout system — drop-in trade notifications ──────────
-      var _calloutQ = [];
-      var _calloutShowing = false;
+      // ── Callout system — stackable drop-in notifications ────────
       var _calloutRail = document.getElementById('callout-rail');
 
-      function _showNextCallout() {{
-        if (!_calloutQ.length || _calloutShowing) return;
-        var cfg = _calloutQ.shift();
-        _calloutShowing = true;
+      // Position rail flush below strat-bar
+      (function _positionRail() {{
+        var sb = document.getElementById('strat-bar');
+        if (sb && _calloutRail) {{
+          var r = sb.getBoundingClientRect();
+          _calloutRail.style.top = r.bottom + 'px';
+        }}
+        requestAnimationFrame(_positionRail);
+      }})();
 
+      function _spawnCallout(cfg) {{
+        var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
         var card = document.createElement('div');
         card.className = 'callout-card';
         card.style.borderLeftColor = cfg.col;
@@ -6782,23 +6788,23 @@ window.addEventListener('resize', function() {{
           '<div class="cc-badge" style="color:' + cfg.col + ';border-color:' + cfg.col + '">' + cfg.badge + '</div>' +
           '<div class="cc-body">' +
             '<div class="cc-ticker" style="color:' + cfg.col + '">' + cfg.sym + '</div>' +
-            '<div class="cc-phase" id="cc-ph">SCANNING \xb7 <span id="cc-ct">5</span></div>' +
-            '<div class="cc-exec-bar"><div class="cc-exec-fill" id="cc-fill" style="background:' + cfg.col + '"></div></div>' +
+            '<div class="cc-phase" id="ph-' + uid + '">SCANNING \xb7 <span id="ct-' + uid + '">5</span></div>' +
+            '<div class="cc-exec-bar"><div class="cc-exec-fill" id="fl-' + uid + '" style="background:' + cfg.col + '"></div></div>' +
           '</div>' +
-          '<div class="cc-count" style="color:' + cfg.col + '" id="cc-num">5</div>';
-        if (_calloutRail) _calloutRail.appendChild(card);
+          '<div class="cc-count" style="color:' + cfg.col + '" id="nm-' + uid + '">5</div>';
 
+        if (_calloutRail) _calloutRail.appendChild(card);
         requestAnimationFrame(function() {{
           requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
         }});
 
-        var phEl  = card.querySelector('#cc-ph');
-        var ctEl  = card.querySelector('#cc-ct');
-        var numEl = card.querySelector('#cc-num');
-        var bar   = card.querySelector('.cc-exec-bar');
-        var fill  = card.querySelector('#cc-fill');
+        var phEl  = document.getElementById('ph-' + uid);
+        var ctEl  = document.getElementById('ct-' + uid);
+        var numEl = document.getElementById('nm-' + uid);
+        var fill  = document.getElementById('fl-' + uid);
+        var bar   = fill ? fill.parentNode : null;
 
-        // Phase 1 — SCANNING countdown 5→1 (5 × 400ms)
+        // Phase 1 — SCANNING countdown 5→1
         var count = 5;
         var countInt = setInterval(function() {{
           count--;
@@ -6807,26 +6813,21 @@ window.addEventListener('resize', function() {{
             if (numEl) numEl.textContent = count;
           }} else {{
             clearInterval(countInt);
-
-            // Phase 2 — EXECUTING + progress bar (~1.1s)
+            // Phase 2 — EXECUTING + bar
             if (phEl)  phEl.textContent = 'EXECUTING...';
             if (numEl) numEl.style.opacity = '0';
             if (bar)   bar.style.display = 'block';
             setTimeout(function() {{ if (fill) fill.style.width = '100%'; }}, 30);
-
             setTimeout(function() {{
               // Phase 3 — COMPLETE
               if (phEl)  {{ phEl.textContent = '◉ ' + (cfg.complete || 'COMPLETE'); phEl.style.color = cfg.col; }}
               if (bar)   bar.style.display = 'none';
-
               // Phase 4 — retract
               setTimeout(function() {{
                 card.classList.remove('cc-show');
                 card.classList.add('cc-exit');
                 setTimeout(function() {{
                   if (card.parentNode) card.parentNode.removeChild(card);
-                  _calloutShowing = false;
-                  setTimeout(_showNextCallout, 80);
                 }}, 240);
               }}, 900);
             }}, 1200);
@@ -6835,8 +6836,7 @@ window.addEventListener('resize', function() {{
       }}
 
       window._fireCallout = function(badge, sym, detail, col, complete) {{
-        _calloutQ.push({{ badge: badge, sym: sym, detail: detail, col: col || '#ff00cc', complete: complete || 'COMPLETE' }});
-        _showNextCallout();
+        _spawnCallout({{ badge: badge, sym: sym, detail: detail, col: col || '#ff00cc', complete: complete || 'COMPLETE' }});
       }};
 
       // ── Master tick ───────────────────────────────────────────
