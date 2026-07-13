@@ -2355,13 +2355,36 @@ var layout = {{
 var config = {{ scrollZoom:true, displayModeBar:false, responsive:true }};
 var gd = document.getElementById('chart');
 
-// ── Ambient canvas — drifting cyberpunk blobs ─────────
+// ── Ambient canvas — night sky + drifting blobs ─────────
 var ambCanvas = document.getElementById('ambient-canvas');
 (function() {{
   function resizeAmb() {{ ambCanvas.width=window.innerWidth; ambCanvas.height=window.innerHeight; }}
   resizeAmb();
   window.addEventListener('resize', resizeAmb);
   var t = 0;
+
+  // ── Star field: three depth layers moving right→left ──────────────────────
+  var _starLayers = [
+    {{ count:140, speed:0.25, r:0.55, a:0.22, cr:220, cg:220, cb:255 }}, // far — blue-white
+    {{ count:55,  speed:1.1,  r:0.9,  a:0.30, cr:0,   cg:220, cb:255 }}, // mid — cyan
+    {{ count:20,  speed:2.8,  r:1.4,  a:0.38, cr:180, cg:0,   cb:255 }}, // near — purple
+  ];
+  var _stars = [];
+  _starLayers.forEach(function(l) {{
+    for (var i = 0; i < l.count; i++) {{
+      _stars.push({{
+        x: Math.random(), y: Math.random(),
+        speed: l.speed + Math.random() * l.speed * 0.4,
+        r: l.r + Math.random() * 0.3,
+        a: l.a * (0.6 + Math.random() * 0.4),
+        cr: l.cr, cg: l.cg, cb: l.cb,
+      }});
+    }}
+  }});
+
+  // Hyperspeed streaks
+  var _streaks = [];
+
   var blobs = [
     {{ rx:.18, ry:.55, cr:148, cg:0,   cb:255, a:.11,  sx:.00017, sy:.00011 }},
     {{ rx:.78, ry:.28, cr:0,   cg:229, cb:255, a:.08,  sx:-.00013,sy:.00009 }},
@@ -2374,6 +2397,47 @@ var ambCanvas = document.getElementById('ambient-canvas');
     var W = ambCanvas.width, H = ambCanvas.height;
     ctx.clearRect(0,0,W,H);
     t += 0.005;
+
+    // ── Stars moving right→left ────────────────────────────────────────────
+    _stars.forEach(function(s) {{
+      s.x -= s.speed / W;
+      if (s.x < -0.01) {{ s.x = 1.02 + Math.random() * 0.05; s.y = Math.random(); }}
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + s.cr + ',' + s.cg + ',' + s.cb + ',' + s.a + ')';
+      ctx.fill();
+    }});
+
+    // ── Hyperspeed streaks (rare, fast layer) ──────────────────────────────
+    if (Math.random() < 0.018) {{
+      var _spLen = 0.04 + Math.random() * 0.10;
+      _streaks.push({{
+        x: 1.0 + Math.random() * 0.05, y: Math.random(),
+        len: _spLen, a: 0.45 + Math.random() * 0.2,
+        speed: 5 + Math.random() * 8,
+        cr: Math.random() < 0.5 ? 0 : 180,
+        cg: Math.random() < 0.5 ? 229 : 0,
+        cb: 255,
+      }});
+    }}
+    for (var si = _streaks.length - 1; si >= 0; si--) {{
+      var str = _streaks[si];
+      str.x -= str.speed / W;
+      str.a -= 0.014;
+      if (str.a <= 0 || str.x < -str.len) {{ _streaks.splice(si, 1); continue; }}
+      var sg = ctx.createLinearGradient(str.x * W, str.y * H, (str.x + str.len) * W, str.y * H);
+      sg.addColorStop(0, 'rgba(' + str.cr + ',' + str.cg + ',' + str.cb + ',0)');
+      sg.addColorStop(1, 'rgba(' + str.cr + ',' + str.cg + ',' + str.cb + ',' + str.a + ')');
+      ctx.save();
+      ctx.strokeStyle = sg;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo((str.x + str.len) * W, str.y * H);
+      ctx.lineTo(str.x * W, str.y * H);
+      ctx.stroke();
+      ctx.restore();
+    }}
+
     blobs.forEach(function(b,i) {{
       var px = (b.rx + Math.sin(t * b.sx * 1000 + phases[i]) * .15) * W;
       var py = (b.ry + Math.cos(t * b.sy * 1000 + phases[i]) * .12) * H;
