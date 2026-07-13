@@ -2681,32 +2681,32 @@ function drawPulse() {{
       }}
 
       // Ring speed and size driven by pressure
-      var ringSpeed = 2.0 + pressure * 3.5;
-      var ringMax   = flashAlpha>0 ? 40+flashAlpha*20 : 28 - pressure*8;
-      var ringCount = flashAlpha>0 ? Math.ceil(Math.max(3,_orbBurstCount)) : 3;
+      var ringSpeed = 1.2 + pressure * 1.5;
+      var ringMax   = flashAlpha>0 ? 18+flashAlpha*10 : 12 - pressure*3;
+      var ringCount = flashAlpha>0 ? Math.ceil(Math.max(2,_orbBurstCount)) : 2;
       if (_orbBurstCount > 0) _orbBurstCount = Math.max(0, _orbBurstCount-0.04);
 
       for (var k=0; k<ringCount; k++) {{
         var p2 = (Math.sin(phase*ringSpeed - k*0.9)+1)/2;
         ctx.beginPath();
-        ctx.arc(pcx, pcy, 5+p2*ringMax, 0, Math.PI*2);
-        ctx.strokeStyle='rgba('+pr+','+pg+','+pb+','+(0.7*(1-p2))+')';
-        ctx.lineWidth=2-k*0.3; ctx.stroke();
+        ctx.arc(pcx, pcy, 4+p2*ringMax, 0, Math.PI*2);
+        ctx.strokeStyle='rgba('+pr+','+pg+','+pb+','+(0.35*(1-p2))+')';
+        ctx.lineWidth=1; ctx.stroke();
       }}
 
-      // Pressure danger pulse — extra outer ring when near stop
-      if (pressure > 0.6) {{
-        var dp = (Math.sin(phase*6)+1)/2;
+      // Pressure danger pulse — subtle outer ring only when very high pressure
+      if (pressure > 0.8) {{
+        var dp = (Math.sin(phase*4)+1)/2;
         ctx.beginPath();
-        ctx.arc(pcx, pcy, 8+dp*(ringMax+16), 0, Math.PI*2);
-        ctx.strokeStyle='rgba(255,51,102,'+(0.35*(1-dp)*(pressure-0.6)/0.4)+')';
+        ctx.arc(pcx, pcy, 6+dp*(ringMax+8), 0, Math.PI*2);
+        ctx.strokeStyle='rgba(255,51,102,'+(0.18*(1-dp)*(pressure-0.8)/0.2)+')';
         ctx.lineWidth=1; ctx.stroke();
       }}
 
       // Core
-      var coreSize = flashAlpha>0 ? 6+flashAlpha*4 : 6;
+      var coreSize = flashAlpha>0 ? 5+flashAlpha*3 : 4.5;
       ctx.shadowColor='rgba('+pr+','+pg+','+pb+',1)';
-      ctx.shadowBlur = flashAlpha>0 ? 35+flashAlpha*20 : 18+pressure*12;
+      ctx.shadowBlur = flashAlpha>0 ? 20+flashAlpha*12 : 10+pressure*6;
       ctx.beginPath(); ctx.arc(pcx,pcy,coreSize,0,Math.PI*2);
       ctx.fillStyle='rgba('+pr+','+pg+','+pb+',1)'; ctx.fill();
       ctx.shadowBlur=0;
