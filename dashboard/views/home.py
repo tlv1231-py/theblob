@@ -5462,8 +5462,8 @@ window.addEventListener('resize', function() {{
       }} else {{
         _last.y = nav; // update in place if same tick
       }}
-      // Trim to 2 hours of history — enough context, never stale
-      var _cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      // Trim to 30 min — matches the visible window, prevents ancient points making laser beams
+      var _cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) {{
         window._navHistory.shift();
       }}
@@ -5497,15 +5497,16 @@ window.addEventListener('resize', function() {{
       .catch(function() {{}});
     }}
 
-    // Seed _navHistory from today's snapshots so the chart has data immediately on load
+    // Seed _navHistory — only last 30 min so seeded points fall inside the visible window.
+    // Older points cause diagonal laser beams across the 20-min view.
     (function() {{
       window._navHistory = [];
-      var today = new Date().toISOString().split('T')[0];
+      var seedFrom = new Date(Date.now() - 30*60*1000).toISOString();
       var seedUrl = SUPA_URL + '/rest/v1/portfolio_snapshots'
         + '?select=total_value,recorded_at'
         + '&strategy=eq.crypto_momentum'
-        + '&recorded_at=gte.' + today + 'T00:00:00Z'
-        + '&order=recorded_at.asc&limit=500';
+        + '&recorded_at=gte.' + seedFrom
+        + '&order=recorded_at.asc&limit=200';
       fetch(seedUrl, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
       .then(function(r) {{ return r.json(); }})
       .then(function(rows) {{
@@ -5534,28 +5535,26 @@ window.addEventListener('resize', function() {{
       setInterval(_pollNav, 5000);
     }}, 4000);
 
-    // Heartbeat: push current NAV with current timestamp every 30s even if DB hasn't changed.
-    // Without this, sparse portfolio_snapshots writes leave the chart as a 2-point laser beam.
+    // Heartbeat: push current NAV every 15s so the chart fills in quickly.
+    // Snapshots are sparse (1 per trade batch); without this the chart is a 2-point laser.
     setInterval(function() {{
       var nav = window._lastKnownNav;
       if (!nav) return;
       if (!window._navHistory) window._navHistory = [];
       var isoNow = new Date().toISOString();
       var last = window._navHistory[window._navHistory.length - 1];
-      // Only push if at least 25s since last point (avoid micro-dupes)
-      if (last && (new Date(isoNow) - new Date(last.x)) < 25000) return;
+      if (last && (new Date(isoNow) - new Date(last.x)) < 12000) return; // dedup
       window._navHistory.push({{ x: isoNow, y: nav }});
-      // Trim to 2h
-      var cutoff = new Date(Date.now() - 2*60*60*1000).toISOString();
+      // Trim to 30 min — match the visible window
+      var cutoff = new Date(Date.now() - 30*60*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
-      // Redraw
       var _gd = document.getElementById('chart');
       if (_gd && _gd.data && _gd.data.length > 3) {{
         var _xs = window._navHistory.map(function(p) {{ return p.x; }});
         var _ys = window._navHistory.map(function(p) {{ return p.y; }});
         Plotly.restyle(_gd, {{ x: [_xs, _xs], y: [_ys, _ys] }}, [3, 4]);
       }}
-    }}, 30000);
+    }}, 15000);
 
     // ── Live positions poller — DOM-diffing with enter/exit animations ───────
     var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
