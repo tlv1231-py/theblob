@@ -1236,7 +1236,7 @@ body::after {{
   pointer-events:none;
 }}
 .callout-card.cc-show {{ transform:scaleY(1); opacity:1; }}
-.callout-card.cc-exit {{ transform:scaleY(0); opacity:0; transition:transform .16s ease-in, opacity .14s ease-in; }}
+.callout-card.cc-exit {{ transform:scaleY(0); opacity:0; transition:transform .7s cubic-bezier(.4,0,.6,1), opacity .9s ease-out; }}
 .cc-badge {{
   font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 6px;
   border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.9;
@@ -6971,8 +6971,8 @@ window.addEventListener('resize', function() {{
             card.classList.add('cc-exit');
             setTimeout(function() {{
               if (card.parentNode) card.parentNode.removeChild(card);
-            }}, 240);
-          }}, 900);
+            }}, 1000); // matches .9s opacity transition
+          }}, 2200); // linger on COMPLETE before fading
         }}
 
         function _execPhase() {{
