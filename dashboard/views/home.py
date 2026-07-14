@@ -4084,14 +4084,13 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return ms >= winStart && ms <= nowMs + 2000;
     }});
 
-    // Sort chronologically (defensive — heartbeat should already be ordered)
+    // Sort chronologically
     pts.sort(function(a, b) {{ return new Date(a.x) - new Date(b.x); }});
 
-    // Guarantee a left-anchor so there is always a line, not just a dot.
-    // If no point exists more than 2s before now, inject one near the left edge.
-    var hasLeftPt = pts.some(function(p) {{ return new Date(p.x).getTime() < nowMs - 2000; }});
-    if (!hasLeftPt && curNav) {{
-      pts.unshift({{ x: new Date(winStart + 60000).toISOString(), y: curNav }});
+    // Only inject a left-anchor when history is completely empty (first load with no stored data).
+    // Otherwise let real data define the line — injected anchors cause restart artifacts.
+    if (pts.length === 0 && curNav) {{
+      pts.push({{ x: new Date(winStart + 5000).toISOString(), y: curNav }});
     }}
 
     // Orb always at canvas center (current time = W/2)
@@ -7027,17 +7026,17 @@ window.addEventListener('resize', function() {{
         _prevWalletNav = nav;
         _lastWalletVal = nav;
         _animateWallet(nav);
-        // Push every nav change to the canvas history and redraw immediately
+        // Throttle: push at most 1 point per 3s so points are spread across the canvas,
+        // not clustered at center (rAF handles visual smoothness; data density doesn't need to match)
         if (!window._navHistory) window._navHistory = [];
-        var _isoNow = new Date().toISOString();
+        var _nowMs2 = Date.now();
         var _lastH = window._navHistory[window._navHistory.length - 1];
-        if (!_lastH || _lastH.y !== nav) {{
-          window._navHistory.push({{ x: _isoNow, y: nav }});
-          var _cutoff = new Date(Date.now() - 5*60*1000).toISOString();
+        var _lastPushMs = _lastH ? new Date(_lastH.x).getTime() : 0;
+        if (_nowMs2 - _lastPushMs >= 3000) {{
+          window._navHistory.push({{ x: new Date(_nowMs2).toISOString(), y: nav }});
+          var _cutoff = new Date(_nowMs2 - 5*60*1000).toISOString();
           while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
-          // Persist to sessionStorage so history survives page refresh
           try {{ sessionStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
-          if (window._drawNavCanvas) window._drawNavCanvas();
         }}
       }};
       // Trade event: flash color + chip + animate to new value
