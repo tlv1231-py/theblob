@@ -4088,10 +4088,11 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // Sort chronologically
     pts.sort(function(a, b) {{ return new Date(a.x) - new Date(b.x); }});
 
-    // Only inject a left-anchor when history is completely empty (first load with no stored data).
-    // Otherwise let real data define the line — injected anchors cause restart artifacts.
-    if (pts.length === 0 && curNav) {{
-      pts.push({{ x: new Date(winStart + 5000).toISOString(), y: curNav }});
+    // Inject a left-anchor if there's nothing to the left of "now".
+    // Runs every frame until real data fills the window — scrolls off naturally after 5 min.
+    var hasLeftPt = pts.some(function(p) {{ return new Date(p.x).getTime() < nowMs - 1000; }});
+    if (!hasLeftPt && curNav) {{
+      pts.unshift({{ x: new Date(winStart + 2000).toISOString(), y: curNav }});
     }}
 
     // Orb always at canvas center (current time = W/2)
