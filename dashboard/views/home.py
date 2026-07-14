@@ -1270,7 +1270,7 @@ body::after {{
 }}
 /* ── Wallet slot ── */
 .ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
-.ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
+.ss-wallet-anchor {{ position:relative; display:inline-flex; flex-direction:column; align-items:center; }}
 .ss-wallet-val {{
   font-family:'Press Start 2P',monospace; font-size:14px; font-weight:400;
   letter-spacing:.04em; font-variant-numeric:tabular-nums;
@@ -1316,12 +1316,13 @@ body::after {{
   100% {{ opacity:0; transform:translateY(-16px) scale(.92); }}
 }}
 .ss-wallet-chip {{
-  position:absolute; left:calc(100% + 8px); top:0;
+  display:block; text-align:center;
   font-family:'Press Start 2P',monospace;
-  font-size:10px; font-weight:400; letter-spacing:.02em;
+  font-size:9px; font-weight:400; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
   opacity:0; white-space:nowrap; pointer-events:none;
   text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 10px currentColor;
+  line-height:1.4; margin-top:2px;
 }}
 .ss-wallet-chip.dmg-active {{
   animation: dmg-pop 2.2s cubic-bezier(.22,1,.36,1) forwards;
@@ -1356,8 +1357,8 @@ body::after {{
   100% {{ opacity:0; transform:translateX(0);    filter:brightness(0);              clip-path:inset(0 100% 0 0); }}
 }}
 .callout-card {{
-  display:flex; align-items:baseline; gap:0;
-  padding:3px 0 3px 8px;
+  display:flex; align-items:center; gap:0;
+  padding:3px 8px 3px 8px;
   background:transparent; border:none;
   border-left:1px solid rgba(255,255,255,.06);
   opacity:0;
@@ -1365,6 +1366,7 @@ body::after {{
   font-family:Consolas,'Courier New',monospace;
   white-space:nowrap;
   transform-origin:center;
+  min-width:140px;
 }}
 .callout-card.cc-show {{
   animation: cc-in .18s cubic-bezier(.2,.9,.3,1) forwards;
@@ -1372,21 +1374,22 @@ body::after {{
 .callout-card.cc-exit {{
   animation: cc-out .55s cubic-bezier(.6,0,1,1) forwards;
 }}
+/* 8-bit pixel sell icon — replaces "sold" text */
 .cc-verb {{
-  font-size:7px; letter-spacing:.22em; text-transform:uppercase;
-  color:rgba(255,255,255,.28); font-weight:600;
-  width:28px; flex-shrink:0;
+  font-size:10px; flex-shrink:0; margin-right:5px; line-height:1;
+  opacity:.7;
 }}
 .cc-sym {{
   font-size:13px; font-weight:700; letter-spacing:.06em;
-  margin-right:8px;
   text-shadow:0 0 12px currentColor;
+  flex:1;
 }}
 .cc-pnl {{
   font-family:'Press Start 2P',monospace;
   font-size:9px; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
   text-shadow:0 0 8px currentColor, 1px 1px 0 rgba(0,0,0,.95);
+  text-align:right; flex-shrink:0; min-width:54px;
 }}
 .cc-count {{ display:none; }}
 
@@ -1839,47 +1842,59 @@ body::after {{
 
 /* ── Equity position cards (right panel) ── */
 .pc-eq {{
-  padding:11px 12px 10px 14px !important;
-  background:rgba(6,0,18,.62) !important;
+  padding:10px 12px 10px 12px !important;
+  background:rgba(0,0,10,.9) !important;
   backdrop-filter:blur(6px) !important;
-  border-bottom:1px solid rgba(255,255,255,.03) !important;
-  border-left-width:2px !important;
+  border:1px solid rgba(255,255,255,.06) !important;
+  border-left-width:3px !important;
+  border-bottom:2px solid rgba(255,255,255,.06) !important;
   transition:background .4s ease;
+  position:relative; overflow:hidden;
 }}
-.pc-eq:hover {{ background:rgba(10,0,28,.72) !important; }}
+/* scanline overlay — matches crypto tiles */
+.pc-eq::before {{
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.15) 0px,rgba(0,0,0,.15) 1px,transparent 1px,transparent 3px);
+}}
+.pc-eq > * {{ position:relative; z-index:1; }}
+.pc-eq:hover {{ background:rgba(6,0,24,.97) !important; }}
 .pc-eq .pos-corner {{ display:none; }}
 .pc-row1 {{
-  display:flex; align-items:baseline; gap:6px; margin-bottom:5px;
+  display:flex; align-items:baseline; gap:6px; margin-bottom:6px;
 }}
+/* Symbol — Press Start 2P to match crypto tiles */
 .pc-sym {{
-  font-family:Consolas,monospace; font-size:14px; font-weight:800;
-  letter-spacing:.06em; flex-shrink:0;
+  font-family:'Press Start 2P',monospace; font-size:9px; font-weight:400;
+  letter-spacing:.04em; flex-shrink:0;
+  text-shadow:0 0 10px currentColor, 1px 1px 0 rgba(0,0,0,.8);
 }}
 .pc-badge {{
-  font-size:6px; font-weight:700; letter-spacing:.18em; padding:2px 6px 1px;
-  border-radius:1px; flex-shrink:0; font-family:Consolas,monospace;
+  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
+  letter-spacing:.06em; padding:2px 5px 2px;
+  border-radius:0; flex-shrink:0;
   text-transform:uppercase;
 }}
 .pc-badge-hold {{
-  background:transparent; color:rgba(0,180,110,.55);
-  border:1px solid rgba(0,180,110,.2);
+  background:transparent; color:rgba(0,180,110,.7);
+  border:1px solid rgba(0,180,110,.3);
 }}
 .pc-badge-sell {{
-  background:transparent; color:rgba(220,160,0,.6);
-  border:1px solid rgba(220,160,0,.25);
+  background:transparent; color:rgba(220,160,0,.7);
+  border:1px solid rgba(220,160,0,.3);
 }}
 .pc-val {{
-  margin-left:auto; font-family:Consolas,monospace; font-size:13px;
-  font-weight:700; color:rgba(230,220,255,.9); letter-spacing:.01em;
+  margin-left:auto; font-family:'Press Start 2P',monospace; font-size:8px;
+  font-weight:400; color:#00ff9d; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
+  text-shadow:1px 1px 0 #003320, 0 0 10px rgba(0,255,157,.5);
 }}
 .pc-pnl {{
-  font-family:Consolas,monospace; font-size:11px; font-weight:600;
+  font-family:'Press Start 2P',monospace; font-size:7px; font-weight:400;
   letter-spacing:.02em; margin-bottom:7px; font-variant-numeric:tabular-nums;
-  opacity:.9;
 }}
 .pc-pnl-pct {{
-  font-size:9.5px; opacity:.65; margin-left:5px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:6px; opacity:.7;
+  margin-left:4px; font-weight:400;
 }}
 /* Proximity bar — range navigator, not danger meter */
 .pc-prox-wrap {{
@@ -1890,13 +1905,13 @@ body::after {{
   position:relative; height:11px; margin-bottom:3px;
 }}
 .pc-prox-stop,.pc-prox-tgt {{
-  font-family:Consolas,monospace; font-size:6.5px; color:rgba(140,110,170,.5);
-  letter-spacing:.04em;
+  font-family:'Press Start 2P',monospace; font-size:5px; color:rgba(140,110,170,.6);
+  letter-spacing:.02em;
 }}
 .pc-prox-cur {{
   position:absolute; transform:translateX(-50%);
-  font-family:Consolas,monospace; font-size:7px; font-weight:700;
-  color:rgba(255,255,255,.65); white-space:nowrap;
+  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
+  color:rgba(255,255,255,.7); white-space:nowrap;
 }}
 .pc-prox-track {{
   position:relative; height:2px; background:rgba(255,255,255,.05);
@@ -1917,25 +1932,25 @@ body::after {{
   margin-top:5px; margin-bottom:4px;
 }}
 .pc-days {{
-  font-family:Consolas,monospace; font-size:8.5px; color:rgba(0,200,220,.55);
-  letter-spacing:.04em;
+  font-family:'Press Start 2P',monospace; font-size:6px; color:rgba(0,200,220,.6);
+  letter-spacing:.02em;
 }}
 .pc-entry {{
-  font-family:Consolas,monospace; font-size:7px; color:rgba(140,110,170,.45);
+  font-family:'Press Start 2P',monospace; font-size:5px; color:rgba(140,110,170,.5);
   letter-spacing:.02em;
 }}
 /* Status line */
 .pc-status {{
-  font-size:7px; letter-spacing:.06em; padding-top:4px;
-  border-top:1px solid rgba(255,255,255,.04);
-  font-family:Consolas,monospace; line-height:1.5; text-transform:uppercase;
+  font-family:'Press Start 2P',monospace; font-size:5px; letter-spacing:.04em;
+  padding-top:5px; border-top:1px solid rgba(255,255,255,.05);
+  line-height:1.6; text-transform:uppercase;
 }}
-.pc-status-hold {{ color:rgba(0,170,100,.4); }}
-.pc-status-sell {{ color:rgba(210,160,0,.45); }}
+.pc-status-hold {{ color:rgba(0,170,100,.55); }}
+.pc-status-sell {{ color:rgba(210,160,0,.55); }}
 
 /* ── Crypto cards v2 — 8-bit arcade tiles ── */
 #pos-left .pos-card {{
-  padding:7px 8px 6px 8px;
+  padding:9px 10px 8px 10px;
   background:rgba(0,0,10,.92) !important; backdrop-filter:blur(4px) !important;
   border:1px solid rgba(255,255,255,.07);
   border-left:2px solid; /* ticker color inline */
@@ -1957,8 +1972,8 @@ body::after {{
 }}
 /* Symbol — arcade block font */
 #pos-left .pos-sym {{
-  font-family:'Press Start 2P',monospace; font-size:7px; font-weight:400; letter-spacing:.04em;
-  text-shadow:0 0 8px currentColor, 1px 1px 0 rgba(0,0,0,.8);
+  font-family:'Press Start 2P',monospace; font-size:9px; font-weight:400; letter-spacing:.04em;
+  text-shadow:0 0 10px currentColor, 1px 1px 0 rgba(0,0,0,.8);
 }}
 #pos-left .pos-qty {{ display:none; }}
 #pos-left .pos-val {{
@@ -1967,21 +1982,21 @@ body::after {{
 }}
 /* Holdings value */
 #pos-left .pos-hval {{
-  font-family:'Press Start 2P',monospace; font-size:6px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:8px; font-weight:400;
   font-variant-numeric:tabular-nums; color:#00ff9d; margin-left:auto; letter-spacing:.02em;
-  text-shadow:1px 1px 0 #003320, 0 0 8px rgba(0,255,157,.5);
+  text-shadow:1px 1px 0 #003320, 0 0 10px rgba(0,255,157,.6);
 }}
 /* Entry price + live P&L row */
 #pos-left .pos-entry-sub {{
   display:flex; justify-content:space-between; align-items:baseline;
-  margin-top:3px; margin-bottom:3px;
+  margin-top:4px; margin-bottom:4px;
 }}
 #pos-left .pos-epx {{
-  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:6px; font-weight:400;
   letter-spacing:.02em; opacity:.7;
 }}
 #pos-left .pos-pnl-live {{
-  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:6px; font-weight:400;
   letter-spacing:.02em; transition:color .3s;
 }}
 #pos-left .pos-hold {{ display:none; }}
@@ -6507,7 +6522,7 @@ window.addEventListener('resize', function() {{
       }}, 260);
     }};
 
-    var _CARD_W = 132; // crypto column width
+    var _CARD_W = 148; // crypto column width
     var _EQ_W   = 130; // equity column width
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
@@ -7422,7 +7437,7 @@ window.addEventListener('resize', function() {{
             (cfg.countdown ? '<span class="cc-pnl" style="color:' + (cfg.col||'#fff') + '" id="cc-cd-' + Date.now() + '">' + Math.round(cfg.countdown) + 's</span>' : '');
         }} else {{
           card.innerHTML =
-            '<span class="cc-verb">sold</span>' +
+            '<span class="cc-verb" style="color:' + pnlCol + '">⊗</span>' +
             '<span class="cc-sym" style="color:' + symCol + '">' + symClean + '</span>' +
             (pnlStr ? '<span class="cc-pnl" style="color:' + pnlCol + '">' + pnlStr + '</span>' : '');
         }}
