@@ -1253,16 +1253,16 @@ body::after {{
 .callout-card {{
   width:440px; display:flex; align-items:center; gap:12px;
   padding:11px 18px 11px 14px;
-  background:rgba(4,0,16,.72); backdrop-filter:blur(18px);
-  border:1px solid rgba(148,0,255,.14); border-left:3px solid;
+  background:rgba(4,0,16,.18); backdrop-filter:blur(20px);
+  border:1px solid rgba(148,0,255,.12); border-left:3px solid;
   border-radius:2px;
-  box-shadow:0 8px 32px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
-  transform:scaleY(0); transform-origin:top center; opacity:0;
-  transition:transform .28s cubic-bezier(.22,1,.36,1), opacity .22s ease;
+  box-shadow:0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+  opacity:0;
+  transition:opacity .3s ease;
   pointer-events:none;
 }}
-.callout-card.cc-show {{ transform:scaleY(1); opacity:1; }}
-.callout-card.cc-exit {{ transform:scaleY(0); opacity:0; transition:transform .8s cubic-bezier(.4,0,.6,1), opacity 1.1s ease-out; }}
+.callout-card.cc-show {{ opacity:1; }}
+.callout-card.cc-exit {{ opacity:0; transition:opacity 1.4s ease-out; }}
 .cc-badge {{
   font:700 7px Consolas,monospace; letter-spacing:.22em; padding:3px 8px;
   border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.85;
@@ -5403,6 +5403,9 @@ window.addEventListener('resize', function() {{
               _isPos ? '#00c880' : '#e03355', null,
               'total-pnl-val', _basePnl, _batchPnl);
 
+            // Immediately update Portfolio slot with this batch's P&L delta
+            if (window._walletCombo) window._walletCombo(_batchPnl);
+
             // Sound: one per batch
             if (_isPos && window._soundWin) window._soundWin();
             else if (!_isPos && window._soundLoss) window._soundLoss();
@@ -6934,32 +6937,38 @@ window.addEventListener('resize', function() {{
 
       // ── WALLET slot — Alpaca NAV with gain/loss color flash (window-exposed) ─
       var _lastWalletVal = null;
+      // Just update the number — no combo logic here (avoids NAV-poll false triggers)
       window._updateWalletSlot = function(nav) {{
         if (!nav) return;
         var el = document.getElementById('ss-wallet-val');
         if (!el) return;
-        var fmtd = '$' + nav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
-        el.textContent = fmtd;
-        if (_lastWalletVal !== null) {{
-          var delta = nav - _lastWalletVal;
-          if (Math.abs(delta) > 0.5) {{
-            var isGain = delta > 0;
-            el.classList.remove('gain', 'loss');
-            void el.offsetWidth;
-            el.classList.add(isGain ? 'gain' : 'loss');
-            var chip = document.getElementById('ss-wallet-chip');
-            if (chip) {{
-              chip.textContent = (isGain ? '+$' : '-$') + Math.abs(delta).toFixed(0);
-              chip.style.color = isGain ? '#00ff9d' : '#ff3366';
-              chip.style.opacity = '1';
-              setTimeout(function() {{
-                chip.style.opacity = '0';
-                setTimeout(function() {{ el.classList.remove('gain','loss'); }}, 600);
-              }}, 5000);
-            }}
-          }}
-        }}
+        el.textContent = '$' + nav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
         _lastWalletVal = nav;
+      }};
+      // Fire this only from real trade events
+      window._walletCombo = function(delta) {{
+        var el = document.getElementById('ss-wallet-val');
+        var chip = document.getElementById('ss-wallet-chip');
+        if (!el) return;
+        var isGain = delta >= 0;
+        el.classList.remove('gain', 'loss');
+        void el.offsetWidth;
+        el.classList.add(isGain ? 'gain' : 'loss');
+        // Immediately bump displayed value
+        if (_lastWalletVal) {{
+          var newVal = _lastWalletVal + delta;
+          el.textContent = '$' + newVal.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+          _lastWalletVal = newVal;
+        }}
+        if (chip) {{
+          chip.textContent = (isGain ? '+$' : '-$') + Math.abs(delta).toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+          chip.style.color = isGain ? '#00ff9d' : '#ff3366';
+          chip.style.opacity = '1';
+          setTimeout(function() {{
+            chip.style.opacity = '0';
+            setTimeout(function() {{ el.classList.remove('gain','loss'); }}, 600);
+          }}, 5000);
+        }}
       }};
 
       // ── PRICE slot — CoinGecko poll every 4s ─────────────────
