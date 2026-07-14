@@ -4149,21 +4149,12 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    // Smooth curve path helper — quadratic bezier midpoints
+    // Straight polyline — no bezier. Bezier midpoints retroactively reshape historical
+    // segments as new points arrive, making the recent trail morph. lineTo is immutable.
     function _strokeSmooth(m) {{
       ctx.beginPath();
       ctx.moveTo(m[0].x, m[0].y);
-      if (m.length === 2) {{
-        ctx.lineTo(m[1].x, m[1].y);
-      }} else {{
-        for (var i = 0; i < m.length - 1; i++) {{
-          var mx = (m[i].x + m[i+1].x) / 2;
-          var my = (m[i].y + m[i+1].y) / 2;
-          if (i === 0) {{ ctx.lineTo(mx, my); }}
-          else {{ ctx.quadraticCurveTo(m[i].x, m[i].y, mx, my); }}
-        }}
-        ctx.lineTo(m[m.length-1].x, m[m.length-1].y);
-      }}
+      for (var i = 1; i < m.length; i++) ctx.lineTo(m[i].x, m[i].y);
     }}
 
     // Trail-to-orb gradient: transparent at left tail → bright at orb (W/2)
