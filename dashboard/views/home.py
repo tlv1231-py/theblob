@@ -4111,11 +4111,12 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var base = curNav || pts[pts.length-1].y;
     var rawSpread = 0;
     pts.forEach(function(p) {{ var d = Math.abs(p.y - base); if (d > rawSpread) rawSpread = d; }});
-    var minSpread = base * 0.0008; // 0.08% floor — small moves still wiggle visibly
-    var targetRange = Math.max(rawSpread * 1.5, minSpread);
-    // EMA: scale converges slowly so sudden curNav ticks don't jerk the whole line
+    var minSpread = base * 0.0005; // 0.05% floor ~$30 on $60k — any move wiggles
+    var targetRange = rawSpread * 1.1; // tight padding so data fills the height
+    if (targetRange < minSpread) targetRange = minSpread;
+    // Fast EMA so scale tracks data quickly but doesn't snap on single ticks
     if (!window._navHalfRange || window._navHalfRange < minSpread) window._navHalfRange = targetRange;
-    window._navHalfRange = window._navHalfRange * 0.92 + targetRange * 0.08;
+    window._navHalfRange = window._navHalfRange * 0.85 + targetRange * 0.15;
     var halfRange = window._navHalfRange;
 
     // Coordinate mappers — current time at W/2, curNav always at H/2
@@ -4159,11 +4160,13 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.stroke();
   }};
 
-  // Redraw every 5s — also triggers heartbeat so history accumulates even if pollNav is slow
-  setInterval(function() {{
-    if (window._navHeartbeat) window._navHeartbeat();
+  // rAF loop — redraws every frame so the line scrolls forward at 60fps
+  // Heartbeat still fires every 5s to push new data points
+  setInterval(function() {{ if (window._navHeartbeat) window._navHeartbeat(); }}, 5000);
+  (function _raf() {{
     window._drawNavCanvas();
-  }}, 5000);
+    requestAnimationFrame(_raf);
+  }})();
 }})();
 
 // ── Real-time x-axis advance — DISABLED: _recenterOnLatest() handles centering ──
