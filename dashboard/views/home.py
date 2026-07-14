@@ -2272,42 +2272,39 @@ body::after {{
 .card-target-lock::before {{ top:2px; left:2px; border-width:2px 0 0 2px; }}
 .card-target-lock::after  {{ bottom:2px; right:2px; border-width:0 2px 2px 0; }}
 
-/* ── Phase 2: Rapid hit-flash (damage blink) ── */
-@keyframes card-hit-flash {{
-  0%   {{ filter:brightness(1); transform:scale(1); }}
-  10%  {{ filter:brightness(12) saturate(0); transform:scale(1.03); }}
-  20%  {{ filter:brightness(1.2); transform:scale(1); }}
-  32%  {{ filter:brightness(10) saturate(0); transform:scale(1.025); }}
-  42%  {{ filter:brightness(1); transform:scale(1); }}
-  55%  {{ filter:brightness(7) saturate(0); transform:scale(1.015); }}
-  65%  {{ filter:brightness(1); transform:scale(1); }}
-  80%  {{ filter:brightness(4) saturate(0); }}
-  100% {{ filter:brightness(1); }}
+/* ── Phase 2: Damage blink — binary steps, pure 8-bit ── */
+@keyframes card-hit-blink {{
+  0%, 100% {{ filter:brightness(1) saturate(1); }}
+  50%      {{ filter:brightness(18) saturate(0); }}
 }}
-.pos-card-hit {{ animation:card-hit-flash .32s steps(6,end) forwards; }}
+/* 5 hard blinks over 400ms — steps(2) makes each blink instant on/off */
+.pos-card-hit {{ animation:card-hit-blink .08s steps(2,end) 5 forwards; }}
 
-/* ── Phase 3: Arcade destroy — crush to bright scanline then gone ── */
-/* NOTE: no max-height/padding/margin in keyframes — layout hold managed by JS */
+/* ── Phase 3: Arcade destroy — pure vertical crush, no scaleX (avoid clip) ── */
 @keyframes card-arcade-destroy {{
-  0%   {{ transform:scaleY(1) scaleX(1); filter:brightness(6) saturate(0); opacity:1; }}
-  15%  {{ transform:scaleY(.5) scaleX(1.06); filter:brightness(18) saturate(0); opacity:1; }}
-  30%  {{ transform:scaleY(.15) scaleX(1.14); filter:brightness(32) saturate(0); opacity:1; }}
-  45%  {{ transform:scaleY(.03) scaleX(1.22); filter:brightness(50); opacity:1; }}
-  58%  {{ transform:scaleY(0) scaleX(1.28); filter:brightness(70); opacity:1; }}
-  100% {{ transform:scaleY(0) scaleX(0); opacity:0; }}
+  0%   {{ transform:scaleY(1);   filter:brightness(5) saturate(0); opacity:1; }}
+  20%  {{ transform:scaleY(.55); filter:brightness(14) saturate(0); opacity:1; }}
+  38%  {{ transform:scaleY(.18); filter:brightness(26) saturate(0); opacity:1; }}
+  52%  {{ transform:scaleY(.04); filter:brightness(44); opacity:1; }}
+  64%  {{ transform:scaleY(0);   filter:brightness(60); opacity:1; }}
+  100% {{ transform:scaleY(0);   filter:brightness(0);  opacity:0; }}
 }}
-/* After destroy animation, JS adds this class to collapse the DOM space */
-.pos-card-collapsing {{
-  transition:height .28s ease-in, margin-top .28s ease-in, margin-bottom .28s ease-in,
-             padding-top .28s ease-in, padding-bottom .28s ease-in, border-width .28s ease-in !important;
-  height:0 !important; margin:0 !important; padding:0 !important; border-width:0 !important;
-  overflow:hidden !important; opacity:0;
+/* Placeholder that holds the dead tile's space in the flex column */
+.pos-card-ghost-space {{
+  flex-shrink:0; pointer-events:none;
+  overflow:hidden;
+  background:transparent;
+}}
+/* Ghost collapses with smooth ease once all exits are done */
+.pos-card-ghost-collapsing {{
+  transition:height .38s cubic-bezier(.4,0,1,1) !important;
+  height:0 !important;
 }}
 .pos-card-exiting,
 .pos-card-exit-target,
 .pos-card-exit-stop,
 .pos-card-exit-timeout,
-.pos-card-exit-rev     {{ animation:card-arcade-destroy .7s cubic-bezier(.6,0,1,1) forwards; overflow:hidden; transform-origin:center; }}
+.pos-card-exit-rev     {{ animation:card-arcade-destroy .65s steps(12,end) forwards; transform-origin:center; }}
 /* ── PnL ghost — video-game exit ── */
 /* ── P&L ghost — 80s arcade score-popup, floats left of tile column ── */
 @keyframes pnl-ghost-pop {{
@@ -6502,6 +6499,30 @@ window.addEventListener('resize', function() {{
     }}
     setTimeout(_buildEquityMap, 500);
 
+    // ── Batch ghost collapse — waits for all in-flight exits ──────────────────
+    var _ghostsToCollapse = [];
+    var _ghostCollapseTimer = null;
+    function _queueGhostCollapse(ghost) {{
+      _ghostsToCollapse.push(ghost);
+      clearTimeout(_ghostCollapseTimer);
+      // Debounce: 1.8s after the LAST exit trigger before anything reflows
+      _ghostCollapseTimer = setTimeout(function() {{
+        var batch = _ghostsToCollapse.splice(0);
+        batch.forEach(function(g) {{
+          if (!g.parentNode) return;
+          var h = g.getBoundingClientRect().height;
+          g.style.height = h + 'px';       // explicit starting point for transition
+          requestAnimationFrame(function() {{
+            g.classList.add('pos-card-ghost-collapsing');
+          }});
+        }});
+        setTimeout(function() {{
+          batch.forEach(function(g) {{ if (g.parentNode) g.parentNode.removeChild(g); }});
+          _updateOverlayWidth();
+        }}, 420);
+      }}, 1800);
+    }}
+
     window._triggerCardExit = function(fullSym, reason, pnl, exitPrice) {{
       var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD']
              || _equityCardEls[fullSym];
@@ -6521,46 +6542,61 @@ window.addEventListener('resize', function() {{
       el.classList.remove('pos-card-active');
       var col = (pnl !== null && pnl !== undefined) ? (pnl >= 0 ? '#00ff9d' : '#ff3366') : '#fff';
 
-      // Freeze card height so surrounding tiles don't move during the sequence
-      var naturalH = el.getBoundingClientRect().height;
-      el.style.height = naturalH + 'px';
-      el.style.minHeight = '';
-      el.style.boxSizing = 'border-box';
-      el.style.flexShrink = '0';
+      // ── Snapshot position, swap with ghost placeholder ─────────────────
+      var r = el.getBoundingClientRect();
+      var ghost = document.createElement('div');
+      ghost.className = 'pos-card-ghost-space';
+      ghost.style.height = r.height + 'px';
+      if (el.parentNode) el.parentNode.insertBefore(ghost, el);
 
-      // ── Phase 1: Target-lock overlay (400ms) ──────────────────────────
-      el.style.position = 'relative';
+      // Detach card and re-pin at exact viewport position — unrestricted by pos-left overflow
+      if (el.parentNode) el.parentNode.removeChild(el);
+      el.style.cssText += [
+        ';position:fixed',
+        'top:' + r.top + 'px',
+        'left:' + r.left + 'px',
+        'width:' + r.width + 'px',
+        'height:' + r.height + 'px',
+        'z-index:9990',
+        'margin:0',
+        'box-sizing:border-box',
+        'overflow:visible',
+        // Restore visual appearance lost when leaving #pos-left scope
+        'background:rgba(0,0,10,.92)',
+        'border:1px solid rgba(255,255,255,.07)'
+      ].join(';');
+      document.body.appendChild(el);
+
+      // ── Phase 1: Target-lock overlay (0–420ms) ────────────────────────
       var lock = document.createElement('div');
       lock.className = 'card-target-lock';
       lock.style.setProperty('--tc', col);
       el.appendChild(lock);
 
-      // ── Phase 2: Hit-flash blinks (400–800ms) ─────────────────────────
+      // ── Phase 2: Binary damage blinks (420–820ms) ─────────────────────
       setTimeout(function() {{
         if (lock.parentNode) lock.parentNode.removeChild(lock);
         el.classList.add('pos-card-hit');
-      }}, 400);
+      }}, 420);
 
-      // ── Phase 3: Destroy + ghost + particles (800ms+) ──────────────────
+      // ── Phase 3: Destroy + P&L ghost + pixel particles (820ms+) ───────
       setTimeout(function() {{
-        var r = el.getBoundingClientRect();
-        var cx = r.left + r.width / 2;
-        var cy = r.top  + r.height / 2;
+        var r2 = el.getBoundingClientRect();
+        var cx = r2.left + r2.width / 2;
+        var cy = r2.top  + r2.height / 2;
         _spawnParticles(cx, cy, col);
-        _spawnPnlGhost(r, pnl, fullSym, exitPrice);
+        _spawnPnlGhost(r2, pnl, fullSym, exitPrice);
         el.classList.remove('pos-card-hit');
-        el.classList.add('pos-card-exit-stop');   // triggers card-arcade-destroy (.7s)
+        el.classList.add('pos-card-exit-stop');  // card-arcade-destroy (.65s)
 
-        // After visual destroy completes, collapse DOM space so other tiles close gap
+        // Remove fixed overlay after animation
         setTimeout(function() {{
-          el.style.height = naturalH + 'px';      // explicit for transition start point
-          el.classList.add('pos-card-collapsing'); // height→0 transition (.28s)
-          setTimeout(function() {{
-            if (el.parentNode) el.parentNode.removeChild(el);
-            _updateOverlayWidth();
-          }}, 300);
-        }}, 720);
-      }}, 800);
+          if (el.parentNode) el.parentNode.removeChild(el);
+        }}, 700);
+      }}, 820);
+
+      // Queue ghost placeholder for batch collapse (1.8s debounce from last exit)
+      _queueGhostCollapse(ghost);
     }};
 
     var _CARD_W = 148; // crypto column width
