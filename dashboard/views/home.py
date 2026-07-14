@@ -4067,7 +4067,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     if (!curNav && history.length === 0) return;
 
     var nowMs    = Date.now();
-    var halfWin  = 5 * 60 * 1000; // ±5-min window; current time = W/2 (orb center)
+    var halfWin  = 45 * 1000; // ±45s window — tight enough that 1s-old points are visibly spread
     var winStart = nowMs - halfWin;
     var winEnd   = nowMs + halfWin;
 
@@ -5781,7 +5781,7 @@ window.addEventListener('resize', function() {{
     if (!window._navHistory) {{
       try {{
         var _stored = localStorage.getItem('_navHistory');
-        var _cutoffMs = Date.now() - 5*60*1000;
+        var _cutoffMs = Date.now() - 90*1000;
         window._navHistory = _stored
           ? JSON.parse(_stored).filter(function(p) {{ return new Date(p.x).getTime() > _cutoffMs; }})
           : [];
@@ -6055,7 +6055,7 @@ window.addEventListener('resize', function() {{
       var last = window._navHistory[window._navHistory.length - 1];
       if (last && (new Date(isoNow) - new Date(last.x)) < 4000) return; // dedup <4s
       window._navHistory.push({{ x: isoNow, y: nav }});
-      var cutoff = new Date(Date.now() - 5*60*1000).toISOString();
+      var cutoff = new Date(Date.now() - 90*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
       if (window._drawNavCanvas) window._drawNavCanvas();
     }}
@@ -7035,9 +7035,9 @@ window.addEventListener('resize', function() {{
         var _nowMs2 = Date.now();
         var _lastH = window._navHistory[window._navHistory.length - 1];
         var _lastPushMs = _lastH ? new Date(_lastH.x).getTime() : 0;
-        if (_nowMs2 - _lastPushMs >= 3000) {{
+        if (_nowMs2 - _lastPushMs >= 1000) {{
           window._navHistory.push({{ x: new Date(_nowMs2).toISOString(), y: nav }});
-          var _cutoff = new Date(_nowMs2 - 5*60*1000).toISOString();
+          var _cutoff = new Date(_nowMs2 - 90*1000).toISOString();
           while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
           try {{ localStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
         }}
