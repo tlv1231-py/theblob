@@ -154,13 +154,18 @@ section[data-testid="stSidebar"],
     justify-content: center;
     width: 52px;
     height: 44px;
+    padding: 0;
+    margin: 0;
     text-decoration: none;
     color: var(--text-dim);
     font-size: 1.1rem;
+    line-height: 1;
     font-family: Consolas, monospace;
+    text-align: center;
     transition: color 0.12s, background 0.12s;
     position: relative;
     flex-shrink: 0;
+    box-sizing: border-box;
 }
 #icon-rail a.ir-item:hover {
     color: var(--accent2);

@@ -824,6 +824,7 @@ def _build_daw_html(data: dict) -> str:
     })
 
     pos_cards = ""
+    _pc_idx = 0
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     for p in data.get("positions_data", []):
         tcol   = _TICKER_PAL[hash(p["sym"]) % len(_TICKER_PAL)]
@@ -875,23 +876,27 @@ def _build_daw_html(data: dict) -> str:
         except Exception:
             edate_fmt = edate_raw[:7]
 
+        scan_delay = f'{(_pc_idx % 5) * 0.8:.1f}s'
+        _pc_idx += 1
         pos_cards += (
             f'<div class="pos-card pc-eq pos-card-active" data-sym="{p["sym"]}"'
-            f' style="border-left:3px solid {tcol}">'
+            f' data-entry="{p.get("entry_price", 0)}" data-qty="{p.get("qty", 0)}"'
+            f' style="border-left:3px solid {tcol};--pc-scan-delay:{scan_delay}">'
             f'<span class="pos-corner tl" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner tr" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner bl" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner br" style="border-color:{tcol}"></span>'
             # Row 1: sym + badge + value
             f'<div class="pc-row1">'
+            f'  <span class="pc-live-dot"></span>'
             f'  <span class="pc-sym" style="color:{tcol}">{p["sym"]}</span>'
             f'  {badge_html}'
-            f'  <span class="pc-val">${p["value"]:,.0f}</span>'
+            f'  <span class="pc-val" id="pcval-{p["sym"]}">${p["value"]:,.0f}</span>'
             f'</div>'
             # Row 2: P&L
-            f'<div class="pc-pnl" style="color:{pnl_col}">'
+            f'<div class="pc-pnl" id="pcpnl-{p["sym"]}" style="color:{pnl_col}">'
             f'  {pnl_arrow} {pnl_sign}${abs(epnl):,.0f}'
-            f'  <span class="pc-pnl-pct">({epct:+.1f}%)</span>'
+            f'  <span class="pc-pnl-pct" id="pcpct-{p["sym"]}">({epct:+.1f}%)</span>'
             f'</div>'
             # Proximity bar
             f'{prox_bar}'
@@ -1228,7 +1233,7 @@ body::after {{
 .strat-slot:last-child {{ border-right:none; }}
 .strat-slot::before {{
   content:''; position:absolute; left:0; top:0; bottom:0; width:2px;
-  background:var(--sc, rgba(0,180,255,.2));
+  background:transparent;
   transition:background .4s, box-shadow .4s;
 }}
 .strat-slot.ss-active::before  {{ background:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.9); }}
@@ -1837,172 +1842,154 @@ body::after {{
 }}
 /* pos-cards */
 .pos-section-label {{ display:none; }}
-.pos-card {{ padding:6px 12px 7px; cursor:default; position:relative; overflow:hidden;
-             background:rgba(6,0,8,.38); backdrop-filter:blur(2px); border-bottom:1px solid #0d0020; }}
+.pos-card {{ padding:5px 10px; cursor:default; position:relative; overflow:hidden;
+             background:rgba(0,0,8,.88); border-bottom:1px solid rgba(255,255,255,.04); }}
 
-/* ── Equity position cards (right panel) ── */
+/* ── Equity position cards — terminal row style ── */
 .pc-eq {{
-  padding:10px 12px 10px 12px !important;
-  background:rgba(0,0,10,.9) !important;
-  backdrop-filter:blur(6px) !important;
-  border:1px solid rgba(255,255,255,.06) !important;
-  border-left-width:3px !important;
-  border-bottom:2px solid rgba(255,255,255,.06) !important;
-  transition:background .4s ease;
+  padding:5px 10px 5px 12px !important;
+  background:rgba(0,0,8,.88) !important;
+  border:none !important;
+  border-left:3px solid !important;
+  border-bottom:1px solid rgba(255,255,255,.04) !important;
+  transition:background .2s ease;
   position:relative; overflow:hidden;
 }}
-/* scanline overlay — matches crypto tiles */
-.pc-eq::before {{
-  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
-  background:repeating-linear-gradient(0deg,rgba(0,0,0,.15) 0px,rgba(0,0,0,.15) 1px,transparent 1px,transparent 3px);
-}}
-.pc-eq > * {{ position:relative; z-index:1; }}
-.pc-eq:hover {{ background:rgba(6,0,24,.97) !important; }}
+.pc-eq:hover {{ background:rgba(6,0,20,.95) !important; }}
 .pc-eq .pos-corner {{ display:none; }}
 .pc-row1 {{
-  display:flex; align-items:baseline; gap:6px; margin-bottom:6px;
+  display:flex; align-items:center; gap:8px;
 }}
-/* Symbol — Press Start 2P to match crypto tiles */
 .pc-sym {{
-  font-family:'Press Start 2P',monospace; font-size:9px; font-weight:400;
-  letter-spacing:.04em; flex-shrink:0;
-  text-shadow:0 0 10px currentColor, 1px 1px 0 rgba(0,0,0,.8);
+  font-family:Consolas,'Courier New',monospace; font-size:11px; font-weight:700;
+  letter-spacing:.06em; flex-shrink:0;
 }}
 .pc-badge {{
-  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
-  letter-spacing:.06em; padding:2px 5px 2px;
-  border-radius:0; flex-shrink:0;
-  text-transform:uppercase;
+  font-family:Consolas,monospace; font-size:8px; font-weight:400;
+  letter-spacing:.08em; padding:1px 4px;
+  border-radius:0; flex-shrink:0; text-transform:uppercase;
 }}
-.pc-badge-hold {{
-  background:transparent; color:rgba(0,180,110,.7);
-  border:1px solid rgba(0,180,110,.3);
-}}
-.pc-badge-sell {{
-  background:transparent; color:rgba(220,160,0,.7);
-  border:1px solid rgba(220,160,0,.3);
-}}
+.pc-badge-hold {{ color:rgba(0,200,140,.65); border:1px solid rgba(0,200,140,.2); }}
+.pc-badge-sell {{ color:rgba(220,160,0,.65);  border:1px solid rgba(220,160,0,.2); }}
 .pc-val {{
-  margin-left:auto; font-family:'Press Start 2P',monospace; font-size:8px;
-  font-weight:400; color:#00ff9d; letter-spacing:.02em;
-  font-variant-numeric:tabular-nums;
-  text-shadow:1px 1px 0 #003320, 0 0 10px rgba(0,255,157,.5);
+  margin-left:auto; font-family:Consolas,monospace; font-size:11px;
+  font-weight:700; color:#00ff9d; font-variant-numeric:tabular-nums;
 }}
 .pc-pnl {{
-  font-family:'Press Start 2P',monospace; font-size:7px; font-weight:400;
-  letter-spacing:.02em; margin-bottom:7px; font-variant-numeric:tabular-nums;
+  font-family:Consolas,monospace; font-size:10px; font-weight:400;
+  font-variant-numeric:tabular-nums;
 }}
 .pc-pnl-pct {{
-  font-family:'Press Start 2P',monospace; font-size:6px; opacity:.7;
-  margin-left:4px; font-weight:400;
+  font-family:Consolas,monospace; font-size:9px; opacity:.55; margin-left:3px;
 }}
-/* Proximity bar — range navigator, not danger meter */
-.pc-prox-wrap {{
-  position:relative; margin-bottom:6px;
-}}
-.pc-prox-labels {{
-  display:flex; justify-content:space-between; align-items:center;
-  position:relative; height:11px; margin-bottom:3px;
-}}
+.pc-prox-wrap  {{ position:relative; margin-top:4px; }}
+.pc-prox-labels {{ display:flex; justify-content:space-between; height:10px; margin-bottom:2px; }}
 .pc-prox-stop,.pc-prox-tgt {{
-  font-family:'Press Start 2P',monospace; font-size:5px; color:rgba(140,110,170,.6);
-  letter-spacing:.02em;
+  font-family:Consolas,monospace; font-size:8px; color:rgba(140,110,170,.5);
 }}
 .pc-prox-cur {{
   position:absolute; transform:translateX(-50%);
-  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
-  color:rgba(255,255,255,.7); white-space:nowrap;
+  font-family:Consolas,monospace; font-size:8px; color:rgba(255,255,255,.6); white-space:nowrap;
 }}
 .pc-prox-track {{
-  position:relative; height:2px; background:rgba(255,255,255,.05);
-  border-radius:1px; overflow:visible;
+  position:relative; height:2px; background:rgba(255,255,255,.06); overflow:visible;
 }}
-.pc-prox-fill {{
-  height:100%; border-radius:1px; transition:width 1.2s ease; opacity:.7;
-}}
+.pc-prox-fill  {{ height:100%; transition:width 1.2s ease; opacity:.6; }}
 .pc-prox-dot {{
   position:absolute; top:50%; transform:translate(-50%,-50%);
-  width:6px; height:6px; border-radius:50%;
-  border:1px solid rgba(0,0,0,.5);
-  transition:left 1.2s ease;
+  width:5px; height:5px; border-radius:50%;
+  border:1px solid rgba(0,0,0,.4); transition:left 1.2s ease;
 }}
-/* Meta row */
-.pc-meta {{
-  display:flex; justify-content:space-between; align-items:center;
-  margin-top:5px; margin-bottom:4px;
-}}
-.pc-days {{
-  font-family:'Press Start 2P',monospace; font-size:6px; color:rgba(0,200,220,.6);
-  letter-spacing:.02em;
-}}
-.pc-entry {{
-  font-family:'Press Start 2P',monospace; font-size:5px; color:rgba(140,110,170,.5);
-  letter-spacing:.02em;
-}}
-/* Status line */
+.pc-meta  {{ display:flex; justify-content:space-between; margin-top:4px; }}
+.pc-days  {{ font-family:Consolas,monospace; font-size:8px; color:rgba(0,200,220,.5); }}
+.pc-entry {{ font-family:Consolas,monospace; font-size:8px; color:rgba(140,110,170,.4); }}
 .pc-status {{
-  font-family:'Press Start 2P',monospace; font-size:5px; letter-spacing:.04em;
-  padding-top:5px; border-top:1px solid rgba(255,255,255,.05);
-  line-height:1.6; text-transform:uppercase;
+  font-family:Consolas,monospace; font-size:8px; letter-spacing:.06em;
+  padding-top:4px; border-top:1px solid rgba(255,255,255,.04);
+  text-transform:uppercase;
 }}
-.pc-status-hold {{ color:rgba(0,170,100,.55); }}
-.pc-status-sell {{ color:rgba(210,160,0,.55); }}
+.pc-status-hold {{ color:rgba(0,170,100,.5); }}
+.pc-status-sell {{ color:rgba(210,160,0,.5); }}
 
-/* ── Crypto cards v2 — 8-bit arcade tiles ── */
+/* ── Equity tile game-feel: sweeping scanline + flash animations ── */
+@keyframes pc-scan {{
+  0%   {{ left:-100%; }}
+  100% {{ left:200%; }}
+}}
+@keyframes pc-tick-up {{
+  0%   {{ color:#00ff9d; text-shadow:0 0 12px #00ff9d, 0 0 4px #00ff9d; }}
+  80%  {{ color:#00ff9d; }}
+  100% {{ color:inherit; text-shadow:none; }}
+}}
+@keyframes pc-tick-down {{
+  0%   {{ color:#ff3366; text-shadow:0 0 12px #ff3366, 0 0 4px #ff3366; }}
+  80%  {{ color:#ff3366; }}
+  100% {{ color:inherit; text-shadow:none; }}
+}}
+.pc-eq {{ overflow:hidden; }}
+.pc-eq::after {{
+  content:'';
+  position:absolute; top:0; left:-100%; width:40%; height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,0,204,.06),transparent);
+  pointer-events:none;
+  animation:pc-scan 4s linear infinite;
+  animation-delay:var(--pc-scan-delay,0s);
+}}
+.pc-val.pc-tick-up   {{ animation:pc-tick-up   .6s ease-out forwards; }}
+.pc-val.pc-tick-down {{ animation:pc-tick-down  .6s ease-out forwards; }}
+.pc-live-dot {{
+  display:inline-block; width:4px; height:4px; border-radius:50%;
+  background:#ff00cc; margin-right:5px; flex-shrink:0;
+  animation:pdot 1.4s ease-in-out infinite;
+  box-shadow:0 0 6px rgba(255,0,204,.8);
+}}
+
+/* ── Crypto tiles — terminal row style ── */
 #pos-left .pos-card {{
-  padding:9px 10px 8px 10px;
-  background:rgba(0,0,10,.92) !important; backdrop-filter:blur(4px) !important;
-  border:1px solid rgba(255,255,255,.07);
-  border-left:2px solid; /* ticker color inline */
-  border-bottom:2px solid rgba(255,255,255,.07);
-  transition:background .3s ease;
+  padding:5px 10px 5px 10px;
+  background:rgba(0,0,8,.88) !important;
+  border:none !important;
+  border-left:3px solid !important; /* ticker color inline */
+  border-bottom:1px solid rgba(255,255,255,.04) !important;
+  transition:background .2s ease;
   position:relative; overflow:hidden;
 }}
-/* scanline overlay */
-#pos-left .pos-card::before {{
-  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
-  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0px,rgba(0,0,0,.18) 1px,transparent 1px,transparent 3px);
-}}
+#pos-left .pos-card::before {{ display:none; }} /* no scanlines */
 #pos-left .pos-card > * {{ position:relative; z-index:1; }}
-#pos-left .pos-card:hover {{ background:rgba(6,0,24,.97) !important; }}
+#pos-left .pos-card:hover {{ background:rgba(6,0,20,.95) !important; }}
 #pos-left .pos-corner {{ display:none; }}
-#pos-left .pos-acq-flash {{ font:400 6px 'Press Start 2P',monospace; letter-spacing:.06em; }}
-#pos-left .pos-top {{
-  display:flex; justify-content:space-between; align-items:baseline; gap:4px; line-height:1.6;
+#pos-left .pos-acq-flash {{
+  font:600 8px Consolas,monospace; letter-spacing:.14em; text-transform:uppercase;
 }}
-/* Symbol — arcade block font */
+#pos-left .pos-top {{
+  display:flex; justify-content:space-between; align-items:center; gap:6px;
+}}
 #pos-left .pos-sym {{
-  font-family:'Press Start 2P',monospace; font-size:9px; font-weight:400; letter-spacing:.04em;
-  text-shadow:0 0 10px currentColor, 1px 1px 0 rgba(0,0,0,.8);
+  font-family:Consolas,'Courier New',monospace; font-size:11px; font-weight:700;
+  letter-spacing:.06em;
 }}
 #pos-left .pos-qty {{ display:none; }}
 #pos-left .pos-val {{
-  font-size:7px; font-weight:600; font-variant-numeric:tabular-nums;
-  color:rgba(255,255,255,.32); margin-left:auto;
+  font-family:Consolas,monospace; font-size:9px; font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,.28); margin-left:auto;
 }}
-/* Holdings value */
 #pos-left .pos-hval {{
-  font-family:'Press Start 2P',monospace; font-size:8px; font-weight:400;
-  font-variant-numeric:tabular-nums; color:#00ff9d; margin-left:auto; letter-spacing:.02em;
-  text-shadow:1px 1px 0 #003320, 0 0 10px rgba(0,255,157,.6);
+  font-family:Consolas,monospace; font-size:11px; font-weight:700;
+  font-variant-numeric:tabular-nums; color:#00ff9d; margin-left:auto;
 }}
-/* Entry price + live P&L row */
 #pos-left .pos-entry-sub {{
-  display:flex; justify-content:space-between; align-items:baseline;
-  margin-top:4px; margin-bottom:4px;
+  display:flex; justify-content:space-between; align-items:center; margin-top:2px;
 }}
 #pos-left .pos-epx {{
-  font-family:'Press Start 2P',monospace; font-size:6px; font-weight:400;
-  letter-spacing:.02em; opacity:.7;
+  font-family:Consolas,monospace; font-size:9px; opacity:.5;
 }}
 #pos-left .pos-pnl-live {{
-  font-family:'Press Start 2P',monospace; font-size:6px; font-weight:400;
-  letter-spacing:.02em; transition:color .3s;
+  font-family:Consolas,monospace; font-size:10px; font-weight:600;
+  font-variant-numeric:tabular-nums; transition:color .3s;
 }}
 #pos-left .pos-hold {{ display:none; }}
 #pos-left .pos-hold-sub {{ display:none; }}
 #pos-left .pos-prox-wrap {{ margin-top:4px; padding:0; }}
-/* Hide age bar — non-functional in paper mode */
 #pos-left .pos-age-bar {{ display:none !important; }}
 
 /* Scan spark — tiny white flare on proximity dot */
@@ -2121,11 +2108,11 @@ body::after {{
 .pos-prox-wrap {{ margin-top:5px; padding:0; }}
 .pos-prox-labels-row {{
   display:flex; justify-content:space-between; align-items:center;
-  margin-bottom:3px; font:400 5px 'Press Start 2P',monospace; letter-spacing:.02em;
+  margin-bottom:3px; font:400 8px Consolas,monospace; letter-spacing:.02em;
 }}
-.prox-lbl-stop  {{ color:#ff3366; opacity:.8; }}
-.prox-lbl-arrow {{ color:rgba(255,255,255,.3); font-size:6px; }}
-.prox-lbl-tgt   {{ color:#00ff9d; opacity:.8; }}
+.prox-lbl-stop  {{ color:#ff3366; opacity:.7; }}
+.prox-lbl-arrow {{ color:rgba(255,255,255,.25); font-size:8px; }}
+.prox-lbl-tgt   {{ color:#00ff9d; opacity:.7; }}
 /* pixel-block track — no rounded corners */
 .pos-prox-track {{
   position:relative; height:6px; border-radius:0; overflow:visible;
@@ -2279,19 +2266,15 @@ body::after {{
 }}
 .pos-card-hit {{ animation:card-hit-blink .08s steps(2,end) 5 forwards; }}
 
-/* ── Phase 3: 8-bit destroy — brightness blinks then INSTANT hard-cut vanish ── */
-/* No scaleY, no wipe, no motion — just flash then gone */
+/* ── Phase 3: flash B&W twice, fade to black ── */
 @keyframes card-8bit-destroy {{
-  0%   {{ filter:brightness(1);              opacity:1; }}
-  14%  {{ filter:brightness(20) saturate(0); opacity:1; }}
-  28%  {{ filter:brightness(1.2);            opacity:1; }}
-  42%  {{ filter:brightness(24) saturate(0); opacity:1; }}
-  56%  {{ filter:brightness(1);              opacity:1; }}
-  72%  {{ filter:brightness(36) saturate(0); opacity:1; }}
-  88%  {{ filter:brightness(60);             opacity:1; }}
-  /* hard cut — single step from visible to gone */
-  89%  {{ filter:brightness(0);              opacity:0; }}
-  100% {{ opacity:0; }}
+  0%   {{ filter:brightness(1)   saturate(1); opacity:1; animation-timing-function:steps(1,end); }}
+  18%  {{ filter:brightness(0)   saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
+  28%  {{ filter:brightness(100) saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
+  40%  {{ filter:brightness(0)   saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
+  52%  {{ filter:brightness(100) saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
+  62%  {{ filter:brightness(0)   saturate(0); opacity:1; }}
+  100% {{ filter:brightness(0)   saturate(0); opacity:0; }}
 }}
 /* Placeholder that holds the dead tile's space in the flex column */
 .pos-card-ghost-space {{
@@ -2315,16 +2298,14 @@ body::after {{
 .pos-card-exit-target,
 .pos-card-exit-stop,
 .pos-card-exit-timeout,
-.pos-card-exit-rev     {{ animation:card-8bit-destroy .58s steps(8,end) forwards; }}
+.pos-card-exit-rev     {{ animation:card-8bit-destroy .72s linear forwards; }}
 /* ── PnL ghost — video-game exit ── */
 /* ── P&L ghost — 80s arcade score-popup, floats left of tile column ── */
 @keyframes pnl-ghost-pop {{
-  0%   {{ transform:scale(.4) translateY(0);     opacity:0; filter:brightness(8) saturate(0); }}
-  12%  {{ transform:scale(1.25) translateY(-8px); opacity:1; filter:brightness(3); }}
-  28%  {{ transform:scale(.9) translateY(-20px); opacity:1; filter:brightness(1.4); }}
-  50%  {{ transform:scale(1.0) translateY(-42px); opacity:1; filter:brightness(1); }}
-  75%  {{ transform:scale(1.0) translateY(-75px); opacity:.9; }}
-  100% {{ transform:scale(.95) translateY(-115px); opacity:0; }}
+  0%   {{ transform:translateY(0);   opacity:0; }}
+  10%  {{ transform:translateY(-4px); opacity:1; }}
+  70%  {{ transform:translateY(-18px); opacity:1; }}
+  100% {{ transform:translateY(-32px); opacity:0; }}
 }}
 @keyframes pnl-particle {{
   0%   {{ transform:translate(0,0) scale(1); opacity:1; }}
@@ -2337,33 +2318,18 @@ body::after {{
 }}
 .pnl-ghost {{
   position:fixed; pointer-events:none; z-index:9999;
-  display:flex; flex-direction:column; align-items:flex-end; gap:3px;
-  animation:pnl-ghost-pop 1.3s cubic-bezier(.22,1,.36,1) forwards;
+  display:flex; flex-direction:column; align-items:flex-end; gap:2px;
+  white-space:nowrap;
+  animation:pnl-ghost-pop 1.1s ease-out forwards;
 }}
-/* Symbol label */
-.pnl-ghost .pg-sym {{
-  font-family:'Press Start 2P',monospace; font-size:6px; letter-spacing:.1em;
-  opacity:.6; text-transform:uppercase; text-align:right;
-}}
-/* Main P&L value — big arcade score number */
 .pnl-ghost .pg-val {{
-  font-family:'Press Start 2P',monospace; font-size:18px; line-height:1; letter-spacing:.04em;
-  text-shadow:
-    2px 2px 0 rgba(0,0,0,.9),
-    3px 3px 0 rgba(0,0,0,.6),
-    0 0 20px currentColor,
-    0 0 40px currentColor;
+  font-family:'Bangers','Silkscreen',Consolas,monospace;
+  font-size:20px; letter-spacing:.08em; font-variant-numeric:tabular-nums;
+  text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
 }}
-/* PROFIT / LOSS label */
-.pnl-ghost .pg-label {{
-  font-family:'Press Start 2P',monospace; font-size:6px; letter-spacing:.18em;
-  opacity:.7; text-transform:uppercase; text-align:right;
-}}
-/* Exit price — readable, 8-bit */
 .pnl-ghost .pg-price {{
-  font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:.04em;
-  opacity:.8; margin-top:4px; text-align:right;
-  text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 8px currentColor;
+  font-family:'Silkscreen',Consolas,monospace;
+  font-size:9px; letter-spacing:.04em; opacity:.7; text-align:right;
 }}
 .pnl-particle {{
   position:fixed; pointer-events:none; z-index:9998; border-radius:0;
@@ -2631,13 +2597,12 @@ body::after {{
 
   <!-- Left overlay: System Feed -->
   <div id="feed-overlay">
-    <div class="panel-hdr"><div class="term-dot"></div></div>
     <div id="term-clock" class="te" style="flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:5px;margin-bottom:2px"></div>
     <div id="term-body">
       {term_rows}
     </div>
     <div id="feed-bottom-bar">
-      <span id="feed-last-ago" style="font:700 7px Consolas,monospace;letter-spacing:.14em;color:#3a1a5a;flex:1">—</span>
+      <span id="feed-last-ago" style="font:700 7px Consolas,monospace;letter-spacing:.14em;color:#3a1a5a;flex:1;display:none">—</span>
       <button id="mute-btn" onclick="_toggleMute()" title="Toggle sound">
         <span id="mute-icon">♪</span>
         <span id="mute-label">ON</span>
@@ -4318,11 +4283,15 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // Collect points in the visible window
     var visible = [];
     // Seed: last known point before the window (so line starts at left edge, not mid-air)
+    // If that seed is stale (>1 day old), use liveNav so Y-scale stays sane
+    var _seedIdx = -1;
     for (var si = _navPts.length - 1; si >= 0; si--) {{
-      if (_navPts[si].ms <= leftEdgeMs) {{
-        visible.push({{ ms: leftEdgeMs, v: _navPts[si].v }});
-        break;
-      }}
+      if (_navPts[si].ms <= leftEdgeMs) {{ _seedIdx = si; break; }}
+    }}
+    if (_seedIdx >= 0) {{
+      var _seedAge = leftEdgeMs - _navPts[_seedIdx].ms;
+      var _seedV   = _seedAge > 86400000 ? liveNav : _navPts[_seedIdx].v;
+      visible.push({{ ms: leftEdgeMs, v: _seedV }});
     }}
     for (var i = 0; i < _navPts.length; i++) {{
       if (_navPts[i].ms > leftEdgeMs && _navPts[i].ms < nowMs) {{
@@ -4359,6 +4328,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     // Y-axis labels
     (function() {{
+      var base = (vLo + vHi) / 2;
+      var halfRange = (vHi - vLo) / 2;
       var fmt = function(v) {{
         if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
         return '$' + v.toFixed(0);
@@ -4378,14 +4349,6 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     var m = mapped;
     var n = m.length;
-    var gx0 = m[0].x, gx1 = W/2;
-    function _tg(r,g,b,a0,a1) {{
-      var gr=ctx.createLinearGradient(gx0,0,gx1,0);
-      gr.addColorStop(0,'rgba('+r+','+g+','+b+','+a0+')');
-      gr.addColorStop(0.65,'rgba('+r+','+g+','+b+','+(a0*0.3+a1*0.7)+')');
-      gr.addColorStop(1,'rgba('+r+','+g+','+b+','+a1+')');
-      return gr;
-    }}
     function _stroke(pts) {{
       ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
       for(var i=0;i<pts.length-1;i++) {{
@@ -4395,24 +4358,38 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       }}
     }}
 
-    // Under-fill
+    // Under-fill — solid throughout
     _stroke(m); ctx.lineTo(m[n-1].x,H); ctx.lineTo(m[0].x,H); ctx.closePath();
-    var fg=ctx.createLinearGradient(gx0,0,gx1,0);
-    fg.addColorStop(0,'rgba(255,0,204,0)'); fg.addColorStop(1,'rgba(255,0,204,0.28)');
+    var fg=ctx.createLinearGradient(0,orbY,0,H);
+    fg.addColorStop(0,'rgba(255,0,204,0.18)'); fg.addColorStop(1,'rgba(255,0,204,0)');
     ctx.fillStyle=fg; ctx.fill();
 
-    _stroke(m); ctx.strokeStyle=_tg(255,0,204,0,0.35);
-    ctx.lineWidth=48; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    _stroke(m); ctx.strokeStyle=_tg(255,0,204,0,0.6);
-    ctx.lineWidth=18; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    _stroke(m); ctx.strokeStyle=_tg(255,80,255,0,0.9);
-    ctx.lineWidth=6; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    _stroke(m); ctx.strokeStyle=_tg(255,0,204,0.05,1);
-    ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    var hg=ctx.createLinearGradient(gx0+(gx1-gx0)*0.8,0,gx1,0);
-    hg.addColorStop(0,'rgba(255,255,255,0)'); hg.addColorStop(1,'rgba(255,255,255,0.95)');
-    _stroke(m); ctx.strokeStyle=hg; ctx.lineWidth=0.8;
-    ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    // Nyan-cat comet gradient: dark void at tail → neon pink bloom at tip
+    var x0 = m[0].x, x1 = m[n-1].x;
+    function _cg(alpha) {{
+      var g = ctx.createLinearGradient(x0,0,x1,0);
+      g.addColorStop(0,   'rgba(10,0,30,0)');
+      g.addColorStop(0.25,'rgba(80,0,180,'  +(alpha*0.15)+')');
+      g.addColorStop(0.55,'rgba(180,0,255,' +(alpha*0.45)+')');
+      g.addColorStop(0.80,'rgba(255,0,204,' +(alpha*0.85)+')');
+      g.addColorStop(1,   'rgba(255,180,255,'+alpha+')');
+      return g;
+    }}
+    // Outer bloom
+    _stroke(m); ctx.strokeStyle=_cg(0.22);
+    ctx.lineWidth=36; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    // Mid glow
+    _stroke(m); ctx.strokeStyle=_cg(0.55);
+    ctx.lineWidth=12; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    // Inner glow
+    _stroke(m); ctx.strokeStyle=_cg(0.85);
+    ctx.lineWidth=4; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    // Solid core
+    _stroke(m); ctx.strokeStyle=_cg(1);
+    ctx.lineWidth=1.5; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    // Hot white highlight spine
+    _stroke(m); ctx.strokeStyle='rgba(255,230,255,0.6)';
+    ctx.lineWidth=0.6; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
 
     // Breathing dot at trail tip
     var pulse=0.5+0.5*Math.sin(Date.now()/400);
@@ -4708,6 +4685,76 @@ function _fetchIntradayMarks() {{
 }}
 setTimeout(_fetchIntradayMarks, 3000);
 setInterval(_fetchIntradayMarks, 15000);
+
+// ── Live equity tile price updater ────────────────────────────────────────────
+(function() {{
+  var _eqPrev = {{}};  // sym -> last displayed value
+
+  function _flashVal(el, up) {{
+    el.classList.remove('pc-tick-up','pc-tick-down');
+    void el.offsetWidth; // reflow
+    el.classList.add(up ? 'pc-tick-up' : 'pc-tick-down');
+  }}
+
+  function _pollEqPrices() {{
+    var cards = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]');
+    if (!cards.length) return;
+    var syms = [];
+    cards.forEach(function(c) {{ syms.push(c.getAttribute('data-sym')); }});
+    if (!syms.length) return;
+
+    var symFilter = syms.map(function(s) {{ return 'symbol=eq.' + s; }}).join(',');
+    var url = SUPA_URL + '/rest/v1/price_bars'
+      + '?select=symbol,close,date&symbol=in.(' + syms.join(',') + ')'
+      + '&order=date.desc&limit=' + (syms.length * 3);
+    fetch(url, {{headers:{{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY }}}})
+    .then(function(r) {{ return r.json(); }})
+    .then(function(rows) {{
+      if (!Array.isArray(rows)) return;
+      // Latest price per sym
+      var latest = {{}};
+      rows.forEach(function(row) {{
+        if (!latest[row.symbol]) latest[row.symbol] = row.close;
+      }});
+
+      cards.forEach(function(card) {{
+        var sym   = card.getAttribute('data-sym');
+        var price = latest[sym];
+        if (!price) return;
+        var qty   = parseFloat(card.getAttribute('data-qty') || '0');
+        var entry = parseFloat(card.getAttribute('data-entry') || '0');
+        var val   = qty * price;
+        var pnl   = entry > 0 ? (price - entry) * qty : 0;
+        var pct   = entry > 0 ? (price - entry) / entry * 100 : 0;
+        var valEl = document.getElementById('pcval-' + sym);
+        var pnlEl = document.getElementById('pcpnl-' + sym);
+        var pctEl = document.getElementById('pcpct-' + sym);
+
+        if (valEl && val > 0) {{
+          var prev = _eqPrev[sym];
+          if (prev !== undefined && Math.abs(val - prev) > 0.50) {{
+            _flashVal(valEl, val > prev);
+          }}
+          _eqPrev[sym] = val;
+          valEl.textContent = '$' + val.toLocaleString('en-US',{{maximumFractionDigits:0}});
+        }}
+        if (pnlEl) {{
+          var sign = pnl >= 0 ? '+' : '-';
+          var col  = pnl >= 0 ? '#00ff9d' : '#ff3366';
+          pnlEl.style.color = col;
+          pnlEl.textContent = sign + '$' + Math.abs(pnl).toLocaleString('en-US',{{maximumFractionDigits:0}});
+          if (pctEl) {{
+            pctEl.textContent = '(' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%)';
+            pnlEl.appendChild(pctEl);
+          }}
+        }}
+      }});
+    }}).catch(function() {{}});
+  }}
+
+  setTimeout(_pollEqPrices, 4000);
+  setInterval(_pollEqPrices, 20000);
+}})();
 
 // ── Live intraday NAV accumulator — fed by Binance price poll every 4s ────────
 var _intradayPts = [];  // {{t: isoStr, v: number}}
@@ -6468,10 +6515,6 @@ window.addEventListener('resize', function() {{
       g.style.top   = gy + 'px';
       g.style.width = ghostW + 'px';
 
-      var symEl = document.createElement('div');
-      symEl.className = 'pg-sym';
-      symEl.textContent = (sym || '').replace('/USD','');
-
       var valEl = document.createElement('div');
       valEl.className = 'pg-val';
       if (hasPnl) {{
@@ -6482,12 +6525,7 @@ window.addEventListener('resize', function() {{
       }} else {{
         valEl.textContent = 'CLOSED';
       }}
-
-      var lbl = document.createElement('div');
-      lbl.className = 'pg-label';
-      lbl.textContent = hasPnl ? (isWin ? 'PROFIT' : 'LOSS') : 'EXIT';
-
-      g.appendChild(symEl); g.appendChild(valEl); g.appendChild(lbl);
+      g.appendChild(valEl);
       if (exitPrice) {{
         var priceEl = document.createElement('div');
         priceEl.className = 'pg-price';
@@ -6613,12 +6651,12 @@ window.addEventListener('resize', function() {{
         _spawnParticles(cx, cy, col);
         _spawnPnlGhost(r2, pnl, fullSym, exitPrice);
         el.classList.remove('pos-card-hit');
-        el.classList.add('pos-card-exit-stop');  // card-8bit-destroy (.58s)
+        el.classList.add('pos-card-exit-stop');  // card-8bit-destroy (.72s)
 
-        // Remove fixed overlay once animation hard-cuts to invisible
+        // Remove fixed overlay once animation completes
         setTimeout(function() {{
           if (el.parentNode) el.parentNode.removeChild(el);
-        }}, 620);
+        }}, 750);
       }}, 820);
 
       // Queue ghost placeholder for batch collapse (1.8s debounce from last exit)
@@ -6660,7 +6698,7 @@ window.addEventListener('resize', function() {{
       el.setAttribute('data-entered', p.entered_at || '');
       el.setAttribute('data-qty', qty || 0);
       el.setAttribute('data-entry', entry || 0);
-      el.style.borderLeft = '2px solid ' + col;
+      el.style.borderLeft = '3px solid ' + col;
       el.style.position = 'relative';
       el.style.overflow = 'hidden';
       el.style.transformOrigin = 'center top';
@@ -7359,7 +7397,7 @@ window.addEventListener('resize', function() {{
       window._updateTradesSlot = function(count) {{
         if (count !== undefined) _hudTradeTotal = count;
         var el = document.getElementById('ss-pipeline-st');
-        if (el) {{ el.textContent = _hudTradeTotal > 0 ? _hudTradeTotal : '—'; el.style.color = '#ff9900'; el.style.textShadow = '0 0 10px rgba(255,153,0,.6)'; }}
+        if (el) {{ el.textContent = _hudTradeTotal; el.style.color = _hudTradeTotal > 0 ? '#ff9900' : 'rgba(148,0,255,.4)'; el.style.textShadow = _hudTradeTotal > 0 ? '0 0 10px rgba(255,153,0,.6)' : 'none'; }}
       }};
       window._tradeSlotCombo = function(delta) {{
         var chip = document.getElementById('ss-trades-chip');
@@ -7545,7 +7583,7 @@ window.addEventListener('resize', function() {{
             (cfg.countdown ? '<span class="cc-pnl" style="color:' + (cfg.col||'#fff') + '" id="cc-cd-' + Date.now() + '">' + Math.round(cfg.countdown) + 's</span>' : '');
         }} else {{
           card.innerHTML =
-            '<span class="cc-verb" style="color:' + pnlCol + '">⊗</span>' +
+            '<span class="cc-verb" style="color:rgba(180,140,220,.65)">◆</span>' +
             '<span class="cc-sym" style="color:' + symCol + '">' + symClean + '</span>' +
             (pnlStr ? '<span class="cc-pnl" style="color:' + pnlCol + '">' + pnlStr + '</span>' : '');
         }}
