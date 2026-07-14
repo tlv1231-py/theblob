@@ -4128,25 +4128,29 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       mapped.push({{ x: tx(trail[i].t), y: ty(trail[i].y) }});
     }}
 
-    // Wall labels — annotate large vertical jumps with a delta dollar amount
+    // Wall labels — dollar threshold (machine-independent), deduplicated per transition.
+    // Only fires at the leading edge of each value change, not every frame of the wall.
     (function() {{
-      var wallThresh = H * 0.08; // must be >8% of canvas height to qualify
+      var minDollar = base * 0.001; // 0.1% of portfolio (~$59 on $59k)
       ctx.save();
       ctx.font = 'bold 9px Consolas,monospace';
       ctx.textBaseline = 'middle';
+      var lastLabelX = -999;
       for (var i = 1; i < trail.length; i++) {{
-        var dy = mapped[i].y - mapped[i-1].y; // negative = moved up
-        if (Math.abs(dy) < wallThresh) continue;
-        var dv = trail[i].y - trail[i-1].y;   // actual dollar delta
+        var dv = trail[i].y - trail[i-1].y;
+        if (Math.abs(dv) < minDollar) continue;
+        // Only the leading edge: previous point must have been the same value as two-ago
+        // (i.e. trail[i] is the first frame at a new level)
+        if (i > 1 && trail[i-1].y !== trail[i-2].y) continue;
+        // Suppress if too close to previous label horizontally
+        if (mapped[i].x - lastLabelX < 30) continue;
+        lastLabelX = mapped[i].x;
         var sign = dv >= 0 ? '+' : '';
         var label = sign + '$' + Math.abs(dv).toFixed(0);
         var lx = mapped[i].x + 5;
         var ly = (mapped[i].y + mapped[i-1].y) / 2;
-        // glow halo
-        ctx.strokeStyle = dv >= 0 ? 'rgba(0,255,157,0.3)' : 'rgba(255,51,102,0.3)';
-        ctx.lineWidth = 4;
-        ctx.strokeText(label, lx, ly);
-        // fill
+        ctx.strokeStyle = dv >= 0 ? 'rgba(0,255,157,0.35)' : 'rgba(255,51,102,0.35)';
+        ctx.lineWidth = 4; ctx.strokeText(label, lx, ly);
         ctx.fillStyle = dv >= 0 ? '#00ff9d' : '#ff3366';
         ctx.fillText(label, lx, ly);
       }}
