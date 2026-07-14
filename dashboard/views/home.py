@@ -1249,25 +1249,41 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Press Start 2P',monospace; font-size:19px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:18px; font-weight:400;
   letter-spacing:.04em; font-variant-numeric:tabular-nums;
-  /* gold arcade gradient fill */
-  background:linear-gradient(180deg,#ffe97a 0%,#ffc200 38%,#ff8c00 68%,#c44d00 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
-  /* chunky block shadow for depth */
-  filter:drop-shadow(2px 3px 0 rgba(0,0,0,.95)) drop-shadow(0 0 14px rgba(255,160,0,.55));
-  white-space:nowrap; line-height:1; transition:filter .4s ease;
+  color:#ffe566;
+  -webkit-text-stroke:1px rgba(0,0,0,.6);
+  text-shadow:
+    1px 1px 0 #b85c00,
+    2px 2px 0 #9a4a00,
+    3px 3px 0 #7a3600,
+    4px 4px 0 rgba(0,0,0,.7),
+    0 0 18px rgba(255,180,0,.5),
+    0 0 6px  rgba(255,200,0,.3);
+  white-space:nowrap; line-height:1;
+  transition:color .4s ease, text-shadow .4s ease;
 }}
 .ss-wallet-val.gain {{
-  background:linear-gradient(180deg,#b6ffdd 0%,#00ff9d 40%,#00c464 72%,#006633 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-  filter:drop-shadow(2px 3px 0 rgba(0,0,0,.95)) drop-shadow(0 0 18px rgba(0,255,157,.7));
+  color:#b6ffdd;
+  -webkit-text-stroke:1px rgba(0,0,0,.6);
+  text-shadow:
+    1px 1px 0 #006633,
+    2px 2px 0 #004d26,
+    3px 3px 0 #003319,
+    4px 4px 0 rgba(0,0,0,.7),
+    0 0 20px rgba(0,255,157,.7),
+    0 0 8px  rgba(0,255,157,.4);
 }}
 .ss-wallet-val.loss {{
-  background:linear-gradient(180deg,#ffb3c6 0%,#ff3366 40%,#cc0033 72%,#660011 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-  filter:drop-shadow(2px 3px 0 rgba(0,0,0,.95)) drop-shadow(0 0 18px rgba(255,51,102,.7));
+  color:#ffb3c6;
+  -webkit-text-stroke:1px rgba(0,0,0,.6);
+  text-shadow:
+    1px 1px 0 #880022,
+    2px 2px 0 #660019,
+    3px 3px 0 #440011,
+    4px 4px 0 rgba(0,0,0,.7),
+    0 0 20px rgba(255,51,102,.7),
+    0 0 8px  rgba(255,51,102,.4);
 }}
 @keyframes dmg-pop {{
   0%   {{ opacity:0; transform:translateY(0px) scale(1.5); }}
@@ -1282,7 +1298,7 @@ body::after {{
   font-size:10px; font-weight:400; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
   opacity:0; white-space:nowrap; pointer-events:none;
-  filter:drop-shadow(1px 2px 0 rgba(0,0,0,.9)) drop-shadow(0 0 8px currentColor);
+  text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 10px currentColor;
 }}
 .ss-wallet-chip.dmg-active {{
   animation: dmg-pop 2.2s cubic-bezier(.22,1,.36,1) forwards;
