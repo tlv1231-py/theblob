@@ -136,6 +136,20 @@ def _load_chart_data() -> dict:
         port_dates  = [r.d              for r in port_rows]
         port_values = [float(r.total_value) for r in port_rows]
 
+        # Intraday marks — "marked the book at $X" pipeline events (dense price history)
+        mark_rows = s.execute(text("""
+            SELECT recorded_at, message FROM pipeline_events
+            WHERE message ILIKE '%marked the book at%'
+            ORDER BY recorded_at DESC LIMIT 500
+        """)).fetchall()
+        mark_ts, mark_vals = [], []
+        import re as _re
+        for r in reversed(mark_rows):
+            m = _re.search(r'\$([\d,]+\.?\d*)', r.message)
+            if m:
+                mark_ts.append(r.recorded_at.isoformat())
+                mark_vals.append(float(m.group(1).replace(',', '')))
+
         # Benchmark tracks — SPY / QQQ
         start_cutoff = port_dates[0] if port_dates else "2026-01-01"
         bench_rows = s.execute(text("""
@@ -944,6 +958,8 @@ def _build_daw_html(data: dict) -> str:
     # Serialize chart data as JSON (safe for embedding)
     port_dates_j  = json.dumps(port["dates"])
     port_values_j = json.dumps(port["values"])
+    mark_ts_j     = json.dumps(mark_ts)
+    mark_vals_j   = json.dumps(mark_vals)
     spy_dates_j   = json.dumps(spy["dates"])
     spy_norm_j    = json.dumps(spy_norm)
     qqq_dates_j   = json.dumps(qqq["dates"])
@@ -2575,6 +2591,8 @@ var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
 
 var portDates  = {port_dates_j};
 var portValues = {port_values_j};
+var markTs     = {mark_ts_j};
+var markVals   = {mark_vals_j};
 // Strip initial inflated value from May 2026 double-run (> 1.5x starting capital)
 (function() {{
   var cap = 150000;
@@ -4137,16 +4155,17 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll-to-zoom: days of portfolio history visible (default 14)
-  window._navZoomDays = 14;
+  window._navZoomDays = 3; // default: last 3 days of history
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
-      var total = portDates ? portDates.length : 14;
       var delta = e.deltaY > 0 ? 1 : -1;
-      window._navZoomDays = Math.max(2, Math.min(total,
-        (window._navZoomDays || 14) + delta * Math.max(1, Math.round((window._navZoomDays||14)*0.15))));
+      var cur = window._navZoomDays || 3;
+      // fine-grain zoom: smaller steps at short ranges
+      var step = cur < 1 ? 0.1 : cur < 7 ? 0.5 : 1;
+      window._navZoomDays = Math.max(0.1, Math.min(90, cur + delta * step));
     }}, {{ passive: false }});
   }})();
 
@@ -4156,54 +4175,69 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Use portDates/portValues for stable historical shape (always present on load).
-    // Live value from _lastKnownNav controls the orb's Y position without reshaping history.
-    var allDates  = portDates  || [];
-    var allValues = portValues || [];
-    var liveNav   = window._lastKnownNav || (allValues.length ? allValues[allValues.length-1] : null);
-
-    if (allDates.length < 2 || !liveNav) {{
-      window._navOrbFracX = 0.5;
-      window._navOrbFracY = 0.5;
-      return;
+    // Merge daily snapshots + intraday pipeline marks into one sorted series
+    var combined = [];
+    var _pd = portDates || [], _pv = portValues || [];
+    for (var ci = 0; ci < _pd.length; ci++) {{
+      var ms = new Date(_pd[ci]).getTime();
+      if (!isNaN(ms)) combined.push({{ ms: ms, v: _pv[ci] }});
+    }}
+    var _md = markTs || [], _mv = markVals || [];
+    for (var mi2 = 0; mi2 < _md.length; mi2++) {{
+      var ms2 = new Date(_md[mi2]).getTime();
+      if (!isNaN(ms2)) combined.push({{ ms: ms2, v: _mv[mi2] }});
+    }}
+    combined.sort(function(a,b){{ return a.ms - b.ms; }});
+    // Deduplicate timestamps within 500ms
+    var deduped = [];
+    for (var di = 0; di < combined.length; di++) {{
+      if (!deduped.length || combined[di].ms - deduped[deduped.length-1].ms > 500) {{
+        deduped.push(combined[di]);
+      }}
     }}
 
-    // Slice to zoom window, always include at least the last value
-    var nShow  = Math.max(2, Math.min(allDates.length, Math.round(window._navZoomDays || 14)));
-    var startI = allDates.length - nShow;
-    var dates  = allDates.slice(startI);
-    var values = allValues.slice(startI);
-    var n      = dates.length;
+    var liveNav = window._lastKnownNav || (deduped.length ? deduped[deduped.length-1].v : null);
+    if (deduped.length < 1 || !liveNav) {{
+      window._navOrbFracX = 0.5; window._navOrbFracY = 0.5; return;
+    }}
 
-    // Append a virtual "now" point at liveNav so the trail ends at the orb
-    var nowIso = new Date().toISOString();
-    dates  = dates.concat([nowIso]);
-    values = values.concat([liveNav]);
-    n      = dates.length;
+    // X axis: fixed wall-clock window from (nShow days ago) → now. Orb always at W/2.
+    var nowMs   = Date.now();
+    var nDays   = Math.max(1, window._navZoomDays || 3);
+    var x0ms    = nowMs - nDays * 86400000;
+    var xSpan   = nowMs - x0ms; // = nDays * 86400000
+    function tx(ms) {{ return (ms - x0ms) / xSpan * (W / 2); }}
 
-    // X: map the full range [dates[0], now] → [0, W/2]. Orb is always at W/2.
-    var x0ms  = new Date(dates[0]).getTime();
-    var x1ms  = new Date(dates[n-1]).getTime();
-    var xSpan = x1ms - x0ms || 1;
-    function tx(iso) {{ return (new Date(iso).getTime() - x0ms) / xSpan * (W / 2); }}
+    // Filter to visible window + append live point
+    var visible = deduped.filter(function(p){{ return p.ms >= x0ms && p.ms <= nowMs; }});
+    // Always seed from the last known value before the window if visible is sparse
+    if (visible.length === 0 || visible[0].ms > x0ms + 3600000) {{
+      // Find last point before window start
+      var seed = null;
+      for (var si = deduped.length - 1; si >= 0; si--) {{
+        if (deduped[si].ms <= x0ms) {{ seed = deduped[si]; break; }}
+      }}
+      if (seed) visible.unshift({{ ms: x0ms, v: seed.v }});
+    }}
+    visible.push({{ ms: nowMs, v: liveNav }});
 
-    // Y: base = last DAILY snapshot (stable — doesn't jump when live price changes)
-    var base     = values[n-2];
-    var maxDev   = 0;
-    for (var vi = 0; vi < n; vi++) {{ var dv = Math.abs(values[vi]-base); if(dv>maxDev) maxDev=dv; }}
-    var halfRange = maxDev * 1.3 || base * 0.03;
-    if (!halfRange) halfRange = 1;
-    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
+    // Y: center on median of visible values for stability
+    var vv = visible.map(function(p){{ return p.v; }});
+    var vSorted = vv.slice().sort(function(a,b){{ return a-b; }});
+    var base = vSorted[Math.floor(vSorted.length / 2)];
+    var maxDev = 0;
+    for (var vi = 0; vi < vv.length; vi++) {{ var dv = Math.abs(vv[vi] - base); if (dv > maxDev) maxDev = dv; }}
+    var halfRange = maxDev * 1.4 || base * 0.01 || 1;
+    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.82); }}
 
-    // Orb Y tracks live NAV. Orb X always at W/2 (rightmost = "now").
     var orbY = ty(liveNav);
     window._navOrbFracX = 0.5;
     window._navOrbFracY = orbY / H;
 
     // Build mapped points; final point lands exactly at orb center
     var mapped = [];
-    for (var mi = 0; mi < n - 1; mi++) {{
-      mapped.push({{ x: tx(dates[mi]), y: ty(values[mi]) }});
+    for (var mi = 0; mi < visible.length - 1; mi++) {{
+      mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
     mapped.push({{ x: W / 2, y: orbY }});
     if (mapped.length < 2) return;
