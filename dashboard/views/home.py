@@ -1249,14 +1249,26 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Bangers','Silkscreen','Press Start 2P',Consolas,monospace; font-size:26px; font-weight:400;
-  letter-spacing:.06em; font-variant-numeric:tabular-nums;
-  color:#fff; transition:color .4s ease, text-shadow .4s ease;
-  text-shadow:0 0 20px rgba(255,255,255,.7), 0 0 6px rgba(255,255,255,.4), 0 2px 0 rgba(0,0,0,.8);
-  white-space:nowrap; line-height:1;
+  font-family:'Press Start 2P',monospace; font-size:19px; font-weight:400;
+  letter-spacing:.04em; font-variant-numeric:tabular-nums;
+  /* gold arcade gradient fill */
+  background:linear-gradient(180deg,#ffe97a 0%,#ffc200 38%,#ff8c00 68%,#c44d00 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
+  /* chunky block shadow for depth */
+  filter:drop-shadow(2px 3px 0 rgba(0,0,0,.95)) drop-shadow(0 0 14px rgba(255,160,0,.55));
+  white-space:nowrap; line-height:1; transition:filter .4s ease;
 }}
-.ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 28px rgba(0,255,157,1),0 0 10px rgba(0,255,157,.6),0 2px 0 rgba(0,0,0,.8); }}
-.ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 28px rgba(255,51,102,1),0 0 10px rgba(255,51,102,.6),0 2px 0 rgba(0,0,0,.8); }}
+.ss-wallet-val.gain {{
+  background:linear-gradient(180deg,#b6ffdd 0%,#00ff9d 40%,#00c464 72%,#006633 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  filter:drop-shadow(2px 3px 0 rgba(0,0,0,.95)) drop-shadow(0 0 18px rgba(0,255,157,.7));
+}}
+.ss-wallet-val.loss {{
+  background:linear-gradient(180deg,#ffb3c6 0%,#ff3366 40%,#cc0033 72%,#660011 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  filter:drop-shadow(2px 3px 0 rgba(0,0,0,.95)) drop-shadow(0 0 18px rgba(255,51,102,.7));
+}}
 @keyframes dmg-pop {{
   0%   {{ opacity:0; transform:translateY(0px) scale(1.5); }}
   8%   {{ opacity:1; transform:translateY(-2px) scale(1.08); }}
@@ -1266,11 +1278,11 @@ body::after {{
 }}
 .ss-wallet-chip {{
   position:absolute; left:calc(100% + 8px); top:0;
-  font-family:'Bangers','Silkscreen','Press Start 2P',Consolas,monospace;
-  font-size:13px; font-weight:400; letter-spacing:.04em;
+  font-family:'Press Start 2P',monospace;
+  font-size:10px; font-weight:400; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
   opacity:0; white-space:nowrap; pointer-events:none;
-  text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
+  filter:drop-shadow(1px 2px 0 rgba(0,0,0,.9)) drop-shadow(0 0 8px currentColor);
 }}
 .ss-wallet-chip.dmg-active {{
   animation: dmg-pop 2.2s cubic-bezier(.22,1,.36,1) forwards;
