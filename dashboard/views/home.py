@@ -4106,23 +4106,23 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return;
     }}
 
-    // Y range — symmetric around curNav so current value maps to H/2
-    var base = curNav || pts[pts.length-1].y;
-    var spread = 0;
-    pts.forEach(function(p) {{
-      var d = Math.abs(p.y - base);
-      if (d > spread) spread = d;
-    }});
-    var minSpread = base * 0.002; // floor: 0.2% of NAV so flat line stays visible
-    var halfRange = Math.max(spread * 1.4, minSpread);
+    // Y range — use stable midpoint of all visible data so the chart doesn't flip
+    // when curNav ticks (base anchored to data, not to current value)
+    var minY = Infinity, maxY = -Infinity;
+    pts.forEach(function(p) {{ if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }});
+    var base = (minY + maxY) / 2;
+    var spread = (maxY - minY) / 2;
+    // Floor: 0.03% of NAV so tiny moves still show as visible wiggles (more dramatic)
+    var minSpread = (curNav || base) * 0.0003;
+    var halfRange = Math.max(spread * 1.6, minSpread);
 
-    // Coordinate mappers — current time at W/2, curNav at H/2
+    // Coordinate mappers — current time at W/2
     function tx(isoStr) {{
       var ms = new Date(isoStr).getTime();
       return (ms - winStart) / (winEnd - winStart) * W;
     }}
     function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
-    window._navOrbCanvasY = ty(base);
+    window._navOrbCanvasY = ty(curNav || base);
 
     var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
 
@@ -5771,8 +5771,16 @@ window.addEventListener('resize', function() {{
       return v >= start ? '#00ff9d' : '#ff3366';
     }}
 
-    // Rolling nav history for velocity computation
-    if (!window._navHistory) window._navHistory = [];
+    // Rolling nav history — restore from sessionStorage so refreshes keep the line
+    if (!window._navHistory) {{
+      try {{
+        var _stored = sessionStorage.getItem('_navHistory');
+        var _cutoffMs = Date.now() - 30*60*1000;
+        window._navHistory = _stored
+          ? JSON.parse(_stored).filter(function(p) {{ return new Date(p.x).getTime() > _cutoffMs; }})
+          : [];
+      }} catch(e) {{ window._navHistory = []; }}
+    }}
     function _trackNav(nav, ts) {{
       window._navHistory.push({{ x: new Date(ts).toISOString(), y: parseFloat(nav) }});
       // keep last 200 points (canvas draw uses _navHistory as source of truth)
@@ -7022,6 +7030,8 @@ window.addEventListener('resize', function() {{
           window._navHistory.push({{ x: _isoNow, y: nav }});
           var _cutoff = new Date(Date.now() - 30*60*1000).toISOString();
           while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
+          // Persist to sessionStorage so history survives page refresh
+          try {{ sessionStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
           if (window._drawNavCanvas) window._drawNavCanvas();
         }}
       }};
