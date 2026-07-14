@@ -4046,11 +4046,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   if (!_nc) return;
 
   function _resize() {{
-    var ma = document.getElementById('main-area');
-    if (!ma) return;
-    var r = ma.getBoundingClientRect();
-    _nc.width  = r.width  || 800;
-    _nc.height = r.height || 500;
+    // Canvas is position:fixed covering full viewport — use window dimensions
+    _nc.width  = window.innerWidth  || 800;
+    _nc.height = window.innerHeight || 500;
   }}
   _resize();
   window.addEventListener('resize', _resize);
