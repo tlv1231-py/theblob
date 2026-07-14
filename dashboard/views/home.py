@@ -1343,13 +1343,17 @@ body::after {{
   40%  {{ opacity:1; clip-path:inset(0% 0 0 0);   transform:translateX(2px); }}
   100% {{ opacity:1; clip-path:inset(0% 0 0 0);   transform:translateX(0); }}
 }}
-/* Exit: CRT power-off — compress to scanline then flash out */
+/* Exit: arcade glitch → scanline wipe right */
 @keyframes cc-out {{
-  0%   {{ opacity:1; clip-path:inset(0% 0 0% 0);      filter:brightness(1);   transform:scaleY(1); }}
-  35%  {{ opacity:1; clip-path:inset(40% 0 40% 0);    filter:brightness(3) saturate(4); transform:scaleY(.15); }}
-  55%  {{ opacity:1; clip-path:inset(49.5% 0 49.5% 0); filter:brightness(8);  transform:scaleY(.02); }}
-  70%  {{ opacity:.8; clip-path:inset(49.5% 0 49.5% 0); filter:brightness(12); transform:scaleY(.02); }}
-  100% {{ opacity:0; clip-path:inset(50% 0 50% 0);    filter:brightness(0);   transform:scaleY(0); }}
+  0%   {{ opacity:1; transform:translateX(0);    filter:brightness(1);              clip-path:inset(0 0% 0 0); }}
+  12%  {{ opacity:1; transform:translateX(7px);  filter:brightness(2.5) hue-rotate(160deg); clip-path:inset(0 0% 0 0); }}
+  20%  {{ opacity:1; transform:translateX(-4px); filter:brightness(1) hue-rotate(0deg);     clip-path:inset(0 0% 0 0); }}
+  28%  {{ opacity:1; transform:translateX(3px);  filter:brightness(4) saturate(6);  clip-path:inset(0 0% 0 0); }}
+  38%  {{ opacity:1; transform:translateX(0);    filter:brightness(1.5);            clip-path:inset(0 20% 0 0); }}
+  55%  {{ opacity:1; transform:translateX(0);    filter:brightness(2);              clip-path:inset(0 60% 0 0); }}
+  72%  {{ opacity:1; transform:translateX(0);    filter:brightness(5);              clip-path:inset(0 88% 0 0); }}
+  85%  {{ opacity:1; transform:translateX(0);    filter:brightness(12);             clip-path:inset(0 97% 0 0); }}
+  100% {{ opacity:0; transform:translateX(0);    filter:brightness(0);              clip-path:inset(0 100% 0 0); }}
 }}
 .callout-card {{
   display:flex; align-items:baseline; gap:0;
@@ -2429,6 +2433,20 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
+<!-- ── System health strip — sits ABOVE HUD ── -->
+<div id="sys-health-bar">
+  <div class="sysh-item"><span class="sysh-dot" id="sysh-mktdata"></span><span class="sysh-lbl">MKT DATA</span><span class="sysh-val" id="sysh-mktdata-val">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-dot" id="sysh-db"></span><span class="sysh-lbl">DB</span><span class="sysh-val" id="sysh-db-val">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">HEARTBEAT</span><span class="sysh-val" id="sysh-hb">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">LATENCY</span><span class="sysh-val" id="sysh-lat">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">API REQ/MIN</span><span class="sysh-val" id="sysh-rpm">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">CLK DRIFT</span><span class="sysh-val" id="sysh-drift">—</span></div>
+</div>
 <!-- ── Stratagem HUD bar ── -->
 <div id="strat-bar">
   <div class="strat-slot" id="ss-runner">
@@ -2481,20 +2499,6 @@ body::after {{
     <div class="ss-name">$/HR</div>
     <div class="ss-status" id="ss-tph-st">—</div>
   </div>
-</div>
-<!-- ── System health strip ── -->
-<div id="sys-health-bar">
-  <div class="sysh-item"><span class="sysh-dot" id="sysh-mktdata"></span><span class="sysh-lbl">MKT DATA</span><span class="sysh-val" id="sysh-mktdata-val">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-dot" id="sysh-db"></span><span class="sysh-lbl">DB</span><span class="sysh-val" id="sysh-db-val">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">HEARTBEAT</span><span class="sysh-val" id="sysh-hb">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">LATENCY</span><span class="sysh-val" id="sysh-lat">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">API REQ/MIN</span><span class="sysh-val" id="sysh-rpm">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">CLK DRIFT</span><span class="sysh-val" id="sysh-drift">—</span></div>
 </div>
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
