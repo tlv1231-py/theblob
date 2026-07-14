@@ -4055,73 +4055,64 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Dense in-memory trail — one point per rAF frame (~60/sec).
-  // Kept separate from _navHistory (sparse, persisted). No synthetic "now" point
-  // needed: last trail point is always <16ms old so the line is fused to the orb.
-  if (!window._navDenseTrail) window._navDenseTrail = [];
-
+  // Nav canvas now drives off portDates/portValues — the real historical equity curve.
+  // Orb sits at the right edge = "today". Line is the full paper trading track record.
   window._drawNavCanvas = function() {{
     _resize();
     var W = _nc.width, H = _nc.height;
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    var curNav = window._lastKnownNav;
-    var nowMs  = Date.now();
-
-    // Push one point this frame (only if we have a value)
-    if (curNav) {{
-      window._navDenseTrail.push({{ t: nowMs, y: curNav }});
-    }}
-    // Trim to 30s window
-    var cutoff = nowMs - 30000;
-    while (window._navDenseTrail.length > 1 && window._navDenseTrail[0].t < cutoff) {{
-      window._navDenseTrail.shift();
-    }}
-
-    var trail = window._navDenseTrail;
-    if (trail.length < 2) {{
-      window._navOrbCanvasX = W / 2;
+    var dates  = portDates;   // string dates e.g. '2026-05-29'
+    var values = portValues;  // float portfolio values
+    if (!dates || dates.length < 2) {{
+      window._navOrbCanvasX = W - 24;
       window._navOrbCanvasY = H / 2;
       return;
     }}
 
-    window._navOrbCanvasX = W / 2;
-    window._navOrbCanvasY = H / 2;
+    var orbGap = 24; // px gap between line tip and orb center
+    var n = dates.length;
 
-    var orbGap   = 32; // px clear of orb center
-    var winStart = nowMs - 30000;
-    function tx(ms) {{ return (ms - winStart) / 60000 * W; }}
-
-    // Find last trail index that falls left of orbGap cutoff
-    var lastVisIdx = 0;
-    for (var vi = 0; vi < trail.length; vi++) {{
-      if (tx(trail[vi].t) >= W/2 - orbGap) break;
-      lastVisIdx = vi;
+    // X: spread all data across [0, W - orbGap], orb at W - orbGap/2
+    var x0ms = new Date(dates[0]).getTime();
+    var x1ms = new Date(dates[n-1]).getTime();
+    var xSpan = x1ms - x0ms || 1;
+    function tx(iso) {{
+      return (new Date(iso).getTime() - x0ms) / xSpan * (W - orbGap);
     }}
 
-    // base = value AT the gap boundary (last visible point).
-    // That point maps to H/2, same as the orb — they're always visually connected.
-    // The orb leads the trail by ~orbGap pixels (a natural short delay).
-    var base      = trail[lastVisIdx].y;
-    var halfRange = base * 0.0008;
-    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
+    // Y: auto-fit with padding; pin last value to H/2 so orb aligns with line tip
+    var base = values[n-1];
+    var minV = base, maxV = base;
+    for (var vi = 0; vi < n; vi++) {{
+      if (values[vi] < minV) minV = values[vi];
+      if (values[vi] > maxV) maxV = values[vi];
+    }}
+    var spread = (maxV - minV) || base * 0.01;
+    var pad    = spread * 0.15;
+    var yLo = minV - pad, yHi = maxV + pad;
+    function ty(v) {{ return H - (v - yLo) / (yHi - yLo) * H; }}
 
-    // Y-axis price indicators — subtle, on-brand
+    // Orb position: right edge, at y of latest value
+    window._navOrbCanvasX = W - orbGap / 2;
+    window._navOrbCanvasY = ty(base);
+
+    // Y-axis price labels — subtle, on-brand
     (function() {{
       var fmt = function(v) {{
         if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
         if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
         return '$' + v.toFixed(0);
       }};
-      var levels = [-0.6, -0.3, 0.3, 0.6];
       ctx.save();
       ctx.setLineDash([3, 7]);
       ctx.lineWidth = 1;
       ctx.font = '8px Consolas,monospace';
       ctx.textBaseline = 'bottom';
-      for (var li = 0; li < levels.length; li++) {{
-        var val = base + halfRange * levels[li];
+      var steps = [0.2, 0.4, 0.6, 0.8];
+      for (var si = 0; si < steps.length; si++) {{
+        var val = yLo + (yHi - yLo) * steps[si];
         var yy  = ty(val);
         if (yy < 6 || yy > H - 6) continue;
         ctx.strokeStyle = 'rgba(255,0,204,0.07)';
@@ -4132,88 +4123,46 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    // Decimate trail: keep value-change transitions + one point per 250ms.
-    // Dense 60fps buffer would waste bezier passes — 250ms gives ~120 pts over 30s.
-    var dec = [];
-    var lastKeptT = -Infinity, lastKeptY = null;
-    for (var di = 0; di <= lastVisIdx; di++) {{
-      var _y = trail[di].y, _t = trail[di].t;
-      if (_y !== lastKeptY || (_t - lastKeptT) >= 250) {{
-        dec.push({{ x: tx(_t), y: ty(_y), rv: _y }});
-        lastKeptT = _t; lastKeptY = _y;
-      }}
-    }}
-    // Always include the exact last-visible point so right edge is precisely H/2
-    if (dec.length === 0 || dec[dec.length-1].rv !== trail[lastVisIdx].y) {{
-      dec.push({{ x: tx(trail[lastVisIdx].t), y: ty(trail[lastVisIdx].y), rv: trail[lastVisIdx].y }});
+    // Build mapped points
+    var mapped = [];
+    for (var mi = 0; mi < n; mi++) {{
+      mapped.push({{ x: tx(dates[mi]), y: ty(values[mi]), v: values[mi] }});
     }}
 
-    // Wall labels on decimated trail
-    (function() {{
-      var minDollar = base * 0.001;
-      ctx.save();
-      ctx.font = 'bold 9px Consolas,monospace';
-      ctx.textBaseline = 'middle';
-      var lastLabelX = -999;
-      for (var li = 1; li < dec.length; li++) {{
-        var dv = dec[li].rv - dec[li-1].rv;
-        if (Math.abs(dv) < minDollar) continue;
-        if (dec[li].x - lastLabelX < 30) continue;
-        lastLabelX = dec[li].x;
-        var sign = dv >= 0 ? '+' : '';
-        var label = sign + '$' + Math.abs(dv).toFixed(0);
-        var lx = dec[li].x + 5;
-        var ly = (dec[li].y + dec[li-1].y) / 2;
-        ctx.strokeStyle = dv >= 0 ? 'rgba(0,255,157,0.35)' : 'rgba(255,51,102,0.35)';
-        ctx.lineWidth = 4; ctx.strokeText(label, lx, ly);
-        ctx.fillStyle = dv >= 0 ? '#00ff9d' : '#ff3366';
-        ctx.fillText(label, lx, ly);
-      }}
-      ctx.restore();
-    }})();
-
-    var mapped = dec;
-    if (mapped.length < 2) return;
-
-    // Catmull-Rom smooth curve — passes through all points, no retroactive reshape.
-    // Safe now: right edge is always stable at H/2 so historical shape never shifts.
+    // Catmull-Rom smooth curve
     function _stroke(m) {{
       ctx.beginPath();
       ctx.moveTo(m[0].x, m[0].y);
       for (var i = 0; i < m.length - 1; i++) {{
         var p0 = m[Math.max(0, i-1)];
-        var p1 = m[i];
-        var p2 = m[i+1];
+        var p1 = m[i], p2 = m[i+1];
         var p3 = m[Math.min(m.length-1, i+2)];
-        var cp1x = p1.x + (p2.x - p0.x) / 6;
-        var cp1y = p1.y + (p2.y - p0.y) / 6;
-        var cp2x = p2.x - (p3.x - p1.x) / 6;
-        var cp2y = p2.y - (p3.y - p1.y) / 6;
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+        ctx.bezierCurveTo(
+          p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
+          p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
+          p2.x, p2.y
+        );
       }}
     }}
 
-    var x0 = mapped[0].x;
-    var x1 = W / 2; // orb center — gradient aims here even though line stops orbGap short
+    var gx0 = mapped[0].x, gx1 = mapped[n-1].x;
     function _tg(r, g, b, a0, a1) {{
-      var gr = ctx.createLinearGradient(x0, 0, x1, 0);
+      var gr = ctx.createLinearGradient(gx0, 0, gx1, 0);
       gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + a0 + ')');
-      gr.addColorStop(0.6, 'rgba(' + r + ',' + g + ',' + b + ',' + ((a0+a1)/2) + ')');
+      gr.addColorStop(0.65,'rgba(' + r + ',' + g + ',' + b + ',' + ((a0*0.3+a1*0.7)) + ')');
       gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',' + a1 + ')');
       return gr;
     }}
 
     // Under-fill
     _stroke(mapped);
-    ctx.lineTo(mapped[mapped.length-1].x, H);
-    ctx.lineTo(mapped[0].x, H);
-    ctx.closePath();
-    var fg = ctx.createLinearGradient(x0, 0, x1, 0);
+    ctx.lineTo(mapped[n-1].x, H); ctx.lineTo(mapped[0].x, H); ctx.closePath();
+    var fg = ctx.createLinearGradient(gx0, 0, gx1, 0);
     fg.addColorStop(0, 'rgba(255,0,204,0)');
     fg.addColorStop(1, 'rgba(255,0,204,0.28)');
     ctx.fillStyle = fg; ctx.fill();
 
-    // Outer bloom — wide, intense
+    // Outer bloom
     _stroke(mapped);
     ctx.strokeStyle = _tg(255,0,204, 0, 0.35);
     ctx.lineWidth = 48; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
@@ -4228,18 +4177,18 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.strokeStyle = _tg(255,80,255, 0, 0.9);
     ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
-    // Core
+    // Core line
     _stroke(mapped);
     ctx.strokeStyle = _tg(255,0,204, 0.05, 1);
     ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
-    // White hot — rightmost 25% only
-    var hg = ctx.createLinearGradient(x0 + (x1-x0)*0.75, 0, x1, 0);
+    // White hot tip — rightmost 20%
+    var hg = ctx.createLinearGradient(gx0 + (gx1-gx0)*0.8, 0, gx1, 0);
     hg.addColorStop(0, 'rgba(255,255,255,0)');
     hg.addColorStop(1, 'rgba(255,255,255,0.95)');
     _stroke(mapped);
-    ctx.strokeStyle = hg;
-    ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.strokeStyle = hg; ctx.lineWidth = 0.8;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
   }};
 
   // rAF loop — redraws every frame so the line scrolls forward at 60fps
