@@ -4062,8 +4062,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.clearRect(0, 0, W, H);
 
     var history = window._navHistory || [];
-    // Use live interpolated value from wallet animation so line moves 1:1 with number scroll
-    var curNav  = window._navLiveVal || window._lastKnownNav;
+    // Use last committed NAV only — _navLiveVal animates 60fps and shifts base every frame,
+    // causing all historical points to jitter. _lastKnownNav only updates on real data push.
+    var curNav  = window._lastKnownNav;
     if (!curNav && history.length === 0) return;
 
     var nowMs    = Date.now();
