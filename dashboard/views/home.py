@@ -1231,14 +1231,14 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Press Start 2P','Orbitron',Consolas,monospace; font-size:11px; font-weight:400;
-  letter-spacing:.02em; font-variant-numeric:tabular-nums;
-  color:#fff; transition:color .6s ease, text-shadow .6s ease;
-  text-shadow:0 0 12px rgba(255,255,255,.4);
+  font-family:'Press Start 2P','Orbitron',Consolas,monospace; font-size:14px; font-weight:400;
+  letter-spacing:.03em; font-variant-numeric:tabular-nums;
+  color:#fff; transition:color .4s ease, text-shadow .4s ease;
+  text-shadow:0 0 20px rgba(255,255,255,.7), 0 0 6px rgba(255,255,255,.4), 0 2px 0 rgba(0,0,0,.8);
   white-space:nowrap;
 }}
-.ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 16px rgba(0,255,157,.9),0 0 4px rgba(0,255,157,.4); }}
-.ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 16px rgba(255,51,102,.9),0 0 4px rgba(255,51,102,.4); }}
+.ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 28px rgba(0,255,157,1),0 0 10px rgba(0,255,157,.6),0 2px 0 rgba(0,0,0,.8); }}
+.ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 28px rgba(255,51,102,1),0 0 10px rgba(255,51,102,.6),0 2px 0 rgba(0,0,0,.8); }}
 @keyframes dmg-pop {{
   0%   {{ opacity:0; transform:translateY(0px) scale(1.5); }}
   8%   {{ opacity:1; transform:translateY(-2px) scale(1.08); }}
