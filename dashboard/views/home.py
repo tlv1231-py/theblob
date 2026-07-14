@@ -1251,12 +1251,12 @@ body::after {{
   position:relative; height:0; overflow:visible;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
-  padding-top:4px;
+  padding-top:4px; width:320px;
   z-index:99999;
 }}
 .callout-card {{
-  display:inline-flex; align-items:baseline; gap:7px;
-  padding:10px 16px;
+  display:flex; align-items:baseline; gap:7px;
+  width:320px; padding:10px 16px;
   background:rgba(4,0,16,.18); backdrop-filter:blur(20px);
   border:1px solid rgba(148,0,255,.12); border-left:3px solid;
   border-radius:2px;
@@ -1294,6 +1294,7 @@ body::after {{
   font-size:13px; font-weight:700; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
   text-shadow:0 0 12px currentColor;
+  margin-left:auto;
 }}
 .cc-count {{
   font-size:11px; font-weight:700; opacity:.7;
