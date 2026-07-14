@@ -4196,7 +4196,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    var m = dec;
+    var m = mapped;
     var n = m.length;
     var gx0 = m[0].x, gx1 = W/2;
     function _tg(r,g,b,a0,a1) {{
