@@ -883,6 +883,7 @@ def _build_daw_html(data: dict) -> str:
 
     # Build equity positions map for JS satellites
     import json as _json
+    _TICKER_PAL_PY = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
     _eq_pos_js = _json.dumps({
         p["sym"]: {
             "entry_price":  float(p["entry_price"] or p.get("value") or 1),
@@ -893,6 +894,26 @@ def _build_daw_html(data: dict) -> str:
         }
         for p in data.get("positions_data", [])
     })
+    # Canvas tile seed data — all fields needed to paint tiles on load
+    _eq_canvas_tiles_j = _json.dumps([
+        {
+            "sym":        p["sym"],
+            "col":        _TICKER_PAL_PY[hash(p["sym"]) % len(_TICKER_PAL_PY)],
+            "val":        float(p["value"] or 0),
+            "pnl":        float(p["entry_pnl"] or 0),
+            "pnlPct":     float(p["entry_pnl_pct"] or 0),
+            "entry":      float(p["entry_price"] or 0),
+            "qty":        float(p.get("qty") or 0),
+            "stop":       float(p.get("stop_price") or 0),
+            "target":     float(p.get("target_price") or 0),
+            "curPrice":   float(p.get("price") or p["entry_price"] or 0),
+            "days":       int(p.get("days_held") or 0),
+            "inSignal":   bool(p.get("in_signal", True)),
+            "rank":       int(p.get("rank") or 0),
+            "holdText":   str(p.get("hold_text") or ""),
+        }
+        for p in data.get("positions_data", [])
+    ])
 
     pos_cards = ""
     _pc_idx = 0
@@ -2745,8 +2766,7 @@ body::after {{
         </div>
       </div>
       <div id="pos-right">
-        <div class="pos-section-label">equity</div>
-        <div id="pos-equity-section">{pos_cards}</div>
+        <canvas id="eq-tiles-canvas" style="display:block;flex-shrink:0"></canvas>
         <div id="equity-countdown">
           <span class="eq-pip-label" id="eq-pip-label">equity pipeline</span>
           <div class="eq-pip-bar"><div class="eq-pip-fill" id="eq-pip-fill" style="width:0%"></div></div>
@@ -2765,6 +2785,7 @@ body::after {{
 var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
 var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
 
+var _eqCanvasInitData = {_eq_canvas_tiles_j};
 var portDates  = {port_dates_j};
 var portValues = {port_values_j};
 var markTs     = {mark_ts_j};
@@ -4856,13 +4877,11 @@ setInterval(_fetchIntradayMarks, 15000);
   }}
 
   function _pollEqPrices() {{
-    var cards = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]');
-    if (!cards.length) return;
-    var syms = [];
-    cards.forEach(function(c) {{ syms.push(c.getAttribute('data-sym')); }});
-    if (!syms.length) return;
+    // Read tile state from canvas engine — no DOM queries needed
+    var liveTiles = _ET.filter(function(t) {{ return t.phase === 'live' || t.phase === 'entering'; }});
+    if (!liveTiles.length) return;
+    var syms = liveTiles.map(function(t) {{ return t.sym; }});
 
-    var symFilter = syms.map(function(s) {{ return 'symbol=eq.' + s; }}).join(',');
     var url = SUPA_URL + '/rest/v1/price_bars'
       + '?select=symbol,close,date&symbol=in.(' + syms.join(',') + ')'
       + '&order=date.desc&limit=' + (syms.length * 3);
@@ -4870,54 +4889,37 @@ setInterval(_fetchIntradayMarks, 15000);
     .then(function(r) {{ return r.json(); }})
     .then(function(rows) {{
       if (!Array.isArray(rows)) return;
-      // Latest price per sym
       var latest = {{}};
       rows.forEach(function(row) {{
         if (!latest[row.symbol]) latest[row.symbol] = row.close;
       }});
 
-      cards.forEach(function(card) {{
-        var sym   = card.getAttribute('data-sym');
-        var price = latest[sym];
+      liveTiles.forEach(function(t) {{
+        var price = latest[t.sym];
         if (!price) return;
-        var qty   = parseFloat(card.getAttribute('data-qty') || '0');
-        var entry = parseFloat(card.getAttribute('data-entry') || '0');
-        var val   = qty * price;
-        var pnl   = entry > 0 ? (price - entry) * qty : 0;
-        var pct   = entry > 0 ? (price - entry) / entry * 100 : 0;
-        var valEl = document.getElementById('pcval-' + sym);
-        var pnlEl = document.getElementById('pcpnl-' + sym);
-        var pctEl = document.getElementById('pcpct-' + sym);
-
-        if (valEl && val > 0) {{
-          var prev = _eqPrev[sym];
-          if (prev !== undefined && Math.abs(val - prev) > 0.50) {{
-            _flashVal(valEl, val > prev);
-          }}
-          _eqPrev[sym] = val;
-          valEl.textContent = '$' + val.toLocaleString('en-US',{{maximumFractionDigits:0}});
+        var val = t.qty * price;
+        var pnl = t.entry > 0 ? (price - t.entry) * t.qty : 0;
+        var pct = t.entry > 0 ? (price - t.entry) / t.entry * 100 : 0;
+        // Flash indicator for next draw
+        var prev = _eqPrev[t.sym];
+        if (prev !== undefined && Math.abs(val - prev) > 0.50) {{
+          t._valFlash = val > prev ? 1 : -1;
         }}
-        if (pnlEl) {{
-          var sign = pnl >= 0 ? '+' : '-';
-          var col  = pnl >= 0 ? '#00ff9d' : '#ff3366';
-          pnlEl.style.color = col;
-          pnlEl.textContent = sign + '$' + Math.abs(pnl).toLocaleString('en-US',{{maximumFractionDigits:0}});
-          if (pctEl) {{
-            pctEl.textContent = '(' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%)';
-            pnlEl.appendChild(pctEl);
-          }}
-        }}
+        _eqPrev[t.sym] = val;
+        // Update tile state — canvas draw loop picks it up next frame
+        t.curPrice = price;
+        t.val = val;
+        t.pnl = pnl;
+        t.pnlPct = pct;
       }});
 
       // Compute live equity NAV and push intraday point — drives NET DATA + nav line
       var _eqLivePnl = 0, _eqCount = 0;
-      cards.forEach(function(card) {{
-        var sym   = card.getAttribute('data-sym');
-        var price = latest[sym];
-        if (!price) return;
-        var qty   = parseFloat(card.getAttribute('data-qty') || '0');
-        var entry = parseFloat(card.getAttribute('data-entry') || '0');
-        if (qty > 0 && entry > 0) {{ _eqLivePnl += qty * (price - entry); _eqCount++; }}
+      liveTiles.forEach(function(t) {{
+        if (t.qty > 0 && t.entry > 0 && t.curPrice > 0) {{
+          _eqLivePnl += t.qty * (t.curPrice - t.entry);
+          _eqCount++;
+        }}
       }});
       if (_eqCount > 0) {{
         var _eqNav = (window._portfolioBaseline || 100000) + _eqLivePnl;
@@ -6797,12 +6799,16 @@ setTimeout(function() {{
     }}
 
     window._triggerCardExit = function(fullSym, reason, pnl, exitPrice) {{
-      var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD']
-             || _equityCardEls[fullSym];
+      // Equity tiles are managed by canvas engine — route there and return
+      if (_etBySym[fullSym]) {{
+        window._etExit(fullSym, pnl, exitPrice);
+        return;
+      }}
+
+      var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD'];
       if (!el) return;
       if (_cryptoCardEls[fullSym]) delete _cryptoCardEls[fullSym];
       else if (_cryptoCardEls[fullSym + '/USD']) delete _cryptoCardEls[fullSym + '/USD'];
-      else if (_equityCardEls[fullSym]) delete _equityCardEls[fullSym];
       var _exitSym = _cryptoCardEls[fullSym + '/USD'] ? fullSym + '/USD' : fullSym;
       if (_satAngles[_exitSym] !== undefined) {{
         _satExiting[_exitSym] = {{
@@ -6877,30 +6883,403 @@ setTimeout(function() {{
 
     var _CARD_W = 148; // crypto column width
     var _EQ_W   = 130; // equity column width
+    var _EQ_H   = 82;  // tile height px
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CANVAS EQUITY TILE ENGINE
+    // All equity holdings rendered on a single canvas — zero DOM, zero layout cost.
+    // _ET[] is the single source of truth; draw loop paints it 30fps.
+    // ═══════════════════════════════════════════════════════════════════════════
+    var _ET = [];          // tile state objects (ordered display order)
+    var _etBySym = {{}};   // sym → tile for O(1) lookup
+
+    function _etLayout() {{
+      var stratBar = document.getElementById('strat-bar');
+      var sbH = stratBar ? stratBar.offsetHeight : 46;
+      var availH = window.innerHeight - sbH - 4;
+      var perCol = Math.max(1, Math.floor(availH / _EQ_H));
+      var liveTiles = _ET.filter(function(t) {{ return t.phase !== 'done'; }});
+      var numCols = Math.max(1, Math.ceil(liveTiles.length / perCol));
+      return {{ perCol: perCol, numCols: numCols, availH: availH, live: liveTiles }};
+    }}
+
+    function _etTilePos(idx, layout) {{
+      // Columns grow leftward: rightmost column = column 0
+      var col = Math.floor(idx / layout.perCol);
+      var row = idx % layout.perCol;
+      var x = (layout.numCols - 1 - col) * _EQ_W;
+      var y = row * _EQ_H;
+      return {{ x: x, y: y }};
+    }}
+
+    var _etCanvas = null, _etCtx = null;
+    var _etLastDraw = 0, _etDirty = true;
+    var _etScanT = 0;  // scanline phase
+
+    function _etInitCanvas() {{
+      _etCanvas = document.getElementById('eq-tiles-canvas');
+      if (!_etCanvas) return;
+      _etCtx = _etCanvas.getContext('2d');
+      _etCanvas.style.position = 'relative';
+      _etCanvas.style.zIndex = '2';
+    }}
+
+    function _etResize() {{
+      if (!_etCanvas) return;
+      var layout = _etLayout();
+      var cw = _EQ_W * layout.numCols;
+      var ch = layout.availH;
+      if (_etCanvas.width !== cw || _etCanvas.height !== ch) {{
+        _etCanvas.width  = cw;
+        _etCanvas.height = ch;
+        _etCanvas.style.width  = cw + 'px';
+        _etCanvas.style.height = ch + 'px';
+        _etDirty = true;
+      }}
+    }}
+
+    function _etDraw(ts) {{
+      if (!_etCtx || !_etCanvas) return;
+      _etScanT = ts;
+
+      var layout = _etLayout();
+      _etResize();
+      var ctx = _etCtx;
+      ctx.clearRect(0, 0, _etCanvas.width, _etCanvas.height);
+
+      var now = Date.now();
+      var liveTiles = layout.live;
+
+      for (var i = 0; i < liveTiles.length; i++) {{
+        var t = liveTiles[i];
+        var pos = _etTilePos(i, layout);
+        var x = pos.x, y = pos.y;
+        var age = now - t.phaseStart;
+
+        if (t.phase === 'entering') {{
+          // 8-step opacity ramp over 320ms
+          var step = Math.floor(age / 40);
+          var alpha = Math.min(1, step / 8);
+          ctx.globalAlpha = alpha;
+          _etPaintTile(ctx, t, x, y, ts);
+          ctx.globalAlpha = 1;
+          if (age > 320) {{ t.phase = 'live'; }}
+
+        }} else if (t.phase === 'live') {{
+          _etPaintTile(ctx, t, x, y, ts);
+
+        }} else if (t.phase === 'exit-flash') {{
+          // White flash: bright overlay steps down to zero over 200ms
+          _etPaintTile(ctx, t, x, y, ts);
+          var flashStep = Math.floor(age / 28);  // 7 steps = 196ms
+          var flashAlpha = Math.max(0, 1 - flashStep / 7);
+          ctx.fillStyle = 'rgba(255,255,255,' + flashAlpha + ')';
+          ctx.fillRect(x, y, _EQ_W, _EQ_H);
+          if (age > 200) {{
+            t.phase = 'pnl-ghost';
+            t.phaseStart = now;
+            // Spawn particles at canvas-relative screen position
+            if (_etCanvas) {{
+              var cr = _etCanvas.getBoundingClientRect();
+              _spawnParticles(
+                cr.left + x + _EQ_W / 2,
+                cr.top  + y + _EQ_H / 2,
+                t.pnl >= 0 ? '#00ff9d' : '#ff3366'
+              );
+            }}
+          }}
+
+        }} else if (t.phase === 'pnl-ghost') {{
+          // Ghost: dim tile background, large P&L text centered, fade out at end
+          var ghostAge = now - t.phaseStart;
+          var ghostFade = ghostAge < 2400 ? 1 : Math.max(0, 1 - (ghostAge - 2400) / 400);
+          ctx.globalAlpha = ghostFade;
+
+          // Subtle dark background
+          ctx.fillStyle = 'rgba(0,0,8,0.5)';
+          ctx.fillRect(x, y, _EQ_W, _EQ_H);
+          // Thin left border in ticker color
+          ctx.fillStyle = t.col;
+          ctx.globalAlpha = ghostFade * 0.4;
+          ctx.fillRect(x, y, 2, _EQ_H);
+          ctx.globalAlpha = ghostFade;
+
+          var pnlCol = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
+          var absP = Math.abs(t.exitPnl);
+          var sign = t.exitPnl >= 0 ? '+' : '−';
+          var pnlStr = sign + '$' + (absP >= 1000 ? (absP/1000).toFixed(1)+'k' : absP.toFixed(2));
+
+          // Sym label (tiny, dim)
+          ctx.fillStyle = 'rgba(255,255,255,0.25)';
+          ctx.font = '7px Consolas,monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(t.sym, x + _EQ_W/2, y + _EQ_H/2 - 12);
+
+          // P&L value (large, glowing)
+          ctx.shadowColor = pnlCol;
+          ctx.shadowBlur = 14;
+          ctx.fillStyle = pnlCol;
+          ctx.font = 'bold 15px Consolas,monospace';
+          ctx.fillText(pnlStr, x + _EQ_W/2, y + _EQ_H/2 + 5);
+          ctx.shadowBlur = 0;
+
+          ctx.globalAlpha = 1;
+          ctx.textAlign = 'left';
+
+          if (ghostAge > 2800) {{
+            t.phase = 'done';
+            _etDirty = true;
+          }}
+        }}
+        // 'done' tiles are excluded by liveTiles filter
+      }}
+
+      // Sync overlay width from canvas tile count
+      _updateOverlayWidth();
+    }}
+
+    function _etPaintTile(ctx, t, x, y, ts) {{
+      var W = _EQ_W, H = _EQ_H;
+
+      // Background
+      ctx.fillStyle = 'rgba(0,0,8,0.9)';
+      ctx.fillRect(x, y, W, H);
+
+      // Left accent stripe
+      ctx.fillStyle = t.col;
+      ctx.fillRect(x, y, 3, H);
+
+      // Bottom separator
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(x, y + H - 1, W, 1);
+
+      // Scanline: single horizontal line that sweeps down every 4s
+      var scanPeriod = 4000;
+      var scanPosRaw = ((ts % scanPeriod) / scanPeriod) * (H + 8) - 4;
+      var scanPos = Math.round(scanPosRaw);
+      if (scanPos >= 0 && scanPos < H) {{
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(x + 3, y + scanPos, W - 3, 1);
+      }}
+
+      var lx = x + 8;  // left text margin (after stripe)
+
+      // Row 1: live-dot · sym · badge · value
+      var r1y = y + 15;
+      // Pulsing live dot
+      var dotPulse = 0.5 + 0.5 * Math.sin(ts / 600);
+      ctx.beginPath();
+      ctx.arc(lx + 2, r1y - 3, 2.5, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,0,204,' + (0.5 + dotPulse*0.5) + ')';
+      ctx.fill();
+
+      // Sym
+      ctx.fillStyle = t.col;
+      ctx.font = 'bold 11px Consolas,monospace';
+      ctx.fillText(t.sym, lx + 9, r1y);
+
+      // Badge (HOLD/SELL)
+      var symW = ctx.measureText(t.sym).width;
+      var bx = lx + 9 + symW + 5;
+      var badgeText = t.inSignal ? ('#' + (t.rank||'?') + ' HOLD') : 'EXIT';
+      var badgeCol  = t.inSignal ? 'rgba(0,200,140,0.65)' : 'rgba(220,160,0,0.65)';
+      ctx.font = '7px Consolas,monospace';
+      ctx.fillStyle = badgeCol;
+      ctx.fillText(badgeText, bx, r1y);
+
+      // Value (white, right-aligned)
+      var valStr = '$' + (t.val||0).toLocaleString('en-US',{{maximumFractionDigits:0}});
+      ctx.font = 'bold 11px Consolas,monospace';
+      ctx.fillStyle = t._valFlash ? (t._valFlash > 0 ? '#00ff9d' : '#ff3366') : '#ffffff';
+      ctx.textAlign = 'right';
+      ctx.fillText(valStr, x + W - 6, r1y);
+      ctx.textAlign = 'left';
+      // Decay flash after 2 frames
+      if (t._valFlash) {{ t._valFlash = 0; }}
+
+      // Row 2: P&L
+      var r2y = y + 29;
+      var pnlCol = (t.pnl||0) >= 0 ? '#00c880' : '#e03355';
+      var absP = Math.abs(t.pnl||0);
+      var pnlSign = (t.pnl||0) >= 0 ? '+' : '−';
+      var pct = t.pnlPct || 0;
+      ctx.fillStyle = pnlCol;
+      ctx.font = '10px Consolas,monospace';
+      ctx.fillText(pnlSign + '$' + absP.toLocaleString('en-US',{{maximumFractionDigits:0}}), lx, r2y);
+      ctx.fillStyle = 'rgba(200,200,200,0.4)';
+      ctx.font = '8px Consolas,monospace';
+      var pnlW = ctx.measureText(pnlSign + '$' + absP.toLocaleString('en-US',{{maximumFractionDigits:0}})).width;
+      ctx.fillText(' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)', lx + pnlW, r2y);
+
+      // Row 3: Proximity bar (stop→cur→target)
+      var r3y = y + 42;
+      if (t.entry > 0 && t.stop > 0) {{
+        var tgt = t.target > 0 ? t.target : t.entry * 1.008;
+        var cur = t.curPrice > 0 ? t.curPrice : t.entry;
+        var rng = tgt - t.stop;
+        var prox = rng > 0 ? Math.max(0, Math.min(1, (cur - t.stop) / rng)) : 0.5;
+        var barX = lx, barW = W - lx - 6;
+
+        // Labels
+        ctx.fillStyle = 'rgba(200,200,210,0.35)';
+        ctx.font = '7px Consolas,monospace';
+        var stopStr = t.stop < 1 ? '$' + t.stop.toFixed(4) : '$' + t.stop.toFixed(2);
+        var tgtStr  = tgt  < 1 ? '$' + tgt.toFixed(4)  : '$' + tgt.toFixed(2);
+        ctx.fillText(stopStr, barX, r3y - 2);
+        ctx.textAlign = 'right';
+        ctx.fillText(tgtStr, x + W - 6, r3y - 2);
+        ctx.textAlign = 'left';
+
+        // Track
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(barX, r3y + 2, barW, 2);
+
+        // Fill
+        var fillCol = prox < 0.33 ? '#a03050' : prox < 0.66 ? '#4080b0' : '#00a060';
+        ctx.fillStyle = fillCol;
+        ctx.fillRect(barX, r3y + 2, barW * prox, 2);
+
+        // Cursor dot
+        ctx.beginPath();
+        ctx.arc(barX + barW * prox, r3y + 3, 3, 0, Math.PI*2);
+        ctx.fillStyle = fillCol;
+        ctx.fill();
+
+        // Current price label at cursor
+        var curStr = cur < 1 ? '$' + cur.toFixed(4) : '$' + cur.toFixed(2);
+        ctx.fillStyle = t.col;
+        ctx.font = '7px Consolas,monospace';
+        ctx.textAlign = 'center';
+        var clampedX = Math.max(barX + 10, Math.min(x + W - 16, barX + barW * prox));
+        ctx.fillText(curStr, clampedX, r3y - 2);
+        ctx.textAlign = 'left';
+      }}
+
+      // Row 4: meta
+      var r4y = y + 62;
+      ctx.fillStyle = 'rgba(0,200,220,0.5)';
+      ctx.font = '7px Consolas,monospace';
+      var dayStr = '⏱ ' + (t.days||0) + (t.days===1?' day':' days');
+      ctx.fillText(dayStr, lx, r4y);
+      if (t.entry > 0) {{
+        var entStr = '$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry.toFixed(2));
+        ctx.fillStyle = 'rgba(140,110,170,0.4)';
+        ctx.font = '7px Consolas,monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('entered ' + entStr, x + W - 6, r4y);
+        ctx.textAlign = 'left';
+      }}
+
+      // Row 5: status
+      var r5y = y + 73;
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(x + 3, r5y - 9, W - 6, 1);
+      ctx.fillStyle = t.inSignal ? 'rgba(0,200,140,0.45)' : 'rgba(220,120,0,0.55)';
+      ctx.font = '7px Consolas,monospace';
+      ctx.fillText(t.holdText || (t.inSignal ? 'HOLD — IN SIGNAL' : 'EXIT — DROPPED FROM SIGNAL'), lx, r5y);
+    }}
+
+    // Add or replace a tile (upsert)
+    function _etUpsert(data) {{
+      var existing = _etBySym[data.sym];
+      if (existing) {{
+        // Update live fields only
+        existing.val      = data.val      || existing.val;
+        existing.pnl      = data.pnl      !== undefined ? data.pnl : existing.pnl;
+        existing.pnlPct   = data.pnlPct   !== undefined ? data.pnlPct : existing.pnlPct;
+        existing.curPrice = data.curPrice  || existing.curPrice;
+        existing.inSignal = data.inSignal  !== undefined ? data.inSignal : existing.inSignal;
+        existing.rank     = data.rank      || existing.rank;
+        existing.holdText = data.holdText  || existing.holdText;
+        return existing;
+      }}
+      var tile = {{
+        sym:       data.sym,
+        col:       data.col || '#00e5ff',
+        val:       data.val || 0,
+        pnl:       data.pnl || 0,
+        pnlPct:    data.pnlPct || 0,
+        entry:     data.entry || 0,
+        qty:       data.qty || 0,
+        stop:      data.stop || 0,
+        target:    data.target || 0,
+        curPrice:  data.curPrice || data.entry || 0,
+        days:      data.days || 0,
+        inSignal:  data.inSignal !== undefined ? data.inSignal : true,
+        rank:      data.rank || 0,
+        holdText:  data.holdText || '',
+        exitPnl:   0,
+        phase:     'entering',
+        phaseStart: Date.now(),
+        _valFlash: 0,
+      }};
+      _ET.push(tile);
+      _etBySym[data.sym] = tile;
+      _etDirty = true;
+      _updateOverlayWidth();
+      return tile;
+    }}
+    window._etUpsert = _etUpsert;
+
+    // Exit a tile (called by notification handler or poll)
+    window._etExit = function(sym, pnl, exitPrice) {{
+      var t = _etBySym[sym];
+      if (!t || t.phase === 'exit-flash' || t.phase === 'pnl-ghost' || t.phase === 'done') return;
+      t.exitPnl = (pnl !== null && pnl !== undefined) ? pnl : t.pnl;
+      t.phase = 'exit-flash';
+      t.phaseStart = Date.now();
+      _etDirty = true;
+      // Satellite ejection still uses existing system
+      var _exitSym = sym + '/USD';
+      if (_satAngles[_exitSym] !== undefined) {{
+        var col = t.pnl >= 0 ? '#00ff9d' : '#ff3366';
+        _satExiting[_exitSym] = {{ angle:_satAngles[_exitSym], orbitR:32, age:0,
+          sr: t.pnl>=0?0:255, sg: t.pnl>=0?255:51, sb: t.pnl>=0?157:102 }};
+        delete _satAngles[_exitSym];
+      }}
+      // Clean up after animation completes
+      setTimeout(function() {{
+        delete _etBySym[sym];
+        _ET = _ET.filter(function(tile) {{ return tile.sym !== sym; }});
+        _updateOverlayWidth();
+      }}, 3200);
+    }};
+
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
       var posLeft = document.getElementById('pos-left');
-      var posRight = document.getElementById('pos-right');
       if (!overlay || !posLeft) return;
-      var count = Object.keys(_cryptoCardEls).length;
-      var leftW = count > 0 ? _CARD_W : 0;
+      var cryptoCount = Object.keys(_cryptoCardEls).length;
+      var leftW = cryptoCount > 0 ? _CARD_W : 0;
       posLeft.style.width = leftW + 'px';
-      // Multi-column equity: expand overlay width when tiles can't fit in one column
-      var eqCardEls = document.querySelectorAll('#pos-equity-section .pos-card');
-      var eqCards = eqCardEls.length;
-      // Use actual viewport height minus strat-bar so calculation never uses 0
-      var stratBar = document.getElementById('strat-bar');
-      var sbH = stratBar ? stratBar.getBoundingClientRect().height : 46;
-      var availH = window.innerHeight - sbH - 12;
-      // Measure the first actual card height; fall back to 88px for equity cards
-      var firstCard = eqCardEls.length ? eqCardEls[0] : null;
-      var tileH = firstCard ? Math.max(40, firstCard.getBoundingClientRect().height) : 88;
-      var perCol  = Math.max(1, Math.floor(availH / tileH));
-      var eqCols  = Math.max(1, Math.ceil(eqCards / perCol));
-      overlay.style.width = (leftW + _EQ_W * eqCols) + 'px';
+      var layout = _etLayout();
+      var eqW = layout.numCols * _EQ_W;
+      overlay.style.width = (leftW + eqW) + 'px';
+      // Also resize the canvas
+      if (_etCanvas) {{
+        _etCanvas.style.width  = eqW + 'px';
+        _etCanvas.style.height = layout.availH + 'px';
+      }}
     }}
 
     window._updateOverlayWidth = _updateOverlayWidth;
+
+    // Seed tiles from Python init data
+    (function() {{
+      if (!window._eqCanvasInitData) return;
+      _eqCanvasInitData.forEach(function(d) {{ _etUpsert(d); }});
+    }})();
+
+    // 30fps canvas draw loop
+    var _etRafLast = 0;
+    (function _etRaf(ts) {{
+      if (ts - _etRafLast >= 33) {{
+        _etRafLast = ts;
+        if (!_etCanvas) _etInitCanvas();
+        if (_etCanvas) _etDraw(ts);
+      }}
+      requestAnimationFrame(_etRaf);
+    }})(0);
     window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
       var col   = _symCol(p.symbol);
