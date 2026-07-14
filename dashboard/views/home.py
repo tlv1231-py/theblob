@@ -478,6 +478,7 @@ def _load_chart_data() -> dict:
 
     return {
         "portfolio":   {"dates": port_dates,  "values": port_values},
+        "marks":       {"ts": mark_ts,        "vals": mark_vals},
         "spy":         {"dates": spy_dates,   "prices": spy_prices},
         "qqq":         {"dates": qqq_dates,   "prices": qqq_prices},
         "monitoring_days": int(mon_days),
@@ -510,6 +511,9 @@ def _read_strategy_status() -> str:
 
 def _build_daw_html(data: dict) -> str:
     port  = data["portfolio"]
+    marks = data.get("marks", {"ts": [], "vals": []})
+    mark_ts   = marks["ts"]
+    mark_vals = marks["vals"]
     spy   = data["spy"]
     qqq   = data["qqq"]
     mon   = data["monitoring_days"]
