@@ -1231,8 +1231,8 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Orbitron',Consolas,monospace; font-size:15px; font-weight:900;
-  letter-spacing:-.02em; font-variant-numeric:tabular-nums;
+  font-family:'Press Start 2P','Orbitron',Consolas,monospace; font-size:11px; font-weight:400;
+  letter-spacing:.02em; font-variant-numeric:tabular-nums;
   color:#fff; transition:color .6s ease, text-shadow .6s ease;
   text-shadow:0 0 12px rgba(255,255,255,.4);
   white-space:nowrap;
@@ -1248,8 +1248,8 @@ body::after {{
 }}
 .ss-wallet-chip {{
   position:absolute; left:calc(100% + 8px); top:0;
-  font-family:'Orbitron',Consolas,monospace;
-  font-size:14px; font-weight:900; letter-spacing:-.01em;
+  font-family:'Press Start 2P','Orbitron',Consolas,monospace;
+  font-size:11px; font-weight:400; letter-spacing:.01em;
   font-variant-numeric:tabular-nums;
   opacity:0; white-space:nowrap; pointer-events:none;
   text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
@@ -1282,11 +1282,7 @@ body::after {{
 .callout-card.cc-show {{ opacity:1; }}
 .callout-card.cc-exit {{
   opacity:0;
-  max-height:0; padding-top:0; padding-bottom:0; margin:0;
-  transition:opacity 1.2s ease-out,
-             max-height 0.5s ease-in-out 1.1s,
-             padding 0.3s ease 1.1s,
-             margin 0.3s ease 1.1s;
+  transition:opacity 1.4s ease-out;
 }}
 .cc-verb {{
   font-size:9px; letter-spacing:.18em; text-transform:uppercase;
@@ -1437,7 +1433,7 @@ body::after {{
 .hud-timer.hud-imminent {{ color:#ff3366; animation:q-pulse .5s ease-in-out infinite; }}
 @keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
 /* ── Report panel — Alpaca wallet display ── */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Press+Start+2P&display=swap');
 #report-panel {{
   flex:1.4; min-width:200px; max-width:460px;
   background:#000308; display:flex; flex-direction:column;
@@ -2381,7 +2377,12 @@ body::after {{
   <div class="strat-slot" id="ss-nav">
     <div class="ss-icon">◉</div>
     <div class="ss-name">CURRENT POS</div>
-    <div class="ss-status" id="ss-nav-st">—</div>
+    <div class="ss-trades-row">
+      <div class="ss-trades-anchor">
+        <span class="ss-status" id="ss-nav-st">—</span>
+        <span class="ss-wallet-chip" id="ss-nav-chip"></span>
+      </div>
+    </div>
   </div>
 </div>
 <!-- ── Callout rail — height:0 sibling; cards overflow downward from HUD bottom ── -->
@@ -4065,29 +4066,36 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     if (!curNav && history.length === 0) return;
 
     var nowMs    = Date.now();
-    var halfWin  = 20 * 60 * 1000; // 20 min
+    var halfWin  = 20 * 60 * 1000; // ±20-min window; current time = W/2 (orb center)
     var winStart = nowMs - halfWin;
     var winEnd   = nowMs + halfWin;
 
     // Include current nav as a synthetic "now" point
-    var pts = history.slice(); // array of {{x:ISO, y:nav}}
+    var pts = history.slice();
     if (curNav) {{
-      var last = pts[pts.length - 1];
       var nowIso = new Date(nowMs).toISOString();
+      var last = pts[pts.length - 1];
       if (!last || last.x !== nowIso) pts.push({{ x: nowIso, y: curNav }});
     }}
 
-    // Filter to visible window only
+    // Filter to visible window
     pts = pts.filter(function(p) {{
       var ms = new Date(p.x).getTime();
       return ms >= winStart && ms <= winEnd;
     }});
-    // Always expose the orb position for pulse-canvas to use (current nav = center)
-    window._navOrbCanvasX = W / 2;
-    window._navOrbCanvasY = H / 2;
 
-    if (pts.length < 1) {{
-      // No history yet — dot at exact center
+    // Guarantee a left-anchor so there is always a line, not just a dot.
+    // If no point exists before "now", inject one 19 min back at the known nav.
+    var hasLeftPt = pts.some(function(p) {{ return new Date(p.x).getTime() < nowMs - 2000; }});
+    if (!hasLeftPt && curNav) {{
+      pts.unshift({{ x: new Date(winStart + 60000).toISOString(), y: curNav }});
+    }}
+
+    // Orb always at canvas center (current time = W/2)
+    window._navOrbCanvasX = W / 2;
+    window._navOrbCanvasY = H / 2; // refined below after ty() is defined
+
+    if (pts.length < 2) {{
       if (curNav) {{
         ctx.beginPath(); ctx.arc(W/2, H/2, 5, 0, Math.PI*2);
         ctx.fillStyle = '#ff00cc'; ctx.fill();
@@ -4095,8 +4103,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return;
     }}
 
-    // Y range — symmetric around curNav so it always maps to H/2 (dot = visual center)
-    var base = curNav || 100000;
+    // Y range — symmetric around curNav so current value maps to H/2
+    var base = curNav || pts[pts.length-1].y;
     var spread = 0;
     pts.forEach(function(p) {{
       var d = Math.abs(p.y - base);
@@ -4104,14 +4112,14 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }});
     var minSpread = base * 0.002; // floor: 0.2% of NAV so flat line stays visible
     var halfRange = Math.max(spread * 1.4, minSpread);
-    var minY = base - halfRange, maxY = base + halfRange;
 
-    // Coordinate mappers — current moment always at W/2, curNav always at H/2
+    // Coordinate mappers — current time at W/2, curNav at H/2
     function tx(isoStr) {{
       var ms = new Date(isoStr).getTime();
       return (ms - winStart) / (winEnd - winStart) * W;
     }}
     function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
+    window._navOrbCanvasY = ty(base);
 
     var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
 
@@ -6002,33 +6010,19 @@ window.addEventListener('resize', function() {{
       .catch(function() {{}});
     }}
 
-    // Seed _navHistory — only last 30 min so seeded points fall inside the visible window.
-    // Older points cause diagonal laser beams across the 20-min view.
-    (function() {{
-      window._navHistory = [];
-      var seedFrom = new Date(Date.now() - 30*60*1000).toISOString();
-      var seedUrl = SUPA_URL + '/rest/v1/portfolio_snapshots'
-        + '?select=total_value,recorded_at'
-        + '&strategy=eq.crypto_momentum'
-        + '&recorded_at=gte.' + seedFrom
-        + '&order=recorded_at.asc&limit=200';
-      fetch(seedUrl, {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
-      .then(function(r) {{ return r.json(); }})
-      .then(function(rows) {{
-        if (!Array.isArray(rows)) return;
-        rows.forEach(function(r) {{
-          var x = r.recorded_at.replace(' ','T').replace('+00:00','Z');
-          var y = parseFloat(r.total_value);
-          if (!isNaN(y)) window._navHistory.push({{ x: x, y: y }});
-        }});
-        // Draw immediately after seeding
-        var _gd = document.getElementById('chart');
-        if (_gd && _gd.data && _gd.data.length > 3 && window._navHistory.length) {{
-          if (window._drawNavCanvas) window._drawNavCanvas();
-          _recenterOnLatest(null);
-        }}
-      }}).catch(function() {{}});
-    }})();
+    // Seed _navHistory: once the first NAV is known, push a synthetic baseline point
+    // at the left edge of the 20-min window so the line appears immediately.
+    // crypto_momentum has no portfolio_snapshots rows, so we don't query that table.
+    window._navHistory = [];
+    window._navBaselineSeeded = false;
+    window._seedNavBaseline = function(nav) {{
+      if (window._navBaselineSeeded || !nav) return;
+      window._navBaselineSeeded = true;
+      // Plant baseline 19.5 minutes back — maps to x ≈ 1.25% from left edge
+      var baselineTs = new Date(Date.now() - 19.5*60*1000).toISOString();
+      window._navHistory.push({{ x: baselineTs, y: nav }});
+      if (window._drawNavCanvas) window._drawNavCanvas();
+    }};
 
     setTimeout(function() {{
       _pollNav();
@@ -6049,8 +6043,8 @@ window.addEventListener('resize', function() {{
       if (window._drawNavCanvas) window._drawNavCanvas();
     }}
     window._navHeartbeat = _navHeartbeat;
-    // Fire first heartbeat as soon as pollNav has set _lastKnownNav, then every 5s
-    setTimeout(function() {{ _navHeartbeat(); setInterval(_navHeartbeat, 5000); }}, 5000);
+    // Fire first heartbeat quickly so baseline seeds as soon as nav is known
+    setTimeout(function() {{ _navHeartbeat(); setInterval(_navHeartbeat, 5000); }}, 1500);
 
     // ── Live positions poller — DOM-diffing with enter/exit animations ───────
     var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
@@ -6980,9 +6974,41 @@ window.addEventListener('resize', function() {{
         }}
         _walletRaf = requestAnimationFrame(step);
       }}
-      // Quiet sync from NAV polls
+      // Quiet sync from NAV polls — color intensity scales with move size vs. recent history
+      var _prevWalletNav = null;
+      var _recentMagWindow = [];
+      var _flashTimeout = null;
       window._updateWalletSlot = function(nav) {{
         if (!nav) return;
+        var el = document.getElementById('ss-wallet-val');
+        if (el && _prevWalletNav !== null && nav !== _prevWalletNav) {{
+          var delta = nav - _prevWalletNav;
+          var mag = Math.abs(delta);
+          if (mag > 0.01) {{
+            _recentMagWindow.push(mag);
+            if (_recentMagWindow.length > 30) _recentMagWindow.shift();
+          }}
+          // Intensity: floor 0.15 so even tiny ticks show faint hue; scales to 1 at median+ moves
+          var intensity = 0.15;
+          if (_recentMagWindow.length >= 3) {{
+            var sorted = _recentMagWindow.slice().sort(function(a,b) {{ return a-b; }});
+            var median = sorted[Math.floor(sorted.length / 2)];
+            if (median > 0) intensity = Math.min(1, 0.15 + (mag / median) * 0.85);
+          }}
+          if (mag > 0.01) {{
+            var isGain = delta > 0;
+            var rgb = isGain ? '0,255,157' : '255,51,102';
+            var col = 'rgba(' + rgb + ',' + intensity + ')';
+            var glow = 'rgba(' + rgb + ',' + (intensity * 0.7) + ')';
+            el.style.color = col;
+            el.style.textShadow = '0 0 16px ' + glow + ', 0 0 4px ' + glow;
+            if (_flashTimeout) clearTimeout(_flashTimeout);
+            _flashTimeout = setTimeout(function() {{
+              if (el) {{ el.style.color = ''; el.style.textShadow = ''; }}
+            }}, 1800);
+          }}
+        }}
+        _prevWalletNav = nav;
         _lastWalletVal = nav;
         _animateWallet(nav);
       }};
@@ -7025,6 +7051,7 @@ window.addEventListener('resize', function() {{
       }}
 
       // ── CURRENT POS slot — open position count ───────────────
+      var _prevPosCount = null;
       function _updateNavSlot() {{
         var nav = window._lastKnownNav;
         if (window._updateWalletSlot && nav) window._updateWalletSlot(nav);
@@ -7032,6 +7059,20 @@ window.addEventListener('resize', function() {{
         var eq = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
         var total = count + eq;
         _ssSet('ss-nav-st', total > 0 ? 'ss-active' : '', total > 0 ? total + ' OPEN' : 'FLAT');
+        // Fire combo chip when count changes
+        if (_prevPosCount !== null && total !== _prevPosCount) {{
+          var diff = total - _prevPosCount;
+          var chip = document.getElementById('ss-nav-chip');
+          if (chip) {{
+            chip.textContent = (diff > 0 ? '+' : '') + diff;
+            chip.style.color = diff > 0 ? '#00ff9d' : '#ff3366';
+            chip.classList.remove('dmg-active');
+            void chip.offsetWidth;
+            chip.classList.add('dmg-active');
+            setTimeout(function() {{ chip.classList.remove('dmg-active'); }}, 2300);
+          }}
+        }}
+        _prevPosCount = total;
       }}
 
       // ── Callout system — stackable drop-in notifications ────────
