@@ -1257,12 +1257,20 @@ body::after {{
   border:1px solid rgba(148,0,255,.12); border-left:3px solid;
   border-radius:2px;
   box-shadow:0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+  max-height:120px; overflow:hidden;
   opacity:0;
   transition:opacity .3s ease;
   pointer-events:none;
 }}
 .callout-card.cc-show {{ opacity:1; }}
-.callout-card.cc-exit {{ opacity:0; transition:opacity 1.4s ease-out; }}
+.callout-card.cc-exit {{
+  opacity:0;
+  max-height:0; padding-top:0; padding-bottom:0; margin:0;
+  transition:opacity 1.2s ease-out,
+             max-height 0.5s ease-in-out 1.1s,
+             padding 0.3s ease 1.1s,
+             margin 0.3s ease 1.1s;
+}}
 .cc-badge {{
   font:700 7px Consolas,monospace; letter-spacing:.22em; padding:3px 8px;
   border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.85;
@@ -6937,29 +6945,46 @@ window.addEventListener('resize', function() {{
 
       // ── WALLET slot — Alpaca NAV with gain/loss color flash (window-exposed) ─
       var _lastWalletVal = null;
-      // Just update the number — no combo logic here (avoids NAV-poll false triggers)
-      window._updateWalletSlot = function(nav) {{
-        if (!nav) return;
+      // rAF-animated counter — rolls from current displayed value to target
+      var _walletRaf = null;
+      var _walletRendered = null;
+      function _animateWallet(toVal) {{
         var el = document.getElementById('ss-wallet-val');
         if (!el) return;
-        el.textContent = '$' + nav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+        var from = _walletRendered !== null ? _walletRendered : toVal;
+        if (_walletRaf) {{ cancelAnimationFrame(_walletRaf); _walletRaf = null; }}
+        var startTs = null;
+        var DURATION = 700;
+        function step(ts) {{
+          if (!startTs) startTs = ts;
+          var t = Math.min((ts - startTs) / DURATION, 1);
+          t = 1 - Math.pow(1 - t, 3); // ease-out cubic
+          var cur = from + (toVal - from) * t;
+          _walletRendered = cur;
+          el.textContent = '$' + cur.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+          if (t < 1) _walletRaf = requestAnimationFrame(step);
+          else {{ _walletRendered = toVal; _walletRaf = null; }}
+        }}
+        _walletRaf = requestAnimationFrame(step);
+      }}
+      // Quiet sync from NAV polls
+      window._updateWalletSlot = function(nav) {{
+        if (!nav) return;
         _lastWalletVal = nav;
+        _animateWallet(nav);
       }};
-      // Fire this only from real trade events
+      // Trade event: flash color + chip + animate to new value
       window._walletCombo = function(delta) {{
         var el = document.getElementById('ss-wallet-val');
         var chip = document.getElementById('ss-wallet-chip');
         if (!el) return;
+        var newVal = (_lastWalletVal || 0) + delta;
+        _lastWalletVal = newVal;
         var isGain = delta >= 0;
         el.classList.remove('gain', 'loss');
         void el.offsetWidth;
         el.classList.add(isGain ? 'gain' : 'loss');
-        // Immediately bump displayed value
-        if (_lastWalletVal) {{
-          var newVal = _lastWalletVal + delta;
-          el.textContent = '$' + newVal.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
-          _lastWalletVal = newVal;
-        }}
+        _animateWallet(newVal);
         if (chip) {{
           chip.textContent = (isGain ? '+$' : '-$') + Math.abs(delta).toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
           chip.style.color = isGain ? '#00ff9d' : '#ff3366';
