@@ -985,7 +985,7 @@ body::after {{
 /* flex children */
 #main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
 #chart {{ position:absolute; inset:0; width:100%; height:100%; }}
-#pulse-canvas {{ position:fixed; inset:0; pointer-events:none; z-index:8; }}
+#pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
 #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
 /* ── Left feed overlay ── */
@@ -2396,7 +2396,7 @@ body::after {{
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
-  <canvas id="nav-canvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
+  <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
   <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
   <div id="trade-veil"></div>
@@ -2879,7 +2879,7 @@ function toggleCapital() {{
 
 // ── Pulsing canvas dots ────────────────────────────────
 var canvas = document.getElementById('pulse-canvas');
-function resizeCanvas() {{ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }}
+function resizeCanvas() {{ var ma=document.getElementById('main-area'); if(!ma) return; var r=ma.getBoundingClientRect(); canvas.width=r.width||800; canvas.height=r.height||500; }}
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
@@ -4046,9 +4046,11 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   if (!_nc) return;
 
   function _resize() {{
-    // Canvas is position:fixed covering full viewport — use window dimensions
-    _nc.width  = window.innerWidth  || 800;
-    _nc.height = window.innerHeight || 500;
+    var ma = document.getElementById('main-area');
+    if (!ma) return;
+    var r = ma.getBoundingClientRect();
+    _nc.width  = r.width  || 800;
+    _nc.height = r.height || 500;
   }}
   _resize();
   window.addEventListener('resize', _resize);
