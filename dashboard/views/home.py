@@ -2341,7 +2341,7 @@ body::after {{
   </div>
   <div class="strat-slot" id="ss-positions">
     <div class="ss-icon">◈</div>
-    <div class="ss-name">WALLET</div>
+    <div class="ss-name">PORTFOLIO</div>
     <div class="ss-wallet-row">
       <span class="ss-wallet-val" id="ss-wallet-val">—</span>
       <span class="ss-wallet-chip" id="ss-wallet-chip"></span>
