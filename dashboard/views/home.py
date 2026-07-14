@@ -953,6 +953,9 @@ def _build_daw_html(data: dict) -> str:
 <html>
 <head>
 <meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@700;900&family=Bangers&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 html {{
@@ -1249,7 +1252,7 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Press Start 2P',monospace; font-size:18px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:22px; font-weight:400;
   letter-spacing:.04em; font-variant-numeric:tabular-nums;
   color:#ffe566;
   -webkit-text-stroke:1px rgba(0,0,0,.6);
