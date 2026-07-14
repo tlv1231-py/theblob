@@ -1301,10 +1301,10 @@ body::after {{
   background:transparent;
   transition:background .4s, box-shadow .4s;
 }}
-.strat-slot.ss-active::before  {{ background:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.9); }}
-.strat-slot.ss-ready::before   {{ background:#00ff9d; box-shadow:0 0 8px rgba(0,255,157,.9); }}
-.strat-slot.ss-exec::before    {{ background:#ffaa00; box-shadow:0 0 12px rgba(255,170,0,1); }}
-.strat-slot.ss-warn::before    {{ background:#ff3366; box-shadow:0 0 10px rgba(255,51,102,.9); }}
+.strat-slot.ss-active::before  {{ background:#00e5ff; box-shadow:0 0 3px rgba(0,229,255,.7); }}
+.strat-slot.ss-ready::before   {{ background:#00ff9d; box-shadow:0 0 3px rgba(0,255,157,.7); }}
+.strat-slot.ss-exec::before    {{ background:#ffaa00; box-shadow:0 0 3px rgba(255,170,0,.8); }}
+.strat-slot.ss-warn::before    {{ background:#ff3366; box-shadow:0 0 3px rgba(255,51,102,.7); }}
 .strat-slot.ss-exec {{ background:rgba(255,170,0,.04); }}
 .strat-slot.ss-ready {{ background:rgba(0,255,157,.03); }}
 .ss-icon {{
@@ -3112,6 +3112,7 @@ var _satEntryAge = {{}};
 // Combo streak display
 var _comboCount = 0;
 var _comboFlash = null; // {{age, text, col}}
+var _comboLastAt = 0;  // timestamp of last _comboCount increment — drives auto-fade
 
 // Satellite orbit angles: symbol → angle (radians)
 var _satAngles = {{}};
@@ -3173,6 +3174,7 @@ window._orbTradeFlash = function(isEntry, isWin) {{
 window._orbComboResult = function(isWin) {{
   if (isWin) {{
     _comboCount++;
+    _comboLastAt = Date.now();
     var txt = _comboCount >= 10 ? '⚡ SURGE' : _comboCount >= 5 ? 'HOT STREAK' : '+WIN';
     _comboFlash = {{ age:0, text:txt, col:[0,255,157] }};
   }} else {{
@@ -3510,22 +3512,27 @@ function drawPulse() {{
         ctx.fill(); ctx.shadowBlur = 0;
       }});
 
-      // ── Combo streak text above orb ───────────────────────────────────────
+      // ── Combo streak text — high above orb, clear of outer orbit ────────────
       if (_comboCount > 0) {{
         var comboCol = _comboCount>=10 ? '0,229,255' : _comboCount>=5 ? '255,170,0' : '255,0,204';
         var bounce   = Math.sin(phase*6)*2;
         var comboSize= Math.min(9 + _comboCount*0.8, 18);
-        ctx.save();
-        ctx.font = 'bold '+Math.round(comboSize)+'px Consolas';
-        ctx.fillStyle   = 'rgba('+comboCol+',.9)';
-        ctx.shadowColor = 'rgba('+comboCol+',1)';
-        ctx.shadowBlur  = 10+_comboCount*1.2;
-        ctx.textAlign   = 'center';
-        ctx.fillText('\xd7'+_comboCount+' COMBO', pcx, pcy-32+bounce);
-        ctx.restore();
+        // Auto-fade: full opacity for 1.5s, then fade out over 1s
+        var _comboAge = (Date.now() - _comboLastAt) / 1000;
+        var _comboA   = _comboAge < 1.5 ? 0.9 : Math.max(0, 0.9 - (_comboAge - 1.5) * 0.9);
+        if (_comboA > 0) {{
+          ctx.save();
+          ctx.font = 'bold '+Math.round(comboSize)+'px Consolas';
+          ctx.fillStyle   = 'rgba('+comboCol+','+_comboA+')';
+          ctx.shadowColor = 'rgba('+comboCol+','+_comboA+')';
+          ctx.shadowBlur  = (10+_comboCount*1.2) * _comboA;
+          ctx.textAlign   = 'center';
+          ctx.fillText('\xd7'+_comboCount+' COMBO', pcx, pcy-82+bounce);
+          ctx.restore();
+        }}
       }}
       if (_comboFlash) {{
-        _comboFlash.age += 0.004;
+        _comboFlash.age += 0.018;  // fast decay — gone in ~0.7s
         var fa = Math.max(0, 1-_comboFlash.age*1.4);
         ctx.save();
         ctx.font='bold 8px Consolas';
@@ -3533,7 +3540,7 @@ function drawPulse() {{
         ctx.shadowColor='rgba('+_comboFlash.col[0]+','+_comboFlash.col[1]+','+_comboFlash.col[2]+','+fa+')';
         ctx.shadowBlur=12;
         ctx.textAlign='center';
-        ctx.fillText(_comboFlash.text, pcx, pcy-50-_comboFlash.age*20);
+        ctx.fillText(_comboFlash.text, pcx, pcy-96-_comboFlash.age*20);
         ctx.restore();
         if (_comboFlash.age >= 1) _comboFlash = null;
       }}
