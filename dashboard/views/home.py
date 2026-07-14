@@ -1219,14 +1219,17 @@ body::after {{
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
 /* ── Trades slot ── */
-.ss-trades-row {{ display:flex; align-items:baseline; gap:5px; justify-content:center; }}
+.ss-trades-row {{ display:flex; justify-content:center; }}
+.ss-trades-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-trades-chip {{
+  position:absolute; left:calc(100% + 5px); top:50%; transform:translateY(-50%);
   font:700 9px Consolas,monospace; letter-spacing:.04em;
   color:#ff9900; opacity:0; transition:opacity .15s;
-  text-shadow:0 0 8px rgba(255,153,0,.7);
+  text-shadow:0 0 8px rgba(255,153,0,.7); white-space:nowrap;
 }}
 /* ── Wallet slot ── */
-.ss-wallet-row {{ display:flex; align-items:baseline; gap:6px; justify-content:center; flex-wrap:nowrap; }}
+.ss-wallet-row {{ display:flex; justify-content:center; }}
+.ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
   font-family:'Orbitron',Consolas,monospace; font-size:15px; font-weight:900;
   letter-spacing:-.02em; font-variant-numeric:tabular-nums;
@@ -1237,9 +1240,10 @@ body::after {{
 .ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 16px rgba(0,255,157,.9),0 0 4px rgba(0,255,157,.4); }}
 .ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 16px rgba(255,51,102,.9),0 0 4px rgba(255,51,102,.4); }}
 .ss-wallet-chip {{
+  position:absolute; left:calc(100% + 5px); top:50%; transform:translateY(-50%);
   font:700 8px Consolas,monospace; letter-spacing:.04em;
   opacity:0; transition:opacity .15s;
-  text-shadow:0 0 8px currentColor;
+  text-shadow:0 0 8px currentColor; white-space:nowrap;
 }}
 
 /* ── Callout rail — zero-height sibling after strat-bar; cards overflow down ─ */
@@ -2343,16 +2347,20 @@ body::after {{
     <div class="ss-icon">↯</div>
     <div class="ss-name">TRADES</div>
     <div class="ss-trades-row">
-      <span class="ss-status" id="ss-pipeline-st">—</span>
-      <span class="ss-trades-chip" id="ss-trades-chip"></span>
+      <div class="ss-trades-anchor">
+        <span class="ss-status" id="ss-pipeline-st">—</span>
+        <span class="ss-trades-chip" id="ss-trades-chip"></span>
+      </div>
     </div>
   </div>
   <div class="strat-slot" id="ss-positions">
     <div class="ss-icon">◈</div>
     <div class="ss-name">PORTFOLIO</div>
     <div class="ss-wallet-row">
-      <span class="ss-wallet-val" id="ss-wallet-val">—</span>
-      <span class="ss-wallet-chip" id="ss-wallet-chip"></span>
+      <div class="ss-wallet-anchor">
+        <span class="ss-wallet-val" id="ss-wallet-val">—</span>
+        <span class="ss-wallet-chip" id="ss-wallet-chip"></span>
+      </div>
     </div>
   </div>
   <div class="strat-slot" id="ss-price">
@@ -5495,11 +5503,7 @@ window.addEventListener('resize', function() {{
                   void _veilE.offsetWidth;
                   _veilE.classList.add('veil-entry');
                 }}
-                // Stratagem callout drop-in
-                if (window._fireCallout) {{
-                  var _cPrice = priceM ? ' @$' + parseFloat(priceM[1].replace(/,/g,'')).toFixed(2) : '';
-                  window._fireCallout('ENTER', sym.replace('/USD','') + _cPrice, 'position opened · watching exit', '#00e5ff', 'ACQUIRED');
-                }}
+                // No callout for entries — card appearing in positions panel is enough
                 if (window._orbTradeFlash) window._orbTradeFlash(true);
                 if (window._soundEntry) window._soundEntry();
                 if (window._makeCard) {{
