@@ -1242,9 +1242,9 @@ body::after {{
 @keyframes dmg-pop {{
   0%   {{ opacity:0; transform:translateY(0px) scale(1.5); }}
   8%   {{ opacity:1; transform:translateY(-2px) scale(1.08); }}
-  18%  {{ opacity:1; transform:translateY(-6px) scale(1); }}
-  75%  {{ opacity:1; transform:translateY(-22px) scale(1); }}
-  100% {{ opacity:0; transform:translateY(-34px) scale(.92); }}
+  18%  {{ opacity:1; transform:translateY(-4px) scale(1); }}
+  75%  {{ opacity:1; transform:translateY(-10px) scale(1); }}
+  100% {{ opacity:0; transform:translateY(-16px) scale(.92); }}
 }}
 .ss-wallet-chip {{
   position:absolute; left:calc(100% + 8px); top:0;
@@ -1266,22 +1266,6 @@ body::after {{
   padding-top:4px;
   z-index:99999;
 }}
-/* ── Countdown panel ── */
-#cd-panel {{
-  width:320px; margin:0 auto;
-  background:rgba(4,0,16,.55); backdrop-filter:blur(20px);
-  border:1px solid rgba(148,0,255,.1); border-radius:2px;
-  padding:8px 14px 6px;
-  font-family:Consolas,'Courier New',monospace;
-  pointer-events:none;
-}}
-.cd-row {{
-  display:flex; align-items:baseline; justify-content:space-between;
-  padding:3px 0; border-bottom:1px solid rgba(255,255,255,.04);
-}}
-.cd-row:last-child {{ border-bottom:none; }}
-.cd-label {{ font-size:8px; letter-spacing:.14em; color:rgba(200,150,255,.5); text-transform:uppercase; }}
-.cd-time  {{ font-size:10px; letter-spacing:.06em; color:rgba(255,255,255,.7); font-variant-numeric:tabular-nums; }}
 .callout-card {{
   display:flex; align-items:baseline; gap:7px;
   width:320px; padding:10px 16px;
@@ -2400,12 +2384,6 @@ body::after {{
 </div>
 <!-- ── Callout rail — height:0 sibling; cards overflow downward from HUD bottom ── -->
 <div id="callout-rail"></div>
-<div id="cd-panel">
-  <div class="cd-row"><span class="cd-label">MARKET OPEN</span><span class="cd-time" id="cd-open">—</span></div>
-  <div class="cd-row"><span class="cd-label">MARKET CLOSE</span><span class="cd-time" id="cd-close">—</span></div>
-  <div class="cd-row"><span class="cd-label">PIPELINE</span><span class="cd-time" id="cd-pipe">—</span></div>
-  <div class="cd-row"><span class="cd-label">NEXT REBALANCE</span><span class="cd-time" id="cd-rebal">—</span></div>
-</div>
 
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
@@ -5257,47 +5235,85 @@ window.addEventListener('resize', function() {{
       setInterval(_tickClock, 1000);
     }})();
 
-    // ── Countdown panel ──────────────────────────────────────────────────────
+    // ── Event countdown notifications ────────────────────────────────────────
+    // Fires a callout card 60s before each scheduled event; card shows a live
+    // countdown for the final 10s then flashes "NOW" at execution.
     (function() {{
       var ET = 'America/New_York';
-      function _etNow() {{ return new Date(new Date().toLocaleString('en-US', {{timeZone:ET}})); }}
-      function _nextET(h, m) {{
-        var n = _etNow(), t = new Date(n);
-        t.setHours(h, m, 0, 0);
-        if (t <= n) t.setDate(t.getDate() + 1);
-        // Skip weekends
+      // Returns ms until next occurrence of hh:mm ET on a weekday
+      function _msUntilET(h, m) {{
+        var n = new Date();
+        // Build a candidate date in ET
+        var etStr = n.toLocaleString('en-US', {{timeZone:ET}});
+        var etNow = new Date(etStr);
+        var t = new Date(etNow); t.setHours(h, m, 0, 0);
+        if (t <= etNow) t.setDate(t.getDate() + 1);
         while (t.getDay() === 0 || t.getDay() === 6) t.setDate(t.getDate() + 1);
-        return (t - n) / 1000; // seconds from now
+        // Convert back to wall-clock delta
+        return (t - etNow);
       }}
-      function _fmtCd(sec) {{
-        if (sec <= 0) return 'NOW';
-        var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
-        if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm';
-        if (m > 0) return m + 'm ' + String(s).padStart(2,'0') + 's';
-        return s + 's';
+
+      var _EVENTS = [
+        {{ label:'MARKET OPEN',  h:9,  m:30, col:'#00e5ff' }},
+        {{ label:'MARKET CLOSE', h:16, m:0,  col:'#9400ff' }},
+        {{ label:'PIPELINE RUN', h:16, m:5,  col:'#ff00cc' }},
+      ];
+      var _fired = {{}}; // key → last fire date string so we don't double-fire
+
+      function _spawnCountdownCallout(label, col, msUntil) {{
+        var rail = document.getElementById('callout-rail');
+        if (!rail) return;
+
+        var card = document.createElement('div');
+        card.className = 'callout-card';
+        card.style.borderLeftColor = col;
+        card.innerHTML =
+          '<span class="cc-verb" style="color:' + col + ';opacity:.7">' + label + '</span>' +
+          '<span class="cc-price" id="cd-live-' + Date.now() + '" style="margin-left:auto;font-size:11px;color:' + col + '"></span>';
+        rail.appendChild(card);
+
+        var countEl = card.querySelector('.cc-price');
+        var startMs = Date.now();
+        var fireAt  = startMs + msUntil;
+
+        requestAnimationFrame(function() {{
+          requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
+        }});
+
+        function _tick() {{
+          var remMs = fireAt - Date.now();
+          var remS  = Math.max(0, Math.ceil(remMs / 1000));
+          if (remS <= 0) {{
+            if (countEl) countEl.textContent = 'NOW';
+            card.style.borderLeftColor = '#ffffff';
+            setTimeout(function() {{
+              card.classList.remove('cc-show');
+              card.classList.add('cc-exit');
+              setTimeout(function() {{ if (card.parentNode) card.parentNode.removeChild(card); }}, 1700);
+            }}, 1200);
+            return;
+          }}
+          if (countEl) countEl.textContent = remS <= 10 ? remS + 's' : '';
+          requestAnimationFrame(_tick);
+        }}
+        requestAnimationFrame(_tick);
       }}
-      function _tickCd() {{
-        var elOpen  = document.getElementById('cd-open');
-        var elClose = document.getElementById('cd-close');
-        var elPipe  = document.getElementById('cd-pipe');
-        var elRebal = document.getElementById('cd-rebal');
-        if (!elOpen) return;
-        var openSec  = _nextET(9,  30);
-        var closeSec = _nextET(16, 0);
-        var pipeSec  = _nextET(16, 5);
-        // Rebalance = same as pipeline (equity runs daily at 4:05pm ET)
-        var rebalSec = pipeSec;
-        elOpen.textContent  = _fmtCd(openSec);
-        elClose.textContent = _fmtCd(closeSec);
-        elPipe.textContent  = _fmtCd(pipeSec);
-        elRebal.textContent = _fmtCd(rebalSec);
-        // Highlight imminent events
-        [{{el:elOpen,s:openSec}},{{el:elClose,s:closeSec}},{{el:elPipe,s:pipeSec}}].forEach(function(x) {{
-          x.el.style.color = x.s < 300 ? '#ff9900' : x.s < 60 ? '#ff3366' : 'rgba(255,255,255,.7)';
+
+      function _checkEvents() {{
+        var today = new Date().toLocaleDateString('en-US', {{timeZone:ET}});
+        _EVENTS.forEach(function(ev) {{
+          var key = ev.label + ':' + today;
+          if (_fired[key]) return;
+          var ms = _msUntilET(ev.h, ev.m);
+          // Spawn callout 60s out; after that window, skip until tomorrow
+          if (ms <= 60000) {{
+            _fired[key] = true;
+            _spawnCountdownCallout(ev.label, ev.col, ms);
+          }}
         }});
       }}
-      _tickCd();
-      setInterval(_tickCd, 1000);
+
+      setInterval(_checkEvents, 1000);
     }})();
 
     // Kick off the progress bar — inside IIFE where _tickProgress is in scope
