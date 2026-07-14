@@ -4130,7 +4130,33 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
 
-    // Smooth curve path helper — catmull-rom via quadratic bezier midpoints
+    // Y-axis price indicators — very subtle, on-brand, 3 reference levels
+    (function() {{
+      var fmt = function(v) {{
+        if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+        if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
+        return '$' + v.toFixed(0);
+      }};
+      var levels = [-0.6, -0.3, 0.3, 0.6];
+      ctx.save();
+      ctx.setLineDash([3, 7]);
+      ctx.lineWidth = 1;
+      ctx.font = '8px Consolas,monospace';
+      ctx.textBaseline = 'bottom';
+      for (var li = 0; li < levels.length; li++) {{
+        var lvl = levels[li];
+        var val = base + halfRange * lvl;
+        var yy = ty(val);
+        if (yy < 6 || yy > H - 6) continue;
+        ctx.strokeStyle = 'rgba(255,0,204,0.07)';
+        ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
+        ctx.fillStyle = 'rgba(200,80,255,0.3)';
+        ctx.fillText(fmt(val), 4, yy - 2);
+      }}
+      ctx.restore();
+    }})();
+
+    // Smooth curve path helper — quadratic bezier midpoints
     function _strokeSmooth(m) {{
       ctx.beginPath();
       ctx.moveTo(m[0].x, m[0].y);
@@ -4147,38 +4173,53 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       }}
     }}
 
-    // Fill under the curve
+    // Trail-to-orb gradient: transparent at left tail → bright at orb (W/2)
+    // This makes the dot the visual leader and the line its vaporwave wake
+    var trailX0 = mapped[0].x;
+    var trailX1 = W / 2; // orb is always here
+    function _trailGrad(r, g, b, aTail, aOrb) {{
+      var gr = ctx.createLinearGradient(trailX0, 0, trailX1, 0);
+      gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + aTail + ')');
+      gr.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',' + ((aTail+aOrb)/2) + ')');
+      gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',' + aOrb  + ')');
+      return gr;
+    }}
+
+    // Under-trail fill — fades left
     _strokeSmooth(mapped);
     ctx.lineTo(mapped[mapped.length-1].x, H);
     ctx.lineTo(mapped[0].x, H);
     ctx.closePath();
-    var fillGrad = ctx.createLinearGradient(0, 0, 0, H);
-    fillGrad.addColorStop(0, 'rgba(255,0,204,0.18)');
-    fillGrad.addColorStop(1, 'rgba(255,0,204,0)');
+    var fillGrad = ctx.createLinearGradient(trailX0, 0, trailX1, 0);
+    fillGrad.addColorStop(0, 'rgba(255,0,204,0)');
+    fillGrad.addColorStop(1, 'rgba(255,0,204,0.14)');
     ctx.fillStyle = fillGrad;
     ctx.fill();
 
-    // Outer glow — wide, soft
+    // Outer bloom — vanishes at tail
     _strokeSmooth(mapped);
-    ctx.strokeStyle = 'rgba(255,0,204,0.08)';
+    ctx.strokeStyle = _trailGrad(255,0,204, 0, 0.12);
     ctx.lineWidth = 32; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.stroke();
 
     // Mid glow
     _strokeSmooth(mapped);
-    ctx.strokeStyle = 'rgba(255,0,204,0.18)';
+    ctx.strokeStyle = _trailGrad(255,0,204, 0, 0.25);
     ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Core line — bright, crisp
+    // Core line — fades from near-invisible to bright at orb
     _strokeSmooth(mapped);
-    ctx.strokeStyle = '#ff00cc';
+    ctx.strokeStyle = _trailGrad(255,0,204, 0.05, 1);
     ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Hot center — pure white core for neon effect
+    // White hot center — only in the rightmost 30% of trail
+    var hotGr = ctx.createLinearGradient(trailX0 + (trailX1 - trailX0) * 0.7, 0, trailX1, 0);
+    hotGr.addColorStop(0, 'rgba(255,255,255,0)');
+    hotGr.addColorStop(1, 'rgba(255,255,255,0.7)');
     _strokeSmooth(mapped);
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.strokeStyle = hotGr;
     ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.stroke();
   }};
