@@ -1255,16 +1255,17 @@ body::after {{
   z-index:99999;
 }}
 .callout-card {{
-  width:440px; display:flex; align-items:center; gap:12px;
-  padding:11px 18px 11px 14px;
+  display:inline-flex; align-items:baseline; gap:7px;
+  padding:10px 16px;
   background:rgba(4,0,16,.18); backdrop-filter:blur(20px);
   border:1px solid rgba(148,0,255,.12); border-left:3px solid;
   border-radius:2px;
-  box-shadow:0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
-  max-height:120px; overflow:hidden;
+  box-shadow:0 8px 32px rgba(0,0,0,.35);
+  max-height:60px; overflow:hidden;
   opacity:0;
   transition:opacity .3s ease;
   pointer-events:none;
+  font-family:Consolas,'Courier New',monospace;
 }}
 .callout-card.cc-show {{ opacity:1; }}
 .callout-card.cc-exit {{
@@ -1275,31 +1276,27 @@ body::after {{
              padding 0.3s ease 1.1s,
              margin 0.3s ease 1.1s;
 }}
-.cc-badge {{
-  font:700 7px Consolas,monospace; letter-spacing:.22em; padding:3px 8px;
-  border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.85;
-  border-radius:2px;
+.cc-verb {{
+  font-size:9px; letter-spacing:.18em; text-transform:uppercase;
+  color:rgba(255,255,255,.4); font-weight:600;
 }}
-.cc-body {{ flex:1; min-width:0; }}
-.cc-phase {{
-  font:500 10px Consolas,monospace; letter-spacing:.06em;
-  opacity:.75; transition:color .2s;
+.cc-sym {{
+  font-size:13px; font-weight:700; letter-spacing:.04em; color:#fff;
 }}
-.cc-ticker {{
-  font:700 13px Consolas,monospace; letter-spacing:.05em;
+.cc-at {{
+  font-size:9px; color:rgba(255,255,255,.3);
 }}
-.cc-exec-bar {{
-  height:2px; background:rgba(255,255,255,.06); border-radius:1px;
-  margin-top:5px; overflow:hidden; display:none;
+.cc-price {{
+  font-size:12px; font-weight:600; color:rgba(255,255,255,.65);
+  font-variant-numeric:tabular-nums;
 }}
-.cc-exec-fill {{
-  height:100%; width:0%; border-radius:1px;
-  transition:width 1.1s linear;
+.cc-pnl {{
+  font-size:13px; font-weight:700; letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 0 12px currentColor;
 }}
 .cc-count {{
-  font:700 22px Consolas,monospace; letter-spacing:-.02em;
-  min-width:26px; text-align:right; flex-shrink:0;
-  opacity:.8; transition:opacity .15s;
+  font-size:11px; font-weight:700; opacity:.7;
 }}
 
 /* ── Terminal row appear ── */
@@ -5560,14 +5557,13 @@ window.addEventListener('resize', function() {{
                 }}
                 // Stratagem callout drop-in
                 if (window._fireCallout) {{
-                  var _cPnl = pnlM ? ' · pnl ' + pnlM[1] : '';
-                  var _cXPrice = priceM ? ' @$' + parseFloat(priceM[1].replace(/,/g,'')).toFixed(2) : '';
+                  var _xPrice = priceM ? parseFloat(priceM[1].replace(/,/g,'')).toFixed(2) : null;
+                  var _xPnl   = pnlM ? pnlM[1] : null;
                   window._fireCallout(
-                    _isWin ? 'WIN' : 'LOSS',
-                    sym.replace('/USD','') + _cXPrice,
-                    'closed' + _cPnl,
-                    _isWin ? '#00ff9d' : '#ff3366',
-                    _isWin ? 'CLOSED +' : 'CLOSED —'
+                    sym.replace('/USD',''),
+                    _xPrice,
+                    _xPnl,
+                    _isWin ? '#00ff9d' : '#ff3366'
                   );
                 }}
                 // 2. Orb bloom
@@ -7035,69 +7031,30 @@ window.addEventListener('resize', function() {{
         card.className = 'callout-card';
         card.style.borderLeftColor = cfg.col;
         card.innerHTML =
-          '<div class="cc-badge" style="color:' + cfg.col + ';border-color:' + cfg.col + '">' + cfg.badge + '</div>' +
-          '<div class="cc-body">' +
-            '<div class="cc-ticker" style="color:' + cfg.col + '">' + cfg.sym + '</div>' +
-            '<div class="cc-phase" id="ph-' + uid + '">' + (cfg.detail || '') + '</div>' +
-            '<div class="cc-exec-bar"><div class="cc-exec-fill" id="fl-' + uid + '" style="background:' + cfg.col + '"></div></div>' +
-          '</div>' +
-          (hasCountdown ? '<div class="cc-count" style="color:' + cfg.col + '" id="nm-' + uid + '">' + initCount + '</div>' : '');
+          '<span class="cc-verb">Sold</span>' +
+          '<span class="cc-sym">' + (cfg.sym || '') + '</span>' +
+          (cfg.price ? '<span class="cc-at">@</span><span class="cc-price">$' + cfg.price + '</span>' : '') +
+          (cfg.pnl   ? '<span class="cc-pnl" style="color:' + cfg.col + '">' + cfg.pnl + '</span>' : '') +
+          (hasCountdown ? '<span class="cc-count" style="color:' + cfg.col + '" id="nm-' + uid + '">' + initCount + '</span>' : '');
 
         if (_calloutRail) _calloutRail.appendChild(card);
         requestAnimationFrame(function() {{
           requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
         }});
 
-        var phEl  = document.getElementById('ph-' + uid);
-        var numEl = document.getElementById('nm-' + uid);
-        var fill  = document.getElementById('fl-' + uid);
-        var bar   = fill ? fill.parentNode : null;
-
-        function _retract() {{
+        // Linger 3s then fade out
+        setTimeout(function() {{
+          card.classList.remove('cc-show');
+          card.classList.add('cc-exit');
           setTimeout(function() {{
-            card.classList.remove('cc-show');
-            card.classList.add('cc-exit');
-            setTimeout(function() {{
-              if (card.parentNode) card.parentNode.removeChild(card);
-            }}, 1000); // matches .9s opacity transition
-          }}, 2200); // linger on COMPLETE before fading
-        }}
-
-        function _execPhase() {{
-          // EXECUTING bar → COMPLETE → retract
-          if (phEl)  phEl.textContent = 'EXECUTING...';
-          if (numEl) numEl.style.opacity = '0';
-          if (bar)   bar.style.display = 'block';
-          setTimeout(function() {{ if (fill) fill.style.width = '100%'; }}, 30);
-          setTimeout(function() {{
-            if (phEl) {{ phEl.textContent = '◉ ' + (cfg.complete || 'COMPLETE'); phEl.style.color = cfg.col; }}
-            if (bar)  bar.style.display = 'none';
-            _retract();
-          }}, 1200);
-        }}
-
-        if (hasCountdown) {{
-          // Accurate per-second countdown to a real future event
-          var count = initCount;
-          var countInt = setInterval(function() {{
-            count--;
-            if (count > 0) {{
-              if (numEl) numEl.textContent = count;
-            }} else {{
-              clearInterval(countInt);
-              _execPhase();
-            }}
-          }}, 1000);
-        }} else {{
-          // Already happened — show result immediately, no fake countdown
-          if (phEl) {{ phEl.textContent = '◉ ' + (cfg.complete || cfg.detail || 'COMPLETE'); phEl.style.color = cfg.col; }}
-          _retract();
-        }}
+            if (card.parentNode) card.parentNode.removeChild(card);
+          }}, 1700);
+        }}, 3000);
       }}
 
       // countdown: seconds until the event fires (omit or 0 for past/instant events)
-      window._fireCallout = function(badge, sym, detail, col, complete, countdown) {{
-        _spawnCallout({{ badge:badge, sym:sym, detail:detail, col:col||'#ff00cc', complete:complete||'COMPLETE', countdown:countdown||0 }});
+      window._fireCallout = function(sym, price, pnl, col, countdown) {{
+        _spawnCallout({{ sym:sym, price:price, pnl:pnl, col:col||'#ff3366', countdown:countdown||0 }});
       }};
 
       // ── Master tick ───────────────────────────────────────────
