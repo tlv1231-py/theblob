@@ -4158,20 +4158,49 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Scroll-to-zoom: days of portfolio history visible (default 14)
-  window._navZoomDays = 3; // default: last 3 days of history
+  // Scroll wheel zooms the time window (hours visible to the left of now)
+  window._navWindowMs = 4 * 3600000; // default: 4 hours of history
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
-      var delta = e.deltaY > 0 ? 1 : -1;
-      var cur = window._navZoomDays || 3;
-      // fine-grain zoom: smaller steps at short ranges
-      var step = cur < 1 ? 0.1 : cur < 7 ? 0.5 : 1;
-      window._navZoomDays = Math.max(0.1, Math.min(90, cur + delta * step));
+      var factor = e.deltaY > 0 ? 1.15 : 0.87;
+      window._navWindowMs = Math.max(10 * 60000, Math.min(30 * 86400000,
+        (window._navWindowMs || 4*3600000) * factor));
     }}, {{ passive: false }});
   }})();
+
+  // Master data store — accumulates all known NAV points, sorted by ms
+  var _navPts = [];   // {{ms, v}}
+  var _navPtSet = {{}}; // ms→true for dedup
+
+  function _navIngest(ms, v) {{
+    if (!ms || isNaN(ms) || !v || isNaN(v)) return;
+    var key = Math.round(ms / 500); // bucket to 500ms
+    if (_navPtSet[key]) return;
+    _navPtSet[key] = true;
+    _navPts.push({{ ms: ms, v: v }});
+    _navPts.sort(function(a,b){{ return a.ms - b.ms; }});
+  }}
+
+  // Seed from Python-injected history on load
+  (function() {{
+    var _pd = portDates || [], _pv = portValues || [];
+    for (var i = 0; i < _pd.length; i++) {{
+      _navIngest(new Date(_pd[i]).getTime(), _pv[i]);
+    }}
+    var _md = markTs || [], _mv = markVals || [];
+    for (var j = 0; j < _md.length; j++) {{
+      _navIngest(new Date(_md[j]).getTime(), _mv[j]);
+    }}
+  }})();
+
+  // Live updates: call this whenever we get a new NAV reading
+  window._navPush = function(v, isoTs) {{
+    var ms = isoTs ? new Date(isoTs).getTime() : Date.now();
+    _navIngest(ms, v);
+  }};
 
   window._drawNavCanvas = function() {{
     _resize();
@@ -4179,71 +4208,59 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Merge daily snapshots + intraday pipeline marks into one sorted series
-    var combined = [];
-    var _pd = portDates || [], _pv = portValues || [];
-    for (var ci = 0; ci < _pd.length; ci++) {{
-      var ms = new Date(_pd[ci]).getTime();
-      if (!isNaN(ms)) combined.push({{ ms: ms, v: _pv[ci] }});
-    }}
-    var _md = markTs || [], _mv = markVals || [];
-    for (var mi2 = 0; mi2 < _md.length; mi2++) {{
-      var ms2 = new Date(_md[mi2]).getTime();
-      if (!isNaN(ms2)) combined.push({{ ms: ms2, v: _mv[mi2] }});
-    }}
-    combined.sort(function(a,b){{ return a.ms - b.ms; }});
-    // Deduplicate timestamps within 500ms
-    var deduped = [];
-    for (var di = 0; di < combined.length; di++) {{
-      if (!deduped.length || combined[di].ms - deduped[deduped.length-1].ms > 500) {{
-        deduped.push(combined[di]);
+    // Current live value (most recent known)
+    var liveNav = window._lastKnownNav || (_navPts.length ? _navPts[_navPts.length-1].v : null);
+    if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+
+    // X: "now" is always at canvas center (W/2). History scrolls left.
+    // windowMs = how much time fits between left edge and center.
+    var nowMs     = Date.now();
+    var windowMs  = window._navWindowMs || 4 * 3600000;
+    var leftEdgeMs = nowMs - windowMs;
+
+    // tx: maps a timestamp to canvas X. nowMs → W/2, leftEdgeMs → 0.
+    function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * (W / 2); }}
+
+    // Collect points in the visible window
+    var visible = [];
+    // Seed: last known point before the window (so line starts at left edge, not mid-air)
+    for (var si = _navPts.length - 1; si >= 0; si--) {{
+      if (_navPts[si].ms <= leftEdgeMs) {{
+        visible.push({{ ms: leftEdgeMs, v: _navPts[si].v }});
+        break;
       }}
     }}
-
-    var liveNav = window._lastKnownNav || (deduped.length ? deduped[deduped.length-1].v : null);
-    if (deduped.length < 1 || !liveNav) {{
-      window._navOrbFracX = 0.5; window._navOrbFracY = 0.5; return;
-    }}
-
-    // X axis: fixed wall-clock window from (nShow days ago) → now. Orb always at W/2.
-    var nowMs   = Date.now();
-    var nDays   = Math.max(1, window._navZoomDays || 3);
-    var x0ms    = nowMs - nDays * 86400000;
-    var xSpan   = nowMs - x0ms; // = nDays * 86400000
-    function tx(ms) {{ return (ms - x0ms) / xSpan * (W / 2); }}
-
-    // Filter to visible window + append live point
-    var visible = deduped.filter(function(p){{ return p.ms >= x0ms && p.ms <= nowMs; }});
-    // Always seed from the last known value before the window if visible is sparse
-    if (visible.length === 0 || visible[0].ms > x0ms + 3600000) {{
-      // Find last point before window start
-      var seed = null;
-      for (var si = deduped.length - 1; si >= 0; si--) {{
-        if (deduped[si].ms <= x0ms) {{ seed = deduped[si]; break; }}
+    for (var i = 0; i < _navPts.length; i++) {{
+      if (_navPts[i].ms > leftEdgeMs && _navPts[i].ms < nowMs) {{
+        visible.push({{ ms: _navPts[i].ms, v: _navPts[i].v }});
       }}
-      if (seed) visible.unshift({{ ms: x0ms, v: seed.v }});
     }}
+    // Live "now" point is always the final point, pinned to canvas center
     visible.push({{ ms: nowMs, v: liveNav }});
 
-    // Y: center on median of visible values for stability
-    var vv = visible.map(function(p){{ return p.v; }});
-    var vSorted = vv.slice().sort(function(a,b){{ return a-b; }});
-    var base = vSorted[Math.floor(vSorted.length / 2)];
-    var maxDev = 0;
-    for (var vi = 0; vi < vv.length; vi++) {{ var dv = Math.abs(vv[vi] - base); if (dv > maxDev) maxDev = dv; }}
-    var halfRange = maxDev * 1.4 || base * 0.01 || 1;
-    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.82); }}
+    if (visible.length < 2) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+
+    // Y: auto-scale to fit all visible values with 20% padding
+    var minV = Infinity, maxV = -Infinity;
+    for (var vi = 0; vi < visible.length; vi++) {{
+      if (visible[vi].v < minV) minV = visible[vi].v;
+      if (visible[vi].v > maxV) maxV = visible[vi].v;
+    }}
+    var range = maxV - minV || liveNav * 0.005 || 100;
+    var pad   = range * 0.25;
+    var vLo   = minV - pad, vHi = maxV + pad;
+    function ty(v) {{ return H - (v - vLo) / (vHi - vLo) * H; }}
 
     var orbY = ty(liveNav);
     window._navOrbFracX = 0.5;
-    window._navOrbFracY = orbY / H;
+    window._navOrbFracY = Math.max(0.02, Math.min(0.98, orbY / H));
 
-    // Build mapped points; final point lands exactly at orb center
+    // Map to canvas coords; final point pinned to (W/2, orbY)
     var mapped = [];
     for (var mi = 0; mi < visible.length - 1; mi++) {{
       mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
-    mapped.push({{ x: W / 2, y: orbY }});
+    mapped.push({{ x: W/2, y: orbY }});
     if (mapped.length < 2) return;
 
     // Y-axis labels
@@ -4573,6 +4590,8 @@ function _fetchIntradayMarks() {{
         if (!window._lastLivePriceMs || (Date.now() - window._lastLivePriceMs) > 10000) {{
           window._lastKnownNav = lastV; window._lastKnownTs = lastT;
         }}
+        // Always ingest marks into nav history regardless of which source wins display
+        for (var _i=0; _i<xs.length; _i++) {{ if (window._navPush) window._navPush(ys[_i], xs[_i]); }}
         _updateEndpointDot(lastV, lastT);
         buildTargets();
       }});
@@ -4617,6 +4636,7 @@ window._pushIntradayPoint = function(isoTs, val) {{
   window._lastLivePriceMs = now;
   window._lastKnownNav = val;
   window._lastKnownTs  = isoTs;
+  if (window._navPush) window._navPush(val, isoTs);
   if (gd && gd.data && gd.data.length >= 7) {{
     Plotly.restyle(gd, {{
       x: [_intradayPts.map(function(p) {{ return p.t; }})],
