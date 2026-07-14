@@ -4062,7 +4062,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.clearRect(0, 0, W, H);
 
     var history = window._navHistory || [];
-    var curNav  = window._lastKnownNav;
+    // Use live interpolated value from wallet animation so line moves 1:1 with number scroll
+    var curNav  = window._navLiveVal || window._lastKnownNav;
     if (!curNav && history.length === 0) return;
 
     var nowMs    = Date.now();
@@ -6983,6 +6984,7 @@ window.addEventListener('resize', function() {{
           t = 1 - Math.pow(1 - t, 3); // ease-out cubic
           var cur = from + (toVal - from) * t;
           _walletRendered = cur;
+          window._navLiveVal = cur; // feed live interpolated value to canvas each frame
           el.textContent = '$' + cur.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
           if (t < 1) _walletRaf = requestAnimationFrame(step);
           else {{ _walletRendered = toVal; _walletRaf = null; }}
