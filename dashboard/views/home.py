@@ -7014,6 +7014,16 @@ window.addEventListener('resize', function() {{
         _prevWalletNav = nav;
         _lastWalletVal = nav;
         _animateWallet(nav);
+        // Push every nav change to the canvas history and redraw immediately
+        if (!window._navHistory) window._navHistory = [];
+        var _isoNow = new Date().toISOString();
+        var _lastH = window._navHistory[window._navHistory.length - 1];
+        if (!_lastH || _lastH.y !== nav) {{
+          window._navHistory.push({{ x: _isoNow, y: nav }});
+          var _cutoff = new Date(Date.now() - 30*60*1000).toISOString();
+          while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
+          if (window._drawNavCanvas) window._drawNavCanvas();
+        }}
       }};
       // Trade event: flash color + chip + animate to new value
       window._walletCombo = function(delta) {{
