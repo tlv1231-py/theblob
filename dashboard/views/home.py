@@ -4082,21 +4082,20 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return (new Date(iso).getTime() - x0ms) / xSpan * (W/2 - orbGap);
     }}
 
-    // Y: auto-fit with padding
+    // Y: centered on current value so orb is always at H/2.
+    // halfRange = max deviation of any historical point from current value.
     var base = values[n-1];
-    var minV = base, maxV = base;
+    var maxDev = 0;
     for (var vi = 0; vi < n; vi++) {{
-      if (values[vi] < minV) minV = values[vi];
-      if (values[vi] > maxV) maxV = values[vi];
+      var dev = Math.abs(values[vi] - base);
+      if (dev > maxDev) maxDev = dev;
     }}
-    var spread = (maxV - minV) || base * 0.01;
-    var pad    = spread * 0.15;
-    var yLo = minV - pad, yHi = maxV + pad;
-    function ty(v) {{ return H - (v - yLo) / (yHi - yLo) * H; }}
+    var halfRange = maxDev * 1.15 || base * 0.05;
+    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
-    // Orb always at canvas center; y tracks the latest portfolio value
+    // Orb always at exact canvas center — ty(base) = H/2 by construction
     window._navOrbCanvasX = W / 2;
-    window._navOrbCanvasY = ty(base);
+    window._navOrbCanvasY = H / 2;
 
     // Y-axis price labels — subtle, on-brand
     (function() {{
@@ -4110,9 +4109,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.lineWidth = 1;
       ctx.font = '8px Consolas,monospace';
       ctx.textBaseline = 'bottom';
-      var steps = [0.2, 0.4, 0.6, 0.8];
+      var steps = [-0.6, -0.3, 0.3, 0.6];
       for (var si = 0; si < steps.length; si++) {{
-        var val = yLo + (yHi - yLo) * steps[si];
+        var val = base + halfRange * steps[si];
         var yy  = ty(val);
         if (yy < 6 || yy > H - 6) continue;
         ctx.strokeStyle = 'rgba(255,0,204,0.07)';
