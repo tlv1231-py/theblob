@@ -4106,23 +4106,25 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return;
     }}
 
-    // Y range — use stable midpoint of all visible data so the chart doesn't flip
-    // when curNav ticks (base anchored to data, not to current value)
-    var minY = Infinity, maxY = -Infinity;
-    pts.forEach(function(p) {{ if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }});
-    var base = (minY + maxY) / 2;
-    var spread = (maxY - minY) / 2;
-    // Floor: 0.03% of NAV so tiny moves still show as visible wiggles (more dramatic)
-    var minSpread = (curNav || base) * 0.0003;
-    var halfRange = Math.max(spread * 1.6, minSpread);
+    // Y range — curNav is always the center (orb stays fixed at H/2).
+    // Use EMA-smoothed halfRange so the scale drifts slowly and never snaps.
+    var base = curNav || pts[pts.length-1].y;
+    var rawSpread = 0;
+    pts.forEach(function(p) {{ var d = Math.abs(p.y - base); if (d > rawSpread) rawSpread = d; }});
+    var minSpread = base * 0.0008; // 0.08% floor — small moves still wiggle visibly
+    var targetRange = Math.max(rawSpread * 1.5, minSpread);
+    // EMA: scale converges slowly so sudden curNav ticks don't jerk the whole line
+    if (!window._navHalfRange || window._navHalfRange < minSpread) window._navHalfRange = targetRange;
+    window._navHalfRange = window._navHalfRange * 0.92 + targetRange * 0.08;
+    var halfRange = window._navHalfRange;
 
-    // Coordinate mappers — current time at W/2
+    // Coordinate mappers — current time at W/2, curNav always at H/2
     function tx(isoStr) {{
       var ms = new Date(isoStr).getTime();
       return (ms - winStart) / (winEnd - winStart) * W;
     }}
     function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
-    window._navOrbCanvasY = ty(curNav || base);
+    window._navOrbCanvasY = H / 2; // orb always at canvas center
 
     var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
 
