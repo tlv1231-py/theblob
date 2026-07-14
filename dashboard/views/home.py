@@ -4107,18 +4107,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return;
     }}
 
-    // Y range — curNav is always the center (orb stays fixed at H/2).
-    // Use EMA-smoothed halfRange so the scale drifts slowly and never snaps.
+    // Y range — fixed scale: ±0.3% of portfolio value.
+    // Never rescales so the chart cruises at constant pace whether stationary or moving.
     var base = curNav || pts[pts.length-1].y;
-    var rawSpread = 0;
-    pts.forEach(function(p) {{ var d = Math.abs(p.y - base); if (d > rawSpread) rawSpread = d; }});
-    var minSpread = base * 0.0005; // 0.05% floor ~$30 on $60k — any move wiggles
-    var targetRange = rawSpread * 1.1; // tight padding so data fills the height
-    if (targetRange < minSpread) targetRange = minSpread;
-    // Fast EMA so scale tracks data quickly but doesn't snap on single ticks
-    if (!window._navHalfRange || window._navHalfRange < minSpread) window._navHalfRange = targetRange;
-    window._navHalfRange = window._navHalfRange * 0.85 + targetRange * 0.15;
-    var halfRange = window._navHalfRange;
+    var halfRange = base * 0.003;
 
     // Coordinate mappers — current time at W/2, curNav always at H/2
     function tx(isoStr) {{
