@@ -985,7 +985,7 @@ body::after {{
 /* flex children */
 #main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
 #chart {{ position:absolute; inset:0; width:100%; height:100%; }}
-#pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
+#pulse-canvas {{ position:fixed; inset:0; pointer-events:none; z-index:8; }}
 #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
 /* ── Left feed overlay ── */
@@ -2396,7 +2396,7 @@ body::after {{
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
-  <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
+  <canvas id="nav-canvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
   <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
   <div id="trade-veil"></div>
@@ -4071,18 +4071,18 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       return;
     }}
 
-    var orbGap = 24; // px gap between line tip and orb center
+    var orbGap = 24; // px gap between line tip and orb center (orb lives at W/2)
     var n = dates.length;
 
-    // X: spread all data across [0, W - orbGap], orb at W - orbGap/2
+    // X: map history into the LEFT half [0, W/2 - orbGap]. Orb stays at W/2 (center).
     var x0ms = new Date(dates[0]).getTime();
     var x1ms = new Date(dates[n-1]).getTime();
     var xSpan = x1ms - x0ms || 1;
     function tx(iso) {{
-      return (new Date(iso).getTime() - x0ms) / xSpan * (W - orbGap);
+      return (new Date(iso).getTime() - x0ms) / xSpan * (W/2 - orbGap);
     }}
 
-    // Y: auto-fit with padding; pin last value to H/2 so orb aligns with line tip
+    // Y: auto-fit with padding
     var base = values[n-1];
     var minV = base, maxV = base;
     for (var vi = 0; vi < n; vi++) {{
@@ -4094,8 +4094,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var yLo = minV - pad, yHi = maxV + pad;
     function ty(v) {{ return H - (v - yLo) / (yHi - yLo) * H; }}
 
-    // Orb position: right edge, at y of latest value
-    window._navOrbCanvasX = W - orbGap / 2;
+    // Orb always at canvas center; y tracks the latest portfolio value
+    window._navOrbCanvasX = W / 2;
     window._navOrbCanvasY = ty(base);
 
     // Y-axis price labels — subtle, on-brand
@@ -4145,7 +4145,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       }}
     }}
 
-    var gx0 = mapped[0].x, gx1 = mapped[n-1].x;
+    var gx0 = mapped[0].x, gx1 = W / 2; // gradient peaks at orb center
     function _tg(r, g, b, a0, a1) {{
       var gr = ctx.createLinearGradient(gx0, 0, gx1, 0);
       gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + a0 + ')');
