@@ -1436,7 +1436,7 @@ body::after {{
   font-family:Consolas,'Courier New',monospace;
   white-space:nowrap;
   transform-origin:center;
-  min-width:140px;
+  width:190px;
 }}
 .callout-card.cc-show {{
   animation: cc-in .18s cubic-bezier(.2,.9,.3,1) forwards;
@@ -1776,6 +1776,9 @@ body::after {{
   flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(148,0,255,.25) transparent;
   display:flex; flex-direction:column; padding-bottom:6px; min-height:0;
 }}
+#pos-right {{ overflow:hidden; }} /* equity wraps into columns — no vertical scroll */
+#pos-equity-section .pos-card,
+#pos-equity-section .pos-card-ghost-space {{ width:130px; flex-shrink:0; }}
 #pos-left {{ border-right:none; }}
 /* Crypto cards — transparent column, left accent stripe only */
 #pos-left .pos-card {{
@@ -2344,11 +2347,23 @@ body::after {{
 /* Placeholder that holds the dead tile's space in the flex column */
 .pos-card-ghost-space {{
   flex-shrink:0; pointer-events:none; overflow:hidden; background:transparent;
+  width:130px; box-sizing:border-box;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 8px; opacity:0; transition:opacity .15s;
+  font-family:Consolas,monospace; font-size:9px;
 }}
+.pos-card-ghost-space .gc-sym {{ color:rgba(255,255,255,.3); letter-spacing:.06em; }}
+.pos-card-ghost-space .gc-pnl {{ font-weight:700; letter-spacing:.03em; font-size:10px; }}
 /* Ghost collapses in quantized steps — feels like a board clearing, not a scroll */
 .pos-card-ghost-collapsing {{
   transition:height .32s steps(7,end) !important;
-  height:0 !important;
+  height:0 !important; opacity:0 !important;
+}}
+/* Equity section — multi-column wrap, new columns grow leftward */
+#pos-equity-section {{
+  display:flex; flex-direction:column; flex-wrap:wrap;
+  align-content:flex-end;  /* columns stack from right edge leftward */
+  height:100%; overflow:hidden;
 }}
 /* Remaining tiles glitch-snap when they receive new space */
 @keyframes tile-shuffle-land {{
@@ -3517,9 +3532,9 @@ function drawPulse() {{
         var comboCol = _comboCount>=10 ? '0,229,255' : _comboCount>=5 ? '255,170,0' : '255,0,204';
         var bounce   = Math.sin(phase*6)*2;
         var comboSize= Math.min(9 + _comboCount*0.8, 18);
-        // Auto-fade: full opacity for 1.5s, then fade out over 1s
+        // Auto-fade: full opacity for 4s, then fade out over 2s
         var _comboAge = (Date.now() - _comboLastAt) / 1000;
-        var _comboA   = _comboAge < 1.5 ? 0.9 : Math.max(0, 0.9 - (_comboAge - 1.5) * 0.9);
+        var _comboA   = _comboAge < 4 ? 0.9 : Math.max(0, 0.9 - (_comboAge - 4) * 0.45);
         if (_comboA > 0) {{
           ctx.save();
           ctx.font = 'bold '+Math.round(comboSize)+'px Consolas';
@@ -4325,14 +4340,24 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = window._lastKnownNav || (_navPts.length ? _navPts[_navPts.length-1].v : null);
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // X: "now" is always at canvas center (W/2). History scrolls left.
-    // windowMs = how much time fits between left edge and center.
-    var nowMs     = Date.now();
-    var windowMs  = window._navWindowMs || 5 * 60000;  // 5-min default → ~1px/sec scroll
+    // X: "now" anchors to the right edge of the visible chart area (left of holdings panel).
+    // Dynamically measure panel widths so the anchor tracks actual layout.
+    var _feedPx  = (document.getElementById('feed-overlay') || {{offsetWidth:0}}).offsetWidth || 0;
+    var _posPx   = (document.getElementById('pos-overlay')  || {{offsetWidth:0}}).offsetWidth || 0;
+    var _canvPx  = _nc.offsetWidth || W;
+    // "now" pixel = right edge of chart (just inside holdings panel left edge)
+    var _nowPx   = Math.max(W * 0.6, _canvPx - _posPx - 6);
+    // orb center = horizontal center of visible chart area
+    var _orbPx   = _feedPx + (_canvPx - _feedPx - _posPx) / 2;
+    var nowFracX = _nowPx  / _canvPx;  // fraction of canvas width
+    var orbFracX = Math.max(0.1, Math.min(0.9, _orbPx / _canvPx));
+
+    var nowMs      = Date.now();
+    var windowMs   = window._navWindowMs || 5 * 60000;  // 5-min default → ~1px/sec scroll
     var leftEdgeMs = nowMs - windowMs;
 
-    // tx: maps a timestamp to canvas X. nowMs → W/2, leftEdgeMs → 0.
-    function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * (W / 2); }}
+    // tx: maps a timestamp to canvas X. leftEdgeMs → 0, nowMs → _nowPx.
+    function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * _nowPx; }}
 
     // Collect points in the visible window
     var visible = [];
@@ -4352,10 +4377,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
         visible.push({{ ms: _navPts[i].ms, v: _navPts[i].v }});
       }}
     }}
-    // Live "now" point is always the final point, pinned to canvas center
+    // Live "now" point is always the final point, pinned to chart right edge
     visible.push({{ ms: nowMs, v: liveNav }});
 
-    if (visible.length < 2) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    if (visible.length < 2) {{ window._navOrbFracX=orbFracX; window._navOrbFracY=0.5; return; }}
 
     // Y: auto-scale to fit all visible values with 20% padding
     var minV = Infinity, maxV = -Infinity;
@@ -4369,15 +4394,15 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     function ty(v) {{ return H - (v - vLo) / (vHi - vLo) * H; }}
 
     var orbY = ty(liveNav);
-    window._navOrbFracX = 0.5;
+    window._navOrbFracX = orbFracX;   // visual center of chart between panels
     window._navOrbFracY = Math.max(0.02, Math.min(0.98, orbY / H));
 
-    // Map to canvas coords; final point pinned to (W/2, orbY)
+    // Map to canvas coords; final point pinned to chart right edge
     var mapped = [];
     for (var mi = 0; mi < visible.length - 1; mi++) {{
       mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
-    mapped.push({{ x: W/2, y: orbY }});
+    mapped.push({{ x: _nowPx, y: orbY }});
     if (mapped.length < 2) return;
 
     // Y-axis labels
@@ -4821,6 +4846,23 @@ setInterval(_fetchIntradayMarks, 15000);
           }}
         }}
       }});
+
+      // Compute live equity NAV and push intraday point — drives NET DATA + nav line
+      var _eqLivePnl = 0, _eqCount = 0;
+      cards.forEach(function(card) {{
+        var sym   = card.getAttribute('data-sym');
+        var price = latest[sym];
+        if (!price) return;
+        var qty   = parseFloat(card.getAttribute('data-qty') || '0');
+        var entry = parseFloat(card.getAttribute('data-entry') || '0');
+        if (qty > 0 && entry > 0) {{ _eqLivePnl += qty * (price - entry); _eqCount++; }}
+      }});
+      if (_eqCount > 0) {{
+        var _eqNav = (window._portfolioBaseline || 100000) + _eqLivePnl;
+        window._lastLivePriceMs = Date.now();
+        window._lastKnownNav    = _eqNav;
+        if (window._navPush) window._navPush(_eqNav, new Date().toISOString());
+      }}
     }}).catch(function() {{}});
   }}
 
@@ -6696,6 +6738,14 @@ window.addEventListener('resize', function() {{
       var ghost = document.createElement('div');
       ghost.className = 'pos-card-ghost-space';
       ghost.style.height = r.height + 'px';
+      // In-place P&L result: revealed after destroy animation fires
+      var _symClean = fullSym ? fullSym.replace('/USD','').replace('USD','') : '';
+      if (pnl !== null && pnl !== undefined) {{
+        var _absPnl = Math.abs(pnl);
+        var _pnlStr = (pnl >= 0 ? '+$' : '-$') + (_absPnl >= 1000 ? (_absPnl/1000).toFixed(1)+'k' : _absPnl.toFixed(0));
+        ghost.innerHTML = '<span class="gc-sym">' + _symClean + '</span><span class="gc-pnl" style="color:' + col + '">' + _pnlStr + '</span>';
+        setTimeout(function() {{ ghost.style.opacity = '1'; }}, 920);
+      }}
       if (el.parentNode) el.parentNode.insertBefore(ghost, el);
 
       // Detach card and re-pin at exact viewport position — unrestricted by pos-left overflow
@@ -6734,7 +6784,8 @@ window.addEventListener('resize', function() {{
         var cx = r2.left + r2.width / 2;
         var cy = r2.top  + r2.height / 2;
         _spawnParticles(cx, cy, col);
-        _spawnPnlGhost(r2, pnl, fullSym, exitPrice);
+        // P&L shown in-place via ghost placeholder — skip floating popup
+        // _spawnPnlGhost(r2, pnl, fullSym, exitPrice);
         el.classList.remove('pos-card-hit');
         el.classList.add('pos-card-exit-stop');  // card-8bit-destroy (.72s)
 
@@ -6753,11 +6804,18 @@ window.addEventListener('resize', function() {{
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
       var posLeft = document.getElementById('pos-left');
+      var posRight = document.getElementById('pos-right');
       if (!overlay || !posLeft) return;
       var count = Object.keys(_cryptoCardEls).length;
-      var leftW = count > 0 ? _CARD_W : 0;  // single column regardless of count
+      var leftW = count > 0 ? _CARD_W : 0;
       posLeft.style.width = leftW + 'px';
-      overlay.style.width = (leftW + _EQ_W) + 'px';
+      // Multi-column equity: expand overlay width when tiles can't fit in one column
+      var eqCards = document.querySelectorAll('#pos-equity-section .pos-card').length;
+      var availH  = posRight ? posRight.getBoundingClientRect().height : 400;
+      var tileH   = 46;  // approximate tile height
+      var perCol  = Math.max(1, Math.floor(availH / tileH));
+      var eqCols  = Math.max(1, Math.ceil(eqCards / perCol));
+      overlay.style.width = (leftW + _EQ_W * eqCols) + 'px';
     }}
 
     window._makeCard = function(p) {{ return _makeCard(p); }};
@@ -7785,8 +7843,8 @@ window.addEventListener('resize', function() {{
         var mktAge = window._lastLivePriceMs ? (Date.now() - window._lastLivePriceMs) : Infinity;
         var mdDot = document.getElementById('sysh-mktdata');
         var mdVal = document.getElementById('sysh-mktdata-val');
-        if (mdDot) mdDot.className = 'sysh-dot ' + (mktAge < 8000 ? 'ok' : mktAge < 30000 ? 'warn' : 'dead');
-        if (mdVal) mdVal.textContent = mktAge < 8000 ? 'LIVE' : mktAge < 30000 ? Math.round(mktAge/1000)+'s' : 'LOST';
+        if (mdDot) mdDot.className = 'sysh-dot ' + (mktAge < 45000 ? 'ok' : mktAge < 120000 ? 'warn' : 'dead');
+        if (mdVal) mdVal.textContent = mktAge < 45000 ? 'LIVE' : mktAge < 120000 ? Math.round(mktAge/1000)+'s ago' : 'LOST';
 
         // DB connected
         var dbDot = document.getElementById('sysh-db');
@@ -7912,8 +7970,14 @@ def render() -> None:
                 // Bottom: manage-app-button (44px) + generous buffer so nothing clips
                 var manageBtn = doc.querySelector('[data-testid="manage-app-button"]');
                 var bottomH = manageBtn ? Math.ceil(manageBtn.getBoundingClientRect().height) + 64 : 112;
-                // Top: stHeader is hidden so topH=0; stMain may add a few px of padding
+                // Top: strip Streamlit padding and measure stMain top offset
                 var stMain = doc.querySelector('[data-testid="stMain"]');
+                if (stMain) {
+                    stMain.style.paddingTop    = '0px';
+                    stMain.style.paddingBottom = '0px';
+                }
+                var stBlock = doc.querySelector('[data-testid="stMainBlockContainer"]') || doc.querySelector('.block-container');
+                if (stBlock) { stBlock.style.paddingTop = '0px'; stBlock.style.paddingBottom = '0px'; stBlock.style.maxWidth = '100%'; }
                 var topH = stMain ? Math.ceil(stMain.getBoundingClientRect().top) : 0;
                 if (topH < 0) topH = 0;
                 var h = p.innerHeight - topH - bottomH;
