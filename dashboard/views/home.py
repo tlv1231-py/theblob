@@ -4438,7 +4438,11 @@ function _fetchIntradayMarks() {{
     if (xs.length && gd && gd.data && gd.data.length >= 7) {{
       Plotly.restyle(gd, {{ x:[xs], y:[ys] }}, [6]).then(function() {{
         var lastV = ys[ys.length-1], lastT = xs[xs.length-1];
-        window._lastKnownNav = lastV; window._lastKnownTs = lastT;
+        // Only use pipeline stamp as NAV if no live price has arrived in the last 10s.
+        // Prevents the frozen "marked the book" value from oscillating with the live feed.
+        if (!window._lastLivePriceMs || (Date.now() - window._lastLivePriceMs) > 10000) {{
+          window._lastKnownNav = lastV; window._lastKnownTs = lastT;
+        }}
         _updateEndpointDot(lastV, lastT);
         buildTargets();
       }});
@@ -4479,6 +4483,8 @@ window._pushIntradayPoint = function(isoTs, val) {{
   }} else {{
     _intradayPts.push({{ t: isoTs, v: val }});
   }}
+  // Mark this as authoritative live source — gates pipeline-stamp overrides below
+  window._lastLivePriceMs = now;
   window._lastKnownNav = val;
   window._lastKnownTs  = isoTs;
   if (gd && gd.data && gd.data.length >= 7) {{
@@ -6040,6 +6046,8 @@ window.addEventListener('resize', function() {{
         var row = rows[0];
         if (row.recorded_at === _lastNavTs) return; // no change
         _lastNavTs = row.recorded_at;
+        // Don't overwrite live crypto price feed with a stale DB snapshot
+        if (window._lastLivePriceMs && (Date.now() - window._lastLivePriceMs) < 10000) return;
         _updateNavDisplays(row.total_value, row.recorded_at);
       }})
       .catch(function() {{}});
