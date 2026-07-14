@@ -1933,51 +1933,62 @@ body::after {{
 .pc-status-hold {{ color:rgba(0,170,100,.4); }}
 .pc-status-sell {{ color:rgba(210,160,0,.45); }}
 
-/* ── Crypto cards — calm, data-dense ── */
+/* ── Crypto cards v2 — 8-bit arcade tiles ── */
 #pos-left .pos-card {{
-  padding:7px 10px 6px 11px;
-  background:rgba(6,0,18,.5) !important; backdrop-filter:blur(4px) !important;
-  border-left:2px solid; border-right:none; border-top:none;
-  border-bottom:1px solid rgba(255,255,255,.03);
+  padding:7px 8px 6px 8px;
+  background:rgba(0,0,10,.92) !important; backdrop-filter:blur(4px) !important;
+  border:1px solid rgba(255,255,255,.07);
+  border-left:2px solid; /* ticker color inline */
+  border-bottom:2px solid rgba(255,255,255,.07);
   transition:background .3s ease;
+  position:relative; overflow:hidden;
 }}
-#pos-left .pos-card:hover {{ background:rgba(10,0,28,.65) !important; }}
+/* scanline overlay */
+#pos-left .pos-card::before {{
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0px,rgba(0,0,0,.18) 1px,transparent 1px,transparent 3px);
+}}
+#pos-left .pos-card > * {{ position:relative; z-index:1; }}
+#pos-left .pos-card:hover {{ background:rgba(6,0,24,.97) !important; }}
 #pos-left .pos-corner {{ display:none; }}
-#pos-left .pos-acq-flash {{ font-size:7px; letter-spacing:.18em; }}
+#pos-left .pos-acq-flash {{ font:400 6px 'Press Start 2P',monospace; letter-spacing:.06em; }}
 #pos-left .pos-top {{
-  display:flex; justify-content:space-between; align-items:baseline; gap:4px; line-height:1.3;
+  display:flex; justify-content:space-between; align-items:baseline; gap:4px; line-height:1.6;
 }}
-#pos-left .pos-sym {{ font-size:11px; font-weight:800; letter-spacing:.05em; }}
+/* Symbol — arcade block font */
+#pos-left .pos-sym {{
+  font-family:'Press Start 2P',monospace; font-size:7px; font-weight:400; letter-spacing:.04em;
+  text-shadow:0 0 8px currentColor, 1px 1px 0 rgba(0,0,0,.8);
+}}
 #pos-left .pos-qty {{ display:none; }}
 #pos-left .pos-val {{
-  font-size:8px; font-weight:600; font-variant-numeric:tabular-nums;
-  color:rgba(255,255,255,.38); margin-left:auto;
+  font-size:7px; font-weight:600; font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,.32); margin-left:auto;
 }}
-/* Holdings value (green, top-right) */
+/* Holdings value */
 #pos-left .pos-hval {{
-  font:700 9px Consolas,monospace; font-variant-numeric:tabular-nums;
-  color:#00ff9d; margin-left:auto; letter-spacing:.03em;
-  text-shadow:0 0 6px rgba(0,255,157,.35);
+  font-family:'Press Start 2P',monospace; font-size:6px; font-weight:400;
+  font-variant-numeric:tabular-nums; color:#00ff9d; margin-left:auto; letter-spacing:.02em;
+  text-shadow:1px 1px 0 #003320, 0 0 8px rgba(0,255,157,.5);
 }}
 /* Entry price + live P&L row */
 #pos-left .pos-entry-sub {{
   display:flex; justify-content:space-between; align-items:baseline;
-  margin-top:1px; margin-bottom:3px;
+  margin-top:3px; margin-bottom:3px;
 }}
 #pos-left .pos-epx {{
-  font:600 7px Consolas,monospace; letter-spacing:.03em; opacity:.85;
+  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
+  letter-spacing:.02em; opacity:.7;
 }}
 #pos-left .pos-pnl-live {{
-  font:700 7.5px Consolas,monospace; letter-spacing:.03em;
-  transition:color .3s;
+  font-family:'Press Start 2P',monospace; font-size:5px; font-weight:400;
+  letter-spacing:.02em; transition:color .3s;
 }}
-#pos-left .pos-hold {{
-  font-size:7px; color:rgba(200,180,255,.22); margin-top:2px; letter-spacing:.02em;
-  display:none;
-}}
+#pos-left .pos-hold {{ display:none; }}
 #pos-left .pos-hold-sub {{ display:none; }}
 #pos-left .pos-prox-wrap {{ margin-top:4px; padding:0; }}
-#pos-left .pos-age-bar {{ margin-top:4px; }}
+/* Hide age bar — non-functional in paper mode */
+#pos-left .pos-age-bar {{ display:none !important; }}
 
 /* Scan spark — tiny white flare on proximity dot */
 @keyframes prox-dot-spark {{
@@ -2095,47 +2106,43 @@ body::after {{
 .pos-prox-wrap {{ margin-top:5px; padding:0; }}
 .pos-prox-labels-row {{
   display:flex; justify-content:space-between; align-items:center;
-  margin-bottom:2px; font:600 6.5px Consolas,monospace; letter-spacing:.06em;
+  margin-bottom:3px; font:400 5px 'Press Start 2P',monospace; letter-spacing:.02em;
 }}
-.prox-lbl-stop  {{ color:#ff3366; opacity:.7; }}
-.prox-lbl-arrow {{ color:rgba(255,255,255,.35); font-size:7px; }}
-.prox-lbl-tgt   {{ color:#00ff9d; opacity:.7; }}
+.prox-lbl-stop  {{ color:#ff3366; opacity:.8; }}
+.prox-lbl-arrow {{ color:rgba(255,255,255,.3); font-size:6px; }}
+.prox-lbl-tgt   {{ color:#00ff9d; opacity:.8; }}
+/* pixel-block track — no rounded corners */
 .pos-prox-track {{
-  position:relative; height:5px; border-radius:2px; overflow:visible;
-  background:rgba(255,255,255,.05);
+  position:relative; height:6px; border-radius:0; overflow:visible;
+  background:rgba(255,255,255,.06);
+  image-rendering:pixelated;
 }}
-/* zone segments behind the track */
+/* zone segments */
 .pos-prox-zone-stop {{
-  position:absolute; left:0; top:0; height:100%; border-radius:2px 0 0 2px;
-  background:rgba(255,51,102,.18);
+  position:absolute; left:0; top:0; height:100%; border-radius:0;
+  background:rgba(255,51,102,.22);
 }}
 .pos-prox-zone-tgt {{
-  position:absolute; right:0; top:0; height:100%; border-radius:0 2px 2px 0;
-  background:rgba(0,255,157,.12);
+  position:absolute; right:0; top:0; height:100%; border-radius:0;
+  background:rgba(0,255,157,.15);
 }}
-/* animated fill — shimmer flows in direction of momentum */
+/* pixel fill — segmented look via repeating-linear-gradient */
 .pos-prox-fill {{
-  position:absolute; left:0; top:0; height:100%; border-radius:2px;
-  transition:width .7s cubic-bezier(.22,1,.36,1), background .5s;
-  background:linear-gradient(90deg,rgba(255,51,102,.55) 0%,rgba(255,153,0,.65) 45%,rgba(0,229,255,.75) 100%);
+  position:absolute; left:0; top:0; height:100%; border-radius:0;
+  transition:width .5s steps(20,end), background .4s;
+  background:linear-gradient(90deg,rgba(255,51,102,.7) 0%,rgba(255,153,0,.8) 45%,rgba(0,229,255,.9) 100%);
   overflow:hidden;
 }}
 .pos-prox-fill::after {{
   content:''; position:absolute; inset:0;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.22) 50%,transparent 100%);
-  background-size:200% 100%;
-  animation:prox-shimmer 1.6s linear infinite;
+  background:repeating-linear-gradient(90deg,transparent 0px,transparent 3px,rgba(0,0,0,.25) 3px,rgba(0,0,0,.25) 4px);
 }}
-@keyframes prox-shimmer {{
-  0%   {{ background-position:200% 0; }}
-  100% {{ background-position:-200% 0; }}
-}}
-/* cursor dot */
+/* square pixel cursor */
 .pos-prox-cursor {{
   position:absolute; top:50%; transform:translate(-50%,-50%);
-  width:7px; height:7px; border-radius:50%;
-  transition:left .7s cubic-bezier(.22,1,.36,1), background .5s, box-shadow .5s;
-  background:#fff; box-shadow:0 0 6px #fff;
+  width:6px; height:10px; border-radius:0;
+  transition:left .5s steps(20,end), background .4s, box-shadow .4s;
+  background:#fff; box-shadow:0 0 8px #fff, 0 0 3px #fff;
   z-index:2;
 }}
 @keyframes prox-danger {{
@@ -2201,50 +2208,79 @@ body::after {{
 @keyframes pos-breathe {{ 0%,100%{{box-shadow:none}} 50%{{box-shadow:0 0 10px rgba(0,229,255,.12)}} }}
 .pos-card.pos-card-active {{ animation:pos-breathe 3s ease-in-out infinite; }}
 /* ── Position card enter/exit animations ── */
+/* ── Arcade enter: pixel scanline wipe from top ── */
 @keyframes card-enter {{
   0%   {{ opacity:0; transform:scaleY(0); filter:brightness(5) saturate(0); }}
   20%  {{ opacity:1; transform:scaleY(1); filter:brightness(3) saturate(0); }}
   60%  {{ filter:brightness(2) saturate(2); }}
   100% {{ filter:brightness(1) saturate(1); }}
 }}
+/* Arcade exit — CRT power-off: vertical squish to line, then gone */
+@keyframes card-exit-crt {{
+  0%   {{ transform:scaleY(1) scaleX(1); filter:brightness(1); opacity:1; }}
+  15%  {{ filter:brightness(8) saturate(0); }}
+  30%  {{ transform:scaleY(.04) scaleX(1.08); filter:brightness(12) saturate(0); opacity:1; }}
+  50%  {{ transform:scaleY(.01) scaleX(1.18); filter:brightness(20); opacity:1; }}
+  65%  {{ transform:scaleY(0) scaleX(1.25); filter:brightness(30); opacity:1; }}
+  100% {{ transform:scaleY(0) scaleX(0); opacity:0; max-height:0; padding:0; margin:0; }}
+}}
+/* Target hit: sweep right with green flash */
 @keyframes card-exit-target {{
-  0%   {{ transform:translateX(0); filter:brightness(1); background:transparent; }}
-  20%  {{ filter:brightness(4); background:rgba(0,255,157,.1); }}
-  100% {{ transform:translateX(110%); opacity:0; filter:brightness(2); }}
+  0%   {{ transform:translateX(0) scaleY(1); filter:brightness(1); opacity:1; }}
+  12%  {{ filter:brightness(6) saturate(4); background:rgba(0,255,157,.18); }}
+  28%  {{ transform:translateX(0) scaleY(.05); filter:brightness(15) saturate(0); opacity:1; }}
+  45%  {{ transform:translateX(0) scaleY(0); filter:brightness(25); opacity:1; max-height:30px; }}
+  100% {{ transform:translateX(0) scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
 }}
+/* Stop hit: red CRT-off */
 @keyframes card-exit-stop {{
-  0%   {{ transform:scale(1); filter:brightness(1); }}
-  20%  {{ filter:brightness(5); background:rgba(255,51,102,.15); }}
-  100% {{ transform:scale(0); opacity:0; max-height:0; padding:0; }}
+  0%   {{ transform:scaleY(1); filter:brightness(1); opacity:1; }}
+  14%  {{ filter:brightness(5) saturate(0); background:rgba(255,51,102,.2); }}
+  32%  {{ transform:scaleY(.04); filter:brightness(14) saturate(0); opacity:1; }}
+  50%  {{ transform:scaleY(0); filter:brightness(22); opacity:1; max-height:30px; }}
+  100% {{ transform:scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
 }}
+/* Timeout: orange glitch-flicker then collapse */
 @keyframes card-exit-timeout {{
-  0%   {{ transform:translateY(0); opacity:1; }}
-  20%  {{ background:rgba(255,153,0,.08); filter:brightness(2); }}
-  100% {{ transform:translateY(-28px); opacity:0; max-height:0; padding:0; }}
+  0%   {{ opacity:1; filter:brightness(1); transform:scaleY(1); }}
+  10%  {{ filter:brightness(4) hue-rotate(30deg); background:rgba(255,153,0,.1); }}
+  20%  {{ filter:brightness(1); transform:translateX(3px); }}
+  28%  {{ filter:brightness(6) saturate(0); transform:translateX(-2px) scaleY(.5); }}
+  40%  {{ transform:scaleY(.02); filter:brightness(16); opacity:1; max-height:30px; }}
+  100% {{ transform:scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
 }}
+/* Reversal: hue-rotate glitch collapse */
 @keyframes card-exit-rev {{
-  0%   {{ opacity:1; filter:brightness(1); }}
-  30%  {{ filter:brightness(3) hue-rotate(180deg); background:rgba(0,229,255,.08); }}
-  100% {{ opacity:0; max-height:0; padding:0; }}
+  0%   {{ opacity:1; filter:brightness(1); transform:scaleY(1); }}
+  18%  {{ filter:brightness(4) hue-rotate(180deg); background:rgba(0,229,255,.1); }}
+  34%  {{ transform:scaleY(.05); filter:brightness(12) saturate(0); opacity:1; }}
+  50%  {{ transform:scaleY(0); filter:brightness(20); opacity:1; max-height:30px; }}
+  100% {{ transform:scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
 }}
-/* card-entering — JS orchestrates phases; CSS provides initial clip */
+/* card-entering — pixel scanline wipe from top */
 .pos-card-entering {{
   clip-path:inset(0 0 100% 0);
-  animation:card-clip-reveal .32s cubic-bezier(.22,1,.36,1) forwards;
+  animation:card-arcade-in .28s steps(12,end) forwards;
   transform-origin:top;
-  box-shadow:0 0 0 1px rgba(0,180,255,0);
 }}
+@keyframes card-arcade-in {{
+  0%   {{ clip-path:inset(0 0 100% 0); filter:brightness(6) saturate(0); }}
+  40%  {{ clip-path:inset(0 0 55% 0);  filter:brightness(3) saturate(.5); }}
+  70%  {{ clip-path:inset(0 0 15% 0);  filter:brightness(1.5) saturate(1); }}
+  100% {{ clip-path:inset(0 0 0% 0);   filter:brightness(1) saturate(1); }}
+}}
+/* card-clip-reveal kept for non-crypto uses */
 @keyframes card-clip-reveal {{
   0%   {{ clip-path:inset(0 0 100% 0); box-shadow:0 0 0 1px rgba(0,180,255,0); filter:brightness(2.5) saturate(0); }}
   30%  {{ box-shadow:0 0 20px 2px rgba(0,180,255,.55), inset 0 0 12px rgba(0,180,255,.15); filter:brightness(1.8) saturate(1.5); }}
   70%  {{ clip-path:inset(0 0 0% 0); box-shadow:0 0 12px 1px rgba(0,180,255,.3); filter:brightness(1.2) saturate(1.2); }}
   100% {{ clip-path:inset(0 0 0% 0); box-shadow:none; filter:brightness(1) saturate(1); }}
 }}
-.pos-card-exiting  {{ animation:card-exit-stop .42s ease-in forwards; overflow:hidden; }}
-.pos-card-exit-target  {{ animation:card-exit-target  .52s cubic-bezier(.55,0,1,.45) forwards; overflow:hidden; }}
-.pos-card-exit-stop    {{ animation:card-exit-stop    .42s ease-in forwards; overflow:hidden; }}
-.pos-card-exit-timeout {{ animation:card-exit-timeout .48s ease-in forwards; overflow:hidden; }}
-.pos-card-exit-rev     {{ animation:card-exit-rev     .48s ease-out forwards; overflow:hidden; }}
+.pos-card-exiting      {{ animation:card-exit-crt     .44s ease-in forwards; overflow:hidden; transform-origin:center; }}
+.pos-card-exit-target  {{ animation:card-exit-target   .48s ease-in forwards; overflow:hidden; transform-origin:center; }}
+.pos-card-exit-stop    {{ animation:card-exit-stop     .44s ease-in forwards; overflow:hidden; transform-origin:center; }}
+.pos-card-exit-timeout {{ animation:card-exit-timeout  .52s ease-in forwards; overflow:hidden; transform-origin:center; }}
+.pos-card-exit-rev     {{ animation:card-exit-rev      .48s ease-in forwards; overflow:hidden; transform-origin:center; }}
 /* ── PnL ghost — video-game exit ── */
 @keyframes pnl-ghost-pop {{
   0%   {{ transform:scale(.3) translateY(0);    opacity:0; filter:brightness(3); }}
@@ -6471,7 +6507,7 @@ window.addEventListener('resize', function() {{
       }}, 260);
     }};
 
-    var _CARD_W = 118; // crypto column width
+    var _CARD_W = 132; // crypto column width
     var _EQ_W   = 130; // equity column width
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
