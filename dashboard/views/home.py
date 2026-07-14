@@ -1037,12 +1037,12 @@ def _build_daw_html(data: dict) -> str:
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 html {{
   background:#060008; overflow:hidden;
-  height:100vh; width:100vw;
+  height:100%; width:100%; margin:0; padding:0;
 }}
 body {{
   background:#060008; overflow:visible;
   font-family:Consolas,'Courier New',monospace;
-  color:#f0e0ff; height:100vh; width:100vw;
+  color:#f0e0ff; height:100%; width:100%; margin:0; padding:0;
   display:flex; flex-direction:column;
 }}
 body::after {{
@@ -1203,7 +1203,7 @@ body::after {{
 .tb-stat-label {{ font-size:6.5px; letter-spacing:.22em; color:#3a1a4a; text-transform:uppercase; line-height:1; }}
 .tb-stat-val {{ font-size:12px; font-weight:700; letter-spacing:-.02em; line-height:1.4; }}
 .tb-hg {{ display:flex; flex-direction:column; gap:2px; padding:0 10px; flex-shrink:0; border-left:1px solid #1a0028; }}
-.tb-hg-label {{ font-size:6px; letter-spacing:.2em; color:#3a1a4a; text-transform:uppercase; line-height:1; }}
+.tb-hg-label {{ font-size:6px; letter-spacing:.2em; color:rgba(255,255,255,.55); text-transform:uppercase; line-height:1; }}
 .tb-hg-val {{ font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1.3; color:rgba(255,255,255,.38); font-family:Consolas,monospace; }}
 .tb-hg-row {{ display:flex; align-items:center; gap:4px; }}
 .spacer {{ flex:1; }}
@@ -4279,8 +4279,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
       var factor = e.deltaY > 0 ? 1.15 : 0.87;
-      window._navWindowMs = Math.max(10 * 60000, Math.min(30 * 86400000,
-        (window._navWindowMs || 4*3600000) * factor));
+      window._navWindowMs = Math.max(30000, Math.min(30 * 86400000,
+        (window._navWindowMs || 5*60000) * factor));
     }}, {{ passive: false }});
   }})();
 
@@ -4328,7 +4328,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // X: "now" is always at canvas center (W/2). History scrolls left.
     // windowMs = how much time fits between left edge and center.
     var nowMs     = Date.now();
-    var windowMs  = window._navWindowMs || 4 * 3600000;
+    var windowMs  = window._navWindowMs || 5 * 60000;  // 5-min default → ~1px/sec scroll
     var leftEdgeMs = nowMs - windowMs;
 
     // tx: maps a timestamp to canvas X. nowMs → W/2, leftEdgeMs → 0.
