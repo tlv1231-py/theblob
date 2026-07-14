@@ -1226,17 +1226,18 @@ body::after {{
   text-shadow:0 0 8px rgba(255,153,0,.7);
 }}
 /* ── Wallet slot ── */
-.ss-wallet-row {{ display:flex; align-items:baseline; gap:5px; justify-content:center; }}
+.ss-wallet-row {{ display:flex; align-items:baseline; gap:6px; justify-content:center; flex-wrap:nowrap; }}
 .ss-wallet-val {{
-  font:700 13px Consolas,monospace; letter-spacing:-.01em;
+  font-family:'Orbitron',Consolas,monospace; font-size:15px; font-weight:900;
+  letter-spacing:-.02em; font-variant-numeric:tabular-nums;
   color:#fff; transition:color .6s ease, text-shadow .6s ease;
-  font-variant-numeric:tabular-nums;
-  text-shadow:0 0 10px rgba(255,255,255,.3);
+  text-shadow:0 0 12px rgba(255,255,255,.4);
+  white-space:nowrap;
 }}
-.ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 14px rgba(0,255,157,.8); }}
-.ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 14px rgba(255,51,102,.8); }}
+.ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 16px rgba(0,255,157,.9),0 0 4px rgba(0,255,157,.4); }}
+.ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 16px rgba(255,51,102,.9),0 0 4px rgba(255,51,102,.4); }}
 .ss-wallet-chip {{
-  font:700 9px Consolas,monospace; letter-spacing:.04em;
+  font:700 8px Consolas,monospace; letter-spacing:.04em;
   opacity:0; transition:opacity .15s;
   text-shadow:0 0 8px currentColor;
 }}
@@ -6937,7 +6938,7 @@ window.addEventListener('resize', function() {{
         if (!nav) return;
         var el = document.getElementById('ss-wallet-val');
         if (!el) return;
-        var fmtd = '$' + (nav >= 1000 ? (nav/1000).toFixed(1) + 'K' : nav.toFixed(0));
+        var fmtd = '$' + nav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
         el.textContent = fmtd;
         if (_lastWalletVal !== null) {{
           var delta = nav - _lastWalletVal;
@@ -7064,8 +7065,8 @@ window.addEventListener('resize', function() {{
       // ── Master tick ───────────────────────────────────────────
       function _stratTick() {{
         _updateRunnerSlot();
-        _updatePipelineSlot();
-        _updatePositionsSlot();
+        // TRADES slot updated via window._updateTradesSlot from _updateOrbMetrics
+        // WALLET slot updated via window._updateWalletSlot from _updateNavDisplays
         _updatePriceSlot();
         _updateNavSlot();
       }}
