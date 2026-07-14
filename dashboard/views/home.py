@@ -2223,60 +2223,12 @@ body::after {{
 @keyframes pos-breathe {{ 0%,100%{{box-shadow:none}} 50%{{box-shadow:0 0 10px rgba(0,229,255,.12)}} }}
 .pos-card.pos-card-active {{ animation:pos-breathe 3s ease-in-out infinite; }}
 /* ── Position card enter/exit animations ── */
-/* ── Arcade enter: pixel scanline wipe from top ── */
+/* ── Card enter: pixel scanline wipe from top ── */
 @keyframes card-enter {{
   0%   {{ opacity:0; transform:scaleY(0); filter:brightness(5) saturate(0); }}
   20%  {{ opacity:1; transform:scaleY(1); filter:brightness(3) saturate(0); }}
   60%  {{ filter:brightness(2) saturate(2); }}
   100% {{ filter:brightness(1) saturate(1); }}
-}}
-/* Arcade exit — CRT power-off: vertical squish to line, then gone */
-@keyframes card-exit-crt {{
-  0%   {{ transform:scaleY(1) scaleX(1); filter:brightness(1); opacity:1; }}
-  15%  {{ filter:brightness(8) saturate(0); }}
-  30%  {{ transform:scaleY(.04) scaleX(1.08); filter:brightness(12) saturate(0); opacity:1; }}
-  50%  {{ transform:scaleY(.01) scaleX(1.18); filter:brightness(20); opacity:1; }}
-  65%  {{ transform:scaleY(0) scaleX(1.25); filter:brightness(30); opacity:1; }}
-  100% {{ transform:scaleY(0) scaleX(0); opacity:0; max-height:0; padding:0; margin:0; }}
-}}
-/* Target hit: sweep right with green flash */
-@keyframes card-exit-target {{
-  0%   {{ transform:translateX(0) scaleY(1); filter:brightness(1); opacity:1; }}
-  12%  {{ filter:brightness(6) saturate(4); background:rgba(0,255,157,.18); }}
-  28%  {{ transform:translateX(0) scaleY(.05); filter:brightness(15) saturate(0); opacity:1; }}
-  45%  {{ transform:translateX(0) scaleY(0); filter:brightness(25); opacity:1; max-height:30px; }}
-  100% {{ transform:translateX(0) scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
-}}
-/* Stop hit: red CRT-off */
-@keyframes card-exit-stop {{
-  0%   {{ transform:scaleY(1); filter:brightness(1); opacity:1; }}
-  14%  {{ filter:brightness(5) saturate(0); background:rgba(255,51,102,.2); }}
-  32%  {{ transform:scaleY(.04); filter:brightness(14) saturate(0); opacity:1; }}
-  50%  {{ transform:scaleY(0); filter:brightness(22); opacity:1; max-height:30px; }}
-  100% {{ transform:scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
-}}
-/* Timeout: orange glitch-flicker then collapse */
-@keyframes card-exit-timeout {{
-  0%   {{ opacity:1; filter:brightness(1); transform:scaleY(1); }}
-  10%  {{ filter:brightness(4) hue-rotate(30deg); background:rgba(255,153,0,.1); }}
-  20%  {{ filter:brightness(1); transform:translateX(3px); }}
-  28%  {{ filter:brightness(6) saturate(0); transform:translateX(-2px) scaleY(.5); }}
-  40%  {{ transform:scaleY(.02); filter:brightness(16); opacity:1; max-height:30px; }}
-  100% {{ transform:scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
-}}
-/* Reversal: hue-rotate glitch collapse */
-@keyframes card-exit-rev {{
-  0%   {{ opacity:1; filter:brightness(1); transform:scaleY(1); }}
-  18%  {{ filter:brightness(4) hue-rotate(180deg); background:rgba(0,229,255,.1); }}
-  34%  {{ transform:scaleY(.05); filter:brightness(12) saturate(0); opacity:1; }}
-  50%  {{ transform:scaleY(0); filter:brightness(20); opacity:1; max-height:30px; }}
-  100% {{ transform:scaleY(0); opacity:0; max-height:0; padding:0; margin:0; }}
-}}
-/* card-entering — pixel scanline wipe from top */
-.pos-card-entering {{
-  clip-path:inset(0 0 100% 0);
-  animation:card-arcade-in .28s steps(12,end) forwards;
-  transform-origin:top;
 }}
 @keyframes card-arcade-in {{
   0%   {{ clip-path:inset(0 0 100% 0); filter:brightness(6) saturate(0); }}
@@ -2284,26 +2236,79 @@ body::after {{
   70%  {{ clip-path:inset(0 0 15% 0);  filter:brightness(1.5) saturate(1); }}
   100% {{ clip-path:inset(0 0 0% 0);   filter:brightness(1) saturate(1); }}
 }}
-/* card-clip-reveal kept for non-crypto uses */
+.pos-card-entering {{
+  clip-path:inset(0 0 100% 0);
+  animation:card-arcade-in .28s steps(12,end) forwards;
+  transform-origin:top;
+}}
 @keyframes card-clip-reveal {{
   0%   {{ clip-path:inset(0 0 100% 0); box-shadow:0 0 0 1px rgba(0,180,255,0); filter:brightness(2.5) saturate(0); }}
   30%  {{ box-shadow:0 0 20px 2px rgba(0,180,255,.55), inset 0 0 12px rgba(0,180,255,.15); filter:brightness(1.8) saturate(1.5); }}
   70%  {{ clip-path:inset(0 0 0% 0); box-shadow:0 0 12px 1px rgba(0,180,255,.3); filter:brightness(1.2) saturate(1.2); }}
   100% {{ clip-path:inset(0 0 0% 0); box-shadow:none; filter:brightness(1) saturate(1); }}
 }}
-.pos-card-exiting      {{ animation:card-exit-crt     .44s ease-in forwards; overflow:hidden; transform-origin:center; }}
-.pos-card-exit-target  {{ animation:card-exit-target   .48s ease-in forwards; overflow:hidden; transform-origin:center; }}
-.pos-card-exit-stop    {{ animation:card-exit-stop     .44s ease-in forwards; overflow:hidden; transform-origin:center; }}
-.pos-card-exit-timeout {{ animation:card-exit-timeout  .52s ease-in forwards; overflow:hidden; transform-origin:center; }}
-.pos-card-exit-rev     {{ animation:card-exit-rev      .48s ease-in forwards; overflow:hidden; transform-origin:center; }}
+
+/* ── Phase 1: Target-lock overlay that appears ON the tile ── */
+.card-target-lock {{
+  position:absolute; inset:-2px; z-index:50; pointer-events:none;
+  border:2px solid transparent;
+  animation:card-target-in .3s steps(4,end) forwards;
+}}
+@keyframes card-target-in {{
+  0%   {{ border-color:transparent; box-shadow:none; opacity:0; }}
+  30%  {{ border-color:rgba(255,255,255,.5); opacity:.6; }}
+  60%  {{ border-color:#fff; box-shadow:inset 0 0 10px rgba(255,255,255,.25); opacity:1; }}
+  85%  {{ border-color:#fff; box-shadow:inset 0 0 22px rgba(255,255,255,.45), 0 0 28px rgba(255,255,255,.7); opacity:1; }}
+  100% {{ border-color:var(--tc,#fff); box-shadow:inset 0 0 32px rgba(255,255,255,.6), 0 0 40px var(--tc,#fff); opacity:1; }}
+}}
+/* Crosshair corner brackets inside the overlay */
+.card-target-lock::before,
+.card-target-lock::after {{
+  content:''; position:absolute;
+  width:8px; height:8px;
+  border-color:var(--tc,#fff); border-style:solid;
+  opacity:.9;
+}}
+.card-target-lock::before {{ top:2px; left:2px; border-width:2px 0 0 2px; }}
+.card-target-lock::after  {{ bottom:2px; right:2px; border-width:0 2px 2px 0; }}
+
+/* ── Phase 2: Rapid hit-flash (damage blink) ── */
+@keyframes card-hit-flash {{
+  0%   {{ filter:brightness(1); transform:scale(1); }}
+  10%  {{ filter:brightness(12) saturate(0); transform:scale(1.03); }}
+  20%  {{ filter:brightness(1.2); transform:scale(1); }}
+  32%  {{ filter:brightness(10) saturate(0); transform:scale(1.025); }}
+  42%  {{ filter:brightness(1); transform:scale(1); }}
+  55%  {{ filter:brightness(7) saturate(0); transform:scale(1.015); }}
+  65%  {{ filter:brightness(1); transform:scale(1); }}
+  80%  {{ filter:brightness(4) saturate(0); }}
+  100% {{ filter:brightness(1); }}
+}}
+.pos-card-hit {{ animation:card-hit-flash .32s steps(6,end) forwards; }}
+
+/* ── Phase 3: Arcade destroy — crush to bright scanline then gone ── */
+@keyframes card-arcade-destroy {{
+  0%   {{ transform:scaleY(1) scaleX(1); filter:brightness(6) saturate(0); opacity:1; }}
+  18%  {{ transform:scaleY(.45) scaleX(1.06); filter:brightness(16) saturate(0); opacity:1; }}
+  35%  {{ transform:scaleY(.1) scaleX(1.14); filter:brightness(28) saturate(0); opacity:1; }}
+  50%  {{ transform:scaleY(.025) scaleX(1.22); filter:brightness(45); opacity:1; }}
+  62%  {{ transform:scaleY(0) scaleX(1.28); filter:brightness(60); opacity:1; max-height:60px; }}
+  100% {{ transform:scaleY(0) scaleX(0); opacity:0; max-height:0; padding:0; margin:0; border-width:0; }}
+}}
+.pos-card-exiting,
+.pos-card-exit-target,
+.pos-card-exit-stop,
+.pos-card-exit-timeout,
+.pos-card-exit-rev     {{ animation:card-arcade-destroy .55s cubic-bezier(.6,0,1,1) forwards; overflow:hidden; transform-origin:center; }}
 /* ── PnL ghost — video-game exit ── */
+/* ── P&L ghost — 80s arcade score-popup, floats left of tile column ── */
 @keyframes pnl-ghost-pop {{
-  0%   {{ transform:scale(.3) translateY(0);    opacity:0; filter:brightness(3); }}
-  18%  {{ transform:scale(1.4) translateY(-12px); opacity:1; filter:brightness(1.8); }}
-  38%  {{ transform:scale(.88) translateY(-22px); opacity:1; filter:brightness(1.2); }}
-  55%  {{ transform:scale(1.06) translateY(-34px); opacity:1; filter:brightness(1); }}
-  80%  {{ transform:scale(1.0) translateY(-70px); opacity:.85; }}
-  100% {{ transform:scale(.9) translateY(-115px); opacity:0; }}
+  0%   {{ transform:scale(.4) translateY(0);     opacity:0; filter:brightness(8) saturate(0); }}
+  12%  {{ transform:scale(1.25) translateY(-8px); opacity:1; filter:brightness(3); }}
+  28%  {{ transform:scale(.9) translateY(-20px); opacity:1; filter:brightness(1.4); }}
+  50%  {{ transform:scale(1.0) translateY(-42px); opacity:1; filter:brightness(1); }}
+  75%  {{ transform:scale(1.0) translateY(-75px); opacity:.9; }}
+  100% {{ transform:scale(.95) translateY(-115px); opacity:0; }}
 }}
 @keyframes pnl-particle {{
   0%   {{ transform:translate(0,0) scale(1); opacity:1; }}
@@ -2316,27 +2321,36 @@ body::after {{
 }}
 .pnl-ghost {{
   position:fixed; pointer-events:none; z-index:9999;
-  display:flex; flex-direction:column; align-items:center; gap:2px;
-  animation:pnl-ghost-pop 1.1s cubic-bezier(.22,1,.36,1) forwards;
+  display:flex; flex-direction:column; align-items:flex-end; gap:3px;
+  animation:pnl-ghost-pop 1.3s cubic-bezier(.22,1,.36,1) forwards;
 }}
+/* Symbol label */
 .pnl-ghost .pg-sym {{
-  font:600 8px Consolas,monospace; letter-spacing:.18em; opacity:.7; text-transform:uppercase;
+  font-family:'Press Start 2P',monospace; font-size:6px; letter-spacing:.1em;
+  opacity:.6; text-transform:uppercase; text-align:right;
 }}
+/* Main P&L value — big arcade score number */
 .pnl-ghost .pg-val {{
-  font:800 28px/1 Consolas,monospace; letter-spacing:.04em;
-  text-shadow:0 0 18px currentColor, 0 0 36px currentColor;
+  font-family:'Press Start 2P',monospace; font-size:18px; line-height:1; letter-spacing:.04em;
+  text-shadow:
+    2px 2px 0 rgba(0,0,0,.9),
+    3px 3px 0 rgba(0,0,0,.6),
+    0 0 20px currentColor,
+    0 0 40px currentColor;
 }}
+/* PROFIT / LOSS label */
 .pnl-ghost .pg-label {{
-  font:600 7px Consolas,monospace; letter-spacing:.3em; opacity:.55;
-  text-transform:uppercase; margin-top:1px;
+  font-family:'Press Start 2P',monospace; font-size:6px; letter-spacing:.18em;
+  opacity:.7; text-transform:uppercase; text-align:right;
 }}
+/* Exit price */
 .pnl-ghost .pg-price {{
-  font:600 9px Consolas,monospace; letter-spacing:.08em; opacity:.75;
-  margin-top:3px;
+  font-family:'Press Start 2P',monospace; font-size:5px; letter-spacing:.06em;
+  opacity:.55; margin-top:2px; text-align:right;
 }}
 .pnl-particle {{
-  position:fixed; pointer-events:none; z-index:9998; border-radius:50%;
-  animation:pnl-particle var(--dur,.6s) ease-out forwards;
+  position:fixed; pointer-events:none; z-index:9998; border-radius:0;
+  animation:pnl-particle var(--dur,.6s) steps(6,end) forwards;
 }}
 /* ── Ambient canvas (behind chart content) ── */
 #ambient-canvas {{
@@ -6394,49 +6408,48 @@ window.addEventListener('resize', function() {{
     }};
 
     // ── Video-game card exit ────────────────────────────────────────────────────
-    function _spawnPnlGhost(el, pnl, sym, exitPrice) {{
-      if (!el) return;
-      var hasPnl = (pnl !== null && pnl !== undefined);
-      var r    = el.getBoundingClientRect();
-      var cx   = r.left + r.width  / 2;
-      var cy   = r.top  + r.height / 2;
-      var isWin = hasPnl ? pnl >= 0 : true;
-      var col  = isWin ? '#00ff9d' : '#ff3366';
-
-      // ── 1. Card flash ──────────────────────────────────────────────────────
-      el.style.setProperty('--flash-col', col);
-      el.style.animation = 'card-flash-exit .28s ease-out forwards';
-
-      // ── 2. Particle burst ──────────────────────────────────────────────────
-      var N = 14;
+    // ── Arcade exit: 3-phase sequence ─────────────────────────────────────────
+    // Phase 1 (0–320ms):  Target-lock overlay appears on tile
+    // Phase 2 (320–580ms): Hit-flash damage blinks (3 pulses)
+    // Phase 3 (580–):     Tile crushes to scanline + P&L ghost spawns left of column
+    function _spawnParticles(cx, cy, col) {{
+      var N = 18;
       for (var i = 0; i < N; i++) {{
-        var angle = (Math.PI * 2 / N) * i + (Math.random() - .5) * .6;
-        var dist  = 55 + Math.random() * 60;
-        var size  = 3 + Math.random() * 5;
-        var dur   = (.45 + Math.random() * .35).toFixed(2) + 's';
+        var angle = (Math.PI * 2 / N) * i + (Math.random() - .5) * .5;
+        var dist  = 40 + Math.random() * 70;
+        var size  = 2 + Math.floor(Math.random() * 5);  // pixel sizes
+        var dur   = (.35 + Math.random() * .4).toFixed(2) + 's';
         var p = document.createElement('div');
         p.className = 'pnl-particle';
         p.style.cssText = [
           'width:' + size + 'px', 'height:' + size + 'px',
-          'background:' + col,
-          'box-shadow:0 0 6px ' + col,
-          'left:' + (cx - size/2) + 'px',
-          'top:'  + (cy - size/2) + 'px',
+          'background:' + col, 'box-shadow:0 0 4px ' + col,
+          'left:' + (cx - size/2) + 'px', 'top:' + (cy - size/2) + 'px',
           '--px:' + Math.round(Math.cos(angle) * dist) + 'px',
           '--py:' + Math.round(Math.sin(angle) * dist) + 'px',
-          '--dur:' + dur,
-          'opacity:1'
+          '--dur:' + dur, 'opacity:1'
         ].join(';');
         document.body.appendChild(p);
         setTimeout(function(pp) {{ if (pp.parentNode) pp.parentNode.removeChild(pp); }}, 900, p);
       }}
+    }}
 
-      // ── 3. Large P&L ghost number ──────────────────────────────────────────
+    function _spawnPnlGhost(r, pnl, sym, exitPrice) {{
+      var hasPnl = (pnl !== null && pnl !== undefined);
+      var isWin  = hasPnl ? pnl >= 0 : true;
+      var col    = isWin ? '#00ff9d' : '#ff3366';
+
+      // Position: to the LEFT of the tile column, vertically centered on the card
+      var ghostW = 88;
+      var gx = r.left - ghostW - 10;
+      var gy = r.top + r.height / 2 - 30;
+
       var g = document.createElement('div');
       g.className = 'pnl-ghost';
       g.style.color = col;
-      g.style.left  = (cx - 52) + 'px';
-      g.style.top   = (cy - 28) + 'px';
+      g.style.left  = gx + 'px';
+      g.style.top   = gy + 'px';
+      g.style.width = ghostW + 'px';
 
       var symEl = document.createElement('div');
       symEl.className = 'pg-sym';
@@ -6451,34 +6464,24 @@ window.addEventListener('resize', function() {{
           : (pnl >= 0 ? '+' : '-') + '$' + absPnl.toFixed(2);
       }} else {{
         valEl.textContent = 'CLOSED';
-        valEl.style.fontSize = '18px';
-        valEl.style.letterSpacing = '.15em';
       }}
 
       var lbl = document.createElement('div');
       lbl.className = 'pg-label';
       lbl.textContent = hasPnl ? (isWin ? 'PROFIT' : 'LOSS') : 'EXIT';
 
-      var priceEl = document.createElement('div');
-      priceEl.className = 'pg-price';
+      g.appendChild(symEl); g.appendChild(valEl); g.appendChild(lbl);
       if (exitPrice) {{
+        var priceEl = document.createElement('div');
+        priceEl.className = 'pg-price';
         var ep = parseFloat(exitPrice.toString().replace(/,/g,''));
         priceEl.textContent = '@ $' + (ep > 1 ? ep.toLocaleString('en-US',{{maximumFractionDigits:2}}) : ep.toFixed(4));
+        g.appendChild(priceEl);
       }}
-
-      g.appendChild(symEl); g.appendChild(valEl); g.appendChild(lbl);
-      if (exitPrice) g.appendChild(priceEl);
       document.body.appendChild(g);
-      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1200);
+      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1500);
     }}
-    var _EXIT_CLASS = {{
-      'target':   'pos-card-exit-target',
-      'stop':     'pos-card-exit-stop',
-      'timeout':  'pos-card-exit-timeout',
-      'reversal': 'pos-card-exit-rev',
-      'signal':   'pos-card-exit-rev'
-    }};
-    var _EXIT_DUR = {{ 'target':540, 'stop':430, 'timeout':500, 'reversal':510, 'signal':510 }};
+
     // ── Equity positions map — server-rendered, for satellite orbs ──────────────
     window._equityPositionsMap = {_eq_pos_js};
     // ── Equity card map — built from SSR DOM on load ────────────────────────────
@@ -6491,18 +6494,14 @@ window.addEventListener('resize', function() {{
     setTimeout(_buildEquityMap, 500);
 
     window._triggerCardExit = function(fullSym, reason, pnl, exitPrice) {{
-      // Check crypto map first (fullSym may be "BTC/USD" or just "BTC"), then equity map
       var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD']
              || _equityCardEls[fullSym];
       if (!el) return;
-      // Remove from whichever map owns it; launch satellite exit animation
       if (_cryptoCardEls[fullSym]) delete _cryptoCardEls[fullSym];
       else if (_cryptoCardEls[fullSym + '/USD']) delete _cryptoCardEls[fullSym + '/USD'];
       else if (_equityCardEls[fullSym]) delete _equityCardEls[fullSym];
-      // Satellite exit for both crypto and equity
       var _exitSym = _cryptoCardEls[fullSym + '/USD'] ? fullSym + '/USD' : fullSym;
       if (_satAngles[_exitSym] !== undefined) {{
-        var _ep = (window._equityPositionsMap || {{}})[_exitSym] || {{}};
         _satExiting[_exitSym] = {{
           angle: _satAngles[_exitSym], orbitR: 32, age: 0,
           sr: pnl >= 0 ? 0 : 255, sg: pnl >= 0 ? 255 : 51, sb: pnl >= 0 ? 157 : 102
@@ -6511,15 +6510,35 @@ window.addEventListener('resize', function() {{
         delete (window._equityPositionsMap || {{}})[_exitSym];
       }}
       el.classList.remove('pos-card-active');
-      // Spawn ghost + particles immediately; collapse card after flash plays (280ms)
-      _spawnPnlGhost(el, pnl, fullSym, exitPrice);
-      var cls = _EXIT_CLASS[reason] || 'pos-card-exit-stop';
-      var dur = _EXIT_DUR[reason] || 500;
+      var col = (pnl !== null && pnl !== undefined) ? (pnl >= 0 ? '#00ff9d' : '#ff3366') : '#fff';
+
+      // ── Phase 1: Target-lock overlay (320ms) ──────────────────────────
+      el.style.position = 'relative';
+      var lock = document.createElement('div');
+      lock.className = 'card-target-lock';
+      lock.style.setProperty('--tc', col);
+      el.appendChild(lock);
+
+      // ── Phase 2: Hit-flash blinks (320–580ms) ─────────────────────────
       setTimeout(function() {{
-        el.style.animation = '';  // clear flash so exit CSS can take over
-        el.classList.add(cls);
-        setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); _updateOverlayWidth(); }}, dur);
-      }}, 260);
+        if (lock.parentNode) lock.parentNode.removeChild(lock);
+        el.classList.add('pos-card-hit');
+      }}, 320);
+
+      // ── Phase 3: Destroy + ghost + particles (580ms+) ──────────────────
+      setTimeout(function() {{
+        var r = el.getBoundingClientRect();
+        var cx = r.left + r.width / 2;
+        var cy = r.top  + r.height / 2;
+        _spawnParticles(cx, cy, col);
+        _spawnPnlGhost(r, pnl, fullSym, exitPrice);
+        el.classList.remove('pos-card-hit');
+        el.classList.add('pos-card-exit-stop');
+        setTimeout(function() {{
+          if (el.parentNode) el.parentNode.removeChild(el);
+          _updateOverlayWidth();
+        }}, 600);
+      }}, 580);
     }};
 
     var _CARD_W = 148; // crypto column width
