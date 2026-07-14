@@ -1160,6 +1160,24 @@ body::after {{
 /* ── Tracker bar — orange bar between header and chart ── */
 #tracker-bar {{ display:none; }}
 
+/* ── System health strip ── */
+#sys-health-bar {{
+  height:18px; flex-shrink:0; display:flex; align-items:center; padding:0 10px; gap:0;
+  background:rgba(0,0,4,.96); border-bottom:1px solid rgba(80,0,120,.18);
+  position:relative; z-index:99998; overflow:hidden;
+}}
+.sysh-item {{ display:flex; align-items:center; gap:4px; padding:0 8px; }}
+.sysh-dot {{
+  width:5px; height:5px; border-radius:50%; flex-shrink:0;
+  background:#3a1a5a; transition:background .4s, box-shadow .4s;
+}}
+.sysh-dot.ok  {{ background:#00ff9d; box-shadow:0 0 4px rgba(0,255,157,.8); }}
+.sysh-dot.warn {{ background:#ffaa00; box-shadow:0 0 4px rgba(255,170,0,.8); }}
+.sysh-dot.dead {{ background:#ff3366; box-shadow:0 0 4px rgba(255,51,102,.8); }}
+.sysh-lbl {{ font:700 6px Consolas,monospace; letter-spacing:.16em; color:rgba(255,255,255,.22); text-transform:uppercase; }}
+.sysh-val {{ font:700 8px Consolas,monospace; letter-spacing:.06em; color:rgba(255,255,255,.55); margin-left:3px; }}
+.sysh-sep {{ width:1px; height:10px; background:rgba(148,0,255,.15); flex-shrink:0; }}
+
 /* ═══════════════════════════════════════════════════════════════
    STRATAGEM HUD — Helldivers-style process-status bar
    ═══════════════════════════════════════════════════════════════ */
@@ -1231,8 +1249,8 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Press Start 2P','Orbitron',Consolas,monospace; font-size:22px; font-weight:400;
-  letter-spacing:.03em; font-variant-numeric:tabular-nums;
+  font-family:'Bangers','Silkscreen','Press Start 2P',Consolas,monospace; font-size:26px; font-weight:400;
+  letter-spacing:.06em; font-variant-numeric:tabular-nums;
   color:#fff; transition:color .4s ease, text-shadow .4s ease;
   text-shadow:0 0 20px rgba(255,255,255,.7), 0 0 6px rgba(255,255,255,.4), 0 2px 0 rgba(0,0,0,.8);
   white-space:nowrap; line-height:1;
@@ -1248,8 +1266,8 @@ body::after {{
 }}
 .ss-wallet-chip {{
   position:absolute; left:calc(100% + 8px); top:0;
-  font-family:'Press Start 2P','Orbitron',Consolas,monospace;
-  font-size:11px; font-weight:400; letter-spacing:.01em;
+  font-family:'Bangers','Silkscreen','Press Start 2P',Consolas,monospace;
+  font-size:13px; font-weight:400; letter-spacing:.04em;
   font-variant-numeric:tabular-nums;
   opacity:0; white-space:nowrap; pointer-events:none;
   text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
@@ -1433,7 +1451,7 @@ body::after {{
 .hud-timer.hud-imminent {{ color:#ff3366; animation:q-pulse .5s ease-in-out infinite; }}
 @keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
 /* ── Report panel — Alpaca wallet display ── */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Press+Start+2P&family=Bangers&family=Silkscreen:wght@400;700&display=swap');
 #report-panel {{
   flex:1.4; min-width:200px; max-width:460px;
   background:#000308; display:flex; flex-direction:column;
@@ -2268,6 +2286,16 @@ body::after {{
   font-size:8px; color:#3a1a5a; display:block; margin-top:5px; letter-spacing:.04em;
   border-top:1px solid #1a0028; padding-top:4px;
 }}
+/* ── Orb-side batch P&L popup ── */
+#orb-batch-popup {{
+  position:absolute; pointer-events:none; z-index:30;
+  font-family:'Bangers','Silkscreen',Consolas,monospace;
+  font-size:20px; letter-spacing:.08em; font-variant-numeric:tabular-nums;
+  opacity:0; white-space:nowrap;
+  text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
+  transition:opacity .15s;
+  transform:translateY(-50%);
+}}
 </style>
 </head>
 <body>
@@ -2381,6 +2409,30 @@ body::after {{
       </div>
     </div>
   </div>
+  <div class="strat-slot" id="ss-exposure">
+    <div class="ss-icon">◧</div>
+    <div class="ss-name">EXPOSURE</div>
+    <div class="ss-status" id="ss-exposure-st">—</div>
+  </div>
+  <div class="strat-slot" id="ss-tph">
+    <div class="ss-icon">⚡</div>
+    <div class="ss-name">$/HR</div>
+    <div class="ss-status" id="ss-tph-st">—</div>
+  </div>
+</div>
+<!-- ── System health strip ── -->
+<div id="sys-health-bar">
+  <div class="sysh-item"><span class="sysh-dot" id="sysh-mktdata"></span><span class="sysh-lbl">MKT DATA</span><span class="sysh-val" id="sysh-mktdata-val">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-dot" id="sysh-db"></span><span class="sysh-lbl">DB</span><span class="sysh-val" id="sysh-db-val">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">HEARTBEAT</span><span class="sysh-val" id="sysh-hb">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">LATENCY</span><span class="sysh-val" id="sysh-lat">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">API REQ/MIN</span><span class="sysh-val" id="sysh-rpm">—</span></div>
+  <div class="sysh-sep"></div>
+  <div class="sysh-item"><span class="sysh-lbl">CLK DRIFT</span><span class="sysh-val" id="sysh-drift">—</span></div>
 </div>
 <!-- ── Callout rail — height:0 sibling; cards overflow downward from HUD bottom ── -->
 <div id="callout-rail"></div>
@@ -2396,6 +2448,7 @@ body::after {{
   <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
   <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
+  <div id="orb-batch-popup"></div>
   <div id="trade-veil"></div>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
   <!-- hidden compat stubs — JS refs still work, nothing visible -->
@@ -2941,8 +2994,8 @@ window._orbTradeFlash = function(isEntry, isWin) {{
   // Spawn 5 shockwave rings staggered — use nav-canvas center (same coord space)
   {{
     try {{
-      var scx = window._navOrbCanvasX !== undefined ? window._navOrbCanvasX : canvas.width/2;
-      var scy = window._navOrbCanvasY !== undefined ? window._navOrbCanvasY : canvas.height/2;
+      var scx = (window._navOrbFracX !== undefined ? window._navOrbFracX : 0.5) * canvas.width;
+      var scy = (window._navOrbFracY !== undefined ? window._navOrbFracY : 0.5) * canvas.height;
       if (isFinite(scx) && isFinite(scy)) {{
         var scol = isEntry ? [255,255,255] : (isWin ? [0,255,157] : [255,51,102]);
         for (var si=0; si<5; si++) {{
@@ -3073,9 +3126,9 @@ function drawPulse() {{
       // Pulse-canvas shares the same coordinate space (both inset:0 in #main-area).
       // Use nav-canvas center directly — avoids Plotly yaxis mismatch (NAV $66K vs SPY $750).
       var _rawPcx, _rawPcy;
-      if (window._navOrbCanvasX !== undefined) {{
-        _rawPcx = window._navOrbCanvasX;
-        _rawPcy = window._navOrbCanvasY;
+      if (window._navOrbFracX !== undefined) {{
+        _rawPcx = window._navOrbFracX * canvas.width;
+        _rawPcy = window._navOrbFracY * canvas.height;
       }} else {{
         // Fallback: center of main-area via Plotly chart dimensions
         var fl0 = gd._fullLayout;
@@ -3361,8 +3414,8 @@ function drawPulse() {{
   // ── Brownian live-tip ─────────────────────────────────────────────────────
   if (portT) {{
     try {{
-      var tcx = window._navOrbCanvasX !== undefined ? window._navOrbCanvasX : canvas.width/2;
-      var tcy = window._navOrbCanvasY !== undefined ? window._navOrbCanvasY : canvas.height/2;
+      var tcx = (window._navOrbFracX !== undefined ? window._navOrbFracX : 0.5) * canvas.width;
+      var tcy = (window._navOrbFracY !== undefined ? window._navOrbFracY : 0.5) * canvas.height;
       if (isFinite(tcx) && isFinite(tcy)) {{
         if (!_liveTip.pts.length) _liveTip.pts.push({{dx:0,dy:0}});
         var last2 = _liveTip.pts[_liveTip.pts.length-1];
@@ -4052,21 +4105,19 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Dense in-memory trail — driven by _lastKnownNav, pushes one point per rAF frame.
-  // Seeded with 20min of baseline history so there's a line immediately on load.
-  if (!window._navDenseTrail) {{
-    window._navDenseTrail = [];
-    // Plant baseline history so trail is visible before live prices accumulate.
-    // Without this, all points cluster at X=W/2 (just pushed) and show a wall.
-    var _seedNav = window._lastKnownNav || (portValues.length ? portValues[portValues.length-1] : 0);
-    if (_seedNav) {{
-      var _now = Date.now();
-      var _halfW = 20 * 60 * 1000;
-      // Two anchor points: 20min ago and 1s ago, both at current NAV
-      window._navDenseTrail.push({{ t: _now - _halfW, y: _seedNav }});
-      window._navDenseTrail.push({{ t: _now - 1000,   y: _seedNav }});
-    }}
-  }}
+  // Scroll-to-zoom: days of portfolio history visible (default 14)
+  window._navZoomDays = 14;
+  (function() {{
+    var ma = document.getElementById('main-area');
+    if (!ma) return;
+    ma.addEventListener('wheel', function(e) {{
+      e.preventDefault(); e.stopPropagation();
+      var total = portDates ? portDates.length : 14;
+      var delta = e.deltaY > 0 ? 1 : -1;
+      window._navZoomDays = Math.max(2, Math.min(total,
+        (window._navZoomDays || 14) + delta * Math.max(1, Math.round((window._navZoomDays||14)*0.15))));
+    }}, {{ passive: false }});
+  }})();
 
   window._drawNavCanvas = function() {{
     _resize();
@@ -4074,58 +4125,57 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Always set orb position so pulse-canvas stays in sync even with no trail
-    window._navOrbCanvasX = W / 2;
-    window._navOrbCanvasY = H / 2;
+    // Use portDates/portValues for stable historical shape (always present on load).
+    // Live value from _lastKnownNav controls the orb's Y position without reshaping history.
+    var allDates  = portDates  || [];
+    var allValues = portValues || [];
+    var liveNav   = window._lastKnownNav || (allValues.length ? allValues[allValues.length-1] : null);
 
-    var curNav = window._lastKnownNav;
-    var nowMs  = Date.now();
-    var halfWin = 20 * 60 * 1000;
-
-    // Throttle: push at most one point per ~16ms (rAF already limits this, but guard just in case)
-    var _lastPt = window._navDenseTrail[window._navDenseTrail.length - 1];
-    if (curNav && (!_lastPt || nowMs - _lastPt.t >= 15)) {{
-      window._navDenseTrail.push({{ t: nowMs, y: curNav }});
+    if (allDates.length < 2 || !liveNav) {{
+      window._navOrbFracX = 0.5;
+      window._navOrbFracY = 0.5;
+      return;
     }}
-    var cutoff = nowMs - halfWin;
-    while (window._navDenseTrail.length > 1 && window._navDenseTrail[0].t < cutoff)
-      window._navDenseTrail.shift();
 
-    var trail = window._navDenseTrail;
-    if (trail.length < 2) return;
+    // Slice to zoom window, always include at least the last value
+    var nShow  = Math.max(2, Math.min(allDates.length, Math.round(window._navZoomDays || 14)));
+    var startI = allDates.length - nShow;
+    var dates  = allDates.slice(startI);
+    var values = allValues.slice(startI);
+    var n      = dates.length;
 
-    var orbGap = 28;
-    var winStart = nowMs - halfWin;
-    function tx(ms) {{ return (ms - winStart) / (halfWin * 2) * W; }}
+    // Append a virtual "now" point at liveNav so the trail ends at the orb
+    var nowIso = new Date().toISOString();
+    dates  = dates.concat([nowIso]);
+    values = values.concat([liveNav]);
+    n      = dates.length;
 
-    // Find last point strictly LEFT of orb gap
-    var lastVI = -1;
-    for (var vi = 0; vi < trail.length; vi++) {{
-      if (tx(trail[vi].t) >= W/2 - orbGap) break;
-      lastVI = vi;
-    }}
-    // No visible trail yet (all points clustered at the orb) — just show orb, no wall
-    if (lastVI < 0) return;
+    // X: map the full range [dates[0], now] → [0, W/2]. Orb is always at W/2.
+    var x0ms  = new Date(dates[0]).getTime();
+    var x1ms  = new Date(dates[n-1]).getTime();
+    var xSpan = x1ms - x0ms || 1;
+    function tx(iso) {{ return (new Date(iso).getTime() - x0ms) / xSpan * (W / 2); }}
 
-    // base = value at the boundary point — ty(base) = H/2 so trail connects to orb
-    var base = trail[lastVI].y;
-    var halfRange = base * 0.0008;
+    // Y: base = last DAILY snapshot (stable — doesn't jump when live price changes)
+    var base     = values[n-2];
+    var maxDev   = 0;
+    for (var vi = 0; vi < n; vi++) {{ var dv = Math.abs(values[vi]-base); if(dv>maxDev) maxDev=dv; }}
+    var halfRange = maxDev * 1.3 || base * 0.03;
     if (!halfRange) halfRange = 1;
     function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
-    // Decimate to 250ms keyframes for smooth Catmull-Rom
-    var dec = [];
-    var lastKT = -Infinity, lastKY = null;
-    for (var di = 0; di <= lastVI; di++) {{
-      var _t = trail[di].t, _v = trail[di].y;
-      if (_v !== lastKY || (_t - lastKT) >= 250) {{
-        dec.push({{ x: tx(_t), y: ty(_v) }});
-        lastKT = _t; lastKY = _v;
-      }}
+    // Orb Y tracks live NAV. Orb X always at W/2 (rightmost = "now").
+    var orbY = ty(liveNav);
+    window._navOrbFracX = 0.5;
+    window._navOrbFracY = orbY / H;
+
+    // Build mapped points; final point lands exactly at orb center
+    var mapped = [];
+    for (var mi = 0; mi < n - 1; mi++) {{
+      mapped.push({{ x: tx(dates[mi]), y: ty(values[mi]) }});
     }}
-    // Terminal point: exactly at gap boundary, fused to orb at H/2
-    dec.push({{ x: W/2 - orbGap, y: H/2 }});
-    if (dec.length < 2) return;
+    mapped.push({{ x: W / 2, y: orbY }});
+    if (mapped.length < 2) return;
 
     // Y-axis labels
     (function() {{
@@ -4193,9 +4243,6 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.fillStyle='rgba(255,0,204,'+(0.15+pulse*0.2)+')'; ctx.fill();
   }};
 
-  // rAF loop — redraws every frame so the line scrolls forward at 60fps
-  // Heartbeat still fires every 5s to push new data points
-  setInterval(function() {{ if (window._navHeartbeat) window._navHeartbeat(); }}, 5000);
   (function _raf() {{
     window._drawNavCanvas();
     requestAnimationFrame(_raf);
@@ -4511,8 +4558,9 @@ window._pushIntradayPoint = function(isoTs, val) {{
       buildTargets();
       // Spawn particles if NAV moved
       if (_lastNavForParticles !== null && window._spawnNavParticles) {{
-        var px = window._navOrbCanvasX !== undefined ? window._navOrbCanvasX : canvas.width/2;
-        var py = window._navOrbCanvasY !== undefined ? window._navOrbCanvasY : canvas.height/2;
+        var _pc = document.getElementById('pulse-canvas');
+        var px = (window._navOrbFracX !== undefined ? window._navOrbFracX : 0.5) * (_pc ? _pc.width : 800);
+        var py = (window._navOrbFracY !== undefined ? window._navOrbFracY : 0.5) * (_pc ? _pc.height : 500);
         if (true) {{
           try {{
             if (isFinite(px) && isFinite(py)) {{
@@ -5214,7 +5262,15 @@ window.addEventListener('resize', function() {{
       var _BLOCKS = 12;
       function _tickClock() {{
         if (!clk) return;
-        var now   = new Date();
+        // Derive clock from DB timestamps so it matches terminal log entries exactly.
+        // When a DB anchor is known, extrapolate forward from it. Fall back to new Date().
+        var now;
+        if (window._lastKnownTs && window._lastLivePriceMs) {{
+          var _ts = window._lastKnownTs; _ts = _ts.replace(' ','T'); if (/[+-]\d{{2}}$/.test(_ts)) _ts += ':00'; else if (!/Z|[+-]\d{{2}}:\d{{2}}$/.test(_ts)) _ts += 'Z';
+          now = new Date(new Date(_ts).getTime() + (Date.now() - window._lastLivePriceMs));
+        }} else {{
+          now = new Date();
+        }}
         var hhmm  = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
         var elapsed = window._lastRunAt ? (Date.now() - window._lastRunAt) / 1000 : 0;
         var pct     = Math.min(elapsed / (_RUN_INTERVAL || 75), 1);
@@ -5567,6 +5623,8 @@ window.addEventListener('resize', function() {{
 
             // Immediately update Portfolio slot with this batch's P&L delta
             if (window._walletCombo) window._walletCombo(_batchPnl);
+            // Orb-side popup
+            if (window._orbBatchPnl) window._orbBatchPnl(_batchPnl);
 
             // Sound: one per batch
             if (_isPos && window._soundWin) window._soundWin();
@@ -5638,6 +5696,9 @@ window.addEventListener('resize', function() {{
             // All visual + audio effects fire in one synchronous block — no gaps
             if (!isHistory) {{
               if (window._recordTradeForGauge) window._recordTradeForGauge();
+              var _fillPrice = parseFloat((raw.match(/\$([\d,.]+)/) || [])[1] || '0');
+              var _qty = parseFloat((raw.match(/x([\d.]+)/) || [])[1] || '1');
+              if (window._recordTradeVol && _fillPrice > 0) window._recordTradeVol(_fillPrice * _qty);
               if (!isEntry && pnlM && window._recordStreakResult) {{
                 window._recordStreakResult(pnlM[1][0] === '+');
               }}
@@ -6933,8 +6994,8 @@ window.addEventListener('resize', function() {{
         if (sv) {{
           if (streakSign === null) {{ sv.textContent = '—'; sv.style.color = '#3a1a5a'; }}
           else {{
-            var ico = streakSign > 0 ? '&#128293;' : '&#9760;';
-            sv.textContent = ico + ' ' + streak + (streakSign > 0 ? 'W' : 'L');
+            var ico = streakSign > 0 ? '🔥' : '☠️';
+            sv.innerHTML = ico + ' ' + streak + (streakSign > 0 ? 'W' : 'L');
             sv.style.color = streakSign > 0 ? '#00ff9d' : '#ff3366';
           }}
         }}
@@ -7195,7 +7256,7 @@ window.addEventListener('resize', function() {{
         var age = Date.now() - _lastPriceTs;
         var rem = Math.max(0, 4000 - age);
         if (rem < 200) {{
-          _ssSet('ss-price-st', 'ss-exec', 'FETCHING');
+          _ssSet('ss-price-st', 'ss-ready', 'FETCHING');
         }} else {{
           _ssSet('ss-price-st', 'ss-active', 'in ' + _fmtCountdown(rem));
         }}
@@ -7264,6 +7325,126 @@ window.addEventListener('resize', function() {{
         _spawnCallout({{ sym:sym, price:price, pnl:pnl, col:col||'#ff3366', countdown:countdown||0 }});
       }};
 
+      // ── EXPOSURE slot ─────────────────────────────────────────
+      function _updateExposureSlot() {{
+        var nav = window._lastKnownNav || 0;
+        var positions = window._cryptoPositionsMap || {{}};
+        var syms = Object.keys(positions);
+        var eqCards = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]');
+        var posCount = syms.length + eqCards.length;
+        if (!nav || posCount === 0) {{ _ssSet('ss-exposure-st', '', 'FLAT'); return; }}
+        // Approximate: each position is ~20% of NAV (matches MAX_POSITION_SIZE)
+        var exposurePct = Math.min(100, posCount * 20);
+        var col = exposurePct > 80 ? 'ss-warn' : exposurePct > 40 ? 'ss-active' : 'ss-ready';
+        _ssSet('ss-exposure-st', col, exposurePct.toFixed(0) + '%');
+      }}
+
+      // ── $/HR slot — dollar volume traded per hour ─────────────
+      var _tradeVolTs = [];   // {{ts, val}} for last-hour fills
+      window._recordTradeVol = function(fillAmt) {{
+        var now = Date.now();
+        _tradeVolTs.push({{ts: now, val: Math.abs(fillAmt)}});
+        _tradeVolTs = _tradeVolTs.filter(function(x) {{ return x.ts > now - 3600000; }});
+      }};
+      function _updateTphSlot() {{
+        var now = Date.now();
+        _tradeVolTs = _tradeVolTs.filter(function(x) {{ return x.ts > now - 3600000; }});
+        var total = _tradeVolTs.reduce(function(s, x) {{ return s + x.val; }}, 0);
+        if (total < 1) {{ _ssSet('ss-tph-st', '', '—'); return; }}
+        var fmt = total >= 1000 ? '$' + (total/1000).toFixed(1) + 'k' : '$' + Math.round(total);
+        _ssSet('ss-tph-st', 'ss-active', fmt + '/hr');
+      }}
+
+      // ── Orb-side batch P&L popup ──────────────────────────────
+      var _orbPopupTimer = null;
+      window._orbBatchPnl = function(pnl) {{
+        var popup = document.getElementById('orb-batch-popup');
+        var canvas = document.getElementById('pulse-canvas');
+        if (!popup || !canvas) return;
+        var rect = canvas.getBoundingClientRect();
+        var ma = document.getElementById('main-area');
+        var maRect = ma ? ma.getBoundingClientRect() : rect;
+        var orbX = (window._navOrbFracX || 0.5) * rect.width;
+        var orbY = (window._navOrbFracY || 0.5) * rect.height;
+        // Orbit radius is ~56px in pulse-canvas; place popup 80px to right of that
+        var popX = orbX + 140;
+        var popY = orbY;
+        popup.style.left = (rect.left - maRect.left + popX) + 'px';
+        popup.style.top  = (rect.top  - maRect.top  + popY) + 'px';
+        var isPos = pnl >= 0;
+        popup.style.color = isPos ? '#00ff9d' : '#ff3366';
+        popup.textContent = (isPos ? '+$' : '-$') + Math.abs(pnl).toLocaleString('en-US', {{minimumFractionDigits:2,maximumFractionDigits:2}});
+        popup.style.opacity = '1';
+        if (_orbPopupTimer) clearTimeout(_orbPopupTimer);
+        _orbPopupTimer = setTimeout(function() {{
+          popup.style.transition = 'opacity 1.4s ease';
+          popup.style.opacity = '0';
+        }}, 5000);
+      }};
+
+      // ── System health tracking ────────────────────────────────
+      var _apiReqTs = [];
+      var _lastFetchLatency = null;
+      var _dbOk = true;
+      var _origFetch = window.fetch;
+      window.fetch = function() {{
+        var t0 = Date.now();
+        _apiReqTs.push(t0);
+        _apiReqTs = _apiReqTs.filter(function(t){{ return t > t0 - 60000; }});
+        var p = _origFetch.apply(this, arguments);
+        p.then(function() {{
+          _lastFetchLatency = Date.now() - t0;
+          _dbOk = true;
+        }}).catch(function() {{ _dbOk = false; }});
+        return p;
+      }};
+
+      function _updateSysHealth() {{
+        // Market data connected
+        var mktAge = window._lastLivePriceMs ? (Date.now() - window._lastLivePriceMs) : Infinity;
+        var mdDot = document.getElementById('sysh-mktdata');
+        var mdVal = document.getElementById('sysh-mktdata-val');
+        if (mdDot) mdDot.className = 'sysh-dot ' + (mktAge < 8000 ? 'ok' : mktAge < 30000 ? 'warn' : 'dead');
+        if (mdVal) mdVal.textContent = mktAge < 8000 ? 'LIVE' : mktAge < 30000 ? Math.round(mktAge/1000)+'s' : 'LOST';
+
+        // DB connected
+        var dbDot = document.getElementById('sysh-db');
+        var dbVal = document.getElementById('sysh-db-val');
+        if (dbDot) dbDot.className = 'sysh-dot ' + (_dbOk ? 'ok' : 'dead');
+        if (dbVal) dbVal.textContent = _dbOk ? 'OK' : 'ERR';
+
+        // Heartbeat (runner age) — reuse runner-age text
+        var hbEl = document.getElementById('runner-age');
+        var syshHb = document.getElementById('sysh-hb');
+        if (syshHb && hbEl) syshHb.textContent = hbEl.textContent || '—';
+
+        // Latency
+        var latEl = document.getElementById('sysh-lat');
+        if (latEl) latEl.textContent = _lastFetchLatency !== null ? _lastFetchLatency + 'ms' : '—';
+
+        // API req/min
+        var rpmEl = document.getElementById('sysh-rpm');
+        if (rpmEl) rpmEl.textContent = _apiReqTs.length + '/min';
+
+        // Clock drift: compare extrapolated DB time to system clock
+        var driftEl = document.getElementById('sysh-drift');
+        if (driftEl && window._lastKnownTs && window._lastLivePriceMs) {{
+          var tsRaw = window._lastKnownTs; tsRaw = tsRaw.replace(' ','T'); if (/[+-]\d{{2}}$/.test(tsRaw)) tsRaw += ':00'; else if (!/Z|[+-]\d{{2}}:\d{{2}}$/.test(tsRaw)) tsRaw += 'Z';
+          var dbNow = new Date(new Date(tsRaw).getTime() + (Date.now() - window._lastLivePriceMs));
+          var driftMs = Math.abs(Date.now() - dbNow.getTime() - (Date.now() - window._lastLivePriceMs));
+          // drift = difference between DB-derived time and real wall clock, ignoring network lag
+          var sysMs = Date.now();
+          var dbMs  = new Date(tsRaw).getTime();
+          var elapsed = sysMs - window._lastLivePriceMs;
+          var derived = dbMs + elapsed;
+          var drift = Math.abs(sysMs - derived);
+          driftEl.textContent = drift < 1000 ? '<1s' : Math.round(drift/1000) + 's';
+          driftEl.style.color = drift < 5000 ? 'rgba(255,255,255,.55)' : '#ffaa00';
+        }} else {{
+          if (driftEl) driftEl.textContent = '—';
+        }}
+      }}
+
       // ── Master tick ───────────────────────────────────────────
       function _stratTick() {{
         _updateRunnerSlot();
@@ -7271,6 +7452,9 @@ window.addEventListener('resize', function() {{
         // WALLET slot updated via window._updateWalletSlot from _updateNavDisplays
         _updatePriceSlot();
         _updateNavSlot();
+        _updateExposureSlot();
+        _updateTphSlot();
+        _updateSysHealth();
       }}
       _stratTick();
       setInterval(_stratTick, 1000);
