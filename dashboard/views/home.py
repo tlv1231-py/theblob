@@ -2352,8 +2352,8 @@ body::after {{
     <div class="ss-status" id="ss-price-st">—</div>
   </div>
   <div class="strat-slot" id="ss-nav">
-    <div class="ss-icon">◈</div>
-    <div class="ss-name">NAV</div>
+    <div class="ss-icon">◉</div>
+    <div class="ss-name">CURRENT POS</div>
     <div class="ss-status" id="ss-nav-st">—</div>
   </div>
 </div>
@@ -4452,7 +4452,7 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
   if (todayTrades > 0) _orbTodayTrades = todayTrades;
   if (wins   > 0) _orbWins   = wins;
   if (losses > 0) _orbLosses = losses;
-  if (typeof _updateTradesSlot === 'function') _updateTradesSlot(_orbTodayTrades);
+  if (typeof window._updateTradesSlot === 'function') window._updateTradesSlot(_orbTodayTrades);
 
   // Block 2 exposes these via window.*
   var trTs = window._tradeTs || [];
@@ -5432,7 +5432,7 @@ window.addEventListener('resize', function() {{
             var _baseTrades = parseInt((document.getElementById('om-today') || {{}}).textContent || '0', 10);
             _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', null,
               'om-today', _baseTrades, _tradeCount);
-            if (typeof _tradeSlotCombo === 'function') _tradeSlotCombo(_tradeCount);
+            if (window._tradeSlotCombo) window._tradeSlotCombo(_tradeCount);
           }}
 
           // Open positions delta chip — flash only, _pollPositions owns the persistent count
@@ -5745,6 +5745,7 @@ window.addEventListener('resize', function() {{
 
     function _updateNavDisplays(nav, ts) {{
       window._lastKnownNav = nav;
+      if (window._updateWalletSlot) window._updateWalletSlot(nav);
       _trackNav(nav, ts);
       var col = _retColor(nav, START_NAV);
       var ret = _fmtRet(nav, START_NAV);
@@ -6915,24 +6916,24 @@ window.addEventListener('resize', function() {{
         }}
       }}
 
-      // ── TRADES slot — total trade count from fills ────────────
+      // ── TRADES slot — total trade count (window-exposed for outer scope) ─
       var _hudTradeTotal = 0;
-      function _updateTradesSlot(count) {{
+      window._updateTradesSlot = function(count) {{
         if (count !== undefined) _hudTradeTotal = count;
         var el = document.getElementById('ss-pipeline-st');
-        if (el) {{ el.textContent = _hudTradeTotal || '—'; el.style.color = '#ff9900'; el.style.textShadow = '0 0 10px rgba(255,153,0,.6)'; }}
-      }}
-      function _tradeSlotCombo(delta) {{
+        if (el) {{ el.textContent = _hudTradeTotal > 0 ? _hudTradeTotal : '—'; el.style.color = '#ff9900'; el.style.textShadow = '0 0 10px rgba(255,153,0,.6)'; }}
+      }};
+      window._tradeSlotCombo = function(delta) {{
         var chip = document.getElementById('ss-trades-chip');
         if (!chip || delta <= 0) return;
         chip.textContent = '+' + delta;
         chip.style.opacity = '1';
         setTimeout(function() {{ chip.style.opacity = '0'; }}, 4000);
-      }}
+      }};
 
-      // ── WALLET slot — Alpaca NAV with gain/loss color flash ──
+      // ── WALLET slot — Alpaca NAV with gain/loss color flash (window-exposed) ─
       var _lastWalletVal = null;
-      function _updateWalletSlot(nav) {{
+      window._updateWalletSlot = function(nav) {{
         if (!nav) return;
         var el = document.getElementById('ss-wallet-val');
         if (!el) return;
@@ -6943,12 +6944,11 @@ window.addEventListener('resize', function() {{
           if (Math.abs(delta) > 0.5) {{
             var isGain = delta > 0;
             el.classList.remove('gain', 'loss');
-            void el.offsetWidth; // reflow
+            void el.offsetWidth;
             el.classList.add(isGain ? 'gain' : 'loss');
-            // show combo chip
             var chip = document.getElementById('ss-wallet-chip');
             if (chip) {{
-              chip.textContent = (isGain ? '+' : '') + delta.toFixed(0);
+              chip.textContent = (isGain ? '+$' : '-$') + Math.abs(delta).toFixed(0);
               chip.style.color = isGain ? '#00ff9d' : '#ff3366';
               chip.style.opacity = '1';
               setTimeout(function() {{
@@ -6959,7 +6959,7 @@ window.addEventListener('resize', function() {{
           }}
         }}
         _lastWalletVal = nav;
-      }}
+      }};
 
       // ── PRICE slot — CoinGecko poll every 4s ─────────────────
       var _lastPriceTs = 0;
@@ -6974,15 +6974,14 @@ window.addEventListener('resize', function() {{
         }}
       }}
 
-      // ── NAV slot — last known nav ─────────────────────────────
+      // ── CURRENT POS slot — open position count ───────────────
       function _updateNavSlot() {{
         var nav = window._lastKnownNav;
-        if (!nav) {{ _ssSet('ss-nav-st', '', '—'); return; }}
-        var fmtd = nav >= 1000
-          ? '$' + (nav / 1000).toFixed(1) + 'K'
-          : '$' + nav.toFixed(0);
-        _ssSet('ss-nav-st', 'ss-active', fmtd);
-        _updateWalletSlot(nav); // mirror to WALLET slot
+        if (window._updateWalletSlot && nav) window._updateWalletSlot(nav);
+        var count = Object.keys(window._cryptoPositionsMap || {{}}).length;
+        var eq = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
+        var total = count + eq;
+        _ssSet('ss-nav-st', total > 0 ? 'ss-active' : '', total > 0 ? total + ' OPEN' : 'FLAT');
       }}
 
       // ── Callout system — stackable drop-in notifications ────────
