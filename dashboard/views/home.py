@@ -4066,7 +4066,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     if (!curNav && history.length === 0) return;
 
     var nowMs    = Date.now();
-    var halfWin  = 10 * 60 * 1000; // ±10-min window; current time = W/2 (orb center)
+    var halfWin  = 5 * 60 * 1000; // ±5-min window; current time = W/2 (orb center)
     var winStart = nowMs - halfWin;
     var winEnd   = nowMs + halfWin;
 
@@ -5780,7 +5780,7 @@ window.addEventListener('resize', function() {{
     if (!window._navHistory) {{
       try {{
         var _stored = sessionStorage.getItem('_navHistory');
-        var _cutoffMs = Date.now() - 10*60*1000;
+        var _cutoffMs = Date.now() - 5*60*1000;
         window._navHistory = _stored
           ? JSON.parse(_stored).filter(function(p) {{ return new Date(p.x).getTime() > _cutoffMs; }})
           : [];
@@ -6054,7 +6054,7 @@ window.addEventListener('resize', function() {{
       var last = window._navHistory[window._navHistory.length - 1];
       if (last && (new Date(isoNow) - new Date(last.x)) < 4000) return; // dedup <4s
       window._navHistory.push({{ x: isoNow, y: nav }});
-      var cutoff = new Date(Date.now() - 10*60*1000).toISOString();
+      var cutoff = new Date(Date.now() - 5*60*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
       if (window._drawNavCanvas) window._drawNavCanvas();
     }}
@@ -7033,7 +7033,7 @@ window.addEventListener('resize', function() {{
         var _lastH = window._navHistory[window._navHistory.length - 1];
         if (!_lastH || _lastH.y !== nav) {{
           window._navHistory.push({{ x: _isoNow, y: nav }});
-          var _cutoff = new Date(Date.now() - 10*60*1000).toISOString();
+          var _cutoff = new Date(Date.now() - 5*60*1000).toISOString();
           while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
           // Persist to sessionStorage so history survives page refresh
           try {{ sessionStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
