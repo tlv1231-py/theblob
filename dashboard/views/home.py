@@ -4093,8 +4093,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var base      = trail[trail.length - 1].y;
     var halfRange = base * 0.003;
     var winStart  = nowMs - 30000;
-
-    function tx(ms) {{ return (ms - winStart) / 30000 * W; }}
+    // Window is 60s wide (±30s) so nowMs lands at W/2 (center = orb position)
+    function tx(ms) {{ return (ms - winStart) / 60000 * W; }}
     function ty(v)  {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
     // Y-axis price indicators — subtle, on-brand
