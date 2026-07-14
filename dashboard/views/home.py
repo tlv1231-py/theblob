@@ -5776,10 +5776,10 @@ window.addEventListener('resize', function() {{
       return v >= start ? '#00ff9d' : '#ff3366';
     }}
 
-    // Rolling nav history — restore from sessionStorage so refreshes keep the line
+    // Rolling nav history — localStorage persists across Streamlit reloads (unlike sessionStorage)
     if (!window._navHistory) {{
       try {{
-        var _stored = sessionStorage.getItem('_navHistory');
+        var _stored = localStorage.getItem('_navHistory');
         var _cutoffMs = Date.now() - 5*60*1000;
         window._navHistory = _stored
           ? JSON.parse(_stored).filter(function(p) {{ return new Date(p.x).getTime() > _cutoffMs; }})
@@ -7038,7 +7038,7 @@ window.addEventListener('resize', function() {{
           window._navHistory.push({{ x: new Date(_nowMs2).toISOString(), y: nav }});
           var _cutoff = new Date(_nowMs2 - 5*60*1000).toISOString();
           while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
-          try {{ sessionStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
+          try {{ localStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
         }}
       }};
       // Trade event: flash color + chip + animate to new value
