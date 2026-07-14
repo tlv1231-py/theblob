@@ -1252,7 +1252,7 @@ body::after {{
 .ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Press Start 2P',monospace; font-size:22px; font-weight:400;
+  font-family:'Press Start 2P',monospace; font-size:14px; font-weight:400;
   letter-spacing:.04em; font-variant-numeric:tabular-nums;
   color:#ffe566;
   -webkit-text-stroke:1px rgba(0,0,0,.6);
