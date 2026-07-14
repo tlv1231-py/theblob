@@ -2287,19 +2287,27 @@ body::after {{
 .pos-card-hit {{ animation:card-hit-flash .32s steps(6,end) forwards; }}
 
 /* ── Phase 3: Arcade destroy — crush to bright scanline then gone ── */
+/* NOTE: no max-height/padding/margin in keyframes — layout hold managed by JS */
 @keyframes card-arcade-destroy {{
   0%   {{ transform:scaleY(1) scaleX(1); filter:brightness(6) saturate(0); opacity:1; }}
-  18%  {{ transform:scaleY(.45) scaleX(1.06); filter:brightness(16) saturate(0); opacity:1; }}
-  35%  {{ transform:scaleY(.1) scaleX(1.14); filter:brightness(28) saturate(0); opacity:1; }}
-  50%  {{ transform:scaleY(.025) scaleX(1.22); filter:brightness(45); opacity:1; }}
-  62%  {{ transform:scaleY(0) scaleX(1.28); filter:brightness(60); opacity:1; max-height:60px; }}
-  100% {{ transform:scaleY(0) scaleX(0); opacity:0; max-height:0; padding:0; margin:0; border-width:0; }}
+  15%  {{ transform:scaleY(.5) scaleX(1.06); filter:brightness(18) saturate(0); opacity:1; }}
+  30%  {{ transform:scaleY(.15) scaleX(1.14); filter:brightness(32) saturate(0); opacity:1; }}
+  45%  {{ transform:scaleY(.03) scaleX(1.22); filter:brightness(50); opacity:1; }}
+  58%  {{ transform:scaleY(0) scaleX(1.28); filter:brightness(70); opacity:1; }}
+  100% {{ transform:scaleY(0) scaleX(0); opacity:0; }}
+}}
+/* After destroy animation, JS adds this class to collapse the DOM space */
+.pos-card-collapsing {{
+  transition:height .28s ease-in, margin-top .28s ease-in, margin-bottom .28s ease-in,
+             padding-top .28s ease-in, padding-bottom .28s ease-in, border-width .28s ease-in !important;
+  height:0 !important; margin:0 !important; padding:0 !important; border-width:0 !important;
+  overflow:hidden !important; opacity:0;
 }}
 .pos-card-exiting,
 .pos-card-exit-target,
 .pos-card-exit-stop,
 .pos-card-exit-timeout,
-.pos-card-exit-rev     {{ animation:card-arcade-destroy .55s cubic-bezier(.6,0,1,1) forwards; overflow:hidden; transform-origin:center; }}
+.pos-card-exit-rev     {{ animation:card-arcade-destroy .7s cubic-bezier(.6,0,1,1) forwards; overflow:hidden; transform-origin:center; }}
 /* ── PnL ghost — video-game exit ── */
 /* ── P&L ghost — 80s arcade score-popup, floats left of tile column ── */
 @keyframes pnl-ghost-pop {{
@@ -2343,10 +2351,11 @@ body::after {{
   font-family:'Press Start 2P',monospace; font-size:6px; letter-spacing:.18em;
   opacity:.7; text-transform:uppercase; text-align:right;
 }}
-/* Exit price */
+/* Exit price — readable, 8-bit */
 .pnl-ghost .pg-price {{
-  font-family:'Press Start 2P',monospace; font-size:5px; letter-spacing:.06em;
-  opacity:.55; margin-top:2px; text-align:right;
+  font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:.04em;
+  opacity:.8; margin-top:4px; text-align:right;
+  text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 8px currentColor;
 }}
 .pnl-particle {{
   position:fixed; pointer-events:none; z-index:9998; border-radius:0;
@@ -2532,8 +2541,8 @@ body::after {{
   <div class="strat-slot" id="ss-positions" style="position:relative;overflow:visible">
     <div class="ss-wallet-row">
       <div class="ss-wallet-anchor">
-        <span class="ss-wallet-val" id="ss-wallet-val">—</span>
         <span class="ss-wallet-chip" id="ss-wallet-chip"></span>
+        <span class="ss-wallet-val" id="ss-wallet-val">—</span>
       </div>
     </div>
     <!-- callout rail drops from the bottom of this tile -->
@@ -6479,7 +6488,7 @@ window.addEventListener('resize', function() {{
         g.appendChild(priceEl);
       }}
       document.body.appendChild(g);
-      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 1500);
+      setTimeout(function() {{ if (g.parentNode) g.parentNode.removeChild(g); }}, 2800);
     }}
 
     // ── Equity positions map — server-rendered, for satellite orbs ──────────────
@@ -6512,20 +6521,27 @@ window.addEventListener('resize', function() {{
       el.classList.remove('pos-card-active');
       var col = (pnl !== null && pnl !== undefined) ? (pnl >= 0 ? '#00ff9d' : '#ff3366') : '#fff';
 
-      // ── Phase 1: Target-lock overlay (320ms) ──────────────────────────
+      // Freeze card height so surrounding tiles don't move during the sequence
+      var naturalH = el.getBoundingClientRect().height;
+      el.style.height = naturalH + 'px';
+      el.style.minHeight = '';
+      el.style.boxSizing = 'border-box';
+      el.style.flexShrink = '0';
+
+      // ── Phase 1: Target-lock overlay (400ms) ──────────────────────────
       el.style.position = 'relative';
       var lock = document.createElement('div');
       lock.className = 'card-target-lock';
       lock.style.setProperty('--tc', col);
       el.appendChild(lock);
 
-      // ── Phase 2: Hit-flash blinks (320–580ms) ─────────────────────────
+      // ── Phase 2: Hit-flash blinks (400–800ms) ─────────────────────────
       setTimeout(function() {{
         if (lock.parentNode) lock.parentNode.removeChild(lock);
         el.classList.add('pos-card-hit');
-      }}, 320);
+      }}, 400);
 
-      // ── Phase 3: Destroy + ghost + particles (580ms+) ──────────────────
+      // ── Phase 3: Destroy + ghost + particles (800ms+) ──────────────────
       setTimeout(function() {{
         var r = el.getBoundingClientRect();
         var cx = r.left + r.width / 2;
@@ -6533,12 +6549,18 @@ window.addEventListener('resize', function() {{
         _spawnParticles(cx, cy, col);
         _spawnPnlGhost(r, pnl, fullSym, exitPrice);
         el.classList.remove('pos-card-hit');
-        el.classList.add('pos-card-exit-stop');
+        el.classList.add('pos-card-exit-stop');   // triggers card-arcade-destroy (.7s)
+
+        // After visual destroy completes, collapse DOM space so other tiles close gap
         setTimeout(function() {{
-          if (el.parentNode) el.parentNode.removeChild(el);
-          _updateOverlayWidth();
-        }}, 600);
-      }}, 580);
+          el.style.height = naturalH + 'px';      // explicit for transition start point
+          el.classList.add('pos-card-collapsing'); // height→0 transition (.28s)
+          setTimeout(function() {{
+            if (el.parentNode) el.parentNode.removeChild(el);
+            _updateOverlayWidth();
+          }}, 300);
+        }}, 720);
+      }}, 800);
     }};
 
     var _CARD_W = 148; // crypto column width
@@ -6628,6 +6650,11 @@ window.addEventListener('resize', function() {{
         + rangeHtml
         + '<div class="pos-age-bar" title="time held"><div class="pos-age-fill" id="age-fill-' + _symId + '" style="width:0%;background:#00c8ff;box-shadow:0 0 7px rgba(0,200,255,.75)"></div></div>';
       el.appendChild(inner);
+      // Lock the card at its natural height before entry animation so it never shrinks
+      requestAnimationFrame(function() {{
+        var h = el.getBoundingClientRect().height;
+        if (h > 0) {{ el.style.minHeight = h + 'px'; }}
+      }});
       // ── Multi-phase entry animation ────────────────────────────────────────
       var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@$%';
       function _scramble(domEl, target, ms, onDone) {{
