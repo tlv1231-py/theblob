@@ -1261,7 +1261,7 @@ body::after {{
   border:1px solid rgba(148,0,255,.12); border-left:3px solid;
   border-radius:2px;
   box-shadow:0 8px 32px rgba(0,0,0,.35);
-  max-height:60px; overflow:hidden;
+  max-height:80px; overflow:visible;
   opacity:0;
   transition:opacity .3s ease;
   pointer-events:none;
