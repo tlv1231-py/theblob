@@ -4055,169 +4055,128 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Scroll-to-zoom: how many data points to show (default = all).
-  // Scroll up = zoom in (fewer points), scroll down = zoom out (more).
-  window._navZoomPts = portDates ? portDates.length : 30;
-  (function() {{
-    var ma = document.getElementById('main-area');
-    if (!ma) return;
-    ma.addEventListener('wheel', function(e) {{
-      e.preventDefault();
-      e.stopPropagation();
-      var total = portDates ? portDates.length : 1;
-      var delta = e.deltaY > 0 ? 1 : -1; // scroll down = more history
-      window._navZoomPts = Math.max(2, Math.min(total, (window._navZoomPts || total) + delta * Math.max(1, Math.round((window._navZoomPts||total)*0.1))));
-    }}, {{ passive: false }});
-  }})();
+  // Dense in-memory trail — one point per rAF frame so line is always fused to orb.
+  // Driven by _lastKnownNav (intraday "marked the book" poller).
+  // Same ±20-min sliding window as the Plotly chart underneath.
+  if (!window._navDenseTrail) window._navDenseTrail = [];
 
-  // Nav canvas drives off portDates/portValues — real historical equity curve.
-  // Orb always at (W/2, H/2). Scroll wheel controls how many days are visible.
   window._drawNavCanvas = function() {{
     _resize();
     var W = _nc.width, H = _nc.height;
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    var allDates  = portDates;
-    var allValues = portValues;
-    if (!allDates || allDates.length < 2) {{
-      window._navOrbCanvasX = W / 2;
-      window._navOrbCanvasY = H / 2;
-      return;
-    }}
+    var curNav = window._lastKnownNav;
+    var nowMs  = Date.now();
+    var halfWin = 20 * 60 * 1000; // ±20 min — matches Plotly intraday window
 
-    // Slice to visible window (zoom) — always pinned to latest point on right
-    var total  = allDates.length;
-    var nShow  = Math.max(2, Math.min(total, Math.round(window._navZoomPts || total)));
-    var startI = total - nShow;
-    var dates  = allDates.slice(startI);
-    var values = allValues.slice(startI);
+    // Push one point per frame; trim to window
+    if (curNav) window._navDenseTrail.push({{ t: nowMs, y: curNav }});
+    var cutoff = nowMs - halfWin;
+    while (window._navDenseTrail.length > 1 && window._navDenseTrail[0].t < cutoff)
+      window._navDenseTrail.shift();
 
-    var orbGap = 24; // px gap between line tip and orb center (orb at W/2)
-    var n = dates.length;
-
-    // X: map history into the LEFT half [0, W/2 - orbGap]. Orb stays at W/2 (center).
-    var x0ms = new Date(dates[0]).getTime();
-    var x1ms = new Date(dates[n-1]).getTime();
-    var xSpan = x1ms - x0ms || 1;
-    function tx(iso) {{
-      return (new Date(iso).getTime() - x0ms) / xSpan * (W/2 - orbGap);
-    }}
-
-    // Y: centered on current value so orb is always at H/2.
-    // halfRange = max deviation of any historical point from current value.
-    var base = values[n-1];
-    var maxDev = 0;
-    for (var vi = 0; vi < n; vi++) {{
-      var dev = Math.abs(values[vi] - base);
-      if (dev > maxDev) maxDev = dev;
-    }}
-    var halfRange = maxDev * 1.15 || base * 0.05;
-    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
-
-    // Orb always at exact canvas center — ty(base) = H/2 by construction
+    var trail = window._navDenseTrail;
     window._navOrbCanvasX = W / 2;
     window._navOrbCanvasY = H / 2;
+    if (trail.length < 2) return;
 
-    // Y-axis price labels — subtle, on-brand
+    var orbGap = 28; // stop trail this many px before orb
+    var winStart = nowMs - halfWin;
+    // tx: map ms → x. nowMs maps to W/2 (orb center).
+    function tx(ms) {{ return (ms - winStart) / (halfWin * 2) * W; }}
+
+    // Find last point still left of the orb gap
+    var lastVI = 0;
+    for (var vi = 0; vi < trail.length; vi++) {{
+      if (tx(trail[vi].t) >= W/2 - orbGap) break;
+      lastVI = vi;
+    }}
+
+    // base = value at gap boundary → ty(base) = H/2 = orb y — always connected
+    var base = trail[lastVI].y;
+    var halfRange = base * 0.0008; // ±0.08% visible range; exaggerates micro-moves
+    if (!halfRange) halfRange = 1;
+    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
+
+    // Decimate to 250ms keyframes for smooth Catmull-Rom (avoids 60fps staircase)
+    var dec = [];
+    var lastKT = -Infinity, lastKY = null;
+    for (var di = 0; di <= lastVI; di++) {{
+      var _t = trail[di].t, _v = trail[di].y;
+      if (_v !== lastKY || (_t - lastKT) >= 250) {{
+        dec.push({{ x: tx(_t), y: ty(_v) }});
+        lastKT = _t; lastKY = _v;
+      }}
+    }}
+    // Always include boundary point fused to orb gap
+    dec.push({{ x: tx(trail[lastVI].t), y: H/2 }});
+    if (dec.length < 2) return;
+
+    // Y-axis labels
     (function() {{
       var fmt = function(v) {{
-        if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
         if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
         return '$' + v.toFixed(0);
       }};
       ctx.save();
-      ctx.setLineDash([3, 7]);
-      ctx.lineWidth = 1;
-      ctx.font = '8px Consolas,monospace';
-      ctx.textBaseline = 'bottom';
-      var steps = [-0.6, -0.3, 0.3, 0.6];
-      for (var si = 0; si < steps.length; si++) {{
-        var val = base + halfRange * steps[si];
-        var yy  = ty(val);
-        if (yy < 6 || yy > H - 6) continue;
-        ctx.strokeStyle = 'rgba(255,0,204,0.07)';
-        ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
-        ctx.fillStyle = 'rgba(200,80,255,0.3)';
-        ctx.fillText(fmt(val), 4, yy - 2);
-      }}
+      ctx.setLineDash([3,7]); ctx.lineWidth=1;
+      ctx.font='8px Consolas,monospace'; ctx.textBaseline='bottom';
+      [-0.6,-0.3,0.3,0.6].forEach(function(lvl) {{
+        var val=base+halfRange*lvl, yy=ty(val);
+        if(yy<6||yy>H-6) return;
+        ctx.strokeStyle='rgba(255,0,204,0.07)';
+        ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy); ctx.stroke();
+        ctx.fillStyle='rgba(200,80,255,0.3)'; ctx.fillText(fmt(val),4,yy-2);
+      }});
       ctx.restore();
     }})();
 
-    // Build mapped points
-    var mapped = [];
-    for (var mi = 0; mi < n; mi++) {{
-      mapped.push({{ x: tx(dates[mi]), y: ty(values[mi]), v: values[mi] }});
+    var m = dec;
+    var n = m.length;
+    var gx0 = m[0].x, gx1 = W/2;
+    function _tg(r,g,b,a0,a1) {{
+      var gr=ctx.createLinearGradient(gx0,0,gx1,0);
+      gr.addColorStop(0,'rgba('+r+','+g+','+b+','+a0+')');
+      gr.addColorStop(0.65,'rgba('+r+','+g+','+b+','+(a0*0.3+a1*0.7)+')');
+      gr.addColorStop(1,'rgba('+r+','+g+','+b+','+a1+')');
+      return gr;
     }}
-
-    // Catmull-Rom smooth curve
-    function _stroke(m) {{
-      ctx.beginPath();
-      ctx.moveTo(m[0].x, m[0].y);
-      for (var i = 0; i < m.length - 1; i++) {{
-        var p0 = m[Math.max(0, i-1)];
-        var p1 = m[i], p2 = m[i+1];
-        var p3 = m[Math.min(m.length-1, i+2)];
-        ctx.bezierCurveTo(
-          p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
-          p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
-          p2.x, p2.y
-        );
+    function _stroke(pts) {{
+      ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+      for(var i=0;i<pts.length-1;i++) {{
+        var p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
+        ctx.bezierCurveTo(p1.x+(p2.x-p0.x)/6,p1.y+(p2.y-p0.y)/6,
+          p2.x-(p3.x-p1.x)/6,p2.y-(p3.y-p1.y)/6,p2.x,p2.y);
       }}
     }}
 
-    var gx0 = mapped[0].x, gx1 = W / 2; // gradient peaks at orb center
-    function _tg(r, g, b, a0, a1) {{
-      var gr = ctx.createLinearGradient(gx0, 0, gx1, 0);
-      gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + a0 + ')');
-      gr.addColorStop(0.65,'rgba(' + r + ',' + g + ',' + b + ',' + ((a0*0.3+a1*0.7)) + ')');
-      gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',' + a1 + ')');
-      return gr;
-    }}
-
     // Under-fill
-    _stroke(mapped);
-    ctx.lineTo(mapped[n-1].x, H); ctx.lineTo(mapped[0].x, H); ctx.closePath();
-    var fg = ctx.createLinearGradient(gx0, 0, gx1, 0);
-    fg.addColorStop(0, 'rgba(255,0,204,0)');
-    fg.addColorStop(1, 'rgba(255,0,204,0.28)');
-    ctx.fillStyle = fg; ctx.fill();
+    _stroke(m); ctx.lineTo(m[n-1].x,H); ctx.lineTo(m[0].x,H); ctx.closePath();
+    var fg=ctx.createLinearGradient(gx0,0,gx1,0);
+    fg.addColorStop(0,'rgba(255,0,204,0)'); fg.addColorStop(1,'rgba(255,0,204,0.28)');
+    ctx.fillStyle=fg; ctx.fill();
 
-    // Outer bloom
-    _stroke(mapped);
-    ctx.strokeStyle = _tg(255,0,204, 0, 0.35);
-    ctx.lineWidth = 48; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    _stroke(m); ctx.strokeStyle=_tg(255,0,204,0,0.35);
+    ctx.lineWidth=48; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    _stroke(m); ctx.strokeStyle=_tg(255,0,204,0,0.6);
+    ctx.lineWidth=18; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    _stroke(m); ctx.strokeStyle=_tg(255,80,255,0,0.9);
+    ctx.lineWidth=6; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    _stroke(m); ctx.strokeStyle=_tg(255,0,204,0.05,1);
+    ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    var hg=ctx.createLinearGradient(gx0+(gx1-gx0)*0.8,0,gx1,0);
+    hg.addColorStop(0,'rgba(255,255,255,0)'); hg.addColorStop(1,'rgba(255,255,255,0.95)');
+    _stroke(m); ctx.strokeStyle=hg; ctx.lineWidth=0.8;
+    ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
 
-    // Mid glow
-    _stroke(mapped);
-    ctx.strokeStyle = _tg(255,0,204, 0, 0.6);
-    ctx.lineWidth = 18; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-
-    // Inner hot glow
-    _stroke(mapped);
-    ctx.strokeStyle = _tg(255,80,255, 0, 0.9);
-    ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-
-    // Core line
-    _stroke(mapped);
-    ctx.strokeStyle = _tg(255,0,204, 0.05, 1);
-    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-
-    // White hot tip — rightmost 20%
-    var hg = ctx.createLinearGradient(gx0 + (gx1-gx0)*0.8, 0, gx1, 0);
-    hg.addColorStop(0, 'rgba(255,255,255,0)');
-    hg.addColorStop(1, 'rgba(255,255,255,0.95)');
-    _stroke(mapped);
-    ctx.strokeStyle = hg; ctx.lineWidth = 0.8;
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-
-    // Breathing dot at line tip — animates 60fps to make chart feel live
-    var pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
-    var tipX = mapped[n-1].x, tipY = mapped[n-1].y;
-    ctx.beginPath(); ctx.arc(tipX, tipY, 4 + pulse * 3, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + pulse * 0.5) + ')'; ctx.fill();
-    ctx.beginPath(); ctx.arc(tipX, tipY, 10 + pulse * 8, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,0,204,' + (0.15 + pulse * 0.2) + ')'; ctx.fill();
+    // Breathing dot at trail tip
+    var pulse=0.5+0.5*Math.sin(Date.now()/400);
+    var tipX=m[n-1].x, tipY=m[n-1].y;
+    ctx.beginPath(); ctx.arc(tipX,tipY,4+pulse*3,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,'+(0.5+pulse*0.5)+')'; ctx.fill();
+    ctx.beginPath(); ctx.arc(tipX,tipY,10+pulse*8,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,0,204,'+(0.15+pulse*0.2)+')'; ctx.fill();
   }};
 
   // rAF loop — redraws every frame so the line scrolls forward at 60fps
