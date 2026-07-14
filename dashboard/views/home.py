@@ -1218,53 +1218,75 @@ body::after {{
 .strat-slot.ss-exec   .ss-status {{ color:#ffaa00; text-shadow:0 0 10px rgba(255,170,0,.8); animation:ss-exec-pulse .4s ease-in-out infinite alternate; }}
 .strat-slot.ss-warn   .ss-status {{ color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.5); }}
 @keyframes ss-exec-pulse {{ from{{opacity:.7}} to{{opacity:1}} }}
+/* ── Trades slot ── */
+.ss-trades-row {{ display:flex; align-items:baseline; gap:5px; justify-content:center; }}
+.ss-trades-chip {{
+  font:700 9px Consolas,monospace; letter-spacing:.04em;
+  color:#ff9900; opacity:0; transition:opacity .15s;
+  text-shadow:0 0 8px rgba(255,153,0,.7);
+}}
+/* ── Wallet slot ── */
+.ss-wallet-row {{ display:flex; align-items:baseline; gap:5px; justify-content:center; }}
+.ss-wallet-val {{
+  font:700 13px Consolas,monospace; letter-spacing:-.01em;
+  color:#fff; transition:color .6s ease, text-shadow .6s ease;
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 0 10px rgba(255,255,255,.3);
+}}
+.ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 14px rgba(0,255,157,.8); }}
+.ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 14px rgba(255,51,102,.8); }}
+.ss-wallet-chip {{
+  font:700 9px Consolas,monospace; letter-spacing:.04em;
+  opacity:0; transition:opacity .15s;
+  text-shadow:0 0 8px currentColor;
+}}
 
-/* ── Callout rail — absolute child of strat-bar, hangs below its bottom edge ─ */
+/* ── Callout rail — zero-height sibling after strat-bar; cards overflow down ─ */
 #callout-rail {{
-  position:absolute; left:50%; top:100%;
-  transform:translateX(-50%);
-  z-index:9998;
+  position:relative; height:0; overflow:visible;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
-  width:380px;
   padding-top:4px;
+  z-index:99999;
 }}
 .callout-card {{
-  width:100%; display:flex; align-items:center; gap:8px;
-  padding:7px 12px 7px 10px;
-  background:rgba(2,0,12,.98); backdrop-filter:blur(8px);
-  border:1px solid rgba(148,0,255,.2); border-left:3px solid;
-  /* unfurl downward from HUD bottom edge */
+  width:440px; display:flex; align-items:center; gap:12px;
+  padding:11px 18px 11px 14px;
+  background:rgba(4,0,16,.72); backdrop-filter:blur(18px);
+  border:1px solid rgba(148,0,255,.14); border-left:3px solid;
+  border-radius:2px;
+  box-shadow:0 8px 32px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
   transform:scaleY(0); transform-origin:top center; opacity:0;
-  transition:transform .22s cubic-bezier(.22,1,.36,1), opacity .18s ease;
+  transition:transform .28s cubic-bezier(.22,1,.36,1), opacity .22s ease;
   pointer-events:none;
 }}
 .callout-card.cc-show {{ transform:scaleY(1); opacity:1; }}
-.callout-card.cc-exit {{ transform:scaleY(0); opacity:0; transition:transform .7s cubic-bezier(.4,0,.6,1), opacity .9s ease-out; }}
+.callout-card.cc-exit {{ transform:scaleY(0); opacity:0; transition:transform .8s cubic-bezier(.4,0,.6,1), opacity 1.1s ease-out; }}
 .cc-badge {{
-  font:700 7px Consolas,monospace; letter-spacing:.2em; padding:2px 6px;
-  border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.9;
+  font:700 7px Consolas,monospace; letter-spacing:.22em; padding:3px 8px;
+  border:1px solid; text-transform:uppercase; flex-shrink:0; opacity:.85;
+  border-radius:2px;
 }}
 .cc-body {{ flex:1; min-width:0; }}
 .cc-phase {{
-  font:700 9px Consolas,monospace; letter-spacing:.08em;
-  transition:color .2s;
+  font:500 10px Consolas,monospace; letter-spacing:.06em;
+  opacity:.75; transition:color .2s;
 }}
 .cc-ticker {{
-  font:700 11px Consolas,monospace; letter-spacing:.06em;
+  font:700 13px Consolas,monospace; letter-spacing:.05em;
 }}
 .cc-exec-bar {{
-  height:3px; background:rgba(255,255,255,.07); border-radius:1px;
-  margin-top:4px; overflow:hidden; display:none;
+  height:2px; background:rgba(255,255,255,.06); border-radius:1px;
+  margin-top:5px; overflow:hidden; display:none;
 }}
 .cc-exec-fill {{
   height:100%; width:0%; border-radius:1px;
   transition:width 1.1s linear;
 }}
 .cc-count {{
-  font:700 18px Consolas,monospace; letter-spacing:-.02em;
-  min-width:22px; text-align:right; flex-shrink:0;
-  opacity:.75; transition:opacity .15s;
+  font:700 22px Consolas,monospace; letter-spacing:-.02em;
+  min-width:26px; text-align:right; flex-shrink:0;
+  opacity:.8; transition:opacity .15s;
 }}
 
 /* ── Terminal row appear ── */
@@ -2309,14 +2331,20 @@ body::after {{
     <div class="ss-status" id="ss-runner-st">—</div>
   </div>
   <div class="strat-slot" id="ss-pipeline">
-    <div class="ss-icon">⚙</div>
-    <div class="ss-name">PIPELINE</div>
-    <div class="ss-status" id="ss-pipeline-st">—</div>
+    <div class="ss-icon">↯</div>
+    <div class="ss-name">TRADES</div>
+    <div class="ss-trades-row">
+      <span class="ss-status" id="ss-pipeline-st">—</span>
+      <span class="ss-trades-chip" id="ss-trades-chip"></span>
+    </div>
   </div>
   <div class="strat-slot" id="ss-positions">
-    <div class="ss-icon">◉</div>
-    <div class="ss-name">POSITIONS</div>
-    <div class="ss-status" id="ss-positions-st">—</div>
+    <div class="ss-icon">◈</div>
+    <div class="ss-name">WALLET</div>
+    <div class="ss-wallet-row">
+      <span class="ss-wallet-val" id="ss-wallet-val">—</span>
+      <span class="ss-wallet-chip" id="ss-wallet-chip"></span>
+    </div>
   </div>
   <div class="strat-slot" id="ss-price">
     <div class="ss-icon">↻</div>
@@ -2328,9 +2356,9 @@ body::after {{
     <div class="ss-name">NAV</div>
     <div class="ss-status" id="ss-nav-st">—</div>
   </div>
-  <!-- ── Callout rail — absolute child, cards hang below strat-bar bottom edge ── -->
-  <div id="callout-rail"></div>
 </div>
+<!-- ── Callout rail — height:0 sibling; cards overflow downward from HUD bottom ── -->
+<div id="callout-rail"></div>
 
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
@@ -2345,40 +2373,18 @@ body::after {{
   <canvas id="pulse-canvas"></canvas>
   <div id="trade-veil"></div>
   <div id="crosshair-overlay"><canvas id="xhair-canvas"></canvas></div>
-  <div id="pnl-float">
-    <div id="pnl-float-cols">
-      <!-- TRADES -->
-      <div class="pnl-col">
-        <div class="pnl-col-label">TRADES</div>
-        <div class="pnl-val-row">
-          <div class="pnl-col-val" id="om-today">0</div>
-          <div class="pnl-combo-chip" id="trades-combo-chip"></div>
-        </div>
-      </div>
-      <!-- TOTAL P&L (center, largest) -->
-      <div class="pnl-col pnl-col-center">
-        <div class="pnl-col-label">TOTAL P&amp;L</div>
-        <div class="pnl-val-row">
-          <div id="total-pnl-val" class="pnl-col-val" data-raw="{_total_pnl}" style="color:{_pnl_col}">{_pnl_str}</div>
-          <div id="batch-pnl-chip" class="pnl-combo-chip"></div>
-        </div>
-      </div>
-      <!-- OPEN POS -->
-      <div class="pnl-col">
-        <div class="pnl-col-label">OPEN POS</div>
-        <div class="pnl-val-row">
-          <div class="pnl-col-val" id="om-openpos" style="color:#00e5ff">{n_positions}</div>
-          <div class="pnl-combo-chip" id="pos-combo-chip"></div>
-        </div>
-      </div>
-    </div>
-    <!-- hidden compat elements so existing JS refs don't break -->
-    <span id="om-dpnl" style="display:none">{dpnl_str}</span>
-    <span id="om-tph" style="display:none">—</span>
-    <span id="om-winrate" style="display:none">—</span>
-    <span id="om-streak-orb" style="display:none">—</span>
-    <span id="total-pnl-sub" style="display:none">{_pnl_pct_str}</span>
-  </div>
+  <!-- hidden compat stubs — JS refs still work, nothing visible -->
+  <span id="om-today" style="display:none">0</span>
+  <span id="trades-combo-chip" style="display:none"></span>
+  <span id="total-pnl-val" style="display:none" data-raw="{_total_pnl}">{_pnl_str}</span>
+  <span id="batch-pnl-chip" style="display:none"></span>
+  <span id="om-openpos" style="display:none">{n_positions}</span>
+  <span id="pos-combo-chip" style="display:none"></span>
+  <span id="om-dpnl" style="display:none">{dpnl_str}</span>
+  <span id="om-tph" style="display:none">—</span>
+  <span id="om-winrate" style="display:none">—</span>
+  <span id="om-streak-orb" style="display:none">—</span>
+  <span id="total-pnl-sub" style="display:none">{_pnl_pct_str}</span>
   <div class="legend-strip">
     <div class="leg-item">
       <div class="leg-dot" style="background:#ff00cc;box-shadow:0 0 6px rgba(255,0,204,.7);"></div>
@@ -4446,6 +4452,7 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
   if (todayTrades > 0) _orbTodayTrades = todayTrades;
   if (wins   > 0) _orbWins   = wins;
   if (losses > 0) _orbLosses = losses;
+  if (typeof _updateTradesSlot === 'function') _updateTradesSlot(_orbTodayTrades);
 
   // Block 2 exposes these via window.*
   var trTs = window._tradeTs || [];
@@ -5420,11 +5427,12 @@ window.addEventListener('resize', function() {{
             }}, _batchDur + 1000);
           }}
 
-          // Trades combo chip — decays companion trade count from base+delta → base
+          // Trades combo chip
           if (_tradeCount > 0) {{
             var _baseTrades = parseInt((document.getElementById('om-today') || {{}}).textContent || '0', 10);
             _showChip('trades-combo-chip', '+' + _tradeCount, '#ff9900', null,
               'om-today', _baseTrades, _tradeCount);
+            if (typeof _tradeSlotCombo === 'function') _tradeSlotCombo(_tradeCount);
           }}
 
           // Open positions delta chip — flash only, _pollPositions owns the persistent count
@@ -6907,36 +6915,50 @@ window.addEventListener('resize', function() {{
         }}
       }}
 
-      // ── PIPELINE slot — equity pipeline 4:05pm ET ─────────────
-      function _nextPipelineEtMs() {{
-        var now = new Date();
-        // DST-aware ET offset
-        var month = now.getUTCMonth() + 1;
-        var etOff = (month > 3 && month < 11) ? -4 : -5; // EDT=-4, EST=-5
-        var etNow = new Date(now.getTime() + etOff * 3600000);
-        var target = new Date(etNow);
-        target.setUTCHours(16 - etOff, 5, 0, 0); // 16:05 ET in local UTC
-        // Rephrase: set to 16:05 ET = 20:05 or 21:05 UTC
-        var pipeHour = 16 + (-etOff); // 20 or 21
-        target = new Date(now);
-        target.setUTCHours(pipeHour, 5, 0, 0);
-        if (now >= target) target.setUTCDate(target.getUTCDate() + 1);
-        return target - now;
+      // ── TRADES slot — total trade count from fills ────────────
+      var _hudTradeTotal = 0;
+      function _updateTradesSlot(count) {{
+        if (count !== undefined) _hudTradeTotal = count;
+        var el = document.getElementById('ss-pipeline-st');
+        if (el) {{ el.textContent = _hudTradeTotal || '—'; el.style.color = '#ff9900'; el.style.textShadow = '0 0 10px rgba(255,153,0,.6)'; }}
       }}
-      function _updatePipelineSlot() {{
-        var rem = _nextPipelineEtMs();
-        var txt = _fmtCountdown(rem);
-        var cls = rem < 120000 ? 'ss-exec' : rem < 600000 ? 'ss-ready' : '';
-        _ssSet('ss-pipeline-st', cls, cls === 'ss-exec' ? 'EXECUTING' : txt);
+      function _tradeSlotCombo(delta) {{
+        var chip = document.getElementById('ss-trades-chip');
+        if (!chip || delta <= 0) return;
+        chip.textContent = '+' + delta;
+        chip.style.opacity = '1';
+        setTimeout(function() {{ chip.style.opacity = '0'; }}, 4000);
       }}
 
-      // ── POSITIONS slot ────────────────────────────────────────
-      function _updatePositionsSlot() {{
-        var count = Object.keys(window._cryptoPositionsMap || {{}}).length;
-        var eq    = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
-        var total = count + eq;
-        _ssSet('ss-positions-st', total > 0 ? 'ss-active' : '',
-          total > 0 ? total + ' OPEN' : 'FLAT');
+      // ── WALLET slot — Alpaca NAV with gain/loss color flash ──
+      var _lastWalletVal = null;
+      function _updateWalletSlot(nav) {{
+        if (!nav) return;
+        var el = document.getElementById('ss-wallet-val');
+        if (!el) return;
+        var fmtd = '$' + (nav >= 1000 ? (nav/1000).toFixed(1) + 'K' : nav.toFixed(0));
+        el.textContent = fmtd;
+        if (_lastWalletVal !== null) {{
+          var delta = nav - _lastWalletVal;
+          if (Math.abs(delta) > 0.5) {{
+            var isGain = delta > 0;
+            el.classList.remove('gain', 'loss');
+            void el.offsetWidth; // reflow
+            el.classList.add(isGain ? 'gain' : 'loss');
+            // show combo chip
+            var chip = document.getElementById('ss-wallet-chip');
+            if (chip) {{
+              chip.textContent = (isGain ? '+' : '') + delta.toFixed(0);
+              chip.style.color = isGain ? '#00ff9d' : '#ff3366';
+              chip.style.opacity = '1';
+              setTimeout(function() {{
+                chip.style.opacity = '0';
+                setTimeout(function() {{ el.classList.remove('gain','loss'); }}, 600);
+              }}, 5000);
+            }}
+          }}
+        }}
+        _lastWalletVal = nav;
       }}
 
       // ── PRICE slot — CoinGecko poll every 4s ─────────────────
@@ -6960,6 +6982,7 @@ window.addEventListener('resize', function() {{
           ? '$' + (nav / 1000).toFixed(1) + 'K'
           : '$' + nav.toFixed(0);
         _ssSet('ss-nav-st', 'ss-active', fmtd);
+        _updateWalletSlot(nav); // mirror to WALLET slot
       }}
 
       // ── Callout system — stackable drop-in notifications ────────
