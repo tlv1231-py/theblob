@@ -4122,10 +4122,13 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    // Map trail to canvas coords
+    // Map trail to canvas coords, clipped to stop short of the orb
+    var orbGap = 32; // px clear of orb center — keeps trail free of the dot and its rings
     var mapped = [];
     for (var i = 0; i < trail.length; i++) {{
-      mapped.push({{ x: tx(trail[i].t), y: ty(trail[i].y) }});
+      var px = tx(trail[i].t);
+      if (px >= W/2 - orbGap) break; // stop before orb
+      mapped.push({{ x: px, y: ty(trail[i].y) }});
     }}
 
     // Wall labels — dollar threshold (machine-independent), deduplicated per transition.
@@ -4157,6 +4160,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
+    if (mapped.length < 2) return; // trail hasn't grown past orbGap yet
+
     // Polyline — straight segments, no bezier, nothing retroactively reshapes
     function _stroke(m) {{
       ctx.beginPath();
@@ -4165,7 +4170,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
 
     var x0 = mapped[0].x;
-    var x1 = W; // right edge = orb
+    var x1 = W / 2; // orb center — gradient aims here even though line stops orbGap short
     function _tg(r, g, b, a0, a1) {{
       var gr = ctx.createLinearGradient(x0, 0, x1, 0);
       gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + a0 + ')');
