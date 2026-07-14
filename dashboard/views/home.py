@@ -221,7 +221,12 @@ def _load_chart_data() -> dict:
                 WHERE event_type != 'UPDATE'
                 ORDER BY recorded_at DESC LIMIT 500
             """)).fetchall()
+            _ev_seen = set()
             for r in pipe_rows:
+                _dedup_key = (r.event_type, r.symbol or "", (r.message or "")[:80])
+                if _dedup_key in _ev_seen:
+                    continue
+                _ev_seen.add(_dedup_key)
                 cls, tag = _EVENT_MAP.get(r.event_type, ("ev-pipeline", r.event_type))
                 term_events.append({
                     "cls": cls, "tag": tag,
@@ -5788,6 +5793,16 @@ window.addEventListener('resize', function() {{
         if (isHistory) rows = rows.slice().reverse(); // DESC → chronological
         if (window._resetRunTimer) window._resetRunTimer();
 
+        // Deduplicate: skip any row we've already rendered (guards WS + poll race)
+        if (!window._feedSeenKeys) window._feedSeenKeys = new Set();
+        rows = rows.filter(function(row) {{
+          var k = (row.recorded_at||'') + '|' + (row.symbol||'') + '|' + (row.message||'').slice(0,80);
+          if (window._feedSeenKeys.has(k)) return false;
+          window._feedSeenKeys.add(k);
+          return true;
+        }});
+        if (!rows.length) return;
+
         // ── Batch processing: exits before entries, then batch PnL chip ─────────
         if (!isHistory) {{
           // Sort: exits first, then entries, within this batch
@@ -5918,10 +5933,13 @@ window.addEventListener('resize', function() {{
           }}
         }}
 
+        // Advance _lastSeen synchronously before stagger so concurrent WS polls don't re-fetch
+        if (rows.length) _lastSeen = rows[rows.length - 1].recorded_at;
+
         // Stagger live batches so events drip in one-by-one (history: instant)
         var _staggerMs = isHistory ? 0 : 180;
         rows.forEach(function(row, _ri) {{ setTimeout(function() {{
-          _lastSeen = row.recorded_at;
+          var raw = row.message || '';
           var raw = row.message || '';
           var sym = row.symbol || '';
           var display;
