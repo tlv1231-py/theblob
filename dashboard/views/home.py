@@ -99,7 +99,7 @@ html,body{{height:100%;background:#040006;font-family:Consolas,'Courier New',mon
 @keyframes bl{{0%,100%{{opacity:1}}50%{{opacity:0}}}}
 </style></head><body>
 <div id="wrap">
-  <div id="hdr"><div class="dot"></div>SYSTEM FEED</div>
+  <div id="hdr"><div class="dot"></div></div>
   <div id="body">
     <div id="cur">█</div>
     {rows}
@@ -1251,7 +1251,7 @@ body::after {{
   position:relative; height:0; overflow:visible;
   display:flex; flex-direction:column; align-items:center;
   gap:4px; pointer-events:none;
-  padding-top:4px; width:320px;
+  padding-top:4px;
   z-index:99999;
 }}
 .callout-card {{
@@ -2423,7 +2423,7 @@ body::after {{
 
   <!-- Left overlay: System Feed -->
   <div id="feed-overlay">
-    <div class="panel-hdr"><div class="term-dot"></div>SYSTEM FEED</div>
+    <div class="panel-hdr"><div class="term-dot"></div></div>
     <div id="term-clock" class="te" style="flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:5px;margin-bottom:2px"></div>
     <div id="term-body">
       {term_rows}
