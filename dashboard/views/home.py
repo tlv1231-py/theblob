@@ -1239,11 +1239,23 @@ body::after {{
 }}
 .ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 16px rgba(0,255,157,.9),0 0 4px rgba(0,255,157,.4); }}
 .ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 16px rgba(255,51,102,.9),0 0 4px rgba(255,51,102,.4); }}
+@keyframes dmg-pop {{
+  0%   {{ opacity:0; transform:translateY(0px) scale(1.5); }}
+  8%   {{ opacity:1; transform:translateY(-2px) scale(1.08); }}
+  18%  {{ opacity:1; transform:translateY(-6px) scale(1); }}
+  75%  {{ opacity:1; transform:translateY(-22px) scale(1); }}
+  100% {{ opacity:0; transform:translateY(-34px) scale(.92); }}
+}}
 .ss-wallet-chip {{
-  position:absolute; left:calc(100% + 5px); top:50%; transform:translateY(-50%);
-  font:700 8px Consolas,monospace; letter-spacing:.04em;
-  opacity:0; transition:opacity .15s;
-  text-shadow:0 0 8px currentColor; white-space:nowrap;
+  position:absolute; left:calc(100% + 8px); top:0;
+  font-family:'Orbitron',Consolas,monospace;
+  font-size:14px; font-weight:900; letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
+  opacity:0; white-space:nowrap; pointer-events:none;
+  text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
+}}
+.ss-wallet-chip.dmg-active {{
+  animation: dmg-pop 2.2s cubic-bezier(.22,1,.36,1) forwards;
 }}
 
 /* ── Callout rail — zero-height sibling after strat-bar; cards overflow down ─ */
@@ -6989,11 +7001,13 @@ window.addEventListener('resize', function() {{
         if (chip) {{
           chip.textContent = (isGain ? '+$' : '-$') + Math.abs(delta).toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
           chip.style.color = isGain ? '#00ff9d' : '#ff3366';
-          chip.style.opacity = '1';
+          chip.classList.remove('dmg-active');
+          void chip.offsetWidth; // force reflow so re-triggering works
+          chip.classList.add('dmg-active');
           setTimeout(function() {{
-            chip.style.opacity = '0';
-            setTimeout(function() {{ el.classList.remove('gain','loss'); }}, 600);
-          }}, 5000);
+            chip.classList.remove('dmg-active');
+            el.classList.remove('gain','loss');
+          }}, 2300);
         }}
       }};
 
