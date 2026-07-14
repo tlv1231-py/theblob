@@ -1328,54 +1328,50 @@ body::after {{
 }}
 
 /* ── Callout rail — zero-height sibling after strat-bar; cards overflow down ─ */
+/* ── Callout rail — drops from bottom of portfolio HUD tile ── */
 #callout-rail {{
-  position:relative; height:0; overflow:visible;
+  position:absolute;
+  bottom:0; left:50%; transform:translateX(-50%);
+  height:0; overflow:visible;
   display:flex; flex-direction:column; align-items:center;
-  gap:4px; pointer-events:none;
-  padding-top:4px;
-  z-index:99999;
+  gap:3px; padding-top:0;
+  pointer-events:none; z-index:99999;
+}}
+@keyframes cc-in {{
+  from {{ opacity:0; clip-path:inset(100% 0 0 0); }}
+  to   {{ opacity:1; clip-path:inset(0% 0 0 0); }}
 }}
 .callout-card {{
-  display:flex; align-items:baseline; gap:7px;
-  width:320px; padding:10px 16px;
-  background:rgba(4,0,16,.18); backdrop-filter:blur(20px);
-  border:1px solid rgba(148,0,255,.12); border-left:3px solid;
-  border-radius:2px;
-  box-shadow:0 8px 32px rgba(0,0,0,.35);
-  max-height:80px; overflow:visible;
+  display:flex; align-items:baseline; gap:8px;
+  padding:5px 12px;
+  background:transparent;
+  border:none;
   opacity:0;
-  transition:opacity .3s ease;
   pointer-events:none;
   font-family:Consolas,'Courier New',monospace;
+  white-space:nowrap;
 }}
-.callout-card.cc-show {{ opacity:1; }}
+.callout-card.cc-show {{
+  animation: cc-in .22s cubic-bezier(.2,.8,.4,1) forwards;
+}}
 .callout-card.cc-exit {{
   opacity:0;
-  transition:opacity 1.4s ease-out;
+  transition:opacity 1.6s ease-out;
 }}
 .cc-verb {{
-  font-size:9px; letter-spacing:.18em; text-transform:uppercase;
-  color:rgba(255,255,255,.4); font-weight:600;
+  font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+  color:rgba(255,255,255,.5); font-weight:600;
 }}
 .cc-sym {{
-  font-size:13px; font-weight:700; letter-spacing:.04em; color:#fff;
-}}
-.cc-at {{
-  font-size:9px; color:rgba(255,255,255,.3);
-}}
-.cc-price {{
-  font-size:12px; font-weight:600; color:rgba(255,255,255,.65);
-  font-variant-numeric:tabular-nums;
+  font-size:15px; font-weight:700; letter-spacing:.04em;
 }}
 .cc-pnl {{
-  font-size:13px; font-weight:700; letter-spacing:.02em;
+  font-family:'Press Start 2P',monospace;
+  font-size:10px; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
-  text-shadow:0 0 12px currentColor;
-  margin-left:auto;
+  text-shadow:0 0 10px currentColor, 1px 1px 0 rgba(0,0,0,.9);
 }}
-.cc-count {{
-  font-size:11px; font-weight:700; opacity:.7;
-}}
+.cc-count {{ display:none; }}
 
 /* ── Terminal row appear ── */
 @keyframes te-appear {{
@@ -2437,13 +2433,15 @@ body::after {{
       </div>
     </div>
   </div>
-  <div class="strat-slot" id="ss-positions">
+  <div class="strat-slot" id="ss-positions" style="position:relative;overflow:visible">
     <div class="ss-wallet-row">
       <div class="ss-wallet-anchor">
         <span class="ss-wallet-val" id="ss-wallet-val">—</span>
         <span class="ss-wallet-chip" id="ss-wallet-chip"></span>
       </div>
     </div>
+    <!-- callout rail drops from the bottom of this tile -->
+    <div id="callout-rail"></div>
   </div>
   <div class="strat-slot" id="ss-price">
     <div class="ss-icon">↻</div>
@@ -2485,9 +2483,6 @@ body::after {{
   <div class="sysh-sep"></div>
   <div class="sysh-item"><span class="sysh-lbl">CLK DRIFT</span><span class="sysh-val" id="sysh-drift">—</span></div>
 </div>
-<!-- ── Callout rail — height:0 sibling; cards overflow downward from HUD bottom ── -->
-<div id="callout-rail"></div>
-
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
   <span id="daily-bar-label"></span>
@@ -5405,55 +5400,15 @@ window.addEventListener('resize', function() {{
       ];
       var _fired = {{}}; // key → last fire date string so we don't double-fire
 
-      function _spawnCountdownCallout(label, col, msUntil) {{
-        var rail = document.getElementById('callout-rail');
-        if (!rail) return;
-
-        var card = document.createElement('div');
-        card.className = 'callout-card';
-        card.style.borderLeftColor = col;
-        card.innerHTML =
-          '<span class="cc-verb" style="color:' + col + ';opacity:.7">' + label + '</span>' +
-          '<span class="cc-price" id="cd-live-' + Date.now() + '" style="margin-left:auto;font-size:11px;color:' + col + '"></span>';
-        rail.appendChild(card);
-
-        var countEl = card.querySelector('.cc-price');
-        var startMs = Date.now();
-        var fireAt  = startMs + msUntil;
-
-        requestAnimationFrame(function() {{
-          requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
-        }});
-
-        function _tick() {{
-          var remMs = fireAt - Date.now();
-          var remS  = Math.max(0, Math.ceil(remMs / 1000));
-          if (remS <= 0) {{
-            if (countEl) countEl.textContent = 'NOW';
-            card.style.borderLeftColor = '#ffffff';
-            setTimeout(function() {{
-              card.classList.remove('cc-show');
-              card.classList.add('cc-exit');
-              setTimeout(function() {{ if (card.parentNode) card.parentNode.removeChild(card); }}, 1700);
-            }}, 1200);
-            return;
-          }}
-          if (countEl) countEl.textContent = remS <= 10 ? remS + 's' : '';
-          requestAnimationFrame(_tick);
-        }}
-        requestAnimationFrame(_tick);
-      }}
-
       function _checkEvents() {{
         var today = new Date().toLocaleDateString('en-US', {{timeZone:ET}});
         _EVENTS.forEach(function(ev) {{
           var key = ev.label + ':' + today;
           if (_fired[key]) return;
           var ms = _msUntilET(ev.h, ev.m);
-          // Spawn callout 60s out; after that window, skip until tomorrow
           if (ms <= 60000) {{
             _fired[key] = true;
-            _spawnCountdownCallout(ev.label, ev.col, ms);
+            if (window._fireEventCallout) window._fireEventCallout(ev.label, ev.col, ms / 1000);
           }}
         }});
       }}
@@ -7379,39 +7334,77 @@ window.addEventListener('resize', function() {{
       // ── Callout system — stackable drop-in notifications ────────
       var _calloutRail = document.getElementById('callout-rail');
 
+      function _symColor(sym) {{
+        // Match the per-symbol colors used in the terminal and position cards
+        var map = {{
+          BTC:'#f7931a', ETH:'#627eea', SOL:'#9945ff', AVAX:'#e84142',
+          DOGE:'#c2a633', LINK:'#2a5ada', XTZ:'#a6e000', BCH:'#8dc351',
+          LTC:'#bfbbbb', ADA:'#0d1e2d', DOT:'#e6007a', MATIC:'#8247e5',
+          CRV:'#40bfbf', UNI:'#ff007a', AAVE:'#b6509e', MKR:'#1aab9b',
+        }};
+        var base = sym.replace('/USD','').replace('USD','');
+        return map[base] || '#00e5ff';
+      }}
+
       function _spawnCallout(cfg) {{
-        var uid = 'cc' + Date.now() + Math.random().toString(36).slice(2,5);
-        var hasCountdown = cfg.countdown && cfg.countdown > 0;
-        var initCount = hasCountdown ? Math.round(cfg.countdown) : 0;
+        var rail = document.getElementById('callout-rail');
+        if (!rail) return;
+
+        var symClean = (cfg.sym || '').replace('/USD','').replace('USD','');
+        var symCol   = _symColor(symClean);
+        var pnlVal   = cfg.pnl ? parseFloat(cfg.pnl.replace(/[^0-9.\-]/g,'')) : null;
+        var isPos    = pnlVal !== null ? pnlVal >= 0 : null;
+        var pnlCol   = isPos === null ? 'rgba(255,255,255,.6)' : (isPos ? '#00ff9d' : '#ff3366');
+        var pnlStr   = pnlVal !== null
+          ? (isPos ? '+$' : '-$') + Math.abs(pnlVal).toFixed(2)
+          : (cfg.pnl || '');
+
+        var isEvent  = cfg.isEvent || false; // true for MARKET OPEN etc.
 
         var card = document.createElement('div');
         card.className = 'callout-card';
-        card.style.borderLeftColor = cfg.col;
-        card.innerHTML =
-          '<span class="cc-verb">Sold</span>' +
-          '<span class="cc-sym">' + (cfg.sym || '') + '</span>' +
-          (cfg.price ? '<span class="cc-at">@</span><span class="cc-price">$' + cfg.price + '</span>' : '') +
-          (cfg.pnl   ? '<span class="cc-pnl" style="color:' + cfg.col + '">' + cfg.pnl + '</span>' : '') +
-          (hasCountdown ? '<span class="cc-count" style="color:' + cfg.col + '" id="nm-' + uid + '">' + initCount + '</span>' : '');
+        if (isEvent) {{
+          card.innerHTML =
+            '<span class="cc-verb" style="color:' + (cfg.col||'#fff') + ';letter-spacing:.2em">' + symClean + '</span>' +
+            (cfg.countdown ? '<span class="cc-pnl" style="color:' + (cfg.col||'#fff') + '" id="cc-cd-' + Date.now() + '">' + Math.round(cfg.countdown) + 's</span>' : '');
+        }} else {{
+          card.innerHTML =
+            '<span class="cc-verb">sold</span>' +
+            '<span class="cc-sym" style="color:' + symCol + '">' + symClean + '</span>' +
+            (pnlStr ? '<span class="cc-pnl" style="color:' + pnlCol + '">' + pnlStr + '</span>' : '');
+        }}
 
-        if (_calloutRail) _calloutRail.appendChild(card);
+        rail.appendChild(card);
         requestAnimationFrame(function() {{
           requestAnimationFrame(function() {{ card.classList.add('cc-show'); }});
         }});
 
-        // Linger 3s then fade out
+        // Handle countdown for event callouts
+        if (isEvent && cfg.countdown > 0) {{
+          var cdEl = card.querySelector('[id^="cc-cd-"]');
+          var _end = Date.now() + cfg.countdown * 1000;
+          (function _tick() {{
+            if (!cdEl) return;
+            var rem = Math.max(0, Math.round((_end - Date.now()) / 1000));
+            cdEl.textContent = rem > 0 ? rem + 's' : 'NOW';
+            if (rem > 0) requestAnimationFrame(_tick);
+          }})();
+        }}
+
+        // Linger then dissolve
+        var linger = isEvent ? Math.max(3000, (cfg.countdown||0)*1000 + 1500) : 4000;
         setTimeout(function() {{
           card.classList.remove('cc-show');
           card.classList.add('cc-exit');
-          setTimeout(function() {{
-            if (card.parentNode) card.parentNode.removeChild(card);
-          }}, 1700);
-        }}, 3000);
+          setTimeout(function() {{ if (card.parentNode) card.parentNode.removeChild(card); }}, 1800);
+        }}, linger);
       }}
 
-      // countdown: seconds until the event fires (omit or 0 for past/instant events)
       window._fireCallout = function(sym, price, pnl, col, countdown) {{
         _spawnCallout({{ sym:sym, price:price, pnl:pnl, col:col||'#ff3366', countdown:countdown||0 }});
+      }};
+      window._fireEventCallout = function(label, col, countdown) {{
+        _spawnCallout({{ sym:label, col:col, countdown:countdown||0, isEvent:true }});
       }};
 
       // ── EXPOSURE slot ─────────────────────────────────────────
