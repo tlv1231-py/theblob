@@ -4067,7 +4067,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     if (!curNav && history.length === 0) return;
 
     var nowMs    = Date.now();
-    var halfWin  = 45 * 1000; // ±45s window — tight enough that 1s-old points are visibly spread
+    var halfWin  = 30 * 1000; // ±30s window — tight real-time view
     var winStart = nowMs - halfWin;
     var winEnd   = nowMs + halfWin;
 
@@ -4130,34 +4130,56 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
 
-    // Fill under the line
-    ctx.beginPath();
-    ctx.moveTo(mapped[0].x, mapped[0].y);
-    for (var i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
+    // Smooth curve path helper — catmull-rom via quadratic bezier midpoints
+    function _strokeSmooth(m) {{
+      ctx.beginPath();
+      ctx.moveTo(m[0].x, m[0].y);
+      if (m.length === 2) {{
+        ctx.lineTo(m[1].x, m[1].y);
+      }} else {{
+        for (var i = 0; i < m.length - 1; i++) {{
+          var mx = (m[i].x + m[i+1].x) / 2;
+          var my = (m[i].y + m[i+1].y) / 2;
+          if (i === 0) {{ ctx.lineTo(mx, my); }}
+          else {{ ctx.quadraticCurveTo(m[i].x, m[i].y, mx, my); }}
+        }}
+        ctx.lineTo(m[m.length-1].x, m[m.length-1].y);
+      }}
+    }}
+
+    // Fill under the curve
+    _strokeSmooth(mapped);
     ctx.lineTo(mapped[mapped.length-1].x, H);
     ctx.lineTo(mapped[0].x, H);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255,0,204,0.06)';
+    var fillGrad = ctx.createLinearGradient(0, 0, 0, H);
+    fillGrad.addColorStop(0, 'rgba(255,0,204,0.18)');
+    fillGrad.addColorStop(1, 'rgba(255,0,204,0)');
+    ctx.fillStyle = fillGrad;
     ctx.fill();
 
-    // Glow pass
-    ctx.beginPath();
-    ctx.moveTo(mapped[0].x, mapped[0].y);
-    for (var i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
-    ctx.strokeStyle = 'rgba(255,0,204,0.15)';
-    ctx.lineWidth   = 18;
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
+    // Outer glow — wide, soft
+    _strokeSmooth(mapped);
+    ctx.strokeStyle = 'rgba(255,0,204,0.08)';
+    ctx.lineWidth = 32; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Main line
-    ctx.beginPath();
-    ctx.moveTo(mapped[0].x, mapped[0].y);
-    for (var i = 1; i < mapped.length; i++) ctx.lineTo(mapped[i].x, mapped[i].y);
+    // Mid glow
+    _strokeSmooth(mapped);
+    ctx.strokeStyle = 'rgba(255,0,204,0.18)';
+    ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Core line — bright, crisp
+    _strokeSmooth(mapped);
     ctx.strokeStyle = '#ff00cc';
-    ctx.lineWidth   = 2.5;
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
+    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Hot center — pure white core for neon effect
+    _strokeSmooth(mapped);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.stroke();
   }};
 
@@ -5781,7 +5803,7 @@ window.addEventListener('resize', function() {{
     if (!window._navHistory) {{
       try {{
         var _stored = localStorage.getItem('_navHistory');
-        var _cutoffMs = Date.now() - 90*1000;
+        var _cutoffMs = Date.now() - 60*1000;
         window._navHistory = _stored
           ? JSON.parse(_stored).filter(function(p) {{ return new Date(p.x).getTime() > _cutoffMs; }})
           : [];
@@ -6055,7 +6077,7 @@ window.addEventListener('resize', function() {{
       var last = window._navHistory[window._navHistory.length - 1];
       if (last && (new Date(isoNow) - new Date(last.x)) < 4000) return; // dedup <4s
       window._navHistory.push({{ x: isoNow, y: nav }});
-      var cutoff = new Date(Date.now() - 90*1000).toISOString();
+      var cutoff = new Date(Date.now() - 60*1000).toISOString();
       while (window._navHistory.length > 0 && window._navHistory[0].x < cutoff) window._navHistory.shift();
       if (window._drawNavCanvas) window._drawNavCanvas();
     }}
@@ -7034,10 +7056,10 @@ window.addEventListener('resize', function() {{
         if (!window._navHistory) window._navHistory = [];
         var _nowMs2 = Date.now();
         var _lastH = window._navHistory[window._navHistory.length - 1];
-        var _lastPushMs = _lastH ? new Date(_lastH.x).getTime() : 0;
-        if (_nowMs2 - _lastPushMs >= 1000) {{
+        // Push on every distinct value — no time throttle; rAF smooths visually
+        if (!_lastH || _lastH.y !== nav) {{
           window._navHistory.push({{ x: new Date(_nowMs2).toISOString(), y: nav }});
-          var _cutoff = new Date(_nowMs2 - 90*1000).toISOString();
+          var _cutoff = new Date(_nowMs2 - 60*1000).toISOString();
           while (window._navHistory.length > 0 && window._navHistory[0].x < _cutoff) window._navHistory.shift();
           try {{ localStorage.setItem('_navHistory', JSON.stringify(window._navHistory)); }} catch(e) {{}}
         }}
