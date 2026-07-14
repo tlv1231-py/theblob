@@ -4091,7 +4091,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     // base = most recent committed value; fixed halfRange = ±0.3%
     var base      = trail[trail.length - 1].y;
-    var halfRange = base * 0.003;
+    var halfRange = base * 0.0008; // tighter scale = more vertical drama on small moves
     var winStart  = nowMs - 30000;
     // Window is 60s wide (±30s) so nowMs lands at W/2 (center = orb position)
     function tx(ms) {{ return (ms - winStart) / 60000 * W; }}
@@ -4152,28 +4152,33 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.closePath();
     var fg = ctx.createLinearGradient(x0, 0, x1, 0);
     fg.addColorStop(0, 'rgba(255,0,204,0)');
-    fg.addColorStop(1, 'rgba(255,0,204,0.14)');
+    fg.addColorStop(1, 'rgba(255,0,204,0.28)');
     ctx.fillStyle = fg; ctx.fill();
 
-    // Outer bloom
+    // Outer bloom — wide, intense
     _stroke(mapped);
-    ctx.strokeStyle = _tg(255,0,204, 0, 0.12);
-    ctx.lineWidth = 32; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.strokeStyle = _tg(255,0,204, 0, 0.35);
+    ctx.lineWidth = 48; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
     // Mid glow
     _stroke(mapped);
-    ctx.strokeStyle = _tg(255,0,204, 0, 0.25);
-    ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.strokeStyle = _tg(255,0,204, 0, 0.6);
+    ctx.lineWidth = 18; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+
+    // Inner hot glow
+    _stroke(mapped);
+    ctx.strokeStyle = _tg(255,80,255, 0, 0.9);
+    ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
     // Core
     _stroke(mapped);
-    ctx.strokeStyle = _tg(255,0,204, 0.04, 1);
+    ctx.strokeStyle = _tg(255,0,204, 0.05, 1);
     ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
     // White hot — rightmost 25% only
     var hg = ctx.createLinearGradient(x0 + (x1-x0)*0.75, 0, x1, 0);
     hg.addColorStop(0, 'rgba(255,255,255,0)');
-    hg.addColorStop(1, 'rgba(255,255,255,0.7)');
+    hg.addColorStop(1, 'rgba(255,255,255,0.95)');
     _stroke(mapped);
     ctx.strokeStyle = hg;
     ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
