@@ -833,15 +833,34 @@ def _build_daw_html(data: dict) -> str:
         '<filter id="bs-gf" x="-80%" y="-80%" width="260%" height="260%">'
         '<feGaussianBlur stdDeviation="3"/>'
         '</filter>'
+        '<radialGradient id="bs-gg-happy" cx="50%" cy="50%" r="50%">'
+        '<stop offset="0%" stop-color="#00ff9d" stop-opacity="0.8"/>'
+        '<stop offset="100%" stop-color="#00ff9d" stop-opacity="0"/>'
+        '</radialGradient>'
+        '<radialGradient id="bs-gg-sad" cx="50%" cy="50%" r="50%">'
+        '<stop offset="0%" stop-color="#0066ff" stop-opacity="0.5"/>'
+        '<stop offset="100%" stop-color="#0066ff" stop-opacity="0"/>'
+        '</radialGradient>'
         '</defs>'
         '<style>'
         '@keyframes bs-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}'
         '@keyframes bs-breathe{0%,100%{transform:scale(1,1)}45%{transform:scale(1.03,.975)}80%{transform:scale(.985,1.02)}}'
         '@keyframes bs-blink{0%,87%,100%{transform:scaleY(1)}92%{transform:scaleY(.07)}}'
         '@keyframes bs-gp{0%,100%{opacity:.22}50%{opacity:.48}}'
+        '@keyframes bs-happy-float{0%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}60%{transform:translateY(-2px)}}'
+        '@keyframes bs-happy-squish{0%,100%{transform:scale(1,1)}30%{transform:scale(1.08,.93)}60%{transform:scale(.96,1.05)}}'
+        '@keyframes bs-happy-glow{0%,100%{opacity:.55}50%{opacity:.9}}'
+        '@keyframes bs-sad-droop{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(2px) scaleY(.96)}}'
+        '@keyframes bs-sad-glow{0%,100%{opacity:.12}50%{opacity:.28}}'
         '#bs-g{animation:bs-float 3.8s ease-in-out infinite,bs-breathe 3.1s ease-in-out infinite;transform-box:fill-box;transform-origin:center}'
+        '#bs-g.bs-happy{animation:bs-happy-float 1.4s ease-in-out infinite,bs-happy-squish 1.1s ease-in-out infinite}'
+        '#bs-g.bs-sad{animation:bs-sad-droop 2.6s ease-in-out infinite;filter:saturate(.4) brightness(.8) hue-rotate(200deg)}'
         '.bs-eye{animation:bs-blink 5.5s ease-in-out infinite;transform-box:fill-box;transform-origin:center}'
+        '.bs-happy .bs-eye{transform:scaleY(.35);transform-box:fill-box;transform-origin:center;animation:none}'
+        '.bs-sad .bs-eye{transform:scaleY(.6) translateY(1px);transform-box:fill-box;transform-origin:center;animation:none}'
         '#bs-hl{animation:bs-gp 2.4s ease-in-out infinite}'
+        '#bs-hl.bs-hl-happy{animation:bs-happy-glow 1.4s ease-in-out infinite;fill:url(#bs-gg-happy)}'
+        '#bs-hl.bs-hl-sad{animation:bs-sad-glow 2.6s ease-in-out infinite;fill:url(#bs-gg-sad)}'
         '</style>'
         '<ellipse id="bs-hl" cx="16" cy="22" rx="15" ry="17" fill="url(#bs-gg)"/>'
         '<path d="M16,4 C21.5,4 27.5,9.5 27.5,18 C27.5,26 24,34 16,36 C8,34 4.5,26 4.5,18 C4.5,9.5 10.5,4 16,4Z"'
@@ -1940,8 +1959,9 @@ body::after {{
 .pc-badge-hold {{ color:rgba(0,200,140,.65); border:1px solid rgba(0,200,140,.2); }}
 .pc-badge-sell {{ color:rgba(220,160,0,.65);  border:1px solid rgba(220,160,0,.2); }}
 .pc-val {{
-  margin-left:auto; font-family:Consolas,monospace; font-size:11px;
-  font-weight:700; color:#00ff9d; font-variant-numeric:tabular-nums;
+  margin-left:auto; font-family:'Orbitron',Consolas,monospace; font-size:11px;
+  font-weight:700; color:#ffffff; font-variant-numeric:tabular-nums;
+  letter-spacing:-.01em;
 }}
 .pc-pnl {{
   font-family:Consolas,monospace; font-size:10px; font-weight:400;
@@ -1953,7 +1973,7 @@ body::after {{
 .pc-prox-wrap  {{ position:relative; margin-top:4px; }}
 .pc-prox-labels {{ display:flex; justify-content:space-between; height:10px; margin-bottom:2px; }}
 .pc-prox-stop,.pc-prox-tgt {{
-  font-family:Consolas,monospace; font-size:8px; color:rgba(140,110,170,.5);
+  font-family:Consolas,monospace; font-size:8px; color:rgba(200,200,210,.35);
 }}
 .pc-prox-cur {{
   position:absolute; transform:translateX(-50%);
@@ -2348,12 +2368,28 @@ body::after {{
 .pos-card-ghost-space {{
   flex-shrink:0; pointer-events:none; overflow:hidden; background:transparent;
   width:130px; box-sizing:border-box;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:0 8px; opacity:0; transition:opacity .15s;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:4px 8px; opacity:0; transition:opacity .12s;
   font-family:Consolas,monospace; font-size:9px;
 }}
-.pos-card-ghost-space .gc-sym {{ color:rgba(255,255,255,.3); letter-spacing:.06em; }}
-.pos-card-ghost-space .gc-pnl {{ font-weight:700; letter-spacing:.03em; font-size:10px; }}
+.pos-card-ghost-space.ghost-pnl-showing {{ opacity:1; }}
+.pos-card-ghost-space .gc-sym {{ color:rgba(255,255,255,.25); letter-spacing:.1em; font-size:7px; text-transform:uppercase; }}
+.pos-card-ghost-space .gc-pnl {{
+  font-family:'Orbitron',Consolas,monospace; font-weight:900; letter-spacing:.04em;
+  font-size:13px; font-variant-numeric:tabular-nums;
+  text-shadow:0 0 12px currentColor, 0 0 28px currentColor;
+}}
+@keyframes ghost-pnl-exit {{
+  0%   {{ opacity:1; transform:none; filter:none; }}
+  60%  {{ opacity:1; transform:translateX(-2px); filter:brightness(1); }}
+  70%  {{ opacity:1; transform:translateX(3px) scaleX(1.04); filter:brightness(8) saturate(0); }}
+  80%  {{ opacity:.5; transform:translateX(-4px) scaleX(.96); filter:brightness(0); }}
+  90%  {{ opacity:.2; transform:translateX(2px); filter:brightness(4) saturate(0); }}
+  100% {{ opacity:0; transform:translateX(0) scaleY(0); filter:brightness(0); }}
+}}
+.pos-card-ghost-space.ghost-pnl-exiting {{
+  animation:ghost-pnl-exit .45s steps(6,end) forwards;
+}}
 /* Ghost collapses in quantized steps — feels like a board clearing, not a scroll */
 .pos-card-ghost-collapsing {{
   transition:height .32s steps(7,end) !important;
@@ -4369,7 +4405,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
     if (_seedIdx >= 0) {{
       var _seedAge = leftEdgeMs - _navPts[_seedIdx].ms;
-      var _seedV   = _seedAge > 86400000 ? liveNav : _navPts[_seedIdx].v;
+      // If seed is more than 10 min old, use liveNav so chart shows flat at current level
+      var _seedV   = _seedAge > 600000 ? liveNav : _navPts[_seedIdx].v;
       visible.push({{ ms: leftEdgeMs, v: _seedV }});
     }}
     for (var i = 0; i < _navPts.length; i++) {{
@@ -4468,24 +4505,28 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       // Comet fade: oldest segment = 15% opacity, tip = 100%
       var _fade = 0.15 + 0.85 * (si / Math.max(1, n - 2));
       var _tip  = (si === n - 2) ? 1.25 : 1;  // tip segment extra bright
-      _passes.forEach(function(pass) {{
+      var _isLast = (si === n - 2);
+      // Last segment: horizontal only — skip vertical snap to avoid bright bar at _nowPx
+      (function(_p1c,_p2c,_rgbc,_fadec,_tipc,_isLastc) {{
+        _passes.forEach(function(pass) {{
+          ctx.beginPath();
+          ctx.moveTo(_p1c.x, _p1c.y);
+          ctx.lineTo(_p2c.x, _p1c.y);   // hold horizontal
+          if (!_isLastc) ctx.lineTo(_p2c.x, _p2c.y); // snap vertical (skip on last)
+          ctx.strokeStyle = 'rgba('+_rgbc+','+(pass.a * _fadec * _tipc)+')';
+          ctx.lineWidth   = pass.w;
+          ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
+          ctx.stroke();
+        }});
+        // White highlight spine
         ctx.beginPath();
-        ctx.moveTo(_p1.x, _p1.y);
-        ctx.lineTo(_p2.x, _p1.y);   // hold horizontal
-        ctx.lineTo(_p2.x, _p2.y);   // snap vertical
-        ctx.strokeStyle = 'rgba('+_rgb+','+(pass.a * _fade * _tip)+')';
-        ctx.lineWidth   = pass.w;
-        ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
+        ctx.moveTo(_p1c.x, _p1c.y);
+        ctx.lineTo(_p2c.x, _p1c.y);
+        if (!_isLastc) ctx.lineTo(_p2c.x, _p2c.y);
+        ctx.strokeStyle = 'rgba(255,245,255,'+(0.5 * _fadec * _tipc)+')';
+        ctx.lineWidth = 0.65; ctx.lineJoin='miter'; ctx.lineCap='square';
         ctx.stroke();
-      }});
-      // White highlight spine
-      ctx.beginPath();
-      ctx.moveTo(_p1.x, _p1.y);
-      ctx.lineTo(_p2.x, _p1.y);
-      ctx.lineTo(_p2.x, _p2.y);
-      ctx.strokeStyle = 'rgba(255,245,255,'+(0.5 * _fade * _tip)+')';
-      ctx.lineWidth = 0.65; ctx.lineJoin='miter'; ctx.lineCap='square';
-      ctx.stroke();
+      }})(_p1,_p2,_rgb,_fade,_tip,_isLast);
     }}
 
     // Breathing dot at trail tip
@@ -4862,6 +4903,19 @@ setInterval(_fetchIntradayMarks, 15000);
         window._lastLivePriceMs = Date.now();
         window._lastKnownNav    = _eqNav;
         if (window._navPush) window._navPush(_eqNav, new Date().toISOString());
+        // Drive blob mood from live P&L direction
+        (function() {{
+          var baseline = window._portfolioBaseline || 100000;
+          var mood = _eqLivePnl > 0 ? 'bs-happy' : _eqLivePnl < 0 ? 'bs-sad' : '';
+          var g  = document.getElementById('bs-g');
+          var hl = document.getElementById('bs-hl');
+          if (g) {{ g.classList.remove('bs-happy','bs-sad'); if (mood) g.classList.add(mood); }}
+          if (hl) {{
+            hl.classList.remove('bs-hl-happy','bs-hl-sad');
+            if (mood === 'bs-happy') hl.classList.add('bs-hl-happy');
+            else if (mood === 'bs-sad') hl.classList.add('bs-hl-sad');
+          }}
+        }})();
       }}
     }}).catch(function() {{}});
   }}
@@ -6682,6 +6736,7 @@ window.addEventListener('resize', function() {{
       _ghostsToCollapse.push(ghost);
       clearTimeout(_ghostCollapseTimer);
       // 1.8s after the LAST exit trigger before any tile reflows
+      // 3.2s after LAST exit: covers 2.7s P&L linger + 0.5s arcade exit animation
       _ghostCollapseTimer = setTimeout(function() {{
         var batch = _ghostsToCollapse.splice(0);
 
@@ -6711,7 +6766,7 @@ window.addEventListener('resize', function() {{
           batch.forEach(function(g) {{ if (g.parentNode) g.parentNode.removeChild(g); }});
           _updateOverlayWidth();
         }}, 360);
-      }}, 1800);
+      }}, 3200);
     }}
 
     window._triggerCardExit = function(fullSym, reason, pnl, exitPrice) {{
@@ -6742,9 +6797,10 @@ window.addEventListener('resize', function() {{
       var _symClean = fullSym ? fullSym.replace('/USD','').replace('USD','') : '';
       if (pnl !== null && pnl !== undefined) {{
         var _absPnl = Math.abs(pnl);
-        var _pnlStr = (pnl >= 0 ? '+$' : '-$') + (_absPnl >= 1000 ? (_absPnl/1000).toFixed(1)+'k' : _absPnl.toFixed(0));
-        ghost.innerHTML = '<span class="gc-sym">' + _symClean + '</span><span class="gc-pnl" style="color:' + col + '">' + _pnlStr + '</span>';
-        setTimeout(function() {{ ghost.style.opacity = '1'; }}, 920);
+        var _sign = pnl >= 0 ? '+' : '−';
+        var _pnlStr = _sign + '$' + (_absPnl >= 1000 ? (_absPnl/1000).toFixed(1)+'k' : _absPnl.toFixed(2));
+        ghost.innerHTML = '<span class="gc-sym">' + _symClean + '</span>'
+          + '<span class="gc-pnl" style="color:' + col + '">' + _pnlStr + '</span>';
       }}
       if (el.parentNode) el.parentNode.insertBefore(ghost, el);
 
@@ -6766,36 +6822,34 @@ window.addEventListener('resize', function() {{
       ].join(';');
       document.body.appendChild(el);
 
-      // ── Phase 1: Target-lock overlay (0–420ms) ────────────────────────
-      var lock = document.createElement('div');
-      lock.className = 'card-target-lock';
-      lock.style.setProperty('--tc', col);
-      el.appendChild(lock);
+      // ── Phase 1: Instant white flash → B&W → transparent (0–220ms) ──────
+      el.style.transition = 'none';
+      el.style.filter = 'brightness(100) saturate(0)';
+      el.style.opacity = '1';
+      requestAnimationFrame(function() {{
+        el.style.transition = 'filter .08s steps(2,end), opacity .18s linear .04s';
+        el.style.filter = 'brightness(0) saturate(0)';
+        el.style.opacity = '0';
+      }});
 
-      // ── Phase 2: Binary damage blinks (420–820ms) ─────────────────────
-      setTimeout(function() {{
-        if (lock.parentNode) lock.parentNode.removeChild(lock);
-        el.classList.add('pos-card-hit');
-      }}, 420);
-
-      // ── Phase 3: Destroy + P&L ghost + pixel particles (820ms+) ───────
+      // ── Phase 2: Remove tile, reveal ghost P&L (220ms) ────────────────
       setTimeout(function() {{
         var r2 = el.getBoundingClientRect();
         var cx = r2.left + r2.width / 2;
         var cy = r2.top  + r2.height / 2;
         _spawnParticles(cx, cy, col);
-        // P&L shown in-place via ghost placeholder — skip floating popup
-        // _spawnPnlGhost(r2, pnl, fullSym, exitPrice);
-        el.classList.remove('pos-card-hit');
-        el.classList.add('pos-card-exit-stop');  // card-8bit-destroy (.72s)
+        if (el.parentNode) el.parentNode.removeChild(el);
+        // Ghost P&L revealed with a bright flash-in
+        ghost.classList.add('ghost-pnl-showing');
+        ghost.style.opacity = '1';
+      }}, 220);
 
-        // Remove fixed overlay once animation completes
-        setTimeout(function() {{
-          if (el.parentNode) el.parentNode.removeChild(el);
-        }}, 750);
-      }}, 820);
+      // ── Phase 3: Ghost P&L sticks for 2.5s, then arcade-glitch out ────
+      setTimeout(function() {{
+        ghost.classList.add('ghost-pnl-exiting');
+      }}, 2700);
 
-      // Queue ghost placeholder for batch collapse (1.8s debounce from last exit)
+      // Queue ghost placeholder for batch collapse after exit animation (~400ms after phase 3)
       _queueGhostCollapse(ghost);
     }};
 
