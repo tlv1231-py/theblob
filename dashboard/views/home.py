@@ -4055,10 +4055,21 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Dense in-memory trail — one point per rAF frame so line is always fused to orb.
-  // Driven by _lastKnownNav (intraday "marked the book" poller).
-  // Same ±20-min sliding window as the Plotly chart underneath.
-  if (!window._navDenseTrail) window._navDenseTrail = [];
+  // Dense in-memory trail — driven by _lastKnownNav, pushes one point per rAF frame.
+  // Seeded with 20min of baseline history so there's a line immediately on load.
+  if (!window._navDenseTrail) {{
+    window._navDenseTrail = [];
+    // Plant baseline history so trail is visible before live prices accumulate.
+    // Without this, all points cluster at X=W/2 (just pushed) and show a wall.
+    var _seedNav = window._lastKnownNav || (portValues.length ? portValues[portValues.length-1] : 0);
+    if (_seedNav) {{
+      var _now = Date.now();
+      var _halfW = 20 * 60 * 1000;
+      // Two anchor points: 20min ago and 1s ago, both at current NAV
+      window._navDenseTrail.push({{ t: _now - _halfW, y: _seedNav }});
+      window._navDenseTrail.push({{ t: _now - 1000,   y: _seedNav }});
+    }}
+  }}
 
   window._drawNavCanvas = function() {{
     _resize();
@@ -4066,40 +4077,46 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
+    // Always set orb position so pulse-canvas stays in sync even with no trail
+    window._navOrbCanvasX = W / 2;
+    window._navOrbCanvasY = H / 2;
+
     var curNav = window._lastKnownNav;
     var nowMs  = Date.now();
-    var halfWin = 20 * 60 * 1000; // ±20 min — matches Plotly intraday window
+    var halfWin = 20 * 60 * 1000;
 
-    // Push one point per frame; trim to window
-    if (curNav) window._navDenseTrail.push({{ t: nowMs, y: curNav }});
+    // Throttle: push at most one point per ~16ms (rAF already limits this, but guard just in case)
+    var _lastPt = window._navDenseTrail[window._navDenseTrail.length - 1];
+    if (curNav && (!_lastPt || nowMs - _lastPt.t >= 15)) {{
+      window._navDenseTrail.push({{ t: nowMs, y: curNav }});
+    }}
     var cutoff = nowMs - halfWin;
     while (window._navDenseTrail.length > 1 && window._navDenseTrail[0].t < cutoff)
       window._navDenseTrail.shift();
 
     var trail = window._navDenseTrail;
-    window._navOrbCanvasX = W / 2;
-    window._navOrbCanvasY = H / 2;
     if (trail.length < 2) return;
 
-    var orbGap = 28; // stop trail this many px before orb
+    var orbGap = 28;
     var winStart = nowMs - halfWin;
-    // tx: map ms → x. nowMs maps to W/2 (orb center).
     function tx(ms) {{ return (ms - winStart) / (halfWin * 2) * W; }}
 
-    // Find last point still left of the orb gap
-    var lastVI = 0;
+    // Find last point strictly LEFT of orb gap
+    var lastVI = -1;
     for (var vi = 0; vi < trail.length; vi++) {{
       if (tx(trail[vi].t) >= W/2 - orbGap) break;
       lastVI = vi;
     }}
+    // No visible trail yet (all points clustered at the orb) — just show orb, no wall
+    if (lastVI < 0) return;
 
-    // base = value at gap boundary → ty(base) = H/2 = orb y — always connected
+    // base = value at the boundary point — ty(base) = H/2 so trail connects to orb
     var base = trail[lastVI].y;
-    var halfRange = base * 0.0008; // ±0.08% visible range; exaggerates micro-moves
+    var halfRange = base * 0.0008;
     if (!halfRange) halfRange = 1;
     function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
-    // Decimate to 250ms keyframes for smooth Catmull-Rom (avoids 60fps staircase)
+    // Decimate to 250ms keyframes for smooth Catmull-Rom
     var dec = [];
     var lastKT = -Infinity, lastKY = null;
     for (var di = 0; di <= lastVI; di++) {{
@@ -4109,8 +4126,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
         lastKT = _t; lastKY = _v;
       }}
     }}
-    // Always include boundary point fused to orb gap
-    dec.push({{ x: tx(trail[lastVI].t), y: H/2 }});
+    // Terminal point: exactly at gap boundary, fused to orb at H/2
+    dec.push({{ x: W/2 - orbGap, y: H/2 }});
     if (dec.length < 2) return;
 
     // Y-axis labels
