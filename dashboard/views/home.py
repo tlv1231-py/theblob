@@ -2272,39 +2272,50 @@ body::after {{
 .card-target-lock::before {{ top:2px; left:2px; border-width:2px 0 0 2px; }}
 .card-target-lock::after  {{ bottom:2px; right:2px; border-width:0 2px 2px 0; }}
 
-/* ── Phase 2: Damage blink — binary steps, pure 8-bit ── */
+/* ── Phase 2: Damage blink — binary on/off, pure 8-bit ── */
 @keyframes card-hit-blink {{
-  0%, 100% {{ filter:brightness(1) saturate(1); }}
-  50%      {{ filter:brightness(18) saturate(0); }}
+  0%,100% {{ filter:brightness(1) saturate(1); opacity:1; }}
+  50%     {{ filter:brightness(20) saturate(0); opacity:1; }}
 }}
-/* 5 hard blinks over 400ms — steps(2) makes each blink instant on/off */
 .pos-card-hit {{ animation:card-hit-blink .08s steps(2,end) 5 forwards; }}
 
-/* ── Phase 3: Arcade destroy — pure vertical crush, no scaleX (avoid clip) ── */
-@keyframes card-arcade-destroy {{
-  0%   {{ transform:scaleY(1);   filter:brightness(5) saturate(0); opacity:1; }}
-  20%  {{ transform:scaleY(.55); filter:brightness(14) saturate(0); opacity:1; }}
-  38%  {{ transform:scaleY(.18); filter:brightness(26) saturate(0); opacity:1; }}
-  52%  {{ transform:scaleY(.04); filter:brightness(44); opacity:1; }}
-  64%  {{ transform:scaleY(0);   filter:brightness(60); opacity:1; }}
-  100% {{ transform:scaleY(0);   filter:brightness(0);  opacity:0; }}
+/* ── Phase 3: 8-bit destroy — brightness blinks then INSTANT hard-cut vanish ── */
+/* No scaleY, no wipe, no motion — just flash then gone */
+@keyframes card-8bit-destroy {{
+  0%   {{ filter:brightness(1);              opacity:1; }}
+  14%  {{ filter:brightness(20) saturate(0); opacity:1; }}
+  28%  {{ filter:brightness(1.2);            opacity:1; }}
+  42%  {{ filter:brightness(24) saturate(0); opacity:1; }}
+  56%  {{ filter:brightness(1);              opacity:1; }}
+  72%  {{ filter:brightness(36) saturate(0); opacity:1; }}
+  88%  {{ filter:brightness(60);             opacity:1; }}
+  /* hard cut — single step from visible to gone */
+  89%  {{ filter:brightness(0);              opacity:0; }}
+  100% {{ opacity:0; }}
 }}
 /* Placeholder that holds the dead tile's space in the flex column */
 .pos-card-ghost-space {{
-  flex-shrink:0; pointer-events:none;
-  overflow:hidden;
-  background:transparent;
+  flex-shrink:0; pointer-events:none; overflow:hidden; background:transparent;
 }}
-/* Ghost collapses with smooth ease once all exits are done */
+/* Ghost collapses in quantized steps — feels like a board clearing, not a scroll */
 .pos-card-ghost-collapsing {{
-  transition:height .38s cubic-bezier(.4,0,1,1) !important;
+  transition:height .32s steps(7,end) !important;
   height:0 !important;
 }}
+/* Remaining tiles glitch-snap when they receive new space */
+@keyframes tile-shuffle-land {{
+  0%   {{ transform:translateX(-4px); filter:brightness(2) saturate(0); }}
+  25%  {{ transform:translateX(3px);  filter:brightness(3) saturate(0); }}
+  50%  {{ transform:translateX(-2px); filter:brightness(1.5); }}
+  75%  {{ transform:translateX(1px);  filter:brightness(1.2); }}
+  100% {{ transform:translateX(0);    filter:brightness(1); }}
+}}
+.pos-card-shuffle-land {{ animation:tile-shuffle-land .18s steps(4,end) forwards; }}
 .pos-card-exiting,
 .pos-card-exit-target,
 .pos-card-exit-stop,
 .pos-card-exit-timeout,
-.pos-card-exit-rev     {{ animation:card-arcade-destroy .65s steps(12,end) forwards; transform-origin:center; }}
+.pos-card-exit-rev     {{ animation:card-8bit-destroy .58s steps(8,end) forwards; }}
 /* ── PnL ghost — video-game exit ── */
 /* ── P&L ghost — 80s arcade score-popup, floats left of tile column ── */
 @keyframes pnl-ghost-pop {{
@@ -6499,27 +6510,42 @@ window.addEventListener('resize', function() {{
     }}
     setTimeout(_buildEquityMap, 500);
 
-    // ── Batch ghost collapse — waits for all in-flight exits ──────────────────
+    // ── Batch ghost collapse — debounced, all exits finish before any reflow ──
     var _ghostsToCollapse = [];
     var _ghostCollapseTimer = null;
     function _queueGhostCollapse(ghost) {{
       _ghostsToCollapse.push(ghost);
       clearTimeout(_ghostCollapseTimer);
-      // Debounce: 1.8s after the LAST exit trigger before anything reflows
+      // 1.8s after the LAST exit trigger before any tile reflows
       _ghostCollapseTimer = setTimeout(function() {{
         var batch = _ghostsToCollapse.splice(0);
+
+        // Step 1: glitch-snap ALL remaining live tiles (they're about to receive space)
+        var liveTiles = document.querySelectorAll(
+          '#pos-crypto-section .pos-card, #pos-equity-section .pos-card'
+        );
+        liveTiles.forEach(function(card) {{
+          card.classList.remove('pos-card-shuffle-land');
+          void card.offsetWidth;  // force reflow so animation restarts
+          card.classList.add('pos-card-shuffle-land');
+          setTimeout(function() {{ card.classList.remove('pos-card-shuffle-land'); }}, 250);
+        }});
+
+        // Step 2: collapse all ghosts simultaneously in quantized steps
         batch.forEach(function(g) {{
           if (!g.parentNode) return;
           var h = g.getBoundingClientRect().height;
-          g.style.height = h + 'px';       // explicit starting point for transition
+          g.style.height = h + 'px';
           requestAnimationFrame(function() {{
             g.classList.add('pos-card-ghost-collapsing');
           }});
         }});
+
+        // Step 3: remove ghost DOM nodes after collapse finishes (7 steps × ~46ms = ~320ms)
         setTimeout(function() {{
           batch.forEach(function(g) {{ if (g.parentNode) g.parentNode.removeChild(g); }});
           _updateOverlayWidth();
-        }}, 420);
+        }}, 360);
       }}, 1800);
     }}
 
@@ -6587,12 +6613,12 @@ window.addEventListener('resize', function() {{
         _spawnParticles(cx, cy, col);
         _spawnPnlGhost(r2, pnl, fullSym, exitPrice);
         el.classList.remove('pos-card-hit');
-        el.classList.add('pos-card-exit-stop');  // card-arcade-destroy (.65s)
+        el.classList.add('pos-card-exit-stop');  // card-8bit-destroy (.58s)
 
-        // Remove fixed overlay after animation
+        // Remove fixed overlay once animation hard-cuts to invisible
         setTimeout(function() {{
           if (el.parentNode) el.parentNode.removeChild(el);
-        }}, 700);
+        }}, 620);
       }}, 820);
 
       // Queue ghost placeholder for batch collapse (1.8s debounce from last exit)
