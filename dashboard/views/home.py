@@ -4089,15 +4089,23 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     window._navOrbCanvasX = W / 2;
     window._navOrbCanvasY = H / 2;
 
-    // base = most recent committed value; fixed halfRange = ±0.3%
-    var base      = trail[trail.length - 1].y;
-    var halfRange = base * 0.0008; // tighter scale = more vertical drama on small moves
-    var winStart  = nowMs - 30000;
-    // Window is 60s wide (±30s) so nowMs lands at W/2 (center = orb position)
+    var orbGap   = 32; // px clear of orb center
+    var winStart = nowMs - 30000;
     function tx(ms) {{ return (ms - winStart) / 60000 * W; }}
-    var _tyRaw = function(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }};
-    var gridPx = 3; // quantize to 3px rows — gives 8-bit staircase feel
-    function ty(v) {{ return Math.round(_tyRaw(v) / gridPx) * gridPx; }}
+
+    // Find last trail index that falls left of orbGap cutoff
+    var lastVisIdx = 0;
+    for (var vi = 0; vi < trail.length; vi++) {{
+      if (tx(trail[vi].t) >= W/2 - orbGap) break;
+      lastVisIdx = vi;
+    }}
+
+    // base = value AT the gap boundary (last visible point).
+    // That point maps to H/2, same as the orb — they're always visually connected.
+    // The orb leads the trail by ~orbGap pixels (a natural short delay).
+    var base      = trail[lastVisIdx].y;
+    var halfRange = base * 0.0008;
+    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
     // Y-axis price indicators — subtle, on-brand
     (function() {{
@@ -4124,36 +4132,38 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    // Map trail to canvas coords, clipped to stop short of the orb
-    var orbGap = 32; // px clear of orb center — keeps trail free of the dot and its rings
-    var mapped = [];
-    for (var i = 0; i < trail.length; i++) {{
-      var px = tx(trail[i].t);
-      if (px >= W/2 - orbGap) break; // stop before orb
-      mapped.push({{ x: px, y: ty(trail[i].y) }});
+    // Decimate trail: keep value-change transitions + one point per 250ms.
+    // Dense 60fps buffer would waste bezier passes — 250ms gives ~120 pts over 30s.
+    var dec = [];
+    var lastKeptT = -Infinity, lastKeptY = null;
+    for (var di = 0; di <= lastVisIdx; di++) {{
+      var _y = trail[di].y, _t = trail[di].t;
+      if (_y !== lastKeptY || (_t - lastKeptT) >= 250) {{
+        dec.push({{ x: tx(_t), y: ty(_y), rv: _y }});
+        lastKeptT = _t; lastKeptY = _y;
+      }}
+    }}
+    // Always include the exact last-visible point so right edge is precisely H/2
+    if (dec.length === 0 || dec[dec.length-1].rv !== trail[lastVisIdx].y) {{
+      dec.push({{ x: tx(trail[lastVisIdx].t), y: ty(trail[lastVisIdx].y), rv: trail[lastVisIdx].y }});
     }}
 
-    // Wall labels — dollar threshold (machine-independent), deduplicated per transition.
-    // Only fires at the leading edge of each value change, not every frame of the wall.
+    // Wall labels on decimated trail
     (function() {{
-      var minDollar = base * 0.001; // 0.1% of portfolio (~$59 on $59k)
+      var minDollar = base * 0.001;
       ctx.save();
       ctx.font = 'bold 9px Consolas,monospace';
       ctx.textBaseline = 'middle';
       var lastLabelX = -999;
-      for (var i = 1; i < trail.length; i++) {{
-        var dv = trail[i].y - trail[i-1].y;
+      for (var li = 1; li < dec.length; li++) {{
+        var dv = dec[li].rv - dec[li-1].rv;
         if (Math.abs(dv) < minDollar) continue;
-        // Only the leading edge: previous point must have been the same value as two-ago
-        // (i.e. trail[i] is the first frame at a new level)
-        if (i > 1 && trail[i-1].y !== trail[i-2].y) continue;
-        // Suppress if too close to previous label horizontally
-        if (mapped[i].x - lastLabelX < 30) continue;
-        lastLabelX = mapped[i].x;
+        if (dec[li].x - lastLabelX < 30) continue;
+        lastLabelX = dec[li].x;
         var sign = dv >= 0 ? '+' : '';
         var label = sign + '$' + Math.abs(dv).toFixed(0);
-        var lx = mapped[i].x + 5;
-        var ly = (mapped[i].y + mapped[i-1].y) / 2;
+        var lx = dec[li].x + 5;
+        var ly = (dec[li].y + dec[li-1].y) / 2;
         ctx.strokeStyle = dv >= 0 ? 'rgba(0,255,157,0.35)' : 'rgba(255,51,102,0.35)';
         ctx.lineWidth = 4; ctx.strokeText(label, lx, ly);
         ctx.fillStyle = dv >= 0 ? '#00ff9d' : '#ff3366';
@@ -4162,18 +4172,24 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    if (mapped.length < 2) return; // trail hasn't grown past orbGap yet
+    var mapped = dec;
+    if (mapped.length < 2) return;
 
-    // 8-bit staircase — horizontal then vertical, no diagonals.
-    // Jumps are instant discrete steps so there's no slope to "catch up."
-    // imageSmoothingEnabled=false keeps pixel edges crisp.
-    ctx.imageSmoothingEnabled = false;
+    // Catmull-Rom smooth curve — passes through all points, no retroactive reshape.
+    // Safe now: right edge is always stable at H/2 so historical shape never shifts.
     function _stroke(m) {{
       ctx.beginPath();
       ctx.moveTo(m[0].x, m[0].y);
-      for (var i = 1; i < m.length; i++) {{
-        ctx.lineTo(m[i].x, m[i-1].y); // horizontal at old level
-        ctx.lineTo(m[i].x, m[i].y);   // vertical snap to new level
+      for (var i = 0; i < m.length - 1; i++) {{
+        var p0 = m[Math.max(0, i-1)];
+        var p1 = m[i];
+        var p2 = m[i+1];
+        var p3 = m[Math.min(m.length-1, i+2)];
+        var cp1x = p1.x + (p2.x - p0.x) / 6;
+        var cp1y = p1.y + (p2.y - p0.y) / 6;
+        var cp2x = p2.x - (p3.x - p1.x) / 6;
+        var cp2y = p2.y - (p3.y - p1.y) / 6;
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }}
     }}
 
