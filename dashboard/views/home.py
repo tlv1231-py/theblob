@@ -1228,14 +1228,14 @@ body::after {{
   text-shadow:0 0 8px rgba(255,153,0,.7); white-space:nowrap;
 }}
 /* ── Wallet slot ── */
-.ss-wallet-row {{ display:flex; justify-content:center; }}
+.ss-wallet-row {{ display:flex; justify-content:center; align-items:center; height:100%; }}
 .ss-wallet-anchor {{ position:relative; display:inline-flex; align-items:baseline; }}
 .ss-wallet-val {{
-  font-family:'Press Start 2P','Orbitron',Consolas,monospace; font-size:14px; font-weight:400;
+  font-family:'Press Start 2P','Orbitron',Consolas,monospace; font-size:22px; font-weight:400;
   letter-spacing:.03em; font-variant-numeric:tabular-nums;
   color:#fff; transition:color .4s ease, text-shadow .4s ease;
   text-shadow:0 0 20px rgba(255,255,255,.7), 0 0 6px rgba(255,255,255,.4), 0 2px 0 rgba(0,0,0,.8);
-  white-space:nowrap;
+  white-space:nowrap; line-height:1;
 }}
 .ss-wallet-val.gain {{ color:#00ff9d; text-shadow:0 0 28px rgba(0,255,157,1),0 0 10px rgba(0,255,157,.6),0 2px 0 rgba(0,0,0,.8); }}
 .ss-wallet-val.loss {{ color:#ff3366; text-shadow:0 0 28px rgba(255,51,102,1),0 0 10px rgba(255,51,102,.6),0 2px 0 rgba(0,0,0,.8); }}
@@ -1266,6 +1266,22 @@ body::after {{
   padding-top:4px;
   z-index:99999;
 }}
+/* ── Countdown panel ── */
+#cd-panel {{
+  width:320px; margin:0 auto;
+  background:rgba(4,0,16,.55); backdrop-filter:blur(20px);
+  border:1px solid rgba(148,0,255,.1); border-radius:2px;
+  padding:8px 14px 6px;
+  font-family:Consolas,'Courier New',monospace;
+  pointer-events:none;
+}}
+.cd-row {{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding:3px 0; border-bottom:1px solid rgba(255,255,255,.04);
+}}
+.cd-row:last-child {{ border-bottom:none; }}
+.cd-label {{ font-size:8px; letter-spacing:.14em; color:rgba(200,150,255,.5); text-transform:uppercase; }}
+.cd-time  {{ font-size:10px; letter-spacing:.06em; color:rgba(255,255,255,.7); font-variant-numeric:tabular-nums; }}
 .callout-card {{
   display:flex; align-items:baseline; gap:7px;
   width:320px; padding:10px 16px;
@@ -2275,7 +2291,6 @@ body::after {{
 <!-- flex child 1: topbar -->
 <div class="topbar">
   <span class="wordmark">THE BLOB</span>
-  <div class="pulse-dot"></div>
   <div id="wallet-selector" onclick="_cycleWallet()" title="Switch portfolio">
     <span id="wallet-mode-icon">◈</span>
     <span id="wallet-mode-label">PAPER</span>
@@ -2360,8 +2375,6 @@ body::after {{
     </div>
   </div>
   <div class="strat-slot" id="ss-positions">
-    <div class="ss-icon">◈</div>
-    <div class="ss-name">PORTFOLIO</div>
     <div class="ss-wallet-row">
       <div class="ss-wallet-anchor">
         <span class="ss-wallet-val" id="ss-wallet-val">—</span>
@@ -2387,6 +2400,12 @@ body::after {{
 </div>
 <!-- ── Callout rail — height:0 sibling; cards overflow downward from HUD bottom ── -->
 <div id="callout-rail"></div>
+<div id="cd-panel">
+  <div class="cd-row"><span class="cd-label">MARKET OPEN</span><span class="cd-time" id="cd-open">—</span></div>
+  <div class="cd-row"><span class="cd-label">MARKET CLOSE</span><span class="cd-time" id="cd-close">—</span></div>
+  <div class="cd-row"><span class="cd-label">PIPELINE</span><span class="cd-time" id="cd-pipe">—</span></div>
+  <div class="cd-row"><span class="cd-label">NEXT REBALANCE</span><span class="cd-time" id="cd-rebal">—</span></div>
+</div>
 
 <div id="daily-bar" style="display:none">
   <div id="daily-bar-fill" style="width:0%"></div>
@@ -3316,7 +3335,7 @@ function drawPulse() {{
         ctx.restore();
       }}
       if (_comboFlash) {{
-        _comboFlash.age += 0.018;
+        _comboFlash.age += 0.004;
         var fa = Math.max(0, 1-_comboFlash.age*1.4);
         ctx.save();
         ctx.font='bold 8px Consolas';
@@ -5236,6 +5255,49 @@ window.addEventListener('resize', function() {{
       }}
       _tickClock();
       setInterval(_tickClock, 1000);
+    }})();
+
+    // ── Countdown panel ──────────────────────────────────────────────────────
+    (function() {{
+      var ET = 'America/New_York';
+      function _etNow() {{ return new Date(new Date().toLocaleString('en-US', {{timeZone:ET}})); }}
+      function _nextET(h, m) {{
+        var n = _etNow(), t = new Date(n);
+        t.setHours(h, m, 0, 0);
+        if (t <= n) t.setDate(t.getDate() + 1);
+        // Skip weekends
+        while (t.getDay() === 0 || t.getDay() === 6) t.setDate(t.getDate() + 1);
+        return (t - n) / 1000; // seconds from now
+      }}
+      function _fmtCd(sec) {{
+        if (sec <= 0) return 'NOW';
+        var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+        if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm';
+        if (m > 0) return m + 'm ' + String(s).padStart(2,'0') + 's';
+        return s + 's';
+      }}
+      function _tickCd() {{
+        var elOpen  = document.getElementById('cd-open');
+        var elClose = document.getElementById('cd-close');
+        var elPipe  = document.getElementById('cd-pipe');
+        var elRebal = document.getElementById('cd-rebal');
+        if (!elOpen) return;
+        var openSec  = _nextET(9,  30);
+        var closeSec = _nextET(16, 0);
+        var pipeSec  = _nextET(16, 5);
+        // Rebalance = same as pipeline (equity runs daily at 4:05pm ET)
+        var rebalSec = pipeSec;
+        elOpen.textContent  = _fmtCd(openSec);
+        elClose.textContent = _fmtCd(closeSec);
+        elPipe.textContent  = _fmtCd(pipeSec);
+        elRebal.textContent = _fmtCd(rebalSec);
+        // Highlight imminent events
+        [{{el:elOpen,s:openSec}},{{el:elClose,s:closeSec}},{{el:elPipe,s:pipeSec}}].forEach(function(x) {{
+          x.el.style.color = x.s < 300 ? '#ff9900' : x.s < 60 ? '#ff3366' : 'rgba(255,255,255,.7)';
+        }});
+      }}
+      _tickCd();
+      setInterval(_tickCd, 1000);
     }})();
 
     // Kick off the progress bar — inside IIFE where _tickProgress is in scope
