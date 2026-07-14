@@ -4078,14 +4078,17 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       if (!last || last.x !== nowIso) pts.push({{ x: nowIso, y: curNav }});
     }}
 
-    // Filter to visible window
+    // Filter to visible window; cap at nowMs+2s to reject server-clock-skew future points
     pts = pts.filter(function(p) {{
       var ms = new Date(p.x).getTime();
-      return ms >= winStart && ms <= winEnd;
+      return ms >= winStart && ms <= nowMs + 2000;
     }});
 
+    // Sort chronologically (defensive — heartbeat should already be ordered)
+    pts.sort(function(a, b) {{ return new Date(a.x) - new Date(b.x); }});
+
     // Guarantee a left-anchor so there is always a line, not just a dot.
-    // If no point exists before "now", inject one 19 min back at the known nav.
+    // If no point exists more than 2s before now, inject one near the left edge.
     var hasLeftPt = pts.some(function(p) {{ return new Date(p.x).getTime() < nowMs - 2000; }});
     if (!hasLeftPt && curNav) {{
       pts.unshift({{ x: new Date(winStart + 60000).toISOString(), y: curNav }});
@@ -7005,7 +7008,7 @@ window.addEventListener('resize', function() {{
             if (_flashTimeout) clearTimeout(_flashTimeout);
             _flashTimeout = setTimeout(function() {{
               if (el) {{ el.style.color = ''; el.style.textShadow = ''; }}
-            }}, 1800);
+            }}, 750); // matches rAF animation duration; combos use class-based color separately
           }}
         }}
         _prevWalletNav = nav;
