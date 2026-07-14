@@ -4055,75 +4055,49 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
+  // Dense in-memory trail — one point per rAF frame (~60/sec).
+  // Kept separate from _navHistory (sparse, persisted). No synthetic "now" point
+  // needed: last trail point is always <16ms old so the line is fused to the orb.
+  if (!window._navDenseTrail) window._navDenseTrail = [];
+
   window._drawNavCanvas = function() {{
-    _resize(); // keep sharp on resize
+    _resize();
     var W = _nc.width, H = _nc.height;
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    var history = window._navHistory || [];
-    // Use last committed NAV only — _navLiveVal animates 60fps and shifts base every frame,
-    // causing all historical points to jitter. _lastKnownNav only updates on real data push.
-    var curNav  = window._lastKnownNav;
-    if (!curNav && history.length === 0) return;
+    var curNav = window._lastKnownNav;
+    var nowMs  = Date.now();
 
-    var nowMs    = Date.now();
-    var halfWin  = 30 * 1000; // ±30s window — tight real-time view
-    var winStart = nowMs - halfWin;
-    var winEnd   = nowMs + halfWin;
-
-    // Include current nav as a synthetic "now" point
-    var pts = history.slice();
+    // Push one point this frame (only if we have a value)
     if (curNav) {{
-      var nowIso = new Date(nowMs).toISOString();
-      var last = pts[pts.length - 1];
-      if (!last || last.x !== nowIso) pts.push({{ x: nowIso, y: curNav }});
+      window._navDenseTrail.push({{ t: nowMs, y: curNav }});
+    }}
+    // Trim to 30s window
+    var cutoff = nowMs - 30000;
+    while (window._navDenseTrail.length > 1 && window._navDenseTrail[0].t < cutoff) {{
+      window._navDenseTrail.shift();
     }}
 
-    // Filter to visible window; cap at nowMs+2s to reject server-clock-skew future points
-    pts = pts.filter(function(p) {{
-      var ms = new Date(p.x).getTime();
-      return ms >= winStart && ms <= nowMs + 2000;
-    }});
-
-    // Sort chronologically
-    pts.sort(function(a, b) {{ return new Date(a.x) - new Date(b.x); }});
-
-    // Inject a left-anchor if there's nothing to the left of "now".
-    // Runs every frame until real data fills the window — scrolls off naturally after 5 min.
-    var hasLeftPt = pts.some(function(p) {{ return new Date(p.x).getTime() < nowMs - 1000; }});
-    if (!hasLeftPt && curNav) {{
-      pts.unshift({{ x: new Date(winStart + 2000).toISOString(), y: curNav }});
-    }}
-
-    // Orb always at canvas center (current time = W/2)
-    window._navOrbCanvasX = W / 2;
-    window._navOrbCanvasY = H / 2; // refined below after ty() is defined
-
-    if (pts.length < 2) {{
-      if (curNav) {{
-        ctx.beginPath(); ctx.arc(W/2, H/2, 5, 0, Math.PI*2);
-        ctx.fillStyle = '#ff00cc'; ctx.fill();
-      }}
+    var trail = window._navDenseTrail;
+    if (trail.length < 2) {{
+      window._navOrbCanvasX = W / 2;
+      window._navOrbCanvasY = H / 2;
       return;
     }}
 
-    // Y range — fixed scale: ±0.3% of portfolio value.
-    // Never rescales so the chart cruises at constant pace whether stationary or moving.
-    var base = curNav || pts[pts.length-1].y;
+    window._navOrbCanvasX = W / 2;
+    window._navOrbCanvasY = H / 2;
+
+    // base = most recent committed value; fixed halfRange = ±0.3%
+    var base      = trail[trail.length - 1].y;
     var halfRange = base * 0.003;
+    var winStart  = nowMs - 30000;
 
-    // Coordinate mappers — current time at W/2, curNav always at H/2
-    function tx(isoStr) {{
-      var ms = new Date(isoStr).getTime();
-      return (ms - winStart) / (winEnd - winStart) * W;
-    }}
-    function ty(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
-    window._navOrbCanvasY = H / 2; // orb always at canvas center
+    function tx(ms) {{ return (ms - winStart) / 30000 * W; }}
+    function ty(v)  {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
 
-    var mapped = pts.map(function(p) {{ return {{ x: tx(p.x), y: ty(p.y) }}; }});
-
-    // Y-axis price indicators — very subtle, on-brand, 3 reference levels
+    // Y-axis price indicators — subtle, on-brand
     (function() {{
       var fmt = function(v) {{
         if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
@@ -4137,9 +4111,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.font = '8px Consolas,monospace';
       ctx.textBaseline = 'bottom';
       for (var li = 0; li < levels.length; li++) {{
-        var lvl = levels[li];
-        var val = base + halfRange * lvl;
-        var yy = ty(val);
+        var val = base + halfRange * levels[li];
+        var yy  = ty(val);
         if (yy < 6 || yy > H - 6) continue;
         ctx.strokeStyle = 'rgba(255,0,204,0.07)';
         ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
@@ -4149,63 +4122,61 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.restore();
     }})();
 
-    // Straight polyline — no bezier. Bezier midpoints retroactively reshape historical
-    // segments as new points arrive, making the recent trail morph. lineTo is immutable.
-    function _strokeSmooth(m) {{
+    // Map trail to canvas coords
+    var mapped = [];
+    for (var i = 0; i < trail.length; i++) {{
+      mapped.push({{ x: tx(trail[i].t), y: ty(trail[i].y) }});
+    }}
+
+    // Polyline — straight segments, no bezier, nothing retroactively reshapes
+    function _stroke(m) {{
       ctx.beginPath();
       ctx.moveTo(m[0].x, m[0].y);
       for (var i = 1; i < m.length; i++) ctx.lineTo(m[i].x, m[i].y);
     }}
 
-    // Trail-to-orb gradient: transparent at left tail → bright at orb (W/2)
-    // This makes the dot the visual leader and the line its vaporwave wake
-    var trailX0 = mapped[0].x;
-    var trailX1 = W / 2; // orb is always here
-    function _trailGrad(r, g, b, aTail, aOrb) {{
-      var gr = ctx.createLinearGradient(trailX0, 0, trailX1, 0);
-      gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + aTail + ')');
-      gr.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',' + ((aTail+aOrb)/2) + ')');
-      gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',' + aOrb  + ')');
+    var x0 = mapped[0].x;
+    var x1 = W; // right edge = orb
+    function _tg(r, g, b, a0, a1) {{
+      var gr = ctx.createLinearGradient(x0, 0, x1, 0);
+      gr.addColorStop(0,   'rgba(' + r + ',' + g + ',' + b + ',' + a0 + ')');
+      gr.addColorStop(0.6, 'rgba(' + r + ',' + g + ',' + b + ',' + ((a0+a1)/2) + ')');
+      gr.addColorStop(1,   'rgba(' + r + ',' + g + ',' + b + ',' + a1 + ')');
       return gr;
     }}
 
-    // Under-trail fill — fades left
-    _strokeSmooth(mapped);
+    // Under-fill
+    _stroke(mapped);
     ctx.lineTo(mapped[mapped.length-1].x, H);
     ctx.lineTo(mapped[0].x, H);
     ctx.closePath();
-    var fillGrad = ctx.createLinearGradient(trailX0, 0, trailX1, 0);
-    fillGrad.addColorStop(0, 'rgba(255,0,204,0)');
-    fillGrad.addColorStop(1, 'rgba(255,0,204,0.14)');
-    ctx.fillStyle = fillGrad;
-    ctx.fill();
+    var fg = ctx.createLinearGradient(x0, 0, x1, 0);
+    fg.addColorStop(0, 'rgba(255,0,204,0)');
+    fg.addColorStop(1, 'rgba(255,0,204,0.14)');
+    ctx.fillStyle = fg; ctx.fill();
 
-    // Outer bloom — vanishes at tail
-    _strokeSmooth(mapped);
-    ctx.strokeStyle = _trailGrad(255,0,204, 0, 0.12);
-    ctx.lineWidth = 32; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.stroke();
+    // Outer bloom
+    _stroke(mapped);
+    ctx.strokeStyle = _tg(255,0,204, 0, 0.12);
+    ctx.lineWidth = 32; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
     // Mid glow
-    _strokeSmooth(mapped);
-    ctx.strokeStyle = _trailGrad(255,0,204, 0, 0.25);
-    ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.stroke();
+    _stroke(mapped);
+    ctx.strokeStyle = _tg(255,0,204, 0, 0.25);
+    ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
-    // Core line — fades from near-invisible to bright at orb
-    _strokeSmooth(mapped);
-    ctx.strokeStyle = _trailGrad(255,0,204, 0.05, 1);
-    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.stroke();
+    // Core
+    _stroke(mapped);
+    ctx.strokeStyle = _tg(255,0,204, 0.04, 1);
+    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
-    // White hot center — only in the rightmost 30% of trail
-    var hotGr = ctx.createLinearGradient(trailX0 + (trailX1 - trailX0) * 0.7, 0, trailX1, 0);
-    hotGr.addColorStop(0, 'rgba(255,255,255,0)');
-    hotGr.addColorStop(1, 'rgba(255,255,255,0.7)');
-    _strokeSmooth(mapped);
-    ctx.strokeStyle = hotGr;
-    ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.stroke();
+    // White hot — rightmost 25% only
+    var hg = ctx.createLinearGradient(x0 + (x1-x0)*0.75, 0, x1, 0);
+    hg.addColorStop(0, 'rgba(255,255,255,0)');
+    hg.addColorStop(1, 'rgba(255,255,255,0.7)');
+    _stroke(mapped);
+    ctx.strokeStyle = hg;
+    ctx.lineWidth = 0.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
   }};
 
   // rAF loop — redraws every frame so the line scrolls forward at 60fps
