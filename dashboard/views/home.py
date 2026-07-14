@@ -1197,6 +1197,10 @@ body::after {{
 .tb-stat {{ display:flex; flex-direction:column; gap:0; padding:0 12px; flex-shrink:0; }}
 .tb-stat-label {{ font-size:6.5px; letter-spacing:.22em; color:#3a1a4a; text-transform:uppercase; line-height:1; }}
 .tb-stat-val {{ font-size:12px; font-weight:700; letter-spacing:-.02em; line-height:1.4; }}
+.tb-hg {{ display:flex; flex-direction:column; gap:2px; padding:0 10px; flex-shrink:0; border-left:1px solid #1a0028; }}
+.tb-hg-label {{ font-size:6px; letter-spacing:.2em; color:#3a1a4a; text-transform:uppercase; line-height:1; }}
+.tb-hg-val {{ font-size:10px; font-weight:700; letter-spacing:.02em; line-height:1.3; color:rgba(255,255,255,.38); font-family:Consolas,monospace; }}
+.tb-hg-row {{ display:flex; align-items:center; gap:4px; }}
 .spacer {{ flex:1; }}
 .hint {{ font-size:8px; letter-spacing:.1em; color:#2a003d; white-space:nowrap; }}
 
@@ -2470,58 +2474,52 @@ body::after {{
 
 <!-- flex child 1: topbar -->
 <div class="topbar">
-  {_BLOB_SVG}
+  <div style="align-self:flex-start;display:flex;line-height:0;flex-shrink:0">{_BLOB_SVG}</div>
   <div id="wallet-selector" onclick="_cycleWallet()" title="Switch portfolio">
     <span id="wallet-mode-icon">◈</span>
     <span id="wallet-mode-label">PAPER</span>
     <span id="wallet-mode-chevron">▾</span>
   </div>
-  <div id="strat-health" title="Strategy health">
-    <div id="strat-health-dot"></div>
-    <span id="strat-health-label">—</span>
+  <div class="tb-hg" style="border-left:none">
+    <span class="tb-hg-label">STRATEGY</span>
+    <div class="tb-hg-row">
+      <div id="strat-health-dot"></div>
+      <span id="strat-health-label" class="tb-hg-val">—</span>
+    </div>
+  </div>
+  <div class="tb-hg">
+    <span class="tb-hg-label">NET DATA</span>
+    <div class="tb-hg-row">
+      <span class="sysh-dot" id="sysh-mktdata"></span>
+      <span class="tb-hg-val" id="sysh-mktdata-val">—</span>
+    </div>
+  </div>
+  <div class="tb-hg">
+    <span class="tb-hg-label">DATABASE</span>
+    <div class="tb-hg-row">
+      <span class="sysh-dot" id="sysh-db"></span>
+      <span class="tb-hg-val" id="sysh-db-val">—</span>
+    </div>
+  </div>
+  <div class="tb-hg">
+    <span class="tb-hg-label">HEARTBEAT</span>
+    <span class="tb-hg-val" id="sysh-hb">—</span>
+  </div>
+  <div class="tb-hg">
+    <span class="tb-hg-label">LATENCY</span>
+    <span class="tb-hg-val" id="sysh-lat">—</span>
+  </div>
+  <div class="tb-hg">
+    <span class="tb-hg-label">API REQ/MIN</span>
+    <span class="tb-hg-val" id="sysh-rpm">—</span>
+  </div>
+  <div class="tb-hg">
+    <span class="tb-hg-label">CLOCK DRIFT</span>
+    <span class="tb-hg-val" id="sysh-drift">—</span>
   </div>
   <div class="spacer"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">NAV</span>
-    <span class="tb-stat-val" style="color:#ff00cc">{nav_str}</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">return</span>
-    <span class="tb-stat-val" style="color:{ret_color}">{ret_str}</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">day P&amp;L</span>
-    <span class="tb-stat-val" style="color:{'#00ff9d' if day_pnl >= 0 else '#ff3366'}">{dpnl_str}</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">sharpe</span>
-    <span class="tb-stat-val" style="color:#00e5ff">{sharpe}</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">SPY</span>
-    <span class="tb-stat-val" style="color:#00e5ff">{spy_latest}</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">QQQ</span>
-    <span class="tb-stat-val" style="color:#9400ff">{qqq_latest}</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div class="tb-stat">
-    <span class="tb-stat-label">win rate</span>
-    <span class="tb-stat-val" id="hdr-winrate" style="color:#00e5ff">—</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div id="streak-chip">
-    <span class="streak-label">streak</span>
-    <span id="streak-val" class="streak-val" style="color:#3a1a5a">—</span>
-  </div>
-  <div class="tb-sep"></div>
-  <div id="runner-health">
+  <!-- hidden elements kept for JS read-backs -->
+  <div id="runner-health" style="display:none">
     <div id="runner-dot" class="warn"></div>
     <div>
       <div id="runner-age" style="color:#3a1a5a">—</div>
@@ -2529,7 +2527,8 @@ body::after {{
       <div id="runner-countdown" style="font:700 8px Consolas,monospace;letter-spacing:.06em;color:#2a1040">next: —</div>
     </div>
   </div>
-  <div class="tb-sep"></div>
+  <span id="hdr-winrate" style="display:none">—</span>
+  <span id="streak-val" style="display:none">—</span>
   <button id="fs-btn" onclick="_toggleFullscreen()" title="Fullscreen (borderless)" style="
     background:none;border:1px solid #2a003d;color:#3a1a5a;cursor:pointer;
     font:700 8px Consolas,monospace;letter-spacing:.12em;padding:3px 7px;
@@ -2537,20 +2536,7 @@ body::after {{
     flex-shrink:0;text-transform:uppercase;
   ">⛶ FS</button>
 </div>
-<!-- ── System health strip — sits ABOVE HUD ── -->
-<div id="sys-health-bar">
-  <div class="sysh-item"><span class="sysh-dot" id="sysh-mktdata"></span><span class="sysh-lbl">MKT DATA</span><span class="sysh-val" id="sysh-mktdata-val">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-dot" id="sysh-db"></span><span class="sysh-lbl">DB</span><span class="sysh-val" id="sysh-db-val">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">HEARTBEAT</span><span class="sysh-val" id="sysh-hb">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">LATENCY</span><span class="sysh-val" id="sysh-lat">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">API REQ/MIN</span><span class="sysh-val" id="sysh-rpm">—</span></div>
-  <div class="sysh-sep"></div>
-  <div class="sysh-item"><span class="sysh-lbl">CLK DRIFT</span><span class="sysh-val" id="sysh-drift">—</span></div>
-</div>
+<!-- sys-health-bar retired — all indicators now live in topbar -->
 <!-- ── Stratagem HUD bar ── -->
 <div id="strat-bar">
   <div class="strat-slot" id="ss-runner">
@@ -4408,9 +4394,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     function _stroke(pts) {{
       ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
       for(var i=0;i<pts.length-1;i++) {{
-        var p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
-        ctx.bezierCurveTo(p1.x+(p2.x-p0.x)/6,p1.y+(p2.y-p0.y)/6,
-          p2.x-(p3.x-p1.x)/6,p2.y-(p3.y-p1.y)/6,p2.x,p2.y);
+        ctx.lineTo(pts[i+1].x, pts[i].y);   // hold horizontal
+        ctx.lineTo(pts[i+1].x, pts[i+1].y); // snap vertical
       }}
     }}
 
@@ -4440,9 +4425,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       {{w:1.6,a:1.00}},
     ];
     for (var si = 0; si < n - 1; si++) {{
-      var _p0 = m[Math.max(0,si-1)], _p1 = m[si], _p2 = m[si+1], _p3 = m[Math.min(n-1,si+2)];
-      var _cp1x = _p1.x+(_p2.x-_p0.x)/6, _cp1y = _p1.y+(_p2.y-_p0.y)/6;
-      var _cp2x = _p2.x-(_p3.x-_p1.x)/6, _cp2y = _p2.y-(_p3.y-_p1.y)/6;
+      var _p1 = m[si], _p2 = m[si+1];
       var _dy   = _p2.y - _p1.y;
       var _rgb  = _segRGB(_dy);
       // Comet fade: oldest segment = 15% opacity, tip = 100%
@@ -4451,18 +4434,20 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       _passes.forEach(function(pass) {{
         ctx.beginPath();
         ctx.moveTo(_p1.x, _p1.y);
-        ctx.bezierCurveTo(_cp1x, _cp1y, _cp2x, _cp2y, _p2.x, _p2.y);
+        ctx.lineTo(_p2.x, _p1.y);   // hold horizontal
+        ctx.lineTo(_p2.x, _p2.y);   // snap vertical
         ctx.strokeStyle = 'rgba('+_rgb+','+(pass.a * _fade * _tip)+')';
         ctx.lineWidth   = pass.w;
-        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
         ctx.stroke();
       }});
-      // White highlight spine (always, for the core readability)
+      // White highlight spine
       ctx.beginPath();
       ctx.moveTo(_p1.x, _p1.y);
-      ctx.bezierCurveTo(_cp1x, _cp1y, _cp2x, _cp2y, _p2.x, _p2.y);
+      ctx.lineTo(_p2.x, _p1.y);
+      ctx.lineTo(_p2.x, _p2.y);
       ctx.strokeStyle = 'rgba(255,245,255,'+(0.5 * _fade * _tip)+')';
-      ctx.lineWidth = 0.65; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.lineWidth = 0.65; ctx.lineJoin='miter'; ctx.lineCap='square';
       ctx.stroke();
     }}
 
@@ -7784,18 +7769,31 @@ window.addEventListener('resize', function() {{
         if (dbDot) dbDot.className = 'sysh-dot ' + (_dbOk ? 'ok' : 'dead');
         if (dbVal) dbVal.textContent = _dbOk ? 'OK' : 'ERR';
 
-        // Heartbeat (runner age) — reuse runner-age text
+        // Heartbeat (runner age) — reuse runner-age text with conditional color
         var hbEl = document.getElementById('runner-age');
         var syshHb = document.getElementById('sysh-hb');
-        if (syshHb && hbEl) syshHb.textContent = hbEl.textContent || '—';
+        if (syshHb && hbEl) {{
+          var _hbTxt = hbEl.textContent || '—';
+          syshHb.textContent = _hbTxt;
+          var _hbMins = _hbTxt === '<1m' ? 0 : parseFloat(_hbTxt);
+          syshHb.style.color = isNaN(_hbMins) ? '' : _hbMins < 5 ? '#00ff9d' : _hbMins < 30 ? '#ffaa00' : '#ff3366';
+        }}
 
         // Latency
         var latEl = document.getElementById('sysh-lat');
-        if (latEl) latEl.textContent = _lastFetchLatency !== null ? _lastFetchLatency + 'ms' : '—';
+        if (latEl) {{
+          var _lat = _lastFetchLatency;
+          latEl.textContent = _lat !== null ? _lat + 'ms' : '—';
+          latEl.style.color = _lat === null ? '' : _lat < 200 ? '#00ff9d' : _lat < 600 ? '#ffaa00' : '#ff3366';
+        }}
 
         // API req/min
         var rpmEl = document.getElementById('sysh-rpm');
-        if (rpmEl) rpmEl.textContent = _apiReqTs.length + '/min';
+        if (rpmEl) {{
+          var _rpm = _apiReqTs.length;
+          rpmEl.textContent = _rpm + '/min';
+          rpmEl.style.color = _rpm < 5 ? '#ff3366' : _rpm < 20 ? '#ffaa00' : '#00ff9d';
+        }}
 
         // Clock drift: compare extrapolated DB time to system clock
         var driftEl = document.getElementById('sysh-drift');
