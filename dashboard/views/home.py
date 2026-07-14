@@ -4055,23 +4055,45 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Nav canvas now drives off portDates/portValues — the real historical equity curve.
-  // Orb sits at the right edge = "today". Line is the full paper trading track record.
+  // Scroll-to-zoom: how many data points to show (default = all).
+  // Scroll up = zoom in (fewer points), scroll down = zoom out (more).
+  window._navZoomPts = portDates ? portDates.length : 30;
+  (function() {{
+    var ma = document.getElementById('main-area');
+    if (!ma) return;
+    ma.addEventListener('wheel', function(e) {{
+      e.preventDefault();
+      e.stopPropagation();
+      var total = portDates ? portDates.length : 1;
+      var delta = e.deltaY > 0 ? 1 : -1; // scroll down = more history
+      window._navZoomPts = Math.max(2, Math.min(total, (window._navZoomPts || total) + delta * Math.max(1, Math.round((window._navZoomPts||total)*0.1))));
+    }}, {{ passive: false }});
+  }})();
+
+  // Nav canvas drives off portDates/portValues — real historical equity curve.
+  // Orb always at (W/2, H/2). Scroll wheel controls how many days are visible.
   window._drawNavCanvas = function() {{
     _resize();
     var W = _nc.width, H = _nc.height;
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    var dates  = portDates;   // string dates e.g. '2026-05-29'
-    var values = portValues;  // float portfolio values
-    if (!dates || dates.length < 2) {{
-      window._navOrbCanvasX = W - 24;
+    var allDates  = portDates;
+    var allValues = portValues;
+    if (!allDates || allDates.length < 2) {{
+      window._navOrbCanvasX = W / 2;
       window._navOrbCanvasY = H / 2;
       return;
     }}
 
-    var orbGap = 24; // px gap between line tip and orb center (orb lives at W/2)
+    // Slice to visible window (zoom) — always pinned to latest point on right
+    var total  = allDates.length;
+    var nShow  = Math.max(2, Math.min(total, Math.round(window._navZoomPts || total)));
+    var startI = total - nShow;
+    var dates  = allDates.slice(startI);
+    var values = allValues.slice(startI);
+
+    var orbGap = 24; // px gap between line tip and orb center (orb at W/2)
     var n = dates.length;
 
     // X: map history into the LEFT half [0, W/2 - orbGap]. Orb stays at W/2 (center).
@@ -4188,6 +4210,14 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     _stroke(mapped);
     ctx.strokeStyle = hg; ctx.lineWidth = 0.8;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+
+    // Breathing dot at line tip — animates 60fps to make chart feel live
+    var pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
+    var tipX = mapped[n-1].x, tipY = mapped[n-1].y;
+    ctx.beginPath(); ctx.arc(tipX, tipY, 4 + pulse * 3, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + pulse * 0.5) + ')'; ctx.fill();
+    ctx.beginPath(); ctx.arc(tipX, tipY, 10 + pulse * 8, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,0,204,' + (0.15 + pulse * 0.2) + ')'; ctx.fill();
   }};
 
   // rAF loop — redraws every frame so the line scrolls forward at 60fps
