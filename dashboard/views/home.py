@@ -810,6 +810,53 @@ def _build_daw_html(data: dict) -> str:
     _pnl_str       = f'{_pnl_sign}${abs(_total_pnl):,.0f}'
     _pnl_pct_str   = f'{_total_pnl_pct:+.2f}% since $100K start'
 
+    # ── Blob sprite SVG (defined as a plain string to avoid f-string brace escaping) ──
+    _BLOB_SVG = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 38" width="28" height="33"'
+        ' overflow="visible" style="display:block;flex-shrink:0">'
+        '<defs>'
+        '<radialGradient id="bs-bd" cx="36%" cy="25%" r="74%">'
+        '<stop offset="0%" stop-color="#FFCAF0"/>'
+        '<stop offset="22%" stop-color="#FF5ECB"/>'
+        '<stop offset="58%" stop-color="#FF0A8A"/>'
+        '<stop offset="100%" stop-color="#8A0050"/>'
+        '</radialGradient>'
+        '<radialGradient id="bs-gg" cx="50%" cy="50%" r="50%">'
+        '<stop offset="0%" stop-color="#FF0A8A" stop-opacity="0.55"/>'
+        '<stop offset="100%" stop-color="#FF0A8A" stop-opacity="0"/>'
+        '</radialGradient>'
+        '<filter id="bs-gf" x="-80%" y="-80%" width="260%" height="260%">'
+        '<feGaussianBlur stdDeviation="3"/>'
+        '</filter>'
+        '</defs>'
+        '<style>'
+        '@keyframes bs-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}'
+        '@keyframes bs-breathe{0%,100%{transform:scale(1,1)}45%{transform:scale(1.03,.975)}80%{transform:scale(.985,1.02)}}'
+        '@keyframes bs-blink{0%,87%,100%{transform:scaleY(1)}92%{transform:scaleY(.07)}}'
+        '@keyframes bs-gp{0%,100%{opacity:.22}50%{opacity:.48}}'
+        '#bs-g{animation:bs-float 3.8s ease-in-out infinite,bs-breathe 3.1s ease-in-out infinite;transform-box:fill-box;transform-origin:center}'
+        '.bs-eye{animation:bs-blink 5.5s ease-in-out infinite;transform-box:fill-box;transform-origin:center}'
+        '#bs-hl{animation:bs-gp 2.4s ease-in-out infinite}'
+        '</style>'
+        '<ellipse id="bs-hl" cx="16" cy="22" rx="15" ry="17" fill="url(#bs-gg)"/>'
+        '<path d="M16,4 C21.5,4 27.5,9.5 27.5,18 C27.5,26 24,34 16,36 C8,34 4.5,26 4.5,18 C4.5,9.5 10.5,4 16,4Z"'
+        ' fill="#FF0A8A" opacity="0.28" filter="url(#bs-gf)"/>'
+        '<g id="bs-g">'
+        '<path d="M16,4 C21.5,4 27.5,9.5 27.5,18 C27.5,26 24,34 16,36 C8,34 4.5,26 4.5,18 C4.5,9.5 10.5,4 16,4Z"'
+        ' fill="url(#bs-bd)" stroke="#1C002C" stroke-width="0.8"/>'
+        '<ellipse cx="11.5" cy="12.5" rx="4.4" ry="2.7" fill="white" opacity="0.30"'
+        ' transform="rotate(-22 11.5 12.5)"/>'
+        '<circle cx="20.5" cy="9.5" r="1.2" fill="white" opacity="0.22"/>'
+        '<path d="M27.5,18 C27.5,26 24,34 16,36" stroke="#FF8AD7" stroke-width="1.1"'
+        ' fill="none" opacity="0.42" stroke-linecap="round"/>'
+        '<rect class="bs-eye" x="9" y="20" width="5.2" height="3.8" rx="1.2" fill="#0E0018"/>'
+        '<rect class="bs-eye" x="17.8" y="20" width="5.2" height="3.8" rx="1.2" fill="#0E0018"/>'
+        '<rect x="9.9" y="20.7" width="1.6" height="1.3" rx="0.5" fill="rgba(255,255,255,.68)"/>'
+        '<rect x="18.7" y="20.7" width="1.6" height="1.3" rx="0.5" fill="rgba(255,255,255,.68)"/>'
+        '</g>'
+        '</svg>'
+    )
+
     # Build equity positions map for JS satellites
     import json as _json
     _eq_pos_js = _json.dumps({
@@ -1068,8 +1115,17 @@ body::after {{
   background:rgba(6,0,8,.9); border-bottom:1px solid #2a003d;
   backdrop-filter:blur(12px);
   display:flex; align-items:center; padding:0 20px; gap:14px; z-index:10;
-  overflow:hidden;
+  overflow:hidden; position:relative;
 }}
+/* 90s Jazz-era geometric decoration — teal/magenta swooshes at low opacity */
+.topbar::before {{
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:
+    linear-gradient(128deg, transparent 0%,  rgba(0,210,200,.055) 22%, transparent 42%),
+    linear-gradient(110deg, transparent 38%, rgba(255,10,138,.035) 56%, transparent 74%),
+    linear-gradient(95deg,  transparent 58%, rgba(148,0,255,.04)   76%, transparent 92%);
+}}
+.topbar > * {{ position:relative; z-index:1; }}
 .wordmark {{ font-size:15px; font-weight:700; letter-spacing:-.02em; color:#ff00cc; animation:chroma-shift 6s ease-in-out infinite; white-space:nowrap; }}
 .pulse-dot {{ width:6px; height:6px; border-radius:50%; background:#ff00cc; box-shadow:0 0 8px rgba(255,0,204,.9); animation:pdot 1.3s ease-in-out infinite; flex-shrink:0; }}
 .pill {{ font-size:8px; letter-spacing:.18em; padding:3px 9px; border:1px solid currentColor; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }}
@@ -2414,7 +2470,7 @@ body::after {{
 
 <!-- flex child 1: topbar -->
 <div class="topbar">
-  <span class="wordmark">THE BLOB</span>
+  {_BLOB_SVG}
   <div id="wallet-selector" onclick="_cycleWallet()" title="Switch portfolio">
     <span id="wallet-mode-icon">◈</span>
     <span id="wallet-mode-label">PAPER</span>
@@ -4358,38 +4414,57 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       }}
     }}
 
-    // Under-fill — solid throughout
+    // Under-fill: reflects gain/loss direction at each end
+    var _startDy = n > 1 ? m[1].y - m[0].y : 0;
+    var _endDy   = n > 1 ? m[n-1].y - m[n-2].y : 0;
+    var _startRGB = _startDy < -0.5 ? '0,220,255' : _startDy > 0.5 ? '255,10,138' : '148,0,255';
+    var _endRGB   = _endDy   < -0.5 ? '0,220,255' : _endDy   > 0.5 ? '255,10,138' : '148,0,255';
     _stroke(m); ctx.lineTo(m[n-1].x,H); ctx.lineTo(m[0].x,H); ctx.closePath();
-    var fg=ctx.createLinearGradient(0,orbY,0,H);
-    fg.addColorStop(0,'rgba(255,0,204,0.18)'); fg.addColorStop(1,'rgba(255,0,204,0)');
+    var fg = ctx.createLinearGradient(m[0].x,0,m[n-1].x,0);
+    fg.addColorStop(0,'rgba('+_startRGB+',0.06)');
+    fg.addColorStop(1,'rgba('+_endRGB+',0.14)');
     ctx.fillStyle=fg; ctx.fill();
 
-    // Nyan-cat comet gradient: dark void at tail → neon pink bloom at tip
-    var x0 = m[0].x, x1 = m[n-1].x;
-    function _cg(alpha) {{
-      var g = ctx.createLinearGradient(x0,0,x1,0);
-      g.addColorStop(0,   'rgba(10,0,30,0)');
-      g.addColorStop(0.25,'rgba(80,0,180,'  +(alpha*0.15)+')');
-      g.addColorStop(0.55,'rgba(180,0,255,' +(alpha*0.45)+')');
-      g.addColorStop(0.80,'rgba(255,0,204,' +(alpha*0.85)+')');
-      g.addColorStop(1,   'rgba(255,180,255,'+alpha+')');
-      return g;
+    // Per-segment Nyan-cat rainbow: each segment colored by gain (teal) or loss (magenta)
+    // Older segments fade out toward the tail — you read the portfolio history in color
+    function _segRGB(dy) {{
+      if (dy < -0.5) return '0,220,255';    // UP   → Jazz teal / cyan
+      if (dy >  0.5) return '255,10,138';   // DOWN → hot magenta
+      return '148,0,255';                   // FLAT → deep violet
     }}
-    // Outer bloom
-    _stroke(m); ctx.strokeStyle=_cg(0.22);
-    ctx.lineWidth=36; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    // Mid glow
-    _stroke(m); ctx.strokeStyle=_cg(0.55);
-    ctx.lineWidth=12; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    // Inner glow
-    _stroke(m); ctx.strokeStyle=_cg(0.85);
-    ctx.lineWidth=4; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    // Solid core
-    _stroke(m); ctx.strokeStyle=_cg(1);
-    ctx.lineWidth=1.5; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-    // Hot white highlight spine
-    _stroke(m); ctx.strokeStyle='rgba(255,230,255,0.6)';
-    ctx.lineWidth=0.6; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+    // Glow pass widths and opacity scales
+    var _passes = [
+      {{w:34, a:0.18}},
+      {{w:13, a:0.52}},
+      {{w:4.5,a:0.82}},
+      {{w:1.6,a:1.00}},
+    ];
+    for (var si = 0; si < n - 1; si++) {{
+      var _p0 = m[Math.max(0,si-1)], _p1 = m[si], _p2 = m[si+1], _p3 = m[Math.min(n-1,si+2)];
+      var _cp1x = _p1.x+(_p2.x-_p0.x)/6, _cp1y = _p1.y+(_p2.y-_p0.y)/6;
+      var _cp2x = _p2.x-(_p3.x-_p1.x)/6, _cp2y = _p2.y-(_p3.y-_p1.y)/6;
+      var _dy   = _p2.y - _p1.y;
+      var _rgb  = _segRGB(_dy);
+      // Comet fade: oldest segment = 15% opacity, tip = 100%
+      var _fade = 0.15 + 0.85 * (si / Math.max(1, n - 2));
+      var _tip  = (si === n - 2) ? 1.25 : 1;  // tip segment extra bright
+      _passes.forEach(function(pass) {{
+        ctx.beginPath();
+        ctx.moveTo(_p1.x, _p1.y);
+        ctx.bezierCurveTo(_cp1x, _cp1y, _cp2x, _cp2y, _p2.x, _p2.y);
+        ctx.strokeStyle = 'rgba('+_rgb+','+(pass.a * _fade * _tip)+')';
+        ctx.lineWidth   = pass.w;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.stroke();
+      }});
+      // White highlight spine (always, for the core readability)
+      ctx.beginPath();
+      ctx.moveTo(_p1.x, _p1.y);
+      ctx.bezierCurveTo(_cp1x, _cp1y, _cp2x, _cp2y, _p2.x, _p2.y);
+      ctx.strokeStyle = 'rgba(255,245,255,'+(0.5 * _fade * _tip)+')';
+      ctx.lineWidth = 0.65; ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.stroke();
+    }}
 
     // Breathing dot at trail tip
     var pulse=0.5+0.5*Math.sin(Date.now()/400);
