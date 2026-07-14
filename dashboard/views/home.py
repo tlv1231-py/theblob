@@ -4095,7 +4095,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var winStart  = nowMs - 30000;
     // Window is 60s wide (±30s) so nowMs lands at W/2 (center = orb position)
     function tx(ms) {{ return (ms - winStart) / 60000 * W; }}
-    function ty(v)  {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }}
+    var _tyRaw = function(v) {{ return H/2 - (v - base) / halfRange * (H/2 * 0.85); }};
+    var gridPx = 3; // quantize to 3px rows — gives 8-bit staircase feel
+    function ty(v) {{ return Math.round(_tyRaw(v) / gridPx) * gridPx; }}
 
     // Y-axis price indicators — subtle, on-brand
     (function() {{
@@ -4162,11 +4164,17 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     if (mapped.length < 2) return; // trail hasn't grown past orbGap yet
 
-    // Polyline — straight segments, no bezier, nothing retroactively reshapes
+    // 8-bit staircase — horizontal then vertical, no diagonals.
+    // Jumps are instant discrete steps so there's no slope to "catch up."
+    // imageSmoothingEnabled=false keeps pixel edges crisp.
+    ctx.imageSmoothingEnabled = false;
     function _stroke(m) {{
       ctx.beginPath();
       ctx.moveTo(m[0].x, m[0].y);
-      for (var i = 1; i < m.length; i++) ctx.lineTo(m[i].x, m[i].y);
+      for (var i = 1; i < m.length; i++) {{
+        ctx.lineTo(m[i].x, m[i-1].y); // horizontal at old level
+        ctx.lineTo(m[i].x, m[i].y);   // vertical snap to new level
+      }}
     }}
 
     var x0 = mapped[0].x;
