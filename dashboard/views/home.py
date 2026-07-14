@@ -1331,45 +1331,58 @@ body::after {{
 /* ── Callout rail — drops from bottom of portfolio HUD tile ── */
 #callout-rail {{
   position:absolute;
-  bottom:0; left:50%; transform:translateX(-50%);
+  bottom:0; left:0;
   height:0; overflow:visible;
-  display:flex; flex-direction:column; align-items:center;
-  gap:3px; padding-top:0;
+  display:flex; flex-direction:column; align-items:flex-start;
+  gap:1px; padding-top:0;
   pointer-events:none; z-index:99999;
 }}
+/* Enter: wipe up from bottom */
 @keyframes cc-in {{
-  from {{ opacity:0; clip-path:inset(100% 0 0 0); }}
-  to   {{ opacity:1; clip-path:inset(0% 0 0 0); }}
+  0%   {{ opacity:0; clip-path:inset(100% 0 0 0); transform:translateX(-4px); }}
+  40%  {{ opacity:1; clip-path:inset(0% 0 0 0);   transform:translateX(2px); }}
+  100% {{ opacity:1; clip-path:inset(0% 0 0 0);   transform:translateX(0); }}
+}}
+/* Exit: CRT power-off — compress to scanline then flash out */
+@keyframes cc-out {{
+  0%   {{ opacity:1; clip-path:inset(0% 0 0% 0);      filter:brightness(1);   transform:scaleY(1); }}
+  35%  {{ opacity:1; clip-path:inset(40% 0 40% 0);    filter:brightness(3) saturate(4); transform:scaleY(.15); }}
+  55%  {{ opacity:1; clip-path:inset(49.5% 0 49.5% 0); filter:brightness(8);  transform:scaleY(.02); }}
+  70%  {{ opacity:.8; clip-path:inset(49.5% 0 49.5% 0); filter:brightness(12); transform:scaleY(.02); }}
+  100% {{ opacity:0; clip-path:inset(50% 0 50% 0);    filter:brightness(0);   transform:scaleY(0); }}
 }}
 .callout-card {{
-  display:flex; align-items:baseline; gap:8px;
-  padding:5px 12px;
-  background:transparent;
-  border:none;
+  display:flex; align-items:baseline; gap:0;
+  padding:3px 0 3px 8px;
+  background:transparent; border:none;
+  border-left:1px solid rgba(255,255,255,.06);
   opacity:0;
   pointer-events:none;
   font-family:Consolas,'Courier New',monospace;
   white-space:nowrap;
+  transform-origin:center;
 }}
 .callout-card.cc-show {{
-  animation: cc-in .22s cubic-bezier(.2,.8,.4,1) forwards;
+  animation: cc-in .18s cubic-bezier(.2,.9,.3,1) forwards;
 }}
 .callout-card.cc-exit {{
-  opacity:0;
-  transition:opacity 1.6s ease-out;
+  animation: cc-out .55s cubic-bezier(.6,0,1,1) forwards;
 }}
 .cc-verb {{
-  font-size:9px; letter-spacing:.16em; text-transform:uppercase;
-  color:rgba(255,255,255,.5); font-weight:600;
+  font-size:7px; letter-spacing:.22em; text-transform:uppercase;
+  color:rgba(255,255,255,.28); font-weight:600;
+  width:28px; flex-shrink:0;
 }}
 .cc-sym {{
-  font-size:15px; font-weight:700; letter-spacing:.04em;
+  font-size:13px; font-weight:700; letter-spacing:.06em;
+  margin-right:8px;
+  text-shadow:0 0 12px currentColor;
 }}
 .cc-pnl {{
   font-family:'Press Start 2P',monospace;
-  font-size:10px; letter-spacing:.02em;
+  font-size:9px; letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
-  text-shadow:0 0 10px currentColor, 1px 1px 0 rgba(0,0,0,.9);
+  text-shadow:0 0 8px currentColor, 1px 1px 0 rgba(0,0,0,.95);
 }}
 .cc-count {{ display:none; }}
 
@@ -7391,12 +7404,12 @@ window.addEventListener('resize', function() {{
           }})();
         }}
 
-        // Linger then dissolve
-        var linger = isEvent ? Math.max(3000, (cfg.countdown||0)*1000 + 1500) : 4000;
+        // Linger then CRT-off exit
+        var linger = isEvent ? Math.max(3000, (cfg.countdown||0)*1000 + 1500) : 4500;
         setTimeout(function() {{
           card.classList.remove('cc-show');
           card.classList.add('cc-exit');
-          setTimeout(function() {{ if (card.parentNode) card.parentNode.removeChild(card); }}, 1800);
+          setTimeout(function() {{ if (card.parentNode) card.parentNode.removeChild(card); }}, 600);
         }}, linger);
       }}
 
