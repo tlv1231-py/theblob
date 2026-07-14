@@ -1930,7 +1930,8 @@ body::after {{
 /* pos-cards */
 .pos-section-label {{ display:none; }}
 .pos-card {{ padding:5px 10px; cursor:default; position:relative; overflow:hidden;
-             background:rgba(0,0,8,.88); border-bottom:1px solid rgba(255,255,255,.04); }}
+             background:rgba(0,0,8,.88); border-bottom:1px solid rgba(255,255,255,.04);
+             will-change:transform,opacity; }}
 
 /* ── Equity position cards — terminal row style ── */
 .pc-eq {{
@@ -2347,22 +2348,36 @@ body::after {{
 .card-target-lock::before {{ top:2px; left:2px; border-width:2px 0 0 2px; }}
 .card-target-lock::after  {{ bottom:2px; right:2px; border-width:0 2px 2px 0; }}
 
-/* ── Phase 2: Damage blink — binary on/off, pure 8-bit ── */
+/* ── Phase 1: white flash → B&W quantized fade — compositor-only (no layout/paint) ── */
+@keyframes card-flash-bw {{
+  0%   {{ opacity:1; }}
+  14%  {{ opacity:1; }}   /* hold white */
+  28%  {{ opacity:.6; }}  /* step down */
+  42%  {{ opacity:1; }}   /* flicker */
+  57%  {{ opacity:.3; }}  /* step */
+  71%  {{ opacity:.7; }}  /* flicker */
+  85%  {{ opacity:.1; }}
+  100% {{ opacity:0; }}
+}}
+.pos-card-flash-exit {{
+  animation:card-flash-bw .22s steps(7,end) forwards;
+  /* cheap white-out via outline rather than filter */
+  outline:3px solid rgba(255,255,255,.9);
+  outline-offset:-1px;
+}}
+/* ── Legacy hit/destroy — kept for non-exit uses ── */
 @keyframes card-hit-blink {{
-  0%,100% {{ filter:brightness(1) saturate(1); opacity:1; }}
-  50%     {{ filter:brightness(20) saturate(0); opacity:1; }}
+  0%,100% {{ opacity:1; }}
+  50%     {{ opacity:.05; }}
 }}
 .pos-card-hit {{ animation:card-hit-blink .08s steps(2,end) 5 forwards; }}
-
-/* ── Phase 3: flash B&W twice, fade to black ── */
 @keyframes card-8bit-destroy {{
-  0%   {{ filter:brightness(1)   saturate(1); opacity:1; animation-timing-function:steps(1,end); }}
-  18%  {{ filter:brightness(0)   saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
-  28%  {{ filter:brightness(100) saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
-  40%  {{ filter:brightness(0)   saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
-  52%  {{ filter:brightness(100) saturate(0); opacity:1; animation-timing-function:steps(1,end); }}
-  62%  {{ filter:brightness(0)   saturate(0); opacity:1; }}
-  100% {{ filter:brightness(0)   saturate(0); opacity:0; }}
+  0%   {{ opacity:1; }}
+  20%  {{ opacity:0; }}
+  40%  {{ opacity:1; }}
+  60%  {{ opacity:0; }}
+  80%  {{ opacity:.4; }}
+  100% {{ opacity:0; }}
 }}
 /* Placeholder that holds the dead tile's space in the flex column */
 .pos-card-ghost-space {{
@@ -2424,8 +2439,8 @@ body::after {{
   100% {{ transform:translateY(-32px); opacity:0; }}
 }}
 @keyframes pnl-particle {{
-  0%   {{ transform:translate(0,0) scale(1); opacity:1; }}
-  100% {{ transform:translate(var(--px),var(--py)) scale(0); opacity:0; }}
+  0%   {{ transform:translate(0,0); opacity:1; }}
+  100% {{ transform:translate(var(--px),var(--py)); opacity:0; }}
 }}
 @keyframes card-flash-exit {{
   0%   {{ box-shadow:inset 0 0 0 1px transparent; }}
@@ -4376,20 +4391,23 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = window._lastKnownNav || (_navPts.length ? _navPts[_navPts.length-1].v : null);
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // X: "now" anchors to the right edge of the visible chart area (left of holdings panel).
-    // Dynamically measure panel widths so the anchor tracks actual layout.
+    // X: "now" endpoint is pinned at the visual center of the chart (matching blob orb).
+    // This puts the nav line endpoint right where the orb sits; history scrolls left.
     var _feedPx  = (document.getElementById('feed-overlay') || {{offsetWidth:0}}).offsetWidth || 0;
     var _posPx   = (document.getElementById('pos-overlay')  || {{offsetWidth:0}}).offsetWidth || 0;
     var _canvPx  = _nc.offsetWidth || W;
-    // "now" pixel = right edge of chart (just inside holdings panel left edge)
-    var _nowPx   = Math.max(W * 0.6, _canvPx - _posPx - 6);
-    // orb center = horizontal center of visible chart area
+    // orb + "now" both at center of visible chart between the two panels
     var _orbPx   = _feedPx + (_canvPx - _feedPx - _posPx) / 2;
-    var nowFracX = _nowPx  / _canvPx;  // fraction of canvas width
+    var _nowPx   = _orbPx;
+    var nowFracX = _nowPx  / _canvPx;
     var orbFracX = Math.max(0.1, Math.min(0.9, _orbPx / _canvPx));
 
-    var nowMs      = Date.now();
-    var windowMs   = window._navWindowMs || 5 * 60000;  // 5-min default → ~1px/sec scroll
+    var nowMs = Date.now();
+    // Window: span from earliest historical point → now so EOD snapshots are visible.
+    // At least 24h wide; grows automatically if older data exists.
+    var _oldestMs = _navPts.length ? _navPts[0].ms : nowMs - 86400000;
+    var _spanMs   = Math.max(nowMs - _oldestMs, 86400000);
+    var windowMs  = window._navWindowMs || _spanMs;
     var leftEdgeMs = nowMs - windowMs;
 
     // tx: maps a timestamp to canvas X. leftEdgeMs → 0, nowMs → _nowPx.
@@ -4538,10 +4556,13 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.fillStyle='rgba(255,0,204,'+(0.15+pulse*0.2)+')'; ctx.fill();
   }};
 
-  (function _raf() {{
-    window._drawNavCanvas();
+  // Cap nav canvas to ~30fps — it carries no per-frame animation data,
+  // so full 60fps redraws waste GPU time shared with the pulse/ambient canvases.
+  var _navLastDraw = 0;
+  (function _raf(ts) {{
+    if (ts - _navLastDraw >= 33) {{ _navLastDraw = ts; window._drawNavCanvas(); }}
     requestAnimationFrame(_raf);
-  }})();
+  }})(0);
 }})();
 
 // ── Real-time x-axis advance — DISABLED: _recenterOnLatest() handles centering ──
@@ -5099,7 +5120,13 @@ var _programmaticRelayout = false;
 
 window.addEventListener('resize', function() {{
   resizeCanvas();
+  // Re-layout equity columns on viewport resize
+  setTimeout(function() {{ if (window._updateOverlayWidth) window._updateOverlayWidth(); }}, 50);
 }});
+// Initial equity column layout — run after first render
+setTimeout(function() {{
+  if (typeof _updateOverlayWidth === 'function') _updateOverlayWidth();
+}}, 800);
 </script>
 
 <!-- Terminal overlay — hidden; kept as DOM container for JS elements -->
@@ -6658,24 +6685,24 @@ window.addEventListener('resize', function() {{
     // Phase 2 (320–580ms): Hit-flash damage blinks (3 pulses)
     // Phase 3 (580–):     Tile crushes to scanline + P&L ghost spawns left of column
     function _spawnParticles(cx, cy, col) {{
-      var N = 18;
+      var N = 10;  // reduced for perf; 8-bit pixel burst feel
       for (var i = 0; i < N; i++) {{
-        var angle = (Math.PI * 2 / N) * i + (Math.random() - .5) * .5;
-        var dist  = 40 + Math.random() * 70;
-        var size  = 2 + Math.floor(Math.random() * 5);  // pixel sizes
-        var dur   = (.35 + Math.random() * .4).toFixed(2) + 's';
+        var angle = (Math.PI * 2 / N) * i;
+        var dist  = 24 + Math.floor(Math.random() * 4) * 12;  // quantized distances
+        var size  = 2 + (Math.random() > .5 ? 2 : 0);  // 2px or 4px — 8-bit pixels
+        var dur   = (.28 + Math.floor(Math.random() * 3) * .08).toFixed(2) + 's';
         var p = document.createElement('div');
         p.className = 'pnl-particle';
         p.style.cssText = [
           'width:' + size + 'px', 'height:' + size + 'px',
-          'background:' + col, 'box-shadow:0 0 4px ' + col,
+          'background:' + col,  // no box-shadow for perf
           'left:' + (cx - size/2) + 'px', 'top:' + (cy - size/2) + 'px',
           '--px:' + Math.round(Math.cos(angle) * dist) + 'px',
           '--py:' + Math.round(Math.sin(angle) * dist) + 'px',
           '--dur:' + dur, 'opacity:1'
         ].join(';');
         document.body.appendChild(p);
-        setTimeout(function(pp) {{ if (pp.parentNode) pp.parentNode.removeChild(pp); }}, 900, p);
+        setTimeout(function(pp) {{ if (pp.parentNode) pp.parentNode.removeChild(pp); }}, 700, p);
       }}
     }}
 
@@ -6822,15 +6849,10 @@ window.addEventListener('resize', function() {{
       ].join(';');
       document.body.appendChild(el);
 
-      // ── Phase 1: Instant white flash → B&W → transparent (0–220ms) ──────
+      // ── Phase 1: Instant white flash → quantized B&W fade (0–220ms) ──────
+      // Use CSS class instead of inline filter to stay on compositor thread
+      el.classList.add('pos-card-flash-exit');
       el.style.transition = 'none';
-      el.style.filter = 'brightness(100) saturate(0)';
-      el.style.opacity = '1';
-      requestAnimationFrame(function() {{
-        el.style.transition = 'filter .08s steps(2,end), opacity .18s linear .04s';
-        el.style.filter = 'brightness(0) saturate(0)';
-        el.style.opacity = '0';
-      }});
 
       // ── Phase 2: Remove tile, reveal ghost P&L (220ms) ────────────────
       setTimeout(function() {{
@@ -6864,14 +6886,21 @@ window.addEventListener('resize', function() {{
       var leftW = count > 0 ? _CARD_W : 0;
       posLeft.style.width = leftW + 'px';
       // Multi-column equity: expand overlay width when tiles can't fit in one column
-      var eqCards = document.querySelectorAll('#pos-equity-section .pos-card').length;
-      var availH  = posRight ? posRight.getBoundingClientRect().height : 400;
-      var tileH   = 46;  // approximate tile height
+      var eqCardEls = document.querySelectorAll('#pos-equity-section .pos-card');
+      var eqCards = eqCardEls.length;
+      // Use actual viewport height minus strat-bar so calculation never uses 0
+      var stratBar = document.getElementById('strat-bar');
+      var sbH = stratBar ? stratBar.getBoundingClientRect().height : 46;
+      var availH = window.innerHeight - sbH - 12;
+      // Measure the first actual card height; fall back to 88px for equity cards
+      var firstCard = eqCardEls.length ? eqCardEls[0] : null;
+      var tileH = firstCard ? Math.max(40, firstCard.getBoundingClientRect().height) : 88;
       var perCol  = Math.max(1, Math.floor(availH / tileH));
       var eqCols  = Math.max(1, Math.ceil(eqCards / perCol));
       overlay.style.width = (leftW + _EQ_W * eqCols) + 'px';
     }}
 
+    window._updateOverlayWidth = _updateOverlayWidth;
     window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
       var col   = _symCol(p.symbol);
