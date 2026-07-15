@@ -908,6 +908,7 @@ def _build_daw_html(data: dict) -> str:
             "target":     float(p.get("target_price") or 0),
             "curPrice":   float(p.get("price") or p["entry_price"] or 0),
             "days":       int(p.get("days_held") or 0),
+            "enteredAt":  int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
             "inSignal":   bool(p.get("in_signal", True)),
             "rank":       int(p.get("rank") or 0),
             "holdText":   str(p.get("hold_text") or ""),
@@ -7056,7 +7057,7 @@ setTimeout(function() {{
       ctx.clearRect(0, 0, _etCanvas.width, _etCanvas.height);
 
       var now = Date.now();
-      var lerpK = 0.10; // lerp speed per frame (~30fps → ~3s to converge)
+      var lerpK = 0.03; // lerp speed per frame (~30fps → ~10s to converge; slow = more cinematic)
 
       var allLive = layout.crypto.concat(layout.equity);
       for (var i = 0; i < allLive.length; i++) {{
@@ -7289,8 +7290,16 @@ setTimeout(function() {{
         // ±5% P&L micro-oscillation
         vuLevel = Math.max(0, Math.min(vuLevel + dPnlPct / 100, 1));
       }} else {{
-        // Crypto — P&L% is the signal; 0%=empty, 3%=full
-        vuLevel = Math.max(0, Math.min(dPnlPct / 3, 1));
+        // Crypto — stop→target proximity is the sell signal
+        var cStop   = t.stop   || 0;
+        var cTarget = t.target || 0;
+        var cCur    = t.curPrice || t.entry || 0;
+        if (cStop > 0 && cTarget > cStop && cCur > 0) {{
+          vuLevel = Math.max(0, Math.min((cCur - cStop) / (cTarget - cStop), 1));
+        }} else {{
+          // fallback: midpoint + P&L drift (gives baseline activity even at 0 P&L)
+          vuLevel = Math.max(0, Math.min(0.45 + dPnlPct / 8, 1));
+        }}
       }}
 
       // Peak hold: new peak resets hold timer; after 1.5s hold, decay at ~0.25/s
