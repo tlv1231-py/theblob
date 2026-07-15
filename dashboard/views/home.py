@@ -912,6 +912,7 @@ def _build_daw_html(data: dict) -> str:
             "inSignal":   bool(p.get("in_signal", True)),
             "rank":       int(p.get("rank") or 0),
             "holdText":   str(p.get("hold_text") or ""),
+            "strategy":   "momentum",
         }
         for p in data.get("positions_data", [])
     ])
@@ -1337,15 +1338,15 @@ body::after {{
   min-width:0;
 }}
 .strat-slot:last-child {{ border-right:none; }}
-.strat-slot::before {{
+#strat-bar > .strat-slot::before {{
   content:''; position:absolute; left:0; top:0; bottom:0; width:2px;
   background:transparent;
   transition:background .4s, box-shadow .4s;
 }}
-.strat-slot.ss-active::before  {{ background:#00e5ff; box-shadow:0 0 3px rgba(0,229,255,.7); }}
-.strat-slot.ss-ready::before   {{ background:#00ff9d; box-shadow:0 0 3px rgba(0,255,157,.7); }}
-.strat-slot.ss-exec::before    {{ background:#ffaa00; box-shadow:0 0 3px rgba(255,170,0,.8); }}
-.strat-slot.ss-warn::before    {{ background:#ff3366; box-shadow:0 0 3px rgba(255,51,102,.7); }}
+#strat-bar > .strat-slot.ss-active::before  {{ background:#00e5ff; box-shadow:0 0 3px rgba(0,229,255,.7); }}
+#strat-bar > .strat-slot.ss-ready::before   {{ background:#00ff9d; box-shadow:0 0 3px rgba(0,255,157,.7); }}
+#strat-bar > .strat-slot.ss-exec::before    {{ background:#ffaa00; box-shadow:0 0 3px rgba(255,170,0,.8); }}
+#strat-bar > .strat-slot.ss-warn::before    {{ background:#ff3366; box-shadow:0 0 3px rgba(255,51,102,.7); }}
 .strat-slot.ss-exec {{ background:rgba(255,170,0,.04); }}
 .strat-slot.ss-ready {{ background:rgba(0,255,157,.03); }}
 .ss-icon {{
@@ -2700,10 +2701,15 @@ body::after {{
       </div>
     </div>
   </div>
-  <div class="strat-slot" id="ss-exposure">
-    <div class="ss-icon">◧</div>
-    <div class="ss-name">EXPOSURE</div>
+  <div class="strat-slot" id="ss-exposure" style="cursor:pointer;position:relative;user-select:none" onclick="window._toggleStratDropdown()">
+    <div class="ss-icon">◈</div>
+    <div class="ss-name">STRATEGIES</div>
     <div class="ss-status" id="ss-exposure-st">—</div>
+  </div>
+  <!-- Strategies dropdown -->
+  <div id="strat-dropdown" style="display:none;position:fixed;z-index:9999;background:rgba(4,0,12,.97);border:1px solid rgba(148,0,255,.35);border-radius:2px;min-width:280px;padding:6px 0;font-family:Consolas,monospace;box-shadow:0 8px 32px rgba(0,0,0,.8)">
+    <div style="font-size:7px;letter-spacing:.2em;color:rgba(148,0,255,.5);padding:6px 14px 4px;text-transform:uppercase">active strategies</div>
+    <div id="strat-dropdown-items"></div>
   </div>
   <div class="strat-slot" id="ss-tph">
     <div class="ss-icon">⚡</div>
@@ -7172,6 +7178,19 @@ setTimeout(function() {{
       _updateOverlayWidth();
     }}
 
+    // Strategy badge map — glyph + glow color per strategy key
+    var _TILE_BADGES = {{
+      'momentum':   {{ g:'▲▲', c:'#00e5ff' }},
+      'crypto':     {{ g:'◈',  c:'#e040fb' }},
+      'daytrader':  {{ g:'⊕',  c:'#b2ff59' }},
+      'reversion':  {{ g:'⇌',  c:'#ff9900' }},
+      'sentiment':  {{ g:'◉',  c:'#ff4081' }},
+      'volatility': {{ g:'⚡', c:'#ff6b35' }},
+      'factor':     {{ g:'✦',  c:'#ffd740' }},
+      'macro':      {{ g:'≋',  c:'#00bcd4' }},
+      'ensemble':   {{ g:'❋',  c:'#ffffff' }},
+    }};
+
     var _SCRAMBLE_CHARS = '0123456789';
     function _scrambleDigits(str) {{
       var out = '';
@@ -7184,7 +7203,6 @@ setTimeout(function() {{
 
     function _etPaintTile(ctx, t, x, y, ts) {{
       var W = _EQ_W, H = _EQ_H;
-      var lx = x + 8;
       var now = Date.now(); // epoch ms — use for hold timer, NOT rAF ts
 
       // Background
@@ -7198,6 +7216,23 @@ setTimeout(function() {{
       // Bottom separator
       ctx.fillStyle = 'rgba(255,255,255,0.04)';
       ctx.fillRect(x, y + H - 1, W, 1);
+
+      // ── Strategy badge — glowing glyph left of ticker ──
+      var _badge = _TILE_BADGES[t.strategy || (t.isCrypto ? 'crypto' : 'momentum')];
+      var _badgeOff = 0;
+      if (_badge) {{
+        ctx.save();
+        ctx.font = '7px Consolas,monospace';
+        ctx.textAlign = 'left';
+        ctx.shadowColor = _badge.c;
+        ctx.shadowBlur  = 5;
+        ctx.fillStyle   = _badge.c;
+        ctx.globalAlpha = 0.85;
+        ctx.fillText(_badge.g, x + 4, y + 15);
+        ctx.restore();
+        _badgeOff = 14; // shift ticker right to clear the badge
+      }}
+      var lx = x + 4 + _badgeOff;
 
       // Lerped display values
       var dVal    = t._dVal    !== undefined ? t._dVal    : (t.val    || 0);
@@ -7377,6 +7412,7 @@ setTimeout(function() {{
         rank:      data.rank || 0,
         holdText:  data.holdText || '',
         isCrypto:  data.isCrypto || false,
+        strategy:  data.strategy || (data.isCrypto ? 'crypto' : 'momentum'),
         direction: data.direction || 'long',
         enteredAt: data.enteredAt || 0,
         exitPnl:   0,
@@ -8426,18 +8462,78 @@ setTimeout(function() {{
         _spawnCallout({{ sym:label, col:col, countdown:countdown||0, isEvent:true }});
       }};
 
-      // ── EXPOSURE slot ─────────────────────────────────────────
+      // ── STRATEGIES slot ───────────────────────────────────────
+      // Badge definitions — glyph + glow color per strategy archetype
+      var _STRAT_BADGES = {{
+        'momentum':   {{ glyph:'▲▲', color:'#00e5ff', label:'Momentum',  desc:'JT 12-1 price momentum · NYSE equities' }},
+        'crypto':     {{ glyph:'◈',  color:'#e040fb', label:'Crypto',    desc:'Crypto positions pipeline' }},
+        'daytrader':  {{ glyph:'⊕',  color:'#b2ff59', label:'Daytrader', desc:'Intraday ORB · VWAP · RVOL' }},
+        'reversion':  {{ glyph:'⇌',  color:'#ff9900', label:'Mean Rev',  desc:'Statistical mean reversion' }},
+        'sentiment':  {{ glyph:'◉',  color:'#ff4081', label:'Sentiment', desc:'Alt data · earnings · insider flow' }},
+        'volatility': {{ glyph:'⚡', color:'#ff6b35', label:'Volatility',desc:'VIX-based dynamic sizing' }},
+        'factor':     {{ glyph:'✦',  color:'#ffd740', label:'Factor',    desc:'Fama-French multi-factor' }},
+        'macro':      {{ glyph:'≋',  color:'#00bcd4', label:'Macro',     desc:'Regime · sector rotation' }},
+        'ensemble':   {{ glyph:'❋',  color:'#ffffff', label:'Ensemble',  desc:'Meta-allocator across strategies' }},
+      }};
+
+      var _stratDropOpen = false;
+      window._toggleStratDropdown = function() {{
+        _stratDropOpen = !_stratDropOpen;
+        var dd = document.getElementById('strat-dropdown');
+        if (!dd) return;
+        if (_stratDropOpen) {{
+          _renderStratDropdown();
+          var slot = document.getElementById('ss-exposure');
+          if (slot) {{
+            var r = slot.getBoundingClientRect();
+            dd.style.top  = (r.bottom + 4) + 'px';
+            dd.style.right = (window.innerWidth - r.right) + 'px';
+            dd.style.left = 'auto';
+          }}
+          dd.style.display = 'block';
+          setTimeout(function() {{
+            document.addEventListener('click', function _csd(e) {{
+              if (!dd.contains(e.target) && e.target.id !== 'ss-exposure') {{
+                _stratDropOpen = false; dd.style.display = 'none';
+                document.removeEventListener('click', _csd);
+              }}
+            }});
+          }}, 10);
+        }} else {{
+          dd.style.display = 'none';
+        }}
+      }};
+
+      function _renderStratDropdown() {{
+        var items = document.getElementById('strat-dropdown-items');
+        if (!items) return;
+        // Count holdings per strategy
+        var counts = {{ momentum: 0, crypto: 0 }};
+        document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').forEach(function() {{ counts.momentum++; }});
+        Object.keys(window._cryptoPositionsMap || {{}}).forEach(function() {{ counts.crypto++; }});
+        var activeStrats = Object.keys(counts).filter(function(k) {{ return counts[k] > 0; }});
+        var html = '';
+        activeStrats.forEach(function(key) {{
+          var b = _STRAT_BADGES[key]; if (!b) return;
+          html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid rgba(148,0,255,.1)">'
+            + '<span style="font-size:14px;filter:drop-shadow(0 0 6px '+b.color+');color:'+b.color+';flex-shrink:0;width:20px;text-align:center">'+b.glyph+'</span>'
+            + '<div style="min-width:0">'
+            + '<div style="font-size:8px;letter-spacing:.12em;color:'+b.color+';text-shadow:0 0 8px '+b.color+';font-weight:700">'+b.label+'</div>'
+            + '<div style="font-size:7px;color:rgba(255,255,255,.35);margin-top:1px">'+b.desc+'</div>'
+            + '</div>'
+            + '<span style="margin-left:auto;font-size:11px;color:'+b.color+';font-weight:700;text-shadow:0 0 8px '+b.color+'">'+counts[key]+'</span>'
+            + '</div>';
+        }});
+        if (!html) html = '<div style="padding:8px 14px;font-size:8px;color:rgba(255,255,255,.3)">no active strategies</div>';
+        items.innerHTML = html;
+      }}
+
       function _updateExposureSlot() {{
-        var nav = window._lastKnownNav || 0;
-        var positions = window._cryptoPositionsMap || {{}};
-        var syms = Object.keys(positions);
-        var eqCards = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]');
-        var posCount = syms.length + eqCards.length;
-        if (!nav || posCount === 0) {{ _ssSet('ss-exposure-st', '', 'FLAT'); return; }}
-        // Approximate: each position is ~20% of NAV (matches MAX_POSITION_SIZE)
-        var exposurePct = Math.min(100, posCount * 20);
-        var col = exposurePct > 80 ? 'ss-warn' : exposurePct > 40 ? 'ss-active' : 'ss-ready';
-        _ssSet('ss-exposure-st', col, exposurePct.toFixed(0) + '%');
+        var cryptoCount = Object.keys(window._cryptoPositionsMap || {{}}).length;
+        var eqCount = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
+        var activeStrats = (cryptoCount > 0 ? 1 : 0) + (eqCount > 0 ? 1 : 0);
+        if (activeStrats === 0) {{ _ssSet('ss-exposure-st', '', '—'); return; }}
+        _ssSet('ss-exposure-st', 'ss-active', activeStrats + '');
       }}
 
       // ── $/HR slot — dollar volume traded per hour ─────────────
