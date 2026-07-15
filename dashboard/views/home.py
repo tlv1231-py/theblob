@@ -5087,7 +5087,9 @@ setInterval(_fetchIntradayMarks, 15000);
         }}
       }});
       if (_eqCount > 0) {{
-        var _eqNav = (window._portfolioBaseline || 100000) + _eqLivePnl;
+        window._livePnlBySource.equity = _eqLivePnl;
+        var _combinedPnl = window._livePnlBySource.equity + window._livePnlBySource.crypto;
+        var _eqNav = (window._portfolioBaseline || 100000) + _combinedPnl;
         window._lastLivePriceMs = Date.now();
         window._lastKnownNav    = _eqNav;
         if (window._navPush) window._navPush(_eqNav, new Date().toISOString());
@@ -5120,6 +5122,10 @@ setInterval(_fetchIntradayMarks, 15000);
     }});
   }})();
 }})();
+
+// ── Shared live PnL accumulator — prevents equity+crypto pollers oscillating _lastKnownNav ──
+// Each poller writes its slice; both read the combined total so NAV doesn't alternate.
+window._livePnlBySource = {{ equity: 0, crypto: 0 }};
 
 // ── Live intraday NAV accumulator — fed by Binance price poll every 4s ────────
 var _intradayPts = [];  // {{t: isoStr, v: number}}
@@ -6022,9 +6028,12 @@ setTimeout(function() {{
   (function() {{
     var dl = document.getElementById('bc-tickers');
     if (!dl || !window._allTickers) return;
-    (_allTickers.equity || []).forEach(function(s) {{
-      var o = document.createElement('option'); o.value = s; dl.appendChild(o);
-    }});
+    // Only show equity tickers during NYSE hours; crypto is 24/7
+    if (_isNYSEOpen()) {{
+      (_allTickers.equity || []).forEach(function(s) {{
+        var o = document.createElement('option'); o.value = s; dl.appendChild(o);
+      }});
+    }}
     (_allTickers.crypto || []).forEach(function(s) {{
       var o = document.createElement('option'); o.value = s; dl.appendChild(o);
     }});
@@ -7221,6 +7230,7 @@ setTimeout(function() {{
     }}
 
     var _etCanvas = null, _etCtx = null;
+    var _etLastTileCount = -1; // tracks tile count for overlay-width dirty check
     var _etLastDraw = 0, _etDirty = true;
     var _etScanT = 0;  // scanline phase
 
@@ -7372,7 +7382,12 @@ setTimeout(function() {{
         ctx.fillRect(sepX, 0, 2, layout.availH);
       }}
 
-      _updateOverlayWidth();
+      // Only update overlay width when tile count changes — not every frame
+      var _nowCount = _ET.filter(function(t){{return t.phase!=='done';}}).length;
+      if (_nowCount !== _etLastTileCount) {{
+        _etLastTileCount = _nowCount;
+        _updateOverlayWidth();
+      }}
     }}
 
     // Strategy badge map — glyph + glow color per strategy key
@@ -8231,7 +8246,10 @@ setTimeout(function() {{
               var qty   = parseFloat(p.qty || 0);
               if (entry > 0 && qty !== 0) livePnl += qty * (px - entry);
             }});
-            var nav = baseline + livePnl;
+            // Write crypto slice; combine with equity slice so NAV is consistent across pollers
+            window._livePnlBySource.crypto = livePnl;
+            var _combinedPnl = window._livePnlBySource.equity + window._livePnlBySource.crypto;
+            var nav = baseline + _combinedPnl;
             if (nav > 50000 && nav < 5000000) {{
               window._pushIntradayPoint(new Date().toISOString(), nav);
             }}
