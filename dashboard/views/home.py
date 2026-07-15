@@ -915,6 +915,8 @@ def _build_daw_html(data: dict) -> str:
         for p in data.get("positions_data", [])
     ])
 
+    _queued_actions_js = _json.dumps(data.get("queued_actions", []))
+
     pos_cards = ""
     _pc_idx = 0
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
@@ -2656,10 +2658,15 @@ body::after {{
     <!-- callout rail drops from the bottom of this tile -->
     <div id="callout-rail"></div>
   </div>
-  <div class="strat-slot" id="ss-price">
-    <div class="ss-icon">↻</div>
-    <div class="ss-name">PRICE</div>
-    <div class="ss-status" id="ss-price-st">—</div>
+  <div class="strat-slot" id="ss-queue" style="cursor:pointer;position:relative;user-select:none" onclick="window._toggleQueueDropdown()">
+    <div class="ss-icon">⚡</div>
+    <div class="ss-name">QUEUED EVENTS</div>
+    <div class="ss-status" id="ss-queue-st">—</div>
+  </div>
+  <!-- Queued events dropdown -->
+  <div id="queue-dropdown" style="display:none;position:fixed;z-index:9999;background:rgba(4,0,12,.97);border:1px solid rgba(148,0,255,.35);border-radius:2px;min-width:340px;padding:6px 0;font-family:Consolas,monospace;box-shadow:0 8px 32px rgba(0,0,0,.8)">
+    <div style="font-size:7px;letter-spacing:.2em;color:rgba(148,0,255,.5);padding:6px 14px 4px;text-transform:uppercase">upcoming events</div>
+    <div id="queue-dropdown-items"></div>
   </div>
   <div class="strat-slot" id="ss-nav">
     <div class="ss-icon">◉</div>
@@ -2786,6 +2793,7 @@ var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
 var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
 
 var _eqCanvasInitData = {_eq_canvas_tiles_j};
+var _queuedActionsData = {_queued_actions_js};
 var portDates  = {port_dates_j};
 var portValues = {port_values_j};
 var markTs     = {mark_ts_j};
@@ -3599,38 +3607,64 @@ function drawPulse() {{
         ctx.fill(); ctx.shadowBlur = 0;
       }});
 
-      // ── Combo streak text — high above orb, clear of outer orbit ────────────
+      // ── Combo markers — spawn LEFT of orb, drift further left as they fade ──
+      // Positive (win) markers float slightly ABOVE orb Y; losses slightly BELOW.
+      if (!window._comboParticles) window._comboParticles = [];
+      var _cp = window._comboParticles;
+      var _cpNow = Date.now();
+
+      // Spawn combo streak label as a new particle
       if (_comboCount > 0) {{
-        var comboCol = _comboCount>=10 ? '0,229,255' : _comboCount>=5 ? '255,170,0' : '255,0,204';
-        var bounce   = Math.sin(phase*6)*2;
-        var comboSize= Math.min(9 + _comboCount*0.8, 18);
-        // Auto-fade: full opacity for 4s, then fade out over 2s
-        var _comboAge = (Date.now() - _comboLastAt) / 1000;
-        var _comboA   = _comboAge < 4 ? 0.9 : Math.max(0, 0.9 - (_comboAge - 4) * 0.45);
-        if (_comboA > 0) {{
-          ctx.save();
-          ctx.font = 'bold '+Math.round(comboSize)+'px Consolas';
-          ctx.fillStyle   = 'rgba('+comboCol+','+_comboA+')';
-          ctx.shadowColor = 'rgba('+comboCol+','+_comboA+')';
-          ctx.shadowBlur  = (10+_comboCount*1.2) * _comboA;
-          ctx.textAlign   = 'center';
-          ctx.fillText('\xd7'+_comboCount+' COMBO', pcx, pcy-82+bounce);
-          ctx.restore();
+        var _comboAge2 = (_cpNow - _comboLastAt) / 1000;
+        var _comboA2   = _comboAge2 < 3 ? 0.9 : Math.max(0, 0.9 - (_comboAge2 - 3) * 0.6);
+        if (_comboA2 > 0 && !window._comboStreakParticle) {{
+          // pin the persistent streak label to a stable particle slot
+          window._comboStreakParticle = {{
+            text: '\xd7'+_comboCount+' COMBO',
+            col: _comboCount>=10 ? '0,229,255' : _comboCount>=5 ? '255,170,0' : '255,0,204',
+            isWin: true, born: _cpNow, lifetime: 6000, sticky: true
+          }};
+          _cp.push(window._comboStreakParticle);
+        }} else if (window._comboStreakParticle) {{
+          // Update streak text as count changes
+          window._comboStreakParticle.text = '\xd7'+_comboCount+' COMBO';
+          window._comboStreakParticle.col  = _comboCount>=10 ? '0,229,255' : _comboCount>=5 ? '255,170,0' : '255,0,204';
+          window._comboStreakParticle.born = _cpNow;
         }}
+      }} else {{
+        window._comboStreakParticle = null;
       }}
       if (_comboFlash) {{
-        _comboFlash.age += 0.018;  // fast decay — gone in ~0.7s
-        var fa = Math.max(0, 1-_comboFlash.age*1.4);
-        ctx.save();
-        ctx.font='bold 8px Consolas';
-        ctx.fillStyle='rgba('+_comboFlash.col[0]+','+_comboFlash.col[1]+','+_comboFlash.col[2]+','+fa+')';
-        ctx.shadowColor='rgba('+_comboFlash.col[0]+','+_comboFlash.col[1]+','+_comboFlash.col[2]+','+fa+')';
-        ctx.shadowBlur=12;
-        ctx.textAlign='center';
-        ctx.fillText(_comboFlash.text, pcx, pcy-96-_comboFlash.age*20);
-        ctx.restore();
-        if (_comboFlash.age >= 1) _comboFlash = null;
+        _cp.push({{
+          text: _comboFlash.text,
+          col: _comboFlash.col[0]+','+_comboFlash.col[1]+','+_comboFlash.col[2],
+          isWin: _comboFlash.col[1] > 100, // green = win
+          born: _cpNow, lifetime: 900, sticky: false
+        }});
+        _comboFlash = null;
       }}
+
+      // Draw and age all combo particles
+      window._comboParticles = _cp.filter(function(p) {{ return _cpNow - p.born < p.lifetime; }});
+      window._comboParticles.forEach(function(p) {{
+        var age = (_cpNow - p.born) / p.lifetime;
+        var alpha = Math.max(0, 1 - age * 1.1);
+        if (alpha <= 0) return;
+        // Drift left over lifetime; pos above, neg below orb Y
+        var drift = age * 90;                          // drifts 90px left over lifetime
+        var yOff  = p.isWin ? -14 : 10;               // win=above, loss=below orb center
+        var px2   = pcx - 30 - drift;                 // start 30px left of orb center
+        var py2   = pcy + yOff;
+        var fsize = p.sticky ? Math.min(9 + (_comboCount||1)*0.6, 16) : 8;
+        ctx.save();
+        ctx.font = 'bold '+Math.round(fsize)+'px Consolas';
+        ctx.fillStyle   = 'rgba('+p.col+','+alpha+')';
+        ctx.shadowColor = 'rgba('+p.col+','+alpha+')';
+        ctx.shadowBlur  = 10 * alpha;
+        ctx.textAlign   = 'right';
+        ctx.fillText(p.text, px2, py2);
+        ctx.restore();
+      }});
 
     }} catch(e) {{}}
   }}
@@ -4512,68 +4546,61 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     var m = mapped;
     var n = m.length;
+    // Direct linear segments — no step chart, no vertical snaps.
+    // Sidescroller: the line is a smooth trail, up = profit, down = loss.
     function _stroke(pts) {{
       ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
-      for(var i=0;i<pts.length-1;i++) {{
-        ctx.lineTo(pts[i+1].x, pts[i].y);   // hold horizontal
-        ctx.lineTo(pts[i+1].x, pts[i+1].y); // snap vertical
-      }}
+      for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
     }}
 
-    // Under-fill: reflects gain/loss direction at each end
+    // Under-fill: gradient from start color to end color
     var _startDy = n > 1 ? m[1].y - m[0].y : 0;
     var _endDy   = n > 1 ? m[n-1].y - m[n-2].y : 0;
     var _startRGB = _startDy < -0.5 ? '0,220,255' : _startDy > 0.5 ? '255,10,138' : '148,0,255';
     var _endRGB   = _endDy   < -0.5 ? '0,220,255' : _endDy   > 0.5 ? '255,10,138' : '148,0,255';
     _stroke(m); ctx.lineTo(m[n-1].x,H); ctx.lineTo(m[0].x,H); ctx.closePath();
     var fg = ctx.createLinearGradient(m[0].x,0,m[n-1].x,0);
-    fg.addColorStop(0,'rgba('+_startRGB+',0.06)');
-    fg.addColorStop(1,'rgba('+_endRGB+',0.14)');
+    fg.addColorStop(0,'rgba('+_startRGB+',0.04)');
+    fg.addColorStop(1,'rgba('+_endRGB+',0.12)');
     ctx.fillStyle=fg; ctx.fill();
 
-    // Per-segment Nyan-cat rainbow: each segment colored by gain (teal) or loss (magenta)
-    // Older segments fade out toward the tail — you read the portfolio history in color
+    // Per-segment glow: colored by direction (teal=up, magenta=down)
+    // Comet fade: oldest segment = 15% alpha, tip = 100%
     function _segRGB(dy) {{
-      if (dy < -0.5) return '0,220,255';    // UP   → Jazz teal / cyan
+      if (dy < -0.5) return '0,220,255';    // UP   → teal/cyan
       if (dy >  0.5) return '255,10,138';   // DOWN → hot magenta
       return '148,0,255';                   // FLAT → deep violet
     }}
-    // Glow pass widths and opacity scales
     var _passes = [
-      {{w:34, a:0.18}},
-      {{w:13, a:0.52}},
-      {{w:4.5,a:0.82}},
-      {{w:1.6,a:1.00}},
+      {{w:18, a:0.14}},
+      {{w:7,  a:0.45}},
+      {{w:2.5,a:0.80}},
+      {{w:1.0,a:1.00}},
     ];
     for (var si = 0; si < n - 1; si++) {{
       var _p1 = m[si], _p2 = m[si+1];
       var _dy   = _p2.y - _p1.y;
       var _rgb  = _segRGB(_dy);
-      // Comet fade: oldest segment = 15% opacity, tip = 100%
       var _fade = 0.15 + 0.85 * (si / Math.max(1, n - 2));
-      var _tip  = (si === n - 2) ? 1.25 : 1;  // tip segment extra bright
-      var _isLast = (si === n - 2);
-      // Last segment: horizontal only — skip vertical snap to avoid bright bar at _nowPx
-      (function(_p1c,_p2c,_rgbc,_fadec,_tipc,_isLastc) {{
+      var _tip  = (si === n - 2) ? 1.3 : 1;
+      (function(_p1c,_p2c,_rgbc,_fadec,_tipc) {{
         _passes.forEach(function(pass) {{
           ctx.beginPath();
           ctx.moveTo(_p1c.x, _p1c.y);
-          ctx.lineTo(_p2c.x, _p1c.y);   // hold horizontal
-          if (!_isLastc) ctx.lineTo(_p2c.x, _p2c.y); // snap vertical (skip on last)
+          ctx.lineTo(_p2c.x, _p2c.y);   // direct linear — no vertical snap
           ctx.strokeStyle = 'rgba('+_rgbc+','+(pass.a * _fadec * _tipc)+')';
           ctx.lineWidth   = pass.w;
-          ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
           ctx.stroke();
         }});
         // White highlight spine
         ctx.beginPath();
         ctx.moveTo(_p1c.x, _p1c.y);
-        ctx.lineTo(_p2c.x, _p1c.y);
-        if (!_isLastc) ctx.lineTo(_p2c.x, _p2c.y);
-        ctx.strokeStyle = 'rgba(255,245,255,'+(0.5 * _fadec * _tipc)+')';
-        ctx.lineWidth = 0.65; ctx.lineJoin='miter'; ctx.lineCap='square';
+        ctx.lineTo(_p2c.x, _p2c.y);
+        ctx.strokeStyle = 'rgba(255,245,255,'+(0.45 * _fadec * _tipc)+')';
+        ctx.lineWidth = 0.7; ctx.lineJoin='round'; ctx.lineCap='round';
         ctx.stroke();
-      }})(_p1,_p2,_rgb,_fade,_tip,_isLast);
+      }})(_p1,_p2,_rgb,_fade,_tip);
     }}
 
     // Breathing dot at trail tip
@@ -8123,17 +8150,79 @@ setTimeout(function() {{
         }}
       }};
 
-      // ── PRICE slot — CoinGecko poll every 4s ─────────────────
+      // ── QUEUED EVENTS slot + dropdown ────────────────────────
       var _lastPriceTs = 0;
       window._onPricePoll = function() {{ _lastPriceTs = Date.now(); }};
-      function _updatePriceSlot() {{
-        var age = Date.now() - _lastPriceTs;
-        var rem = Math.max(0, 4000 - age);
-        if (rem < 200) {{
-          _ssSet('ss-price-st', 'ss-ready', 'FETCHING');
+      var _queueOpen = false;
+      function _fmtMs(ms) {{
+        if (ms <= 0) return 'NOW';
+        var s = Math.round(ms / 1000);
+        if (s < 60) return s + 's';
+        var m = Math.floor(s / 60), ss = s % 60;
+        if (m < 60) return m + 'm ' + (ss ? ss + 's' : '');
+        var h = Math.floor(m / 60), mm = m % 60;
+        return h + 'h ' + (mm ? mm + 'm' : '');
+      }}
+      window._toggleQueueDropdown = function() {{
+        _queueOpen = !_queueOpen;
+        var dd = document.getElementById('queue-dropdown');
+        if (!dd) return;
+        if (_queueOpen) {{
+          var slot = document.getElementById('ss-queue');
+          var r = slot ? slot.getBoundingClientRect() : {{left:0,bottom:0}};
+          dd.style.left = r.left + 'px';
+          dd.style.top  = (r.bottom + 4) + 'px';
+          dd.style.display = 'block';
+          _renderQueueItems();
         }} else {{
-          _ssSet('ss-price-st', 'ss-active', 'in ' + _fmtCountdown(rem));
+          dd.style.display = 'none';
         }}
+        // Close on outside click
+        setTimeout(function() {{
+          function _closeOnOut(e) {{
+            var dd2 = document.getElementById('queue-dropdown');
+            var sl2 = document.getElementById('ss-queue');
+            if (dd2 && !dd2.contains(e.target) && sl2 && !sl2.contains(e.target)) {{
+              dd2.style.display = 'none'; _queueOpen = false;
+              document.removeEventListener('click', _closeOnOut);
+            }}
+          }}
+          document.addEventListener('click', _closeOnOut);
+        }}, 10);
+      }};
+      function _renderQueueItems() {{
+        var el = document.getElementById('queue-dropdown-items');
+        if (!el) return;
+        var now = Date.now();
+        var html = '';
+        (_queuedActionsData || []).forEach(function(q) {{
+          var rem  = (q.target_ms || 0) - now;
+          var eta  = _fmtMs(rem);
+          var past = rem <= 0;
+          var col  = past ? 'rgba(255,255,255,.22)' : q.color;
+          html += '<div style="display:flex;align-items:baseline;gap:10px;padding:6px 14px;border-bottom:1px solid rgba(255,255,255,.04)">'
+            + '<span style="font-size:8px;font-weight:700;color:'+col+';letter-spacing:.12em;min-width:44px">'+ q.badge +'</span>'
+            + '<span style="font-size:10px;color:rgba(220,200,255,.8);flex:1">'+ (q.label||'') +'</span>'
+            + '<span style="font-size:8px;color:'+(past?'rgba(255,255,255,.2)':col)+';letter-spacing:.06em;white-space:nowrap">'
+            + (past ? 'done' : 'in '+eta) +'</span>'
+            + '</div>';
+        }});
+        if (!html) html = '<div style="padding:8px 14px;font-size:9px;color:rgba(255,255,255,.25)">no events scheduled</div>';
+        el.innerHTML = html;
+      }}
+      function _updateQueueSlot() {{
+        var now = Date.now();
+        var next = null;
+        (_queuedActionsData || []).forEach(function(q) {{
+          var rem = (q.target_ms || 0) - now;
+          if (rem > 0 && (next === null || rem < next.rem)) next = {{rem:rem, q:q}};
+        }});
+        if (next) {{
+          _ssSet('ss-queue-st', 'ss-active', next.q.badge + ' in ' + _fmtMs(next.rem));
+        }} else {{
+          _ssSet('ss-queue-st', '', 'all done');
+        }}
+        if (_queueOpen) _renderQueueItems();  // live-update countdowns while open
       }}
 
       // ── CURRENT POS slot — open position count ───────────────
@@ -8375,7 +8464,7 @@ setTimeout(function() {{
         _updateRunnerSlot();
         // TRADES slot updated via window._updateTradesSlot from _updateOrbMetrics
         // WALLET slot updated via window._updateWalletSlot from _updateNavDisplays
-        _updatePriceSlot();
+        _updateQueueSlot();
         _updateNavSlot();
         _updateExposureSlot();
         _updateTphSlot();
