@@ -7430,6 +7430,17 @@ setTimeout(function() {{
     }}
     window._etUpsert = _etUpsert;
 
+    // Returns {{ strategy: count }} for all live tiles (used by HUD dropdown)
+    window._etStratCounts = function() {{
+      var counts = {{}};
+      _ET.forEach(function(t) {{
+        if (t.phase === 'done') return;
+        var s = t.strategy || (t.isCrypto ? 'crypto' : 'momentum');
+        counts[s] = (counts[s] || 0) + 1;
+      }});
+      return counts;
+    }};
+
     // Exit a tile (called by notification handler or poll)
     window._etExit = function(sym, pnl, exitPrice) {{
       var t = _etBySym[sym];
@@ -8507,31 +8518,31 @@ setTimeout(function() {{
       function _renderStratDropdown() {{
         var items = document.getElementById('strat-dropdown-items');
         if (!items) return;
-        // Count holdings per strategy
-        var counts = {{ momentum: 0, crypto: 0 }};
-        document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').forEach(function() {{ counts.momentum++; }});
-        Object.keys(window._cryptoPositionsMap || {{}}).forEach(function() {{ counts.crypto++; }});
-        var activeStrats = Object.keys(counts).filter(function(k) {{ return counts[k] > 0; }});
+        var counts = window._etStratCounts ? window._etStratCounts() : {{}};
         var html = '';
-        activeStrats.forEach(function(key) {{
+        // Active strategies first, then future ones dimmed
+        var allKeys = ['momentum','crypto','daytrader','reversion','sentiment','volatility','factor','macro','ensemble'];
+        allKeys.forEach(function(key) {{
           var b = _STRAT_BADGES[key]; if (!b) return;
-          html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid rgba(148,0,255,.1)">'
-            + '<span style="font-size:14px;filter:drop-shadow(0 0 6px '+b.color+');color:'+b.color+';flex-shrink:0;width:20px;text-align:center">'+b.glyph+'</span>'
-            + '<div style="min-width:0">'
-            + '<div style="font-size:8px;letter-spacing:.12em;color:'+b.color+';text-shadow:0 0 8px '+b.color+';font-weight:700">'+b.label+'</div>'
+          var n = counts[key] || 0;
+          var active = n > 0;
+          var dimAlpha = active ? '1' : '0.28';
+          var glowStyle = active ? 'filter:drop-shadow(0 0 6px '+b.color+');' : '';
+          html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid rgba(148,0,255,.08);opacity:'+dimAlpha+'">'
+            + '<span style="font-size:14px;'+glowStyle+'color:'+b.color+';flex-shrink:0;width:20px;text-align:center">'+b.glyph+'</span>'
+            + '<div style="min-width:0;flex:1">'
+            + '<div style="font-size:8px;letter-spacing:.12em;color:'+(active?b.color:'rgba(255,255,255,.5)')+';'+(active?'text-shadow:0 0 8px '+b.color+';':'')+';font-weight:700">'+b.label+'</div>'
             + '<div style="font-size:7px;color:rgba(255,255,255,.35);margin-top:1px">'+b.desc+'</div>'
             + '</div>'
-            + '<span style="margin-left:auto;font-size:11px;color:'+b.color+';font-weight:700;text-shadow:0 0 8px '+b.color+'">'+counts[key]+'</span>'
+            + '<span style="margin-left:auto;font-size:11px;font-weight:700;color:'+(active?b.color:'rgba(255,255,255,.2)')+';'+(active?'text-shadow:0 0 8px '+b.color:'')+'">'+( active ? n : '—' )+'</span>'
             + '</div>';
         }});
-        if (!html) html = '<div style="padding:8px 14px;font-size:8px;color:rgba(255,255,255,.3)">no active strategies</div>';
         items.innerHTML = html;
       }}
 
       function _updateExposureSlot() {{
-        var cryptoCount = Object.keys(window._cryptoPositionsMap || {{}}).length;
-        var eqCount = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
-        var activeStrats = (cryptoCount > 0 ? 1 : 0) + (eqCount > 0 ? 1 : 0);
+        var counts = window._etStratCounts ? window._etStratCounts() : {{}};
+        var activeStrats = Object.keys(counts).filter(function(k) {{ return counts[k] > 0; }}).length;
         if (activeStrats === 0) {{ _ssSet('ss-exposure-st', '', '—'); return; }}
         _ssSet('ss-exposure-st', 'ss-active', activeStrats + '');
       }}
