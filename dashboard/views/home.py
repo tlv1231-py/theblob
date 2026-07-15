@@ -1151,6 +1151,18 @@ body::after {{
 #pos-overlay #pos-body {{ flex:1; overflow:hidden; display:flex; flex-direction:row; gap:0; }}
 #pos-right {{
   background:transparent;
+  position:relative;
+}}
+#tile-headings {{
+  position:absolute; top:0; left:0; pointer-events:none; z-index:10;
+}}
+.tile-group-hdr {{
+  position:absolute; top:0; display:flex; align-items:center; gap:5px;
+  height:16px; padding:0 6px; box-sizing:border-box;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  background:rgba(0,0,8,0.70);
+  font:700 7px Consolas,monospace; letter-spacing:.18em; text-transform:uppercase;
+  white-space:nowrap; overflow:hidden;
 }}
 #pos-left {{ flex:0 0 auto !important; overflow:hidden; width:0 !important; display:none; }}
 #pos-left .pos-section-label {{ display:none; }}
@@ -2801,7 +2813,8 @@ body::after {{
         </div>
       </div>
       <div id="pos-right">
-        <canvas id="eq-tiles-canvas" style="display:block;flex-shrink:0"></canvas>
+        <div id="tile-headings"></div>
+        <canvas id="eq-tiles-canvas" style="display:block;flex-shrink:0;margin-top:16px"></canvas>
         <div id="equity-countdown">
           <span class="eq-pip-label" id="eq-pip-label">equity pipeline</span>
           <div class="eq-pip-bar"><div class="eq-pip-fill" id="eq-pip-fill" style="width:0%"></div></div>
@@ -6985,10 +6998,12 @@ setTimeout(function() {{
     var _ET = [];          // tile state objects (ordered display order)
     var _etBySym = {{}};   // sym → tile for O(1) lookup
 
+    var _HEADING_H = 16; // px reserved at top of canvas for strategy group labels
+
     function _etLayout() {{
       var stratBar = document.getElementById('strat-bar');
       var sbH = stratBar ? stratBar.offsetHeight : 46;
-      var availH = window.innerHeight - sbH - 4;
+      var availH = window.innerHeight - sbH - 4 - _HEADING_H;
       var perCol = Math.max(1, Math.floor(availH / _EQ_H));
       // Stable sort: within each group, sort by enteredAt so positions don't
       // shuffle when tiles enter/exit (newest at top, oldest at bottom)
@@ -7468,6 +7483,57 @@ setTimeout(function() {{
       }}, 3500);
     }};
 
+    // Strategy heading data — glyph, color, label per key
+    var _HDR_BADGES = {{
+      momentum:  {{ g:'▲▲', c:'#00e5ff', n:'MOMENTUM'  }},
+      crypto:    {{ g:'◈',  c:'#e040fb', n:'CRYPTO'    }},
+      daytrader: {{ g:'⊕',  c:'#b2ff59', n:'DAYTRADER' }},
+      reversion: {{ g:'⇌',  c:'#ff9900', n:'MEAN REV'  }},
+      sentiment: {{ g:'◉',  c:'#ff4081', n:'SENTIMENT' }},
+      volatility:{{ g:'⚡', c:'#ff6b35', n:'VOLATILITY'}},
+      factor:    {{ g:'✦',  c:'#ffd740', n:'FACTOR'    }},
+      macro:     {{ g:'≋',  c:'#00bcd4', n:'MACRO'     }},
+      ensemble:  {{ g:'❋',  c:'#ffffff', n:'ENSEMBLE'  }},
+    }};
+
+    function _updateHeadings(layout) {{
+      var hdrEl = document.getElementById('tile-headings');
+      if (!hdrEl) return;
+
+      // Collect strategy groups: {{ key, xStart, width, count }}
+      var groups = [];
+      // Crypto group (left side)
+      if (layout.cryptoCols > 0 && layout.crypto.length > 0) {{
+        // Identify strategy of first crypto tile (all crypto = same strategy for now)
+        var cKey = (layout.crypto[0] && layout.crypto[0].strategy) || 'crypto';
+        groups.push({{ key: cKey, x: 0, w: layout.cryptoCols * _EQ_W, n: layout.crypto.length }});
+      }}
+      // Equity group (right side)
+      if (layout.equityCols > 0 && layout.equity.length > 0) {{
+        var eKey = (layout.equity[0] && layout.equity[0].strategy) || 'momentum';
+        var eX = layout.cryptoCols * _EQ_W + (layout.cryptoCols > 0 && layout.equityCols > 0 ? 2 : 0);
+        groups.push({{ key: eKey, x: eX, w: layout.equityCols * _EQ_W, n: layout.equity.length }});
+      }}
+
+      // Rebuild heading elements
+      hdrEl.innerHTML = '';
+      groups.forEach(function(g) {{
+        var b = _HDR_BADGES[g.key] || {{ g: '◆', c: '#ffffff', n: g.key.toUpperCase() }};
+        var div = document.createElement('div');
+        div.className = 'tile-group-hdr';
+        div.style.left  = g.x + 'px';
+        div.style.width = g.w + 'px';
+        div.style.color = b.c;
+        div.style.borderBottomColor = b.c.replace(')', ',.15)').replace('rgb','rgba');
+        div.style.textShadow = '0 0 8px ' + b.c;
+        div.innerHTML = '<span style="font-size:9px;filter:drop-shadow(0 0 4px '+b.c+')">'
+          + b.g + '</span><span>' + b.n + '</span>'
+          + '<span style="margin-left:auto;opacity:.45;letter-spacing:.05em">'
+          + g.n + (g.n === 1 ? ' HOLDING' : ' HOLDINGS') + '</span>';
+        hdrEl.appendChild(div);
+      }});
+    }}
+
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
       if (!overlay) return;
@@ -7477,11 +7543,13 @@ setTimeout(function() {{
       var layout = _etLayout();
       var eqW = layout.totalCols * _EQ_W;
       overlay.style.width = eqW + 'px';
-      // Also resize the canvas
+      // Resize canvas
       if (_etCanvas) {{
         _etCanvas.style.width  = eqW + 'px';
         _etCanvas.style.height = layout.availH + 'px';
       }}
+      // Reposition strategy group headings
+      _updateHeadings(layout);
     }}
 
     window._updateOverlayWidth = _updateOverlayWidth;
