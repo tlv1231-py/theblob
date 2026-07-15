@@ -1191,7 +1191,7 @@ body::after {{
 }}
 /* flex children */
 #main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
-#chart {{ display:none; }}
+#chart {{ position:absolute; inset:0; width:100%; height:100%; opacity:0; pointer-events:none; }}
 #pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
 #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
