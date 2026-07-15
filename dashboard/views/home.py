@@ -917,6 +917,16 @@ def _build_daw_html(data: dict) -> str:
 
     _queued_actions_js = _json.dumps(data.get("queued_actions", []))
 
+    def _orb_hue(pnl, pct):
+        if abs(pnl) < 0.01: return 0
+        mag = min(abs(pct) / 5, 1)
+        return int(140 - mag * 60) if pnl >= 0 else 20
+    def _orb_sat(pnl): return "0%" if abs(pnl) < 0.01 else "80%"
+    def _orb_lit(pnl, pct):
+        if abs(pnl) < 0.01: return "26%"
+        return str(int(42 + min(abs(pct)/5,1)*10)) + "%"
+    def _orb_dur(days): return round(max(0.5, 1.4 - min(days,30)/30 * 0.9), 2)
+
     pos_cards = ""
     _pc_idx = 0
     _TICKER_PAL = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
@@ -987,20 +997,15 @@ def _build_daw_html(data: dict) -> str:
             f'  {badge_html}'
             f'  <span class="pc-val" id="pcval-{p["sym"]}">${p["value"]:,.0f}</span>'
             f'</div>'
-            # Row 2: P&L
-            f'<div class="pc-pnl" id="pcpnl-{p["sym"]}" style="color:{pnl_col}">'
-            f'  {pnl_arrow} {pnl_sign}${abs(epnl):,.0f}'
-            f'  <span class="pc-pnl-pct" id="pcpct-{p["sym"]}">({epct:+.1f}%)</span>'
-            f'</div>'
-            # Proximity bar
-            f'{prox_bar}'
-            # Row 3: hold timer + entry info
-            f'<div class="pc-meta">'
-            f'  <span class="pc-days" data-days="{days}">⏱ {days} {day_lbl}</span>'
-            f'  <span class="pc-entry">entered {entry_fmt} · {edate_fmt}</span>'
-            f'</div>'
-            f'<div class="pc-status {"pc-status-hold" if p["in_signal"] else "pc-status-sell"}">'
-            f'  {p["hold_text"]}'
+            # Bottom: P&L orb (color = direction/magnitude, pulse = age)
+            f'<div class="pc-orb-wrap">'
+            f'  <div class="pc-orb" id="pcorb-{p["sym"]}"'
+            f'    data-pnl="{epnl}" data-pct="{epct}" data-days="{days}"'
+            f'    style="--orb-h:{_orb_hue(epnl,epct)};--orb-s:{_orb_sat(epnl)};--orb-l:{_orb_lit(epnl,epct)};--orb-dur:{_orb_dur(days)}s">'
+            f'  </div>'
+            f'  <span class="pc-orb-val" id="pcpnl-{p["sym"]}" style="color:{pnl_col}">'
+            f'    {pnl_sign}${abs(epnl):,.0f}'
+            f'  </span>'
             f'</div>'
             f'</div>'
         )
@@ -1985,7 +1990,28 @@ body::after {{
   font-weight:700; color:#ffffff; font-variant-numeric:tabular-nums;
   letter-spacing:-.01em;
 }}
-.pc-pnl {{
+.pc-pnl {{ font-family:Consolas,monospace; font-size:10px; font-weight:400; font-variant-numeric:tabular-nums; }}
+/* ── P&L orb replacing bottom rows ── */
+.pc-orb-wrap {{
+  display:flex; align-items:center; gap:10px; margin-top:6px; padding-bottom:2px;
+}}
+@keyframes pc-orb-pulse {{
+  0%,100% {{ box-shadow:0 0 4px 1px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.35),
+                        0 0 10px 2px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.15); }}
+  50%      {{ box-shadow:0 0 8px 3px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.7),
+                        0 0 18px 6px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.3); }}
+}}
+.pc-orb {{
+  flex-shrink:0; width:18px; height:18px; border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,
+    hsla(var(--orb-h),var(--orb-s),calc(var(--orb-l) + 22%),1) 0%,
+    hsl(var(--orb-h),var(--orb-s),var(--orb-l)) 55%,
+    hsla(var(--orb-h),var(--orb-s),calc(var(--orb-l) - 15%),1) 100%
+  );
+  animation:pc-orb-pulse var(--orb-dur,1.2s) ease-in-out infinite;
+  transition:background .8s ease, box-shadow .8s ease;
+}}
+.pc-orb-val {{
   font-family:Consolas,monospace; font-size:10px; font-weight:400;
   font-variant-numeric:tabular-nums;
 }}
@@ -4983,6 +5009,15 @@ setInterval(_fetchIntradayMarks, 15000);
 
   setTimeout(_pollEqPrices, 4000);
   setInterval(_pollEqPrices, 20000);
+
+  // ── Equity tile entry animation (wipe from transparent, bottom→up) ────────────
+  (function() {{
+    var cards = document.querySelectorAll('.pc-eq');
+    cards.forEach(function(el, i) {{
+      el.classList.add('pos-card-entering');
+      setTimeout(function() {{ el.classList.remove('pos-card-entering'); }}, 600);
+    }});
+  }})();
 }})();
 
 // ── Live intraday NAV accumulator — fed by Binance price poll every 4s ────────
@@ -6892,27 +6927,50 @@ setTimeout(function() {{
       ].join(';');
       document.body.appendChild(el);
 
-      // ── Phase 1: Instant white flash → quantized B&W fade (0–220ms) ──────
-      // Use CSS class instead of inline filter to stay on compositor thread
-      el.classList.add('pos-card-flash-exit');
-      el.style.transition = 'none';
+      // ── Phase 1: Canvas bitcrusher (0–500ms) ─────────────────────────────
+      var bc = document.createElement('canvas');
+      bc.width  = Math.round(r.width);
+      bc.height = Math.round(r.height);
+      bc.style.cssText = 'position:fixed;top:' + r.top + 'px;left:' + r.left + 'px;'
+        + 'width:' + r.width + 'px;height:' + r.height + 'px;z-index:9991;pointer-events:none;';
+      document.body.appendChild(bc);
+      var bCtx = bc.getContext('2d');
+      // Snapshot the card into the canvas
+      var crushStart = performance.now();
+      var crushDur = 500;
+      (function _crushFrame(now) {{
+        var age = now - crushStart;
+        if (age >= crushDur) {{
+          if (bc.parentNode) bc.parentNode.removeChild(bc);
+          if (el.parentNode) el.parentNode.removeChild(el);
+          ghost.classList.add('ghost-pnl-showing');
+          ghost.style.opacity = '1';
+          return;
+        }}
+        var crushT = age / crushDur;
+        var bSz = Math.max(2, Math.round(2 + crushT * crushT * 12));
+        // On first frame, snapshot el appearance via fillRect mimic
+        bCtx.clearRect(0, 0, bc.width, bc.height);
+        // Draw tile background
+        bCtx.fillStyle = 'rgba(0,0,8,0.92)';
+        bCtx.fillRect(0, 0, bc.width, bc.height);
+        // Left accent stripe
+        bCtx.fillStyle = col;
+        bCtx.fillRect(0, 0, 3, bc.height);
+        // Eat blocks
+        for (var by = 0; by < bc.height; by += bSz) {{
+          for (var bx = 0; bx < bc.width; bx += bSz) {{
+            if (Math.random() < crushT * 1.5) bCtx.clearRect(bx, by, bSz, bSz);
+          }}
+        }}
+        requestAnimationFrame(_crushFrame);
+      }})(crushStart);
+      el.style.opacity = '0'; // hide original immediately; canvas takes over
 
-      // ── Phase 2: Remove tile, reveal ghost P&L (220ms) ────────────────
-      setTimeout(function() {{
-        var r2 = el.getBoundingClientRect();
-        var cx = r2.left + r2.width / 2;
-        var cy = r2.top  + r2.height / 2;
-        _spawnParticles(cx, cy, col);
-        if (el.parentNode) el.parentNode.removeChild(el);
-        // Ghost P&L revealed with a bright flash-in
-        ghost.classList.add('ghost-pnl-showing');
-        ghost.style.opacity = '1';
-      }}, 220);
-
-      // ── Phase 3: Ghost P&L sticks for 2.5s, then arcade-glitch out ────
+      // ── Phase 2: Ghost P&L sticks for 2.5s, then arcade-glitch out ────
       setTimeout(function() {{
         ghost.classList.add('ghost-pnl-exiting');
-      }}, 2700);
+      }}, 3200);
 
       // Queue ghost placeholder for batch collapse after exit animation (~400ms after phase 3)
       _queueGhostCollapse(ghost);
@@ -7022,40 +7080,32 @@ setTimeout(function() {{
         t._dPnlPct += (t.pnlPct- t._dPnlPct) * lerpK;
 
         if (t.phase === 'entering') {{
-          // Powerup pickup — B&W only, fully contained, ~140ms total
-          if (age < 35) {{
-            // A: white flash
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(x, y, _EQ_W, _EQ_H);
-          }} else if (age < 95) {{
-            // B: scanline wipe — white field, horizontal black lines sweep down,
-            //    revealing tile content through the gaps
+          // Powerup pickup: scanline wipe from transparent (top→bottom, 80ms) + corner sparks (100ms)
+          if (age < 80) {{
+            // A: reveal tile top-to-bottom — unrevealed area stays clearRect (transparent)
+            var wipeT   = age / 80;
+            var revealY = Math.round(_EQ_H * wipeT); // px revealed so far
+            // Paint only the revealed strip
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y + _EQ_H - revealY, _EQ_W, revealY);
+            ctx.clip();
             _etPaintTile(ctx, t, x, y, ts);
-            var wipeT   = (age - 35) / 60;           // 0→1 over 60ms
-            var revealY = Math.round(_EQ_H * wipeT); // how many px are revealed
-            // Still-white area above reveal front
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(x, y, _EQ_W, _EQ_H - revealY);
-            // Scanlines over revealed area (2px black / 2px gap)
-            for (var sl = 0; sl < revealY; sl += 4) {{
-              ctx.fillStyle = 'rgba(0,0,0,0.18)';
-              ctx.fillRect(x, y + _EQ_H - revealY + sl, _EQ_W, 2);
-            }}
+            ctx.restore();
           }} else {{
-            // C: tile live — white corner sparks fade out over 45ms
+            // B: tile fully visible — B&W corner sparks fade out over 100ms
             _etPaintTile(ctx, t, x, y, ts);
-            var sparkA = Math.max(0, 1 - (age - 95) / 45);
+            var sparkA = Math.max(0, 1 - (age - 80) / 100);
             if (sparkA > 0) {{
               ctx.fillStyle = 'rgba(255,255,255,' + sparkA + ')';
               var sp = Math.round(6 * sparkA);
-              // 4-corner L-shaped sparks (all within tile bounds)
-              ctx.fillRect(x,            y,            2,  sp); ctx.fillRect(x,            y,            sp, 2);
-              ctx.fillRect(x+_EQ_W-2,    y,            2,  sp); ctx.fillRect(x+_EQ_W-sp,   y,            sp, 2);
-              ctx.fillRect(x,            y+_EQ_H-sp,   2,  sp); ctx.fillRect(x,            y+_EQ_H-2,    sp, 2);
-              ctx.fillRect(x+_EQ_W-2,    y+_EQ_H-sp,  2,  sp); ctx.fillRect(x+_EQ_W-sp,   y+_EQ_H-2,    sp, 2);
+              ctx.fillRect(x,         y,         2, sp); ctx.fillRect(x,         y,         sp, 2);
+              ctx.fillRect(x+_EQ_W-2, y,         2, sp); ctx.fillRect(x+_EQ_W-sp,y,         sp, 2);
+              ctx.fillRect(x,         y+_EQ_H-sp,2, sp); ctx.fillRect(x,         y+_EQ_H-2, sp, 2);
+              ctx.fillRect(x+_EQ_W-2, y+_EQ_H-sp,2, sp); ctx.fillRect(x+_EQ_W-sp,y+_EQ_H-2,sp, 2);
             }}
           }}
-          if (age > 140) {{ t.phase = 'live'; }}
+          if (age > 180) {{ t.phase = 'live'; }}
 
         }} else if (t.phase === 'live') {{
           _etPaintTile(ctx, t, x, y, ts);
@@ -7189,76 +7239,74 @@ setTimeout(function() {{
         if (t._valFlash) {{ t._valFlash = 0; }}
       }}
 
-      // ── ROW 2 (y+30): P&L · % (skip if both are zero) ──
-      var r2y = y + 30;
-      if (Math.abs(dPnl) >= 0.005 || Math.abs(dPnlPct) >= 0.005) {{
-        var pnlIsPos = dPnl >= 0;
-        var pnlCol   = pnlIsPos ? '#00c87a' : '#e03355';
-        var pnlSign  = pnlIsPos ? '+' : '-';
-        var absP     = Math.abs(dPnl);
-        ctx.font = '10px Consolas,monospace';
-        ctx.fillStyle = pnlCol;
-        var pnlStr = pnlSign + '$' + Math.round(absP).toLocaleString('en-US');
-        ctx.fillText(pnlStr, lx, r2y);
-        var pnlStrW = ctx.measureText(pnlStr).width;
-        ctx.font = '8px Consolas,monospace';
-        ctx.fillStyle = 'rgba(200,200,200,0.4)';
-        ctx.fillText(' (' + (dPnlPct>=0?'+':'') + dPnlPct.toFixed(1) + '%)', lx + pnlStrW, r2y);
+      // ── BOTTOM: P&L orb + value (replaces text rows 2–4) ───────────────────
+      // Orb color = P&L direction + magnitude; pulse speed = position age
+      var orbCx = x + 18, orbCy = y + H - 24, orbR = 9;
+
+      // Color: green→yellow→red by magnitude; neutral grey when flat
+      var orbHue, orbSat, orbLit;
+      if (Math.abs(dPnl) < 0.005) {{
+        orbHue = 0; orbSat = 0; orbLit = 28; // grey
+      }} else {{
+        var mag = Math.min(Math.abs(dPnlPct) / 5, 1); // 0→1 over ±5%
+        if (dPnl >= 0) {{
+          orbHue = 140 - mag * 60; // green(140) → yellow(80)
+          orbSat = 70 + mag * 30;
+          orbLit = 42 + mag * 10;
+        }} else {{
+          orbHue = 20 + mag * 0;   // red-orange
+          orbSat = 70 + mag * 30;
+          orbLit = 42 + mag * 10;
+        }}
       }}
 
-      // ── ROW 3 (y+45–48): age bar ──
-      var aBarX = lx, aBarW = W - lx - 5;
-      var r3barY = y + 48;
-      if (t.isCrypto) {{
-        var ageMs  = t.enteredAt ? (ts - t.enteredAt) : 0;
-        var ageHrs = ageMs / 3600000;
-        var agePct = Math.min(ageHrs / 4, 1);
-        var ageCol = agePct < 0.33 ? '#00c8ff' : agePct < 0.66 ? '#ffaa00' : '#ff2844';
-        var aN = 10, aBlockW = Math.floor((aBarW - (aN-1)) / aN);
-        for (var ai = 0; ai < aN; ai++) {{
-          ctx.fillStyle = ai < Math.round(agePct * aN) ? ageCol : 'rgba(255,255,255,0.06)';
-          ctx.fillRect(aBarX + ai*(aBlockW+1), r3barY, aBlockW, 3);
-        }}
-        var ageLabel = ageMs < 60000 ? '<1m' : ageMs < 3600000 ? Math.round(ageMs/60000)+'m' : ageHrs.toFixed(1)+'h';
-        ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = ageCol;
-        ctx.fillText(ageLabel, lx, r3barY + 13);
-        if (t.entry > 0) {{
-          ctx.fillStyle = 'rgba(180,180,180,0.3)';
-          ctx.textAlign = 'right';
-          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r3barY+13);
-          ctx.textAlign = 'left';
-        }}
-      }} else {{
-        // Days-held bar: fill by days/60 (60-day max)
-        var dayPct = Math.min(1, (t.days||0) / 60);
-        var dCol   = dayPct < 0.33 ? '#00c8ff' : dayPct < 0.66 ? '#ffaa00' : '#ff2844';
-        var dN = 10, dBlockW = Math.floor((aBarW - (dN-1)) / dN);
-        for (var di = 0; di < dN; di++) {{
-          ctx.fillStyle = di < Math.round(dayPct * dN) ? dCol : 'rgba(255,255,255,0.06)';
-          ctx.fillRect(aBarX + di*(dBlockW+1), r3barY, dBlockW, 3);
-        }}
-        ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = dCol;
-        ctx.fillText((t.days||0)+(t.days===1?' day':' days'), lx, r3barY+13);
-        if (t.entry > 0) {{
-          ctx.fillStyle = 'rgba(140,110,170,0.45)';
-          ctx.textAlign = 'right';
-          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r3barY+13);
-          ctx.textAlign = 'left';
-        }}
+      // Pulse speed: faster when older (age encodes urgency)
+      var ageForPulse = t.enteredAt ? (ts - t.enteredAt) : (t.days||0) * 3600000;
+      var ageFrac = Math.min(ageForPulse / (4 * 3600000), 1); // 0→1 over 4h
+      var pulseHz  = 0.6 + ageFrac * 1.8;  // 0.6–2.4 Hz
+      var pulse    = 0.55 + 0.45 * Math.sin(ts / 1000 * pulseHz * Math.PI * 2);
 
-        // ── ROW 4 (y+76): HOLD / EXIT signal status (clipped to tile width) ──
-        ctx.fillStyle = 'rgba(255,255,255,0.04)';
-        ctx.fillRect(x+2, y+68, W-4, 1);
+      // Outer glow
+      var glowR = ctx.createRadialGradient(orbCx, orbCy, 0, orbCx, orbCy, orbR * 2.2);
+      var glowCol = 'hsla(' + orbHue + ',' + orbSat + '%,' + orbLit + '%,';
+      glowR.addColorStop(0,   glowCol + (pulse * 0.5) + ')');
+      glowR.addColorStop(1,   glowCol + '0)');
+      ctx.beginPath();
+      ctx.arc(orbCx, orbCy, orbR * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = glowR;
+      ctx.fill();
+
+      // Orb body
+      var bodyR = ctx.createRadialGradient(orbCx - orbR*0.3, orbCy - orbR*0.3, 1, orbCx, orbCy, orbR);
+      bodyR.addColorStop(0,   'hsla(' + orbHue + ',' + orbSat + '%,' + Math.min(orbLit+30,80) + '%,' + pulse + ')');
+      bodyR.addColorStop(0.6, 'hsla(' + orbHue + ',' + orbSat + '%,' + orbLit + '%,' + pulse + ')');
+      bodyR.addColorStop(1,   'hsla(' + orbHue + ',' + orbSat + '%,' + Math.max(orbLit-20,10) + '%,' + (pulse*0.8) + ')');
+      ctx.beginPath();
+      ctx.arc(orbCx, orbCy, orbR, 0, Math.PI * 2);
+      ctx.fillStyle = bodyR;
+      ctx.fill();
+
+      // Specular glint
+      ctx.beginPath();
+      ctx.arc(orbCx - orbR*0.28, orbCy - orbR*0.28, orbR * 0.28, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,' + (pulse * 0.35) + ')';
+      ctx.fill();
+
+      // P&L value text to the right of orb
+      if (Math.abs(dPnl) >= 0.005) {{
+        var pnlSign2 = dPnl >= 0 ? '+' : '-';
+        var absP2 = Math.abs(dPnl);
+        var pnlStr2 = pnlSign2 + '$' + (absP2 >= 1000 ? (absP2/1000).toFixed(1)+'k' : Math.round(absP2).toLocaleString('en-US'));
+        ctx.font = '9px Consolas,monospace';
+        ctx.fillStyle = dPnl >= 0 ? '#00c87a' : '#e03355';
+        ctx.textAlign = 'left';
+        ctx.fillText(pnlStr2, orbCx + orbR + 5, orbCy + 3);
+        // % in dimmer text
+        var pctStr2 = (dPnlPct >= 0 ? '+' : '') + dPnlPct.toFixed(1) + '%';
         ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = t.inSignal ? 'rgba(0,200,140,0.5)' : 'rgba(220,120,0,0.6)';
-        ctx.save();
-        ctx.beginPath(); ctx.rect(lx, y+68, W - lx - 5, 12); ctx.clip();
-        var statusText = t.inSignal ? 'HOLD' : 'EXIT';
-        if (t.holdText) {{ statusText = t.holdText.length > 14 ? t.holdText.slice(0,13)+'…' : t.holdText; }}
-        ctx.fillText(statusText, lx, y+76);
-        ctx.restore();
+        ctx.fillStyle = 'rgba(200,200,200,0.4)';
+        ctx.fillText(pctStr2, orbCx + orbR + 5, orbCy + 13);
+        ctx.textAlign = 'left';
       }}
     }}
 
