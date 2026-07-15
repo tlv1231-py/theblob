@@ -1421,9 +1421,9 @@ body::after {{
 }}
 @keyframes dmg-pop {{
   0%   {{ opacity:0; transform:translateY(0px) scale(1.5); }}
-  8%   {{ opacity:1; transform:translateY(-2px) scale(1.08); }}
-  18%  {{ opacity:1; transform:translateY(-4px) scale(1); }}
-  75%  {{ opacity:1; transform:translateY(-10px) scale(1); }}
+  4%   {{ opacity:1; transform:translateY(-2px) scale(1.08); }}
+  8%   {{ opacity:1; transform:translateY(-4px) scale(1); }}
+  80%  {{ opacity:1; transform:translateY(-10px) scale(1); }}
   100% {{ opacity:0; transform:translateY(-16px) scale(.92); }}
 }}
 .ss-wallet-chip {{
@@ -1436,7 +1436,7 @@ body::after {{
   line-height:1.4; margin-top:2px;
 }}
 .ss-wallet-chip.dmg-active {{
-  animation: dmg-pop 2.2s cubic-bezier(.22,1,.36,1) forwards;
+  animation: dmg-pop 5s cubic-bezier(.22,1,.36,1) forwards;
 }}
 
 /* ── Callout rail — zero-height sibling after strat-bar; cards overflow down ─ */
@@ -8237,7 +8237,7 @@ setTimeout(function() {{
           setTimeout(function() {{
             chip.classList.remove('dmg-active');
             el.classList.remove('gain','loss');
-          }}, 2300);
+          }}, 5000);
         }}
       }};
 
