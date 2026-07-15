@@ -1150,7 +1150,7 @@ body::after {{
   -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
   mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
 }}
-#pos-left {{ flex:0 0 auto !important; overflow:hidden; width:0; transition:width .4s cubic-bezier(.22,1,.36,1); }}
+#pos-left {{ flex:0 0 auto !important; overflow:hidden; width:0 !important; display:none; }}
 #pos-left .pos-section-label {{ display:none; }}
 #pos-overlay #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
@@ -6113,10 +6113,10 @@ setTimeout(function() {{
                 // No callout for entries — card appearing in positions panel is enough
                 if (window._orbTradeFlash) window._orbTradeFlash(true);
                 if (window._soundEntry) window._soundEntry();
-                if (window._makeCard) {{
-                  var _sec = document.getElementById('pos-crypto-section');
+                // Upsert crypto tile on canvas engine
+                (function() {{
                   var _symE = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
-                  if (_sec && !_cryptoCardEls[_symE]) {{
+                  if (!_etBySym[_symE]) {{
                     var _priceE = priceM ? parseFloat(priceM[1].replace(/,/g,'')) : 0;
                     var _ep = {{
                       symbol: _symE, direction: 'long', qty: 0,
@@ -6125,9 +6125,9 @@ setTimeout(function() {{
                     }};
                     if (!window._cryptoPositionsMap) window._cryptoPositionsMap = {{}};
                     window._cryptoPositionsMap[_symE] = _ep;
-                    var _el = window._makeCard(_ep);
-                    // Fetch real qty from DB and backfill card + positionsMap
-                    (function(_s, _card) {{
+                    _makeCard(_ep); // → _etUpsert, no DOM element
+                    // Fetch real qty from DB and backfill tile state
+                    (function(_s) {{
                       var _qurl = 'https://seeevuklabvhkawawtxn.supabase.co/rest/v1/crypto_positions'
                         + '?select=qty,stop_price,target_price&symbol=eq.' + encodeURIComponent(_s);
                       fetch(_qurl, {{ headers: {{ 'apikey': 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY',
@@ -6142,18 +6142,19 @@ setTimeout(function() {{
                           window._cryptoPositionsMap[_s].stop_price = parseFloat(row.stop_price || 0);
                           window._cryptoPositionsMap[_s].target_price = parseFloat(row.target_price || 0);
                         }}
-                        _card.setAttribute('data-qty', realQty);
+                        var t = _etBySym[_s];
+                        if (t) {{
+                          t.qty   = realQty;
+                          t.stop  = parseFloat(row.stop_price  || 0) || t.stop;
+                          t.target= parseFloat(row.target_price|| 0) || t.target;
+                          t.val   = realQty * t.curPrice;
+                        }}
+                        _updateOverlayWidth();
                       }}).catch(function() {{}});
-                    }})(_symE, _el);
-                    _sec.appendChild(_el);
-                    void _el.offsetWidth;
-                    _el.classList.add('pos-card-entering');
-                    setTimeout(function() {{ _el.classList.remove('pos-card-entering'); }}, 220);
-                    _cryptoCardEls[_symE] = _el;
-                    var _flat = document.getElementById('pos-crypto-flat');
-                    if (_flat) _flat.style.display = 'none';
+                    }})(_symE);
+                    _updateOverlayWidth();
                   }}
-                }}
+                }})();
               }} else {{
                 // ── EXIT: ALL effects fire simultaneously — terminal flash + orb bloom +
                 //          sound + satellite shoot-out + P&L odometer — one atomic block ──
@@ -6668,9 +6669,8 @@ setTimeout(function() {{
         panel.classList.add('panel-scanning');
         setTimeout(function() {{ panel.classList.remove('panel-scanning'); }}, 1000);
       }}
-      // Card sweep animations — crypto + equity
-      var cardEls = Object.values(_cryptoCardEls).concat(Object.values(_equityCardEls));
-      cardEls.forEach(function(el, i) {{
+      // Canvas tiles have built-in scanline effect; legacy DOM equity cards also swept
+      Object.values(_equityCardEls).forEach(function(el, i) {{
         setTimeout(function() {{
           el.classList.remove('pos-card-scanning');
           void el.offsetWidth;
@@ -6769,10 +6769,8 @@ setTimeout(function() {{
       _ghostCollapseTimer = setTimeout(function() {{
         var batch = _ghostsToCollapse.splice(0);
 
-        // Step 1: glitch-snap ALL remaining live tiles (they're about to receive space)
-        var liveTiles = document.querySelectorAll(
-          '#pos-crypto-section .pos-card, #pos-equity-section .pos-card'
-        );
+        // Step 1: glitch-snap any legacy DOM equity tiles (canvas tiles self-reflow)
+        var liveTiles = document.querySelectorAll('#pos-equity-section .pos-card');
         liveTiles.forEach(function(card) {{
           card.classList.remove('pos-card-shuffle-land');
           void card.offsetWidth;  // force reflow so animation restarts
@@ -6799,12 +6797,13 @@ setTimeout(function() {{
     }}
 
     window._triggerCardExit = function(fullSym, reason, pnl, exitPrice) {{
-      // Equity tiles are managed by canvas engine — route there and return
-      if (_etBySym[fullSym]) {{
-        window._etExit(fullSym, pnl, exitPrice);
-        return;
-      }}
+      // All tiles are now on the canvas engine
+      var sym1 = fullSym;
+      var sym2 = fullSym + '/USD';
+      if (_etBySym[sym1]) {{ window._etExit(sym1, pnl, exitPrice); return; }}
+      if (_etBySym[sym2]) {{ window._etExit(sym2, pnl, exitPrice); return; }}
 
+      // Fallback: legacy DOM path (should not be reached)
       var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD'];
       if (!el) return;
       if (_cryptoCardEls[fullSym]) delete _cryptoCardEls[fullSym];
@@ -7078,11 +7077,17 @@ setTimeout(function() {{
       ctx.font = 'bold 11px Consolas,monospace';
       ctx.fillText(t.sym, lx + 9, r1y);
 
-      // Badge (HOLD/SELL)
+      // Badge (HOLD/SELL for equity, LONG/SHORT for crypto)
       var symW = ctx.measureText(t.sym).width;
       var bx = lx + 9 + symW + 5;
-      var badgeText = t.inSignal ? ('#' + (t.rank||'?') + ' HOLD') : 'EXIT';
-      var badgeCol  = t.inSignal ? 'rgba(0,200,140,0.65)' : 'rgba(220,160,0,0.65)';
+      var badgeText, badgeCol;
+      if (t.isCrypto) {{
+        badgeText = (t.direction || 'long').toUpperCase();
+        badgeCol  = (t.direction||'long') === 'short' ? 'rgba(255,80,60,0.65)' : 'rgba(0,200,140,0.65)';
+      }} else {{
+        badgeText = t.inSignal ? ('#' + (t.rank||'?') + ' HOLD') : 'EXIT';
+        badgeCol  = t.inSignal ? 'rgba(0,200,140,0.65)' : 'rgba(220,160,0,0.65)';
+      }}
       ctx.font = '7px Consolas,monospace';
       ctx.fillStyle = badgeCol;
       ctx.fillText(badgeText, bx, r1y);
@@ -7155,19 +7160,36 @@ setTimeout(function() {{
         ctx.textAlign = 'left';
       }}
 
-      // Row 4: meta
+      // Row 4: meta — age bar for crypto, days/entry for equity
       var r4y = y + 62;
-      ctx.fillStyle = 'rgba(0,200,220,0.5)';
-      ctx.font = '7px Consolas,monospace';
-      var dayStr = '⏱ ' + (t.days||0) + (t.days===1?' day':' days');
-      ctx.fillText(dayStr, lx, r4y);
-      if (t.entry > 0) {{
-        var entStr = '$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry.toFixed(2));
-        ctx.fillStyle = 'rgba(140,110,170,0.4)';
+      if (t.isCrypto) {{
+        var ageMs  = t.enteredAt ? (ts - t.enteredAt) : 0;
+        var ageHrs = ageMs / 3600000;
+        var agePct = Math.min(ageHrs / 4, 1);
+        var ageCol = agePct < 0.33 ? '#00c8ff' : agePct < 0.66 ? '#ffaa00' : '#ff2844';
+        var aBarX = lx, aBarW = W - lx - 6;
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillRect(aBarX, r4y - 3, aBarW, 3);
+        ctx.fillStyle = ageCol;
+        ctx.fillRect(aBarX, r4y - 3, aBarW * agePct, 3);
+        var ageLabel = ageMs < 60000 ? '<1m' : ageMs < 3600000
+          ? Math.round(ageMs/60000) + 'm' : ageHrs.toFixed(1) + 'h';
+        ctx.fillStyle = ageCol;
         ctx.font = '7px Consolas,monospace';
-        ctx.textAlign = 'right';
-        ctx.fillText('entered ' + entStr, x + W - 6, r4y);
-        ctx.textAlign = 'left';
+        ctx.fillText('⏱ ' + ageLabel, lx, r4y + 8);
+      }} else {{
+        ctx.fillStyle = 'rgba(0,200,220,0.5)';
+        ctx.font = '7px Consolas,monospace';
+        var dayStr = '⏱ ' + (t.days||0) + (t.days===1?' day':' days');
+        ctx.fillText(dayStr, lx, r4y);
+        if (t.entry > 0) {{
+          var entStr = '$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry.toFixed(2));
+          ctx.fillStyle = 'rgba(140,110,170,0.4)';
+          ctx.font = '7px Consolas,monospace';
+          ctx.textAlign = 'right';
+          ctx.fillText('entered ' + entStr, x + W - 6, r4y);
+          ctx.textAlign = 'left';
+        }}
       }}
 
       // Row 5: status
@@ -7208,6 +7230,9 @@ setTimeout(function() {{
         inSignal:  data.inSignal !== undefined ? data.inSignal : true,
         rank:      data.rank || 0,
         holdText:  data.holdText || '',
+        isCrypto:  data.isCrypto || false,
+        direction: data.direction || 'long',
+        enteredAt: data.enteredAt || 0,
         exitPnl:   0,
         phase:     'entering',
         phaseStart: Date.now(),
@@ -7247,14 +7272,13 @@ setTimeout(function() {{
 
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
+      if (!overlay) return;
+      // All tiles (crypto + equity) are on canvas — no separate left column
       var posLeft = document.getElementById('pos-left');
-      if (!overlay || !posLeft) return;
-      var cryptoCount = Object.keys(_cryptoCardEls).length;
-      var leftW = cryptoCount > 0 ? _CARD_W : 0;
-      posLeft.style.width = leftW + 'px';
+      if (posLeft) posLeft.style.width = '0';
       var layout = _etLayout();
       var eqW = layout.numCols * _EQ_W;
-      overlay.style.width = (leftW + eqW) + 'px';
+      overlay.style.width = eqW + 'px';
       // Also resize the canvas
       if (_etCanvas) {{
         _etCanvas.style.width  = eqW + 'px';
@@ -7282,6 +7306,25 @@ setTimeout(function() {{
     }})(0);
     window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
+      // Route all crypto tiles to the unified canvas engine — no DOM element created
+      var col   = _symCol(p.symbol);
+      var entry = parseFloat(p.entry_price || 0);
+      var stop  = parseFloat(p.stop_price  || 0);
+      var tgt   = parseFloat(p.target_price|| 0);
+      if ((!tgt || tgt <= 0) && entry > 0) tgt = entry * 1.008;
+      var qty   = parseFloat(p.qty || 0);
+      var entTs = p.entered_at ? new Date(p.entered_at).getTime() : Date.now();
+      _etUpsert({{
+        sym: p.symbol, col: col, entry: entry, stop: stop, target: tgt,
+        qty: qty, isCrypto: true, direction: p.direction || 'long',
+        enteredAt: entTs, curPrice: entry,
+        val: qty * entry, pnl: 0, pnlPct: 0,
+        inSignal: false, rank: 0, holdText: '',
+      }});
+      return null; // no DOM element — callers must handle null
+    }}
+    function _makeCardLEGACY_UNUSED(p) {{
+      // Original DOM card builder — kept for reference only, never called
       var col   = _symCol(p.symbol);
       var entry = parseFloat(p.entry_price);
       var stop  = parseFloat(p.stop_price);
@@ -7431,7 +7474,7 @@ setTimeout(function() {{
         }}, 420);
       }}, 1150);
       return el;
-    }}
+    }}   // end _makeCardLEGACY_UNUSED
 
     function _updateCard(el, p) {{
       var entry   = parseFloat(p.entry_price);
@@ -7502,61 +7545,29 @@ setTimeout(function() {{
         }});
 
         if (!Array.isArray(rows) || !rows.length) {{
-          // Exit all existing cards (poll fallback — event-driven already fired for live exits)
-          Object.keys(_cryptoCardEls).forEach(function(sym) {{
-            var el = _cryptoCardEls[sym];
-            if (!el.classList.contains('pos-card-exit-target') &&
-                !el.classList.contains('pos-card-exit-stop') &&
-                !el.classList.contains('pos-card-exit-timeout') &&
-                !el.classList.contains('pos-card-exit-rev')) {{
-              el.classList.add('pos-card-exit-stop');
+          // Exit all open crypto canvas tiles (poll fallback)
+          _ET.filter(function(t) {{ return t.isCrypto; }}).forEach(function(t) {{
+            if (t.phase === 'live' || t.phase === 'entering') {{
+              window._etExit(t.sym, null, null);
             }}
-            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 450);
           }});
-          _cryptoCardEls = {{}};
           _updateOverlayWidth();
-          if (!flat) {{
-            var f = document.createElement('div');
-            f.id = 'pos-crypto-flat'; f.className = 'pos-hold';
-            f.style.padding = '4px 14px 6px'; f.textContent = 'flat';
-            section.appendChild(f);
-          }}
           return;
         }}
-
-        // Remove "flat" placeholder
-        if (flat) flat.parentNode.removeChild(flat);
 
         var newSyms = {{}};
         rows.forEach(function(p) {{ newSyms[p.symbol] = p; }});
 
-        // Exit cards no longer in data (poll fallback — event-driven already fired for live exits)
-        Object.keys(_cryptoCardEls).forEach(function(sym) {{
-          if (!newSyms[sym]) {{
-            var el = _cryptoCardEls[sym];
-            if (!el.classList.contains('pos-card-exit-target') &&
-                !el.classList.contains('pos-card-exit-stop') &&
-                !el.classList.contains('pos-card-exit-timeout') &&
-                !el.classList.contains('pos-card-exit-rev')) {{
-              el.classList.add('pos-card-exit-stop'); // fallback
-            }}
-            setTimeout(function() {{ if (el.parentNode) el.parentNode.removeChild(el); }}, 450);
-            delete _cryptoCardEls[sym];
+        // Exit crypto canvas tiles no longer in data (poll fallback)
+        _ET.filter(function(t) {{ return t.isCrypto; }}).forEach(function(t) {{
+          if (!newSyms[t.sym] && (t.phase === 'live' || t.phase === 'entering')) {{
+            window._etExit(t.sym, null, null);
           }}
         }});
 
-        // Add or update small cards
+        // Add or update canvas tiles — _etUpsert handles both
         rows.forEach(function(p) {{
-          if (_cryptoCardEls[p.symbol]) {{
-            _updateCard(_cryptoCardEls[p.symbol], p);
-          }} else {{
-            var el = _makeCard(p);
-            section.appendChild(el);
-            void el.offsetWidth;
-            el.classList.add('pos-card-entering');
-            setTimeout(function() {{ el.classList.remove('pos-card-entering'); }}, 220);
-            _cryptoCardEls[p.symbol] = el;
-          }}
+          _makeCard(p);
         }});
         _updateOverlayWidth();
 
@@ -7719,11 +7730,9 @@ setTimeout(function() {{
       }});
     }}
     function _pollCryptoPrices() {{
-      // Collect ALL open crypto card symbols (not just those with prox-wrap)
-      var openSyms = [];
-      document.querySelectorAll('#pos-crypto-section .pos-card[data-sym]').forEach(function(card) {{
-        openSyms.push(card.getAttribute('data-sym'));
-      }});
+      // Collect open crypto tile symbols from canvas engine
+      var openSyms = _ET.filter(function(t) {{ return t.isCrypto && t.phase !== 'done'; }})
+                        .map(function(t) {{ return t.sym; }});
       if (!openSyms.length) return;
       var cgIds = openSyms.map(function(s) {{ return _CG_SYM_MAP[s]; }}).filter(Boolean);
       if (!cgIds.length) return;
@@ -7739,50 +7748,27 @@ setTimeout(function() {{
           window._liveProxPrices = priceMap;
           if (window._onPricePoll) window._onPricePoll();
           _updateProxMeters(priceMap);
-          // Update holdings value for ALL cards (including those without prox-wrap)
+          // Update canvas tile state (replaces DOM element updates)
           var posMap = window._cryptoPositionsMap || {{}};
-          document.querySelectorAll('#pos-crypto-section .pos-card[data-sym]').forEach(function(card) {{
-            var sym = card.getAttribute('data-sym');
-            var price = priceMap[sym];
+          _ET.filter(function(t) {{ return t.isCrypto && t.phase !== 'done'; }}).forEach(function(t) {{
+            var price = priceMap[t.sym];
             if (!price) return;
-            var symId = sym.replace(/[^A-Za-z0-9]/g,'_');
-            var hvalEl = document.getElementById('hval-' + symId);
-            if (!hvalEl) return;
-            var posData = posMap[sym];
-            // Fall back to data-qty on the card if map not yet populated
-            var qty = posData ? parseFloat(posData.qty || 0)
-                              : parseFloat(card.getAttribute('data-qty') || 0);
-            if (qty > 0) {{
-              var holdVal = qty * price;
-              hvalEl.textContent = holdVal >= 1000
-                ? '$' + (holdVal/1000).toFixed(2) + 'K'
-                : '$' + holdVal.toFixed(2);
+            var posData = posMap[t.sym];
+            var qty = t.qty || (posData ? parseFloat(posData.qty || 0) : 0);
+            var entry = t.entry || (posData ? parseFloat(posData.entry_price || 0) : 0);
+            var prevPrice = t.curPrice;
+            t.curPrice = price;
+            if (qty > 0) t.val = qty * price;
+            if (entry > 0) {{
+              t.pnl    = qty * (price - entry);
+              t.pnlPct = (price - entry) / entry * 100;
             }}
-            // Also update P&L for cards without prox-wrap
-            var pnlEl = document.getElementById('pnl-live-' + symId);
-            var entryFallback = parseFloat(card.getAttribute('data-entry') || 0);
-            if (pnlEl && (posData || entryFallback)) {{
-              var entry = posData ? parseFloat(posData.entry_price || 0) : entryFallback;
-              if (entry > 0) {{
-                var pnlPct = (price - entry) / entry * 100;
-                var prevRaw = parseFloat(pnlEl.getAttribute('data-raw') || 'NaN');
-                var arrow = '';
-                if (!isNaN(prevRaw) && pnlPct !== prevRaw) {{
-                  arrow = pnlPct > prevRaw ? '▲ ' : '▼ ';
-                  var dir2 = pnlPct > prevRaw ? 'up' : 'dn';
-                  pnlEl.classList.remove('prox-tick-up','prox-tick-dn');
-                  void pnlEl.offsetWidth;
-                  pnlEl.classList.add('prox-tick-' + dir2);
-                }}
-                pnlEl.setAttribute('data-raw', pnlPct);
-                pnlEl.textContent = arrow + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%';
-                pnlEl.style.color = pnlPct >= 0 ? '#00ff9d' : '#ff3366';
-              }}
+            if (prevPrice && price !== prevPrice) {{
+              t._valFlash = price > prevPrice ? 1 : -1;
             }}
           }});
           // Compute live portfolio NAV and push intraday point
           if (window._pushIntradayPoint) {{
-            var posMap = window._cryptoPositionsMap || {{}};
             var baseline = window._portfolioBaseline || 100000;
             var livePnl = 0;
             Object.keys(posMap).forEach(function(sym) {{
