@@ -5043,7 +5043,7 @@ setInterval(_fetchIntradayMarks, 15000);
 
   function _pollEqPrices() {{
     // Read tile state from canvas engine — no DOM queries needed
-    var liveTiles = _ET.filter(function(t) {{ return t.phase === 'live' || t.phase === 'entering'; }});
+    var liveTiles = (window._ET||[]).filter(function(t) {{ return t.phase === 'live' || t.phase === 'entering'; }});
     if (!liveTiles.length) return;
     var syms = liveTiles.map(function(t) {{ return t.sym; }});
 
@@ -6365,7 +6365,7 @@ setTimeout(function() {{
                 // Upsert crypto tile on canvas engine
                 (function() {{
                   var _symE = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
-                  if (!_etBySym[_symE]) {{
+                  if (!(window._etBySym||{{}})[_symE]) {{
                     var _priceE = priceM ? parseFloat(priceM[1].replace(/,/g,'')) : 0;
                     var _ep = {{
                       symbol: _symE, direction: 'long', qty: 0,
@@ -6391,7 +6391,7 @@ setTimeout(function() {{
                           window._cryptoPositionsMap[_s].stop_price = parseFloat(row.stop_price || 0);
                           window._cryptoPositionsMap[_s].target_price = parseFloat(row.target_price || 0);
                         }}
-                        var t = _etBySym[_s];
+                        var t = (window._etBySym||{{}})[_s];
                         if (t) {{
                           t.qty   = realQty;
                           t.stop  = parseFloat(row.stop_price  || 0) || t.stop;
@@ -7045,8 +7045,8 @@ setTimeout(function() {{
       // All tiles are now on the canvas engine
       var sym1 = fullSym;
       var sym2 = fullSym + '/USD';
-      if (_etBySym[sym1]) {{ window._etExit(sym1, pnl, exitPrice); return; }}
-      if (_etBySym[sym2]) {{ window._etExit(sym2, pnl, exitPrice); return; }}
+      if ((window._etBySym||{{}})[sym1]) {{ window._etExit(sym1, pnl, exitPrice); return; }}
+      if ((window._etBySym||{{}})[sym2]) {{ window._etExit(sym2, pnl, exitPrice); return; }}
 
       // Fallback: legacy DOM path (should not be reached)
       var el = _cryptoCardEls[fullSym] || _cryptoCardEls[fullSym + '/USD'];
@@ -7157,8 +7157,10 @@ setTimeout(function() {{
     // All equity holdings rendered on a single canvas — zero DOM, zero layout cost.
     // _ET[] is the single source of truth; draw loop paints it 30fps.
     // ═══════════════════════════════════════════════════════════════════════════
-    var _ET = [];          // tile state objects (ordered display order)
-    var _etBySym = {{}};   // sym → tile for O(1) lookup
+    window._ET = [];          // tile state objects — on window so all scripts share reference
+    window._etBySym = {{}};   // sym → tile for O(1) lookup
+    var _ET     = window._ET;
+    var _etBySym = window._etBySym;
 
     var _HEADING_H = 16; // px reserved at top of canvas for strategy group labels
 
@@ -7641,7 +7643,8 @@ setTimeout(function() {{
       // Clean up after bit-crush completes (500ms decay + 2800ms ghost + margin)
       setTimeout(function() {{
         delete _etBySym[sym];
-        _ET = _ET.filter(function(tile) {{ return tile.sym !== sym; }});
+        var _rmIdx = _ET.findIndex(function(tile) {{ return tile.sym === sym; }});
+        if (_rmIdx !== -1) _ET.splice(_rmIdx, 1);
         _updateOverlayWidth();
       }}, 3500);
     }};
