@@ -977,7 +977,7 @@ def _build_daw_html(data: dict) -> str:
             "target":     float(p.get("target_price") or 0),
             "curPrice":   float(p.get("price") or p["entry_price"] or 0),
             "days":       int(p.get("days_held") or 0),
-            "enteredAt":  int(datetime.combine(_date.fromisoformat(str(p["entry_date"])), datetime.min.time()).timestamp() * 1000) if p.get("entry_date") else int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
+            "enteredAt":  int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
             "inSignal":   bool(p.get("in_signal", True)),
             "rank":       int(p.get("rank") or 0),
             "holdText":   str(p.get("hold_text") or ""),
