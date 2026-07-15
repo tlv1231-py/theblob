@@ -4555,17 +4555,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
   }}
 
-  // Seed from Python-injected history on load
-  (function() {{
-    var _pd = portDates || [], _pv = portValues || [];
-    for (var i = 0; i < _pd.length; i++) {{
-      _navIngest(new Date(_pd[i]).getTime(), _pv[i]);
-    }}
-    var _md = markTs || [], _mv = markVals || [];
-    for (var j = 0; j < _md.length; j++) {{
-      _navIngest(new Date(_md[j]).getTime(), _mv[j]);
-    }}
-  }})();
+  // Mark session start BEFORE any historical injection so rolling chart can filter them out.
+  // Daily snapshots go to Plotly equity-curve only — the live canvas gets session-only points.
+  window._navSessionStart = Date.now();
 
   // Live updates: call this whenever we get a new NAV reading
   window._navPush = function(v, isoTs) {{
@@ -4597,30 +4589,18 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // tx: maps a timestamp to canvas X. leftEdgeMs → 0, nowMs → _nowPx.
     function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * _nowPx; }}
 
-    // Collect points in the visible window
+    // Collect only session-live points (no daily historical snapshots — those corrupt the Y scale).
+    // Left edge always starts flat at liveNav; history is whatever the live pollers have pushed.
+    var _sessionStart = window._navSessionStart || 0;
     var visible = [];
-    // Seed: last known point before the window (so line starts at left edge, not mid-air)
-    // If that seed is stale (>1 day old), use liveNav so Y-scale stays sane
-    var _seedIdx = -1;
-    for (var si = _navPts.length - 1; si >= 0; si--) {{
-      if (_navPts[si].ms <= leftEdgeMs) {{ _seedIdx = si; break; }}
-    }}
-    if (_seedIdx >= 0) {{
-      var _seedAge = leftEdgeMs - _navPts[_seedIdx].ms;
-      // Seed older than the window itself → use liveNav so chart doesn't diagonal from the past
-      var _seedV   = _seedAge > windowMs ? liveNav : _navPts[_seedIdx].v;
-      visible.push({{ ms: leftEdgeMs, v: _seedV }});
-    }} else {{
-      // No historical data before window — start flat at current NAV (no mid-air diagonal)
-      visible.push({{ ms: leftEdgeMs, v: liveNav }});
-    }}
+    visible.push({{ ms: leftEdgeMs, v: liveNav }});  // left anchor always flat
     for (var i = 0; i < _navPts.length; i++) {{
-      if (_navPts[i].ms > leftEdgeMs && _navPts[i].ms < nowMs) {{
-        visible.push({{ ms: _navPts[i].ms, v: _navPts[i].v }});
+      var _pt = _navPts[i];
+      if (_pt.ms > _sessionStart && _pt.ms > leftEdgeMs && _pt.ms < nowMs) {{
+        visible.push({{ ms: _pt.ms, v: _pt.v }});
       }}
     }}
-    // Live "now" point is always the final point, pinned to chart right edge
-    visible.push({{ ms: nowMs, v: liveNav }});
+    visible.push({{ ms: nowMs, v: liveNav }});  // right anchor always at current NAV
 
     if (visible.length < 2) {{ window._navOrbFracX=orbFracX; window._navOrbFracY=0.5; return; }}
 
