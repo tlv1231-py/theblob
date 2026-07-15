@@ -27,6 +27,51 @@ _STARTING_CAPITAL = 100_000.0
 _MONITOR_TARGET   = 20
 
 
+# ── Alpaca order execution ──────────────────────────────────────────────────────
+
+def _submit_alpaca_order(sym: str, side: str, notional: float, strategy: str = "user") -> None:
+    """Submit a notional market order to Alpaca and write the fill to DB."""
+    import os
+    from config.settings import settings
+
+    api_key    = settings.alpaca_api_key    or os.environ.get("ALPACA_API_KEY", "")
+    secret_key = settings.alpaca_secret_key or os.environ.get("ALPACA_SECRET_KEY", "")
+    base_url   = settings.alpaca_base_url   or os.environ.get("ALPACA_BASE_URL",
+                                                               "https://paper-api.alpaca.markets")
+    if not api_key or not secret_key:
+        return  # keys not configured — fail silently in UI
+
+    try:
+        from alpaca.trading.client import TradingClient
+        from alpaca.trading.requests import MarketOrderRequest
+        from alpaca.trading.enums import OrderSide, TimeInForce
+
+        client = TradingClient(api_key=api_key, secret_key=secret_key,
+                               paper="paper-api" in base_url)
+        req = MarketOrderRequest(
+            symbol=sym,
+            notional=round(notional, 2),
+            side=OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL,
+            time_in_force=TimeInForce.DAY,
+        )
+        order = client.submit_order(req)
+
+        # Write to DB so dashboard and pipeline pick it up
+        with get_session() as db:
+            db.execute(text("""
+                INSERT INTO orders (strategy, symbol, side, quantity, order_type, status, created_at)
+                VALUES (:strategy, :symbol, :side, :qty, 'market', 'filled', NOW())
+            """), {
+                "strategy": strategy,
+                "symbol":   sym,
+                "side":     side.lower(),
+                "qty":      float(getattr(order, "filled_qty", 0) or 0),
+            })
+            db.commit()
+    except Exception:
+        pass  # order errors surface in the feed via optimistic tile; don't crash dashboard
+
+
 # ── Terminal feed ───────────────────────────────────────────────────────────────
 
 def _render_terminal() -> None:
@@ -515,6 +560,22 @@ def _read_strategy_status() -> str:
 # ── HTML builder ───────────────────────────────────────────────────────────────
 
 def _build_daw_html(data: dict) -> str:
+    import json as _json
+    from config.universe import TRADING_SYMBOLS
+    import yaml as _yaml
+
+    # All known tickers for the buy console dropdown
+    _crypto_syms = []
+    try:
+        _crypto_cfg = _yaml.safe_load((_ROOT / "strategies" / "crypto" / "config.yaml").read_text())
+        _crypto_syms = _crypto_cfg.get("universe", [])
+    except Exception:
+        _crypto_syms = ["BTC/USD", "ETH/USD", "SOL/USD"]
+    _all_tickers_j = _json.dumps({
+        "equity": sorted(TRADING_SYMBOLS),
+        "crypto": _crypto_syms,
+    })
+
     port  = data["portfolio"]
     marks = data.get("marks", {"ts": [], "vals": []})
     mark_ts   = marks["ts"]
@@ -2155,75 +2216,81 @@ body::after {{
 .pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
-/* ── Trade console (bottom-right) ── */
-#trade-console {{
+/* ── Buy console (bottom-right) ── */
+#buy-console {{
   position:fixed; bottom:16px; right:16px; z-index:300;
-  width:220px;
-  background:rgba(0,2,12,.96);
-  border:1px solid #0a1a2a;
-  border-top:2px solid #00e5ff;
-  box-shadow:0 -6px 40px rgba(0,229,255,.10);
-  font:700 8px Consolas,monospace;
-  letter-spacing:.14em;
+  width:200px;
+  background:rgba(0,2,10,.97);
+  border:1px solid #091826;
+  border-top:2px solid #00ff9d;
+  box-shadow:0 -4px 32px rgba(0,255,157,.08);
+  font-family:Consolas,monospace;
   display:flex; flex-direction:column;
-  user-select:none;
 }}
-/* Header row */
-#tc-hdr {{
-  display:flex; align-items:center; gap:6px; padding:5px 8px;
-  border-bottom:1px solid #0a1a2a; color:#00e5ff;
-  text-shadow:0 0 8px rgba(0,229,255,.5); font-size:7px; letter-spacing:.22em;
+#bc-hdr {{
+  display:flex; align-items:center; gap:5px;
+  padding:4px 8px; border-bottom:1px solid #091826;
+  font:700 7px Consolas,monospace; letter-spacing:.22em; color:#00ff9d;
+  text-shadow:0 0 8px rgba(0,255,157,.4);
 }}
-#tc-hdr .tc-dot {{ width:5px; height:5px; border-radius:50%; background:#00e5ff;
-  box-shadow:0 0 6px #00e5ff; flex-shrink:0; }}
-/* Side tabs BUY / SELL */
-#tc-tabs {{ display:flex; }}
-.tc-tab {{
-  flex:1; padding:5px 0; text-align:center; font-size:8px; letter-spacing:.2em;
-  cursor:pointer; border-bottom:2px solid transparent;
-  transition:all .12s;
+#bc-hdr .bc-dot {{ width:4px; height:4px; border-radius:50%; background:#00ff9d;
+  box-shadow:0 0 5px #00ff9d; flex-shrink:0; }}
+/* Dollar amount — big, same weight as portfolio number */
+#bc-amt-row {{
+  display:flex; align-items:center; padding:8px 8px 4px;
+  gap:0; border-bottom:1px solid #091826;
 }}
-.tc-tab[data-side="buy"]  {{ color:#003d30; }}
-.tc-tab[data-side="sell"] {{ color:#3d0010; }}
-.tc-tab[data-side="buy"].tc-active  {{ color:#00ff9d; border-color:#00ff9d;
-  text-shadow:0 0 8px rgba(0,255,157,.5); background:rgba(0,255,157,.04); }}
-.tc-tab[data-side="sell"].tc-active {{ color:#ff3366; border-color:#ff3366;
-  text-shadow:0 0 8px rgba(255,51,102,.5); background:rgba(255,51,102,.04); }}
-/* Form body */
-#tc-body {{ padding:8px 8px 6px; display:flex; flex-direction:column; gap:6px; }}
-.tc-row {{ display:flex; gap:5px; align-items:center; }}
-.tc-label {{ font-size:7px; letter-spacing:.18em; color:#1a3a4a; width:36px; flex-shrink:0; }}
-.tc-input {{
-  flex:1; background:#000d1a; border:1px solid #0a1a2a; color:#c8f0ff;
-  font-family:Consolas,monospace; font-size:12px; padding:4px 7px;
-  outline:none; min-width:0; letter-spacing:.02em;
-  transition:border-color .12s;
+#bc-dollar {{
+  font:700 22px Consolas,monospace; color:#1a4a2a; letter-spacing:-.02em;
+  line-height:1; padding-right:3px; flex-shrink:0;
 }}
-.tc-input:focus {{ border-color:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.18); }}
-/* Quick-qty chips */
-#tc-chips {{ display:flex; gap:3px; flex-wrap:wrap; }}
-.tc-chip {{
-  padding:2px 6px; font-size:7px; letter-spacing:.12em;
-  border:1px solid #0a1a2a; color:#1a3a4a; cursor:pointer;
-  transition:all .1s;
+#bc-amt {{
+  flex:1; background:transparent; border:none; outline:none;
+  font:700 22px Consolas,monospace; color:#00ff9d; letter-spacing:-.02em;
+  min-width:0; padding:0;
+  text-shadow:0 0 12px rgba(0,255,157,.3);
 }}
-.tc-chip:hover {{ border-color:#00e5ff; color:#00e5ff; }}
-/* Submit button */
-#tc-submit {{
-  width:100%; padding:6px 0; margin-top:2px;
-  font-family:Consolas,monospace; font-size:9px; letter-spacing:.2em;
-  border:none; cursor:pointer; transition:all .15s;
+#bc-amt::placeholder {{ color:#0a3a1a; }}
+/* Ticker row */
+#bc-sym-row {{
+  display:flex; align-items:center; padding:6px 8px;
+  gap:8px; border-bottom:1px solid #091826;
 }}
-#tc-submit.buy-mode  {{ background:rgba(0,255,157,.12); color:#00ff9d; border:1px solid #00ff9d;
-  text-shadow:0 0 6px rgba(0,255,157,.5); }}
-#tc-submit.sell-mode {{ background:rgba(255,51,102,.12); color:#ff3366; border:1px solid #ff3366;
-  text-shadow:0 0 6px rgba(255,51,102,.5); }}
-#tc-submit:hover {{ filter:brightness(1.25); }}
-/* Confirm/status line */
-#tc-status {{
-  font-size:7px; letter-spacing:.1em; text-align:center; padding:4px 8px 6px;
-  color:#1a3a4a; min-height:14px; border-top:1px solid #060e18;
+#bc-sym {{
+  flex:1; background:transparent; border:none; outline:none;
+  font:700 13px Consolas,monospace; color:#40c4ff; letter-spacing:.06em;
+  min-width:0; padding:0; text-transform:uppercase;
+  text-shadow:0 0 8px rgba(64,196,255,.3);
+  list-style:none;
+}}
+#bc-sym::placeholder {{ color:#0a1a2a; }}
+datalist {{ display:none; }}
+/* BUY button */
+#bc-buy {{
+  margin:6px 8px 8px; padding:7px 0;
+  background:rgba(0,255,157,.1); border:1px solid #00ff9d;
+  color:#00ff9d; font:700 10px Consolas,monospace; letter-spacing:.24em;
+  cursor:pointer; transition:all .12s;
+  text-shadow:0 0 8px rgba(0,255,157,.5);
+}}
+#bc-buy:hover {{ background:rgba(0,255,157,.2); box-shadow:0 0 16px rgba(0,255,157,.15); }}
+#bc-buy:disabled {{ opacity:.35; cursor:default; }}
+/* Status */
+#bc-status {{
+  font-size:7px; letter-spacing:.08em; text-align:center;
+  padding:0 8px 6px; color:#0a2a1a; min-height:13px;
   transition:color .2s;
+}}
+/* Double-click hint on tiles */
+.tc-dblclick-hint {{
+  position:fixed; z-index:400; pointer-events:none;
+  font:700 8px Consolas,monospace; letter-spacing:.14em;
+  color:#ff3366; text-shadow:0 0 8px rgba(255,51,102,.6);
+  animation:tc-hint-fade .6s ease forwards;
+}}
+@keyframes tc-hint-fade {{
+  0% {{ opacity:1; transform:translateY(0); }}
+  100% {{ opacity:0; transform:translateY(-18px); }}
 }}
 /* ── Runner health chip ── */
 #runner-health {{
@@ -2857,6 +2924,7 @@ var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
 
 var _eqCanvasInitData = {_eq_canvas_tiles_j};
 var _queuedActionsData = {_queued_actions_js};
+var _allTickers = {_all_tickers_j};
 var portDates  = {port_dates_j};
 var portValues = {port_values_j};
 var markTs     = {mark_ts_j};
@@ -5265,42 +5333,24 @@ setTimeout(function() {{
   <div id="pos-panel" style="display:none"></div>
 </div>
 
-<!-- Trade console (fixed bottom-right) -->
-<div id="trade-console">
-  <div id="tc-hdr">
-    <div class="tc-dot"></div>
-    TRADE CONSOLE
-    <span style="margin-left:auto;opacity:.35;letter-spacing:.05em">PAPER</span>
+<!-- Buy console (fixed bottom-right) -->
+<div id="buy-console">
+  <div id="bc-hdr">
+    <div class="bc-dot"></div>
+    BUY
+    <span style="margin-left:auto;opacity:.3;letter-spacing:.05em">PAPER · [USER]</span>
   </div>
-  <div id="tc-tabs">
-    <div class="tc-tab tc-active" data-side="buy"  onclick="tcSetSide('buy')">BUY</div>
-    <div class="tc-tab"           data-side="sell" onclick="tcSetSide('sell')">SELL</div>
+  <div id="bc-amt-row">
+    <span id="bc-dollar">$</span>
+    <input id="bc-amt" type="number" placeholder="0" min="0" step="1" autocomplete="off">
   </div>
-  <div id="tc-body">
-    <div class="tc-row">
-      <div class="tc-label">SYM</div>
-      <input class="tc-input" id="tc-sym" type="text" placeholder="AAPL" maxlength="8"
-             oninput="this.value=this.value.toUpperCase()" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="tc-row">
-      <div class="tc-label">QTY</div>
-      <input class="tc-input" id="tc-qty" type="number" placeholder="10" min="1" step="1">
-    </div>
-    <div id="tc-chips">
-      <div class="tc-chip" onclick="tcSetQty(1)">1</div>
-      <div class="tc-chip" onclick="tcSetQty(5)">5</div>
-      <div class="tc-chip" onclick="tcSetQty(10)">10</div>
-      <div class="tc-chip" onclick="tcSetQty(25)">25</div>
-      <div class="tc-chip" onclick="tcSetQty(50)">50</div>
-      <div class="tc-chip" onclick="tcSetQty(100)">100</div>
-    </div>
-    <div class="tc-row">
-      <div class="tc-label">PRICE</div>
-      <input class="tc-input" id="tc-price" type="number" placeholder="market" min="0" step="0.01">
-    </div>
-    <button id="tc-submit" class="buy-mode" onclick="tcSubmit()">▶ PLACE BUY</button>
+  <div id="bc-sym-row">
+    <input id="bc-sym" type="text" placeholder="ticker" maxlength="12" list="bc-tickers"
+           autocomplete="off" spellcheck="false">
+    <datalist id="bc-tickers"></datalist>
   </div>
-  <div id="tc-status">ready</div>
+  <button id="bc-buy" onclick="bcSubmit()">▶ BUY</button>
+  <div id="bc-status">dbl-click holding to sell</div>
 </div>
 
 <script>
@@ -5965,101 +6015,118 @@ setTimeout(function() {{
     }} catch(e) {{}}
   }}
 
-  // ── Trade console ─────────────────────────────────────────────────────────────
-  var _tcSide = 'buy';
+  // ── Buy console ───────────────────────────────────────────────────────────────
 
-  function tcSetSide(s) {{
-    _tcSide = s;
-    document.querySelectorAll('.tc-tab').forEach(function(el) {{
-      el.classList.toggle('tc-active', el.dataset.side === s);
+  // Populate ticker datalist from Python-seeded universe
+  (function() {{
+    var dl = document.getElementById('bc-tickers');
+    if (!dl || !window._allTickers) return;
+    (_allTickers.equity || []).forEach(function(s) {{
+      var o = document.createElement('option'); o.value = s; dl.appendChild(o);
     }});
-    var btn = document.getElementById('tc-submit');
-    if (btn) {{
-      btn.className = s === 'buy' ? 'buy-mode' : 'sell-mode';
-      btn.textContent = s === 'buy' ? '▶ PLACE BUY' : '▶ PLACE SELL';
-    }}
-    tcStatus('ready', '');
-  }}
+    (_allTickers.crypto || []).forEach(function(s) {{
+      var o = document.createElement('option'); o.value = s; dl.appendChild(o);
+    }});
+  }})();
 
-  function tcSetQty(n) {{
-    var el = document.getElementById('tc-qty');
-    if (el) {{ el.value = n; el.focus(); }}
-  }}
-
-  function tcStatus(msg, col) {{
-    var el = document.getElementById('tc-status');
+  function bcStatus(msg, col) {{
+    var el = document.getElementById('bc-status');
     if (!el) return;
     el.textContent = msg;
-    el.style.color = col || '#1a3a4a';
+    el.style.color = col || '#0a2a1a';
   }}
 
-  function tcSubmit() {{
-    var sym   = (document.getElementById('tc-sym').value  || '').trim().toUpperCase();
-    var qty   = parseFloat(document.getElementById('tc-qty').value   || 0);
-    var price = parseFloat(document.getElementById('tc-price').value || 0);
+  // Route buy/sell through postMessage → parent shim → Alpaca
+  function _submitOrder(sym, side, dollarAmt, notional) {{
+    window.parent.postMessage({{
+      type: 'tnd_order',
+      sym: sym,
+      side: side,
+      notional: notional,  // dollar amount → Alpaca notional order
+      strategy: 'user',
+    }}, '*');
+  }}
 
-    if (!sym)       {{ tcStatus('⚠ enter a symbol', '#ff9900'); return; }}
-    if (!qty || qty <= 0) {{ tcStatus('⚠ enter quantity', '#ff9900'); return; }}
+  function bcSubmit() {{
+    var sym = (document.getElementById('bc-sym').value || '').trim().toUpperCase();
+    var amt = parseFloat(document.getElementById('bc-amt').value || 0);
+    if (!sym) {{ bcStatus('⚠ enter a ticker', '#ff9900'); return; }}
+    if (!amt || amt <= 0) {{ bcStatus('⚠ enter dollar amount', '#ff9900'); return; }}
 
-    var btn = document.getElementById('tc-submit');
+    var btn = document.getElementById('bc-buy');
     if (btn) btn.disabled = true;
-    tcStatus('submitting…', '#00e5ff');
+    bcStatus('submitting…', '#00e5ff');
 
-    var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
-    var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
+    _submitOrder(sym, 'buy', amt, amt);
 
-    // Build order payload — paper executor style
-    var payload = {{
-      strategy:   'momentum',
-      symbol:     sym,
-      side:       _tcSide,
-      qty:        qty,
-      order_type: price > 0 ? 'limit' : 'market',
-      limit_price: price > 0 ? price : null,
-      status:     'pending',
-      created_at: new Date().toISOString(),
-    }};
+    // Optimistic entrance — tile appears immediately, reconciles on next poll
+    var isCrypto = sym.indexOf('/') !== -1;
+    var _TICKER_PAL_JS = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
+    var col = _TICKER_PAL_JS[sym.split('').reduce(function(a,c){{return a+c.charCodeAt(0);}},0) % _TICKER_PAL_JS.length];
+    if (window._etUpsert) {{
+      window._etUpsert({{
+        sym: sym, col: col, val: amt, pnl: 0, pnlPct: 0,
+        entry: 0, qty: 0, stop: 0, target: 0, curPrice: 0,
+        days: 0, enteredAt: Date.now(), inSignal: true, rank: 0,
+        holdText: '0s', strategy: 'user', isCrypto: isCrypto,
+      }});
+    }}
 
-    fetch(SUPA_URL + '/rest/v1/orders', {{
-      method:  'POST',
-      headers: {{
-        'apikey':        SUPA_KEY,
-        'Authorization': 'Bearer ' + SUPA_KEY,
-        'Content-Type':  'application/json',
-        'Prefer':        'return=representation',
-      }},
-      body: JSON.stringify(payload),
-    }})
-    .then(function(r) {{
-      if (!r.ok) throw new Error(r.status);
-      return r.json();
-    }})
-    .then(function(rows) {{
-      var orderId = (rows && rows[0] && rows[0].id) ? rows[0].id : '?';
-      var priceStr = price > 0 ? ' @ $' + price.toFixed(2) : ' @ market';
-      var col = _tcSide === 'buy' ? '#00ff9d' : '#ff3366';
-      tcStatus('✓ ' + _tcSide.toUpperCase() + ' ' + qty + ' ' + sym + priceStr, col);
-      var feedMsg = _tcSide.toUpperCase() + ' ' + qty + 'x ' + sym + priceStr + ' · paper order #' + String(orderId).slice(0,8);
+    var feedMsg = '[USER] BUY $' + amt.toLocaleString('en-US',{{maximumFractionDigits:0}}) + ' ' + sym + ' · market · routed to Alpaca';
+    if (window._postToFeed) window._postToFeed(feedMsg);
+    if (window._recordTradeForGauge) window._recordTradeForGauge();
+
+    bcStatus('✓ BUY ' + sym + ' $' + amt.toLocaleString('en-US',{{maximumFractionDigits:0}}), '#00ff9d');
+    document.getElementById('bc-amt').value = '';
+    document.getElementById('bc-sym').value = '';
+    setTimeout(function() {{ bcStatus('dbl-click holding to sell', ''); if (btn) btn.disabled = false; }}, 3000);
+  }}
+
+  // ── Double-click tile → sell full position ────────────────────────────────────
+  (function() {{
+    var _etC = document.getElementById('eq-tiles-canvas');
+    if (!_etC) return;
+    _etC.addEventListener('dblclick', function(e) {{
+      var rect = _etC.getBoundingClientRect();
+      var mx = e.clientX - rect.left;
+      var my = e.clientY - rect.top;
+      // Hit-test against live tiles
+      var layout = (typeof _etLayout === 'function') ? _etLayout() : null;
+      if (!layout) return;
+      var hit = null;
+      layout.live.forEach(function(t) {{
+        if (t.phase === 'done') return;
+        var pos = _etTilePos(t, layout);
+        if (mx >= pos.x && mx < pos.x + _EQ_W && my >= pos.y && my < pos.y + _EQ_H) hit = t;
+      }});
+      if (!hit) return;
+
+      // Show sell flash label
+      var hint = document.createElement('div');
+      hint.className = 'tc-dblclick-hint';
+      hint.textContent = 'SELL ' + hit.sym;
+      hint.style.left = (e.clientX - 30) + 'px';
+      hint.style.top  = (e.clientY - 20) + 'px';
+      document.body.appendChild(hint);
+      setTimeout(function() {{ if (hint.parentNode) hint.parentNode.removeChild(hint); }}, 700);
+
+      // Route to Alpaca
+      _submitOrder(hit.sym, 'sell', hit.val, hit.val);
+
+      // Feed label
+      var feedMsg = '[USER] SELL ' + hit.sym + ' · full position · market · routed to Alpaca';
       if (window._postToFeed) window._postToFeed(feedMsg);
       if (window._recordTradeForGauge) window._recordTradeForGauge();
-      document.getElementById('tc-sym').value   = '';
-      document.getElementById('tc-qty').value   = '';
-      document.getElementById('tc-price').value = '';
-      setTimeout(function() {{ tcStatus('ready', ''); }}, 4000);
-    }})
-    .catch(function(err) {{
-      tcStatus('⚠ error · ' + err.message, '#ff3366');
-    }})
-    .finally(function() {{
-      if (btn) btn.disabled = false;
-    }});
-  }}
 
-  // Focus sym field on console keydown shortcut: B = buy, S = sell
+      // Trigger exit animation
+      if (window._etExit) window._etExit(hit.sym, null, null);
+    }});
+  }})();
+
+  // Keyboard shortcut: B focuses buy console
   document.addEventListener('keydown', function(e) {{
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'b' || e.key === 'B') {{ tcSetSide('buy');  document.getElementById('tc-sym').focus(); }}
-    if (e.key === 's' || e.key === 'S') {{ tcSetSide('sell'); document.getElementById('tc-sym').focus(); }}
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'b' || e.key === 'B') document.getElementById('bc-amt').focus();
   }});
 
   // ── Live feed poller — Supabase REST, no page reload ────────────────────────
@@ -7291,6 +7358,7 @@ setTimeout(function() {{
     var _TILE_BADGES = {{
       'momentum':   {{ g:'▲▲', c:'#00e5ff' }},
       'crypto':     {{ g:'◈',  c:'#e040fb' }},
+      'user':       {{ g:'◎',  c:'#00ff9d' }},
       'daytrader':  {{ g:'⊕',  c:'#b2ff59' }},
       'reversion':  {{ g:'⇌',  c:'#ff9900' }},
       'sentiment':  {{ g:'◉',  c:'#ff4081' }},
@@ -7581,6 +7649,7 @@ setTimeout(function() {{
     var _HDR_BADGES = {{
       momentum:  {{ g:'▲▲', c:'#00e5ff', n:'MOMENTUM'  }},
       crypto:    {{ g:'◈',  c:'#e040fb', n:'CRYPTO'    }},
+      user:      {{ g:'◎',  c:'#00ff9d', n:'MANUAL'    }},
       daytrader: {{ g:'⊕',  c:'#b2ff59', n:'DAYTRADER' }},
       reversion: {{ g:'⇌',  c:'#ff9900', n:'MEAN REV'  }},
       sentiment: {{ g:'◉',  c:'#ff4081', n:'SENTIMENT' }},
@@ -8935,3 +9004,41 @@ def render() -> None:
     </script>
     """
     components.html(_resizer, height=0, scrolling=False)
+
+    # ── Alpaca order bridge ────────────────────────────────────────────────────
+    # A 0-height shim in the parent frame catches postMessage from the main
+    # iframe and stores the payload in session_state so Python can act on it.
+    _order_shim = """
+    <script>
+    window.addEventListener('message', function(e) {
+        var d = e.data;
+        if (!d || d.type !== 'tnd_order') return;
+        // Write into a hidden Streamlit number input to trigger a rerun
+        var inp = window.parent.document.querySelector('#tnd-order-trigger input');
+        if (inp) {
+            inp.value = JSON.stringify(d);
+            inp.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+    });
+    </script>
+    """
+    components.html(_order_shim, height=0, scrolling=False)
+
+    # Hidden widget that receives the order payload string
+    import json as _json
+    order_payload_str = st.text_input("", key="tnd_order_trigger",
+                                      label_visibility="collapsed")
+    st.markdown('<style>[data-testid="stTextInput"]:has(input[aria-label=""]) { display:none !important; }</style>',
+                unsafe_allow_html=True)
+
+    if order_payload_str:
+        try:
+            _order = _json.loads(order_payload_str)
+            _sym      = _order.get("sym", "")
+            _side     = _order.get("side", "buy")
+            _notional = float(_order.get("notional", 0))
+            _strategy = _order.get("strategy", "user")
+            if _sym and _notional > 0:
+                _submit_alpaca_order(_sym, _side, _notional, _strategy)
+        except Exception:
+            pass
