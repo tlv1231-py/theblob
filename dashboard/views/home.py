@@ -7003,7 +7003,7 @@ setTimeout(function() {{
     function _etLayout() {{
       var stratBar = document.getElementById('strat-bar');
       var sbH = stratBar ? stratBar.offsetHeight : 46;
-      var availH = window.innerHeight - sbH - 4 - _HEADING_H;
+      var availH = Math.floor((window.innerHeight - sbH - 4 - _HEADING_H) * 0.67);
       var perCol = Math.max(1, Math.floor(availH / _EQ_H));
       // Stable sort: within each group, sort by enteredAt so positions don't
       // shuffle when tiles enter/exit (newest at top, oldest at bottom)
