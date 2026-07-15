@@ -4517,10 +4517,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window._navPush = function(v, isoTs) {{
     if (!v || isNaN(v)) return;
     var ms = isoTs ? new Date(isoTs).getTime() : Date.now();
-    var last = _navLive.length ? _navLive[_navLive.length - 1] : null;
-    // Throttle: skip if value moved <$2 AND <30s since last point
-    if (last && Math.abs(v - last.v) < 2 && (ms - last.ms) < 30000) return;
     _navLive.push({{ ms: ms, v: v }});
+    // Trim to last 2h of points so the array doesn't grow unbounded
+    var cutoff = ms - 2 * 3600 * 1000;
+    while (_navLive.length > 1 && _navLive[0].ms < cutoff) _navLive.shift();
   }};
 
   window._drawNavCanvas = function() {{
@@ -4529,52 +4529,57 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    var rawLive = window._lastKnownNav;
-    if (!rawLive) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    var liveNav = window._lastKnownNav;
+    if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // EMA-smooth the orb so it drifts to new values instead of snapping
-    window._navSmoothedNav = window._navSmoothedNav
-      ? 0.06 * rawLive + 0.94 * window._navSmoothedNav
-      : rawLive;
-    var liveNav = window._navSmoothedNav;
-
-    // Y anchor: set ONCE on the first draw from the live value, fixed forever.
-    // This means historical pixel positions never change across frames.
-    if (!window._navYAnchor) window._navYAnchor = liveNav;
-    var yAnchor   = window._navYAnchor;
-    var halfRange = yAnchor * 0.005;            // ±0.5% of portfolio = full chart height
-    var yScale    = (H * 0.40) / halfRange;
-    function ty(v) {{ return H / 2 - (v - yAnchor) * yScale; }}
-
-    // "now" pinned at canvas center; history scrolls left
+    // X: "now" pinned at canvas center; history scrolls left
     var _nowPx     = W / 2;
     var nowMs      = Date.now();
     var windowMs   = window._navWindowMs || (8 * 60 * 1000);
     var leftEdgeMs = nowMs - windowMs;
     function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * _nowPx; }}
 
-    // Collect visible session points + live "now" endpoint
+    // Collect visible session points
     var visible = [];
-    visible.push({{ ms: leftEdgeMs, v: liveNav }});   // left edge starts at current level
     for (var li = 0; li < _navLive.length; li++) {{
       var pt = _navLive[li];
-      if (pt.ms > leftEdgeMs && pt.ms < nowMs) visible.push(pt);
+      if (pt.ms >= leftEdgeMs && pt.ms <= nowMs) visible.push(pt);
     }}
-    visible.push({{ ms: nowMs, v: liveNav }});
+    // Always cap with the live "now" value at the right edge
+    if (!visible.length || visible[visible.length-1].v !== liveNav) {{
+      visible.push({{ ms: nowMs, v: liveNav }});
+    }}
+    // If we have no history yet, add a flat left anchor so there's a line to draw
+    if (visible.length < 2) visible.unshift({{ ms: leftEdgeMs, v: liveNav }});
 
-    if (visible.length < 2) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    // Y: fit to the ACTUAL visible range, EMA-smoothed so the scale changes slowly.
+    // This means the chart auto-zooms to show real movement, like Robinhood.
+    var lo = liveNav, hi = liveNav;
+    for (var vi = 0; vi < visible.length; vi++) {{
+      if (visible[vi].v < lo) lo = visible[vi].v;
+      if (visible[vi].v > hi) hi = visible[vi].v;
+    }}
+    var rawRange = hi - lo;
+    var rawMid   = (hi + lo) / 2;
+    // Floor: at least 0.1% of portfolio so a truly flat line shows centered, not invisible
+    var minRange = liveNav * 0.001;
+    if (rawRange < minRange) {{ rawRange = minRange; rawMid = liveNav; }}
+    // EMA: scale/center adapt slowly so past points don't visibly jump
+    window._navRangeEma = window._navRangeEma ? 0.03*rawRange + 0.97*window._navRangeEma : rawRange;
+    window._navMidEma   = window._navMidEma   ? 0.03*rawMid   + 0.97*window._navMidEma   : rawMid;
+    var yScale = (H * 0.75) / window._navRangeEma;
+    function ty(v) {{ return H/2 - (v - window._navMidEma) * yScale; }}
 
     var orbY = ty(liveNav);
-
     window._navOrbFracX = 0.5;
     window._navOrbFracY = Math.max(0.05, Math.min(0.95, orbY / H));
 
-    // Map to canvas coords — historical points use fixed ty(), now-point uses smoothed orb Y
     var mapped = [];
-    for (var mi = 0; mi < visible.length - 1; mi++) {{
+    for (var mi = 0; mi < visible.length; mi++) {{
       mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
-    mapped.push({{ x: _nowPx, y: orbY }});
+    // Pin the last mapped point to exact center-x so "now" dot is always at W/2
+    mapped[mapped.length-1].x = _nowPx;
     if (mapped.length < 2) return;
 
     var m = mapped;
@@ -4990,14 +4995,10 @@ setInterval(_fetchIntradayMarks, 15000);
           _eqCount++;
         }}
       }});
-      // Always update equity slice — reset to 0 when no live tiles so stale PnL doesn't inflate NAV
+      // Update equity PnL slice — crypto poller is the sole writer of _lastKnownNav/_navPush.
+      // Equity poller only updates tile display + its PnL slice; crypto poller reads both slices.
       window._livePnlBySource.equity = _eqCount > 0 ? _eqLivePnl : 0;
       if (_eqCount > 0) {{
-        var _combinedPnl = window._livePnlBySource.equity + window._livePnlBySource.crypto;
-        var _eqNav = (window._portfolioBaseline || 100000) + _combinedPnl;
-        window._lastLivePriceMs = Date.now();
-        window._lastKnownNav    = _eqNav;
-        if (window._navPush) window._navPush(_eqNav, new Date().toISOString());
         // Drive blob mood from live P&L direction
         (function() {{
           var baseline = window._portfolioBaseline || 100000;
