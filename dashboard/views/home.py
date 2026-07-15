@@ -1916,7 +1916,7 @@ body::after {{
   border-left:3px solid; border-right:none; border-top:none; border-bottom:1px solid rgba(13,0,32,.4);
   background:transparent !important; backdrop-filter:none !important;
 }}
-#pos-overlay {{ transition:width .4s cubic-bezier(.22,1,.36,1); }}
+#pos-overlay {{ transition:none; }}
 #pos-left::-webkit-scrollbar, #pos-right::-webkit-scrollbar {{ width:2px; }}
 #pos-left::-webkit-scrollbar-thumb, #pos-right::-webkit-scrollbar-thumb {{ background:rgba(148,0,255,.3); border-radius:1px; }}
 /* position count badge */
@@ -7090,6 +7090,11 @@ setTimeout(function() {{
       var stratBar = document.getElementById('strat-bar');
       var sbH = stratBar ? stratBar.offsetHeight : 46;
       var availH = Math.floor((window.innerHeight - sbH - 4 - _HEADING_H) * 0.67);
+      // Cache key: tile count + active tile ids+phases + window height
+      var _lk = _ET.length + '|' + window.innerHeight + '|' +
+        _ET.map(function(t){{return t.sym+t.phase;}}).join(',');
+      if (_etCachedLayout && _lk === _etLayoutKey) return _etCachedLayout;
+      _etLayoutKey = _lk;
       var perCol = Math.max(1, Math.floor(availH / _EQ_H));
       // Stable sort: within each group, sort by enteredAt so positions don't
       // shuffle when tiles enter/exit (newest at top, oldest at bottom)
@@ -7100,9 +7105,10 @@ setTimeout(function() {{
       var cryptoCols = Math.max(1, Math.ceil(crypto.length / perCol));
       var equityCols = equity.length > 0 ? Math.max(1, Math.ceil(equity.length / perCol)) : 0;
       var totalCols  = cryptoCols + equityCols;
-      return {{ perCol: perCol, totalCols: totalCols, cryptoCols: cryptoCols, equityCols: equityCols,
+      _etCachedLayout = {{ perCol: perCol, totalCols: totalCols, cryptoCols: cryptoCols, equityCols: equityCols,
                 crypto: crypto, equity: equity, availH: availH,
                 live: crypto.concat(equity) }};
+      return _etCachedLayout;
     }}
 
     function _etTilePos(t, layout) {{
@@ -7127,6 +7133,7 @@ setTimeout(function() {{
     var _etCanvas = null, _etCtx = null;
     var _etLastTileCount = -1; // tracks tile count for overlay-width dirty check
     var _etLastDraw = 0, _etDirty = true;
+    var _etCachedLayout = null, _etLayoutKey = '';
     var _etScanT = 0;  // scanline phase
 
     function _etInitCanvas() {{
@@ -7150,7 +7157,7 @@ setTimeout(function() {{
         _etCanvas.height = ph;
         _etCanvas.style.width  = cw + 'px';
         _etCanvas.style.height = ch + 'px';
-        _etCtx.scale(_etDpr, _etDpr);
+        _etCtx.setTransform(_etDpr, 0, 0, _etDpr, 0, 0);
         _etDirty = true;
       }}
     }}
