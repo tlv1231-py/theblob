@@ -4514,6 +4514,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   }};
 
   window._drawNavCanvas = function() {{
+    try {{
     _resize();
     var ctx = _nc.getContext('2d');
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
@@ -4666,11 +4667,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var tw = ctx.measureText(valStr).width;
     var lx = Math.min(tipX + 14, W - _MR - tw - 6);
     var ly = Math.max(cy0 + 16, Math.min(tipY + 4, cy1 - 6));
-    // Pill background
+    // Pill background (manual rounded rect — roundRect not in all Chrome versions)
     ctx.fillStyle = 'rgba(8,0,18,0.85)';
-    ctx.beginPath();
-    ctx.roundRect(lx - 4, ly - 12, tw + 8, 17, 3);
-    ctx.fill();
+    ctx.fillRect(lx - 4, ly - 13, tw + 8, 17);
     // Text
     ctx.fillStyle = '#e0c8ff';
     ctx.textAlign = 'left';
@@ -4707,6 +4706,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.fillText(tm.sym || '', tmx, isEnter ? tmy - 15 : tmy + 23);
     }}
 
+    }} catch(e) {{ console.error('[navChart]', e); }}
   }};
 
   // ~30fps — enough for a smooth breathing dot without burning GPU
