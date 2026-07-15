@@ -601,14 +601,22 @@ def _build_daw_html(data: dict) -> str:
     import re as _re
     from datetime import datetime as _dt
 
-    _TICKER_PALETTE = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
+    # Canonical cyberpunk ticker palette — no greens, no reds (those are PnL colors).
+    # JS side uses the same palette + same djb2-style hash so colors match everywhere.
+    _TICKER_PALETTE = ["#00e5ff","#cc00ff","#ff9900","#e040fb","#40c4ff","#ff6b35","#00ffcc","#f7b731","#7c4dff","#18ffff"]
     _SYSTEM_SYMS = {"PIPELINE", "PORTFOLIO", "RUN", "INGEST", "SIGNAL", "HOLD",
                     "SNAPSHOT", "PNL", "NAV", "UPDATE", "DATA", "START", "COMPLETE", "VETO"}
 
     def _tc(sym: str) -> str:
         if not sym or sym.upper() in _SYSTEM_SYMS:
             return "#f0e0ff"
-        return _TICKER_PALETTE[hash(sym) % len(_TICKER_PALETTE)]
+        # Normalize same as JS: strip /USD suffix so BTC/USD == BTC
+        s = sym.replace("/USD", "").replace("USD", "")
+        # djb2-style hash — must match JS _symCol exactly
+        h = 0
+        for c in s:
+            h = (h * 31 + ord(c)) & 0xffff
+        return _TICKER_PALETTE[h % len(_TICKER_PALETTE)]
 
     def _ts(sym: str) -> str:
         """Wrap a ticker symbol in its color span."""
@@ -4174,8 +4182,8 @@ document.addEventListener('fullscreenchange', function() {{
   var pCtx = pc.getContext('2d');
 
   // palette pulled from open positions' accent colors
-  var PALETTE = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
-  function symCol(s) {{ var h=0; for(var c of s)h=(h*31+c.charCodeAt(0))&0xffff; return PALETTE[h%PALETTE.length]; }}
+  var PALETTE = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
+  function symCol(s) {{ var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
 
   var particles = [];
   var MAX_P = 60;
@@ -6180,9 +6188,9 @@ setTimeout(function() {{
             var verbCol   = isEntry ? '#00b4ff' : '#ff9900';
             var verbHtml  = '<span style="color:' + verbCol + '">' + verbPlain + '</span>';
             var symCol    = (function(s) {{
-              var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffff;
-              var hue = (h % 360 + 360) % 360; return 'hsl(' + hue + ',70%,62%)';
-            }})(sym);
+              var _p=['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
+              var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return _p[h%_p.length];
+            }})(sym.replace('/USD','').replace('USD',''));
             var symHtml   = '<span style="color:' + symCol + ';font-weight:700">' + sym + '</span>';
             var priceM    = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
             var priceS    = priceM ? ' @ <span style="color:rgba(255,255,255,.55)">$' + priceM[1] + '</span>' : '';
@@ -6735,10 +6743,11 @@ setTimeout(function() {{
     setTimeout(function() {{ _navHeartbeat(); setInterval(_navHeartbeat, 5000); }}, 1500);
 
     // ── Live positions poller — DOM-diffing with enter/exit animations ───────
-    var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
+    var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
     function _symCol(sym) {{
+      var s = sym.replace('/USD','').replace('USD','');
       var h = 0;
-      for (var i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) & 0xffff;
+      for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff;
       return _TICKER_COLS[h % _TICKER_COLS.length];
     }}
 
@@ -7868,8 +7877,8 @@ setTimeout(function() {{
         // Mirror into report panel rp-crypto-section
         var rpSection = document.getElementById('rp-crypto-section');
         if (rpSection) {{
-          var PALETTE = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
-          function _symCol(s) {{ var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
+          var PALETTE = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
+          function _symCol(s) {{ var c=s.replace('/USD','').replace('USD',''); var h=0; for(var i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
           function _rpPnlStr(p) {{
             if (!p.entry_price) return '—';
             // For crypto we don't have current price in this fetch — show entry info
@@ -8524,15 +8533,9 @@ setTimeout(function() {{
       var _calloutRail = document.getElementById('callout-rail');
 
       function _symColor(sym) {{
-        // Match the per-symbol colors used in the terminal and position cards
-        var map = {{
-          BTC:'#f7931a', ETH:'#627eea', SOL:'#9945ff', AVAX:'#e84142',
-          DOGE:'#c2a633', LINK:'#2a5ada', XTZ:'#a6e000', BCH:'#8dc351',
-          LTC:'#bfbbbb', ADA:'#0d1e2d', DOT:'#e6007a', MATIC:'#8247e5',
-          CRV:'#40bfbf', UNI:'#ff007a', AAVE:'#b6509e', MKR:'#1aab9b',
-        }};
-        var base = sym.replace('/USD','').replace('USD','');
-        return map[base] || '#00e5ff';
+        var _p=['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
+        var s=sym.replace('/USD','').replace('USD',''); var h=0;
+        for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return _p[h%_p.length];
       }}
 
       function _spawnCallout(cfg) {{
