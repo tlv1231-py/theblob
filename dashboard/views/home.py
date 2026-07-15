@@ -952,7 +952,7 @@ def _build_daw_html(data: dict) -> str:
 
     # Build equity positions map for JS satellites
     import json as _json
-    _TICKER_PAL_PY = ["#00e5ff","#9400ff","#ff9900","#e040fb","#40c4ff","#b2ff59","#ff6b35","#00ffcc"]
+    _TICKER_PAL_PY = ["#00e5ff","#cc00ff","#ff9900","#e040fb","#40c4ff","#ff6b35","#00ffcc","#f7b731","#7c4dff","#18ffff"]
     _eq_pos_js = _json.dumps({
         p["sym"]: {
             "entry_price":  float(p["entry_price"] or p.get("value") or 1),
@@ -967,7 +967,7 @@ def _build_daw_html(data: dict) -> str:
     _eq_canvas_tiles_j = _json.dumps([
         {
             "sym":        p["sym"],
-            "col":        _TICKER_PAL_PY[hash(p["sym"]) % len(_TICKER_PAL_PY)],
+            "col":        _tc(p["sym"]),
             "val":        float(p["value"] or 0),
             "pnl":        float(p["entry_pnl"] or 0),
             "pnlPct":     float(p["entry_pnl_pct"] or 0),
@@ -977,7 +977,7 @@ def _build_daw_html(data: dict) -> str:
             "target":     float(p.get("target_price") or 0),
             "curPrice":   float(p.get("price") or p["entry_price"] or 0),
             "days":       int(p.get("days_held") or 0),
-            "enteredAt":  int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
+            "enteredAt":  int(datetime.fromisoformat(str(p["entry_date"])).timestamp() * 1000) if p.get("entry_date") else int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
             "inSignal":   bool(p.get("in_signal", True)),
             "rank":       int(p.get("rank") or 0),
             "holdText":   str(p.get("hold_text") or ""),
@@ -7259,8 +7259,6 @@ setTimeout(function() {{
         ctx.save();
         ctx.font = '7px Consolas,monospace';
         ctx.textAlign = 'left';
-        ctx.shadowColor = _badge.c;
-        ctx.shadowBlur  = 5;
         ctx.fillStyle   = _badge.c;
         ctx.globalAlpha = 0.85;
         ctx.fillText(_badge.g, x + 4, y + 14);
@@ -7283,9 +7281,7 @@ setTimeout(function() {{
       ctx.font = _F1;
       ctx.fillStyle = t.col;
       ctx.textAlign = 'left';
-      ctx.shadowColor = t.col; ctx.shadowBlur = 6;
       ctx.fillText(t.sym, lx, y + 15);
-      ctx.shadowBlur = 0;
 
       // ── ROW 1 right: value ──
       if (dVal > 0.5) {{
@@ -7422,11 +7418,7 @@ setTimeout(function() {{
         existing.inSignal = data.inSignal  !== undefined ? data.inSignal : existing.inSignal;
         existing.rank     = data.rank      || existing.rank;
         existing.holdText = data.holdText  || existing.holdText;
-        // Update enteredAt if the new value is a real past timestamp (>1 min old),
-        // overwriting a Date.now() placeholder set when entered_at was null
-        if (data.enteredAt && data.enteredAt < Date.now() - 60000) {{
-          existing.enteredAt = data.enteredAt;
-        }}
+        if (data.enteredAt) existing.enteredAt = data.enteredAt;
         return existing;
       }}
       var tile = {{
