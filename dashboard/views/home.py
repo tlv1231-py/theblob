@@ -4486,10 +4486,19 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       allPts.push({{ ms: new Date(pts[i].t).getTime(), v: pts[i].v }});
     }}
     allPts.push({{ ms: Date.now(), v: liveNav }});
-    if (allPts.length < 2) {{ allPts.unshift({{ ms: Date.now() - 60000, v: liveNav }}); }}
 
-    var t0 = allPts[0].ms, t1 = allPts[allPts.length-1].ms;
-    var tSpan = Math.max(t1 - t0, 1);
+    var t1 = allPts[allPts.length-1].ms;
+    var t0 = allPts[0].ms;
+    // Enforce a minimum visible window: at least 30 min so a fresh session
+    // doesn't squish all points to the right edge.
+    var minSpan = 30 * 60 * 1000;
+    if (t1 - t0 < minSpan) {{ t0 = t1 - minSpan; }}
+    // Filter to points within window, then re-add live point
+    allPts = allPts.filter(function(p) {{ return p.ms >= t0; }});
+    if (!allPts.length) allPts = [{{ ms: t0, v: liveNav }}];
+    allPts.push({{ ms: t1, v: liveNav }});
+
+    var tSpan = t1 - t0;
     function tx(ms) {{ return (ms - t0) / tSpan * (W - 16) + 8; }}
 
     // Y: fit to all visible data, no smoothing.
@@ -6718,7 +6727,8 @@ setTimeout(function() {{
     var _navTraceInited = false;
     function _redrawNavTraces() {{
       var _gd = document.getElementById('chart');
-      if (!_gd || !_gd.data || _gd.data.length < 7) return;
+      // Retry until Plotly is ready — don't bail out permanently
+      if (!_gd || !_gd.data) {{ setTimeout(_redrawNavTraces, 400); return; }}
       var dbPts = window._navDbPts || [];
       var _xs = dbPts.map(function(p) {{ return p.t; }});
       var _ys = dbPts.map(function(p) {{ return p.v; }});
@@ -6727,17 +6737,20 @@ setTimeout(function() {{
         _ys.push(window._lastKnownNav);
       }}
       if (!_xs.length) return;
-      Plotly.restyle(_gd, {{ x: [_xs], y: [_ys] }}, [6]);
-      // On first real data load, force both axes to autorange so the line
-      // fills the chart and the dot is visible without panning.
-      if (!_navTraceInited) {{
-        _navTraceInited = true;
-        Plotly.relayout(_gd, {{ 'xaxis.autorange': true, 'yaxis.autorange': true }});
+      // Find the portfolio trace by name rather than hardcoded index
+      var traceIdx = 6;
+      for (var _ti = 0; _ti < _gd.data.length; _ti++) {{
+        if (_gd.data[_ti].name === 'PORTFOLIO') {{ traceIdx = _ti; break; }}
       }}
+      // restyle returns a Promise — chain relayout so axes fit AFTER data lands
+      Plotly.restyle(_gd, {{ x: [_xs], y: [_ys] }}, [traceIdx]).then(function() {{
+        if (!_navTraceInited) {{
+          _navTraceInited = true;
+          Plotly.relayout(_gd, {{ 'xaxis.autorange': true, 'yaxis.autorange': true }});
+        }}
+      }});
     }}
     window._redrawNavTraces = _redrawNavTraces;
-    // Draw immediately with whatever data arrived during page init, then keep a
-    // 5s heartbeat so timing gaps between fetch and chart init never leave it blank.
     _redrawNavTraces();
     setInterval(_redrawNavTraces, 5000);
 
@@ -7703,7 +7716,7 @@ setTimeout(function() {{
 
         p.innerHTML = [
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">',
-            '<span style="font:700 18px VT323,monospace;color:' + col + '">' + clean + '</span>',
+            '<span id="tp-sym-label" style="font:700 18px VT323,monospace;color:' + col + '">' + clean + '</span>',
             '<div style="display:flex;align-items:center;gap:8px">',
               '<label style="font-size:11px;color:#6a4a8a">COLOR</label>',
               '<input type="color" id="tp-colorpick" value="' + col + '" ',
@@ -7722,18 +7735,22 @@ setTimeout(function() {{
         document.body.appendChild(p);
         _popup = p;
 
-        // Color picker
+        // Color picker — updates tiles, terminal feed spans, and popup header live
         p.querySelector('#tp-colorpick').addEventListener('input', function(e) {{
           var newCol = e.target.value;
           if (!window._TICKER_OVR) window._TICKER_OVR = {{}};
           window._TICKER_OVR[clean] = newCol;
-          // Update any live tile that has this sym
+          // Canvas tiles
           (window._ET||[]).forEach(function(t) {{
-            var ts = t.sym.replace('/USD','').replace('USD','');
-            if (ts === clean) t.col = newCol;
+            if (t.sym.replace('/USD','').replace('USD','') === clean) t.col = newCol;
           }});
+          // All terminal feed spans with matching data-sym
+          document.querySelectorAll('[data-sym]').forEach(function(s) {{
+            if (s.dataset.sym.replace('/USD','').replace('USD','') === clean) s.style.color = newCol;
+          }});
+          // Popup border + header label
           p.style.borderColor = newCol;
-          p.querySelector('#tp-close').previousElementSibling.previousElementSibling.style.color = newCol;
+          p.querySelector('#tp-sym-label').style.color = newCol;
         }});
 
         // Close button
