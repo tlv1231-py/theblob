@@ -7177,6 +7177,7 @@ setTimeout(function() {{
     function _etPaintTile(ctx, t, x, y, ts) {{
       var W = _EQ_W, H = _EQ_H;
       var lx = x + 8;
+      var now = Date.now(); // epoch ms — use for hold timer, NOT rAF ts
 
       // Background
       ctx.fillStyle = 'rgba(0,0,8,0.92)';
@@ -7190,68 +7191,102 @@ setTimeout(function() {{
       ctx.fillStyle = 'rgba(255,255,255,0.04)';
       ctx.fillRect(x, y + H - 1, W, 1);
 
-      // ── ROW 1 (y+15): SYM in unique color ──
+      // Lerped display values
+      var dVal    = t._dVal    !== undefined ? t._dVal    : (t.val    || 0);
+      var dPnl    = t._dPnl    !== undefined ? t._dPnl    : (t.pnl    || 0);
+      var dPnlPct = t._dPnlPct !== undefined ? t._dPnlPct : (t.pnlPct || 0);
+      if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
+      if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
+
+      // ── ROW 1 left (y+15): SYM in unique color ──
       ctx.font = 'bold 10px Consolas,monospace';
       ctx.fillStyle = t.col;
       ctx.textAlign = 'left';
       ctx.fillText(t.sym, lx, y + 15);
 
-      // ── ROW 1 right: holdings value, scramble-flash on update ──
-      var dVal = t._dVal !== undefined ? t._dVal : (t.val || 0);
+      // ── ROW 1 right (y+15): value, P&L-tinted + scramble on update ──
       if (dVal > 0.5) {{
-        var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
+        // Persistent tint: bright green (big gain) → white (flat) → dark red (big loss)
+        var mag = Math.min(Math.abs(dPnlPct) / 8, 1); // 0→1 over ±8%
+        var valCol;
+        if (Math.abs(dPnlPct) < 0.2) {{
+          valCol = '#ffffff';
+        }} else if (dPnl > 0) {{
+          var lit = Math.round(38 + mag * 30); // 38% → 68%
+          valCol = 'hsl(140,90%,' + lit + '%)';
+        }} else {{
+          var lit2 = Math.round(28 + mag * 22); // 28% → 50%
+          valCol = 'hsl(350,90%,' + lit2 + '%)';
+        }}
         var flashAge = t._flashStart ? (ts - t._flashStart) : 9999;
-        var isFlashing = flashAge < 220;
-        var flashCol = t._flashDir > 0 ? '#00ff9d' : '#ff3366';
+        var isFlashing = flashAge < 180;
+        var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
         ctx.font = 'bold 10px Consolas,monospace';
-        ctx.fillStyle = isFlashing ? flashCol : '#ffffff';
+        ctx.fillStyle = isFlashing ? (t._flashDir > 0 ? '#00ff9d' : '#ff3366') : valCol;
         ctx.textAlign = 'right';
         ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 15);
         ctx.textAlign = 'left';
-        if (t._valFlash) {{
-          t._flashStart = ts;
-          t._flashDir   = t._valFlash;
-          t._valFlash   = 0;
-        }}
+        if (t._valFlash) {{ t._flashStart = ts; t._flashDir = t._valFlash; t._valFlash = 0; }}
       }}
 
-      // ── ROW 2 (y+28): entry price in unique color ──
+      // ── ROW 2 left (y+27): entry price in unique color ──
       if (t.entry > 0) {{
         var entryStr = '@$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry < 100 ? t.entry.toFixed(2) : Math.round(t.entry).toLocaleString('en-US'));
         ctx.font = '8px Consolas,monospace';
         ctx.fillStyle = t.col;
-        ctx.fillText(entryStr, lx, y + 28);
+        ctx.fillText(entryStr, lx, y + 27);
       }}
 
-      // ── ROW 3 (y+42): hold timer in white ──
-      var holdMs = t.enteredAt ? (ts - t.enteredAt) : (t.days||0) * 86400000;
+      // ── ROW 2 right (y+27): P&L indicator — animated pulse on change ──
+      if (Math.abs(dPnl) >= 0.01) {{
+        var pSign = dPnl >= 0 ? '+' : '-';
+        var absPnl = Math.abs(dPnl);
+        var pnlDisp = pSign + '$' + (absPnl >= 1000 ? (absPnl/1000).toFixed(1)+'k' : absPnl.toFixed(2));
+        var pnlFlashAge = t._flashStart ? (ts - t._flashStart) : 9999;
+        // Brief scale-up pulse on update
+        var pScale = pnlFlashAge < 300 ? (1 + 0.18 * Math.max(0, 1 - pnlFlashAge/300)) : 1;
+        ctx.save();
+        if (pScale > 1) {{
+          ctx.translate(x + W - 5, y + 27);
+          ctx.scale(pScale, pScale);
+          ctx.translate(-(x + W - 5), -(y + 27));
+        }}
+        ctx.font = '8px Consolas,monospace';
+        ctx.fillStyle = dPnl >= 0 ? '#00c87a' : '#e03355';
+        ctx.textAlign = 'right';
+        ctx.fillText(pnlDisp, x + W - 5, y + 27);
+        ctx.textAlign = 'left';
+        ctx.restore();
+      }}
+
+      // ── ROW 3 (y+40): hold timer in white ──
+      // enteredAt is Date.now() ms; use epoch now, not rAF ts
+      var holdMs = t.enteredAt ? Math.max(0, now - t.enteredAt) : (t.days||0) * 86400000;
       var holdStr;
-      if (holdMs < 60000)       holdStr = Math.floor(holdMs/1000) + 's';
+      if (holdMs < 60000)        holdStr = Math.floor(holdMs/1000) + 's';
       else if (holdMs < 3600000) holdStr = Math.floor(holdMs/60000) + 'm';
-      else if (holdMs < 86400000) holdStr = Math.floor(holdMs/3600000) + 'h ' + Math.floor((holdMs%3600000)/60000) + 'm';
-      else {{
-        var hDays = Math.floor(holdMs/86400000);
-        var hHrs  = Math.floor((holdMs%86400000)/3600000);
-        holdStr = hDays + 'd' + (hHrs > 0 ? ' ' + hHrs + 'h' : '');
+      else if (holdMs < 86400000) {{
+        var hH = Math.floor(holdMs/3600000), hM = Math.floor((holdMs%3600000)/60000);
+        holdStr = hH + 'h' + (hM > 0 ? ' ' + hM + 'm' : '');
+      }} else {{
+        var hD = Math.floor(holdMs/86400000), hHr = Math.floor((holdMs%86400000)/3600000);
+        holdStr = hD + 'd' + (hHr > 0 ? ' ' + hHr + 'h' : '');
       }}
       ctx.font = '8px Consolas,monospace';
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.fillText(holdStr, lx, y + 42);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText(holdStr, lx, y + 40);
 
-      // ── XP progress bar bottom-right ──
-      // Progress = age fraction toward 60-day horizon (equity) / 4h (crypto)
+      // ── XP bar bottom — full width, 3px ──
+      // Fraction toward 4h (crypto) or 60d (equity); near-full on exit signal
       var xpMax  = t.isCrypto ? (4 * 3600000) : (60 * 86400000);
       var xpFrac = Math.min(holdMs / xpMax, 1);
-      // Boost to near-full if exit signal fired
       if (!t.inSignal && t.inSignal !== undefined) xpFrac = Math.max(xpFrac, 0.88);
-      var xpW = 62, xpH = 3, xpX = x + W - xpW - 5, xpY = y + H - 8;
-      // Track
-      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      var xpW = W - 10, xpH = 3, xpX = x + 5, xpY = y + H - 6;
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
       ctx.fillRect(xpX, xpY, xpW, xpH);
-      // Fill — smooth color: blue→purple→gold as it fills
-      var xpHue = 200 + xpFrac * 160; // 200(blue) → 360→ wraps to 40(gold)
-      if (xpHue > 360) xpHue -= 360;
-      ctx.fillStyle = 'hsl(' + xpHue + ',80%,55%)';
+      // Blue → purple → gold as fraction grows
+      var xpHue = 210 + xpFrac * 170; if (xpHue > 360) xpHue -= 360;
+      ctx.fillStyle = 'hsl(' + xpHue + ',75%,52%)';
       ctx.fillRect(xpX, xpY, Math.round(xpW * xpFrac), xpH);
     }}
 
