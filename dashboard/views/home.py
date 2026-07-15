@@ -4499,7 +4499,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll wheel zooms the time window (hours visible to the left of now)
-  window._navWindowMs = 30 * 24 * 60 * 60 * 1000; // default 30-day view; scroll wheel zooms
+  window._navWindowMs = 8 * 60 * 1000; // 8-minute rolling window; scroll wheel zooms
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
@@ -4511,46 +4511,16 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}, {{ passive: false }});
   }})();
 
-  // ── Historical backbone from DB (portDates/portValues) ─────────────────────
-  // These are authoritative, identical on every screen, and never change.
-  var _navHist = [];
-  (function() {{
-    var pd = portDates || [], pv = portValues || [];
-    for (var i = 0; i < pd.length; i++) {{
-      var ms = new Date(pd[i]).getTime();
-      if (ms && !isNaN(ms) && pv[i] && !isNaN(pv[i])) {{
-        _navHist.push({{ ms: ms, v: pv[i] }});
-      }}
-    }}
-    _navHist.sort(function(a,b){{ return a.ms - b.ms; }});
-  }})();
-
-  // ── Y scale — computed ONCE from the full DB history, never recalculated ──
-  // This means historical points never change pixel positions across frames.
-  var _navYMid = 0, _navYScale = 1;
-  (function() {{
-    if (!_navHist.length) {{ _navYMid = window._portfolioBaseline || 100000; }}
-    else {{
-      var lo = Infinity, hi = -Infinity;
-      _navHist.forEach(function(p) {{ if(p.v<lo) lo=p.v; if(p.v>hi) hi=p.v; }});
-      var range = Math.max(hi - lo, lo * 0.01); // min 1% of portfolio
-      _navYMid   = (lo + hi) / 2;
-      _navYScale = (500 * 0.70) / range; // 70% of nominal 500px height; rescaled per frame by H
-    }}
-  }})();
-
-  // ── Live intraday points — extend the DB backbone with today's pollers ───
-  var _navLive = [];   // {{ms, v}} — session only, appended, never modified
-  var _navLiveLastV = null;
+  // ── Session live points — appended only, never modified or reordered ────────
+  var _navLive = [];
 
   window._navPush = function(v, isoTs) {{
     if (!v || isNaN(v)) return;
     var ms = isoTs ? new Date(isoTs).getTime() : Date.now();
-    // Throttle: only record if value moved >$2 or >30s since last live point
-    var last = _navLive.length ? _navLive[_navLive.length-1] : null;
-    if (last && Math.abs(v - last.v) <= 2 && (ms - last.ms) < 30000) return;
+    var last = _navLive.length ? _navLive[_navLive.length - 1] : null;
+    // Throttle: skip if value moved <$2 AND <30s since last point
+    if (last && Math.abs(v - last.v) < 2 && (ms - last.ms) < 30000) return;
     _navLive.push({{ ms: ms, v: v }});
-    _navLiveLastV = v;
   }};
 
   window._drawNavCanvas = function() {{
@@ -4559,51 +4529,37 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Authoritative live value — EMA-smoothed so orb drifts, never snaps
-    var rawLive = window._lastKnownNav || (_navHist.length ? _navHist[_navHist.length-1].v : null);
+    var rawLive = window._lastKnownNav;
     if (!rawLive) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+
+    // EMA-smooth the orb so it drifts to new values instead of snapping
     window._navSmoothedNav = window._navSmoothedNav
       ? 0.06 * rawLive + 0.94 * window._navSmoothedNav
       : rawLive;
     var liveNav = window._navSmoothedNav;
 
-    // "now" pinned at canvas center; history scrolls left
-    var _nowPx   = W / 2;
-    var nowMs    = Date.now();
-    var windowMs = window._navWindowMs || (30 * 24 * 60 * 60 * 1000); // default: 30 days
-    var leftEdgeMs = nowMs - windowMs;
+    // Y anchor: set ONCE on the first draw from the live value, fixed forever.
+    // This means historical pixel positions never change across frames.
+    if (!window._navYAnchor) window._navYAnchor = liveNav;
+    var yAnchor   = window._navYAnchor;
+    var halfRange = yAnchor * 0.005;            // ±0.5% of portfolio = full chart height
+    var yScale    = (H * 0.40) / halfRange;
+    function ty(v) {{ return H / 2 - (v - yAnchor) * yScale; }}
 
-    // X: maps timestamp → canvas X in [0, W/2]; nowMs → W/2
+    // "now" pinned at canvas center; history scrolls left
+    var _nowPx     = W / 2;
+    var nowMs      = Date.now();
+    var windowMs   = window._navWindowMs || (8 * 60 * 1000);
+    var leftEdgeMs = nowMs - windowMs;
     function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * _nowPx; }}
 
-    // Y: fixed scale computed from DB history — historical points NEVER move
-    var yScale = _navYScale * (H / 500); // rescale to actual canvas height
-    var yMid   = _navYMid;
-    function ty(v) {{ return H / 2 - (v - yMid) * yScale; }}
-
-    // Collect visible points: DB history + today's live points + "now"
+    // Collect visible session points + live "now" endpoint
     var visible = [];
-    // Seed: last DB point before the window left edge (so line starts at canvas left, not mid-air)
-    var seedV = null;
-    for (var si = _navHist.length - 1; si >= 0; si--) {{
-      if (_navHist[si].ms <= leftEdgeMs) {{ seedV = _navHist[si].v; break; }}
-    }}
-    if (seedV !== null) visible.push({{ ms: leftEdgeMs, v: seedV }});
-    // DB history within the window
-    for (var hi = 0; hi < _navHist.length; hi++) {{
-      if (_navHist[hi].ms > leftEdgeMs && _navHist[hi].ms < nowMs) {{
-        visible.push({{ ms: _navHist[hi].ms, v: _navHist[hi].v }});
-      }}
-    }}
-    // Live intraday points within the window
+    visible.push({{ ms: leftEdgeMs, v: liveNav }});   // left edge starts at current level
     for (var li = 0; li < _navLive.length; li++) {{
-      if (_navLive[li].ms > leftEdgeMs && _navLive[li].ms < nowMs) {{
-        visible.push({{ ms: _navLive[li].ms, v: _navLive[li].v }});
-      }}
+      var pt = _navLive[li];
+      if (pt.ms > leftEdgeMs && pt.ms < nowMs) visible.push(pt);
     }}
-    // Sort by time (hist + live are both sorted, but interleave for safety)
-    visible.sort(function(a,b){{ return a.ms - b.ms; }});
-    // "Now" endpoint — smoothed live value at W/2
     visible.push({{ ms: nowMs, v: liveNav }});
 
     if (visible.length < 2) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
