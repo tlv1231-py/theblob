@@ -7271,15 +7271,41 @@ setTimeout(function() {{
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.fillText(holdStr, lx, y + 39);
 
-      // ── XP bar — immediately below timer (y+45), white fill ──
-      var xpMax  = t.isCrypto ? (4 * 3600000) : (60 * 86400000);
-      var xpFrac = Math.min(holdMs / xpMax, 1);
-      if (!t.inSignal && t.inSignal !== undefined) xpFrac = Math.max(xpFrac, 0.88);
+      // ── VU meter bar + peak hat (y+46) ──
+      // Audio signal = P&L% toward a 5% target; bar oscillates with price
+      var vuTarget = 5.0; // % → full bar
+      var vuLevel  = Math.max(0, Math.min(dPnlPct / vuTarget, 1));
+      // Boost level toward full when exit signal fires
+      if (!t.inSignal && t.inSignal !== undefined) vuLevel = Math.max(vuLevel, 0.90);
+
+      // Peak hold: new peak resets hold timer; after 1.5s hold, decay at ~0.25/s
+      if (t._vuPeak === undefined) {{ t._vuPeak = 0; t._vuPeakTs = ts; }}
+      if (vuLevel >= t._vuPeak) {{
+        t._vuPeak   = vuLevel;
+        t._vuPeakTs = ts; // reset hold
+      }} else {{
+        var holdDur = 1500; // ms before decay starts
+        var decayAge = ts - t._vuPeakTs - holdDur;
+        if (decayAge > 0) {{
+          // decay ~0.25 of full bar per second
+          t._vuPeak = Math.max(vuLevel, t._vuPeak - decayAge * 0.00025);
+          t._vuPeakTs = ts - holdDur; // advance so decay is frame-relative
+        }}
+      }}
+
       var xpW = W - 10, xpH = 3, xpX = x + 5, xpY = y + 46;
-      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      // Track (dim)
+      ctx.fillStyle = 'rgba(255,255,255,0.09)';
       ctx.fillRect(xpX, xpY, xpW, xpH);
-      ctx.fillStyle = 'rgba(255,255,255,0.72)';
-      ctx.fillRect(xpX, xpY, Math.round(xpW * xpFrac), xpH);
+      // Fill (current level)
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.fillRect(xpX, xpY, Math.round(xpW * vuLevel), xpH);
+      // Peak hat — 2px wide block, bright white
+      var hatX = xpX + Math.round(xpW * t._vuPeak) - 2;
+      if (hatX > xpX && hatX + 2 <= xpX + xpW) {{
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fillRect(hatX, xpY - 1, 2, xpH + 2); // slightly taller than bar
+      }}
     }}
 
     // Add or replace a tile (upsert)
