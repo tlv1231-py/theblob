@@ -4583,16 +4583,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = window._lastKnownNav || (_navPts.length ? _navPts[_navPts.length-1].v : null);
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // X: "now" endpoint is pinned at the visual center of the chart (matching blob orb).
-    // This puts the nav line endpoint right where the orb sits; history scrolls left.
-    var _feedPx  = (document.getElementById('feed-overlay') || {{offsetWidth:0}}).offsetWidth || 0;
-    var _posPx   = (document.getElementById('pos-overlay')  || {{offsetWidth:0}}).offsetWidth || 0;
-    var _canvPx  = _nc.offsetWidth || W;
-    // orb + "now" both at center of visible chart between the two panels
-    var _orbPx   = _feedPx + (_canvPx - _feedPx - _posPx) / 2;
-    var _nowPx   = _orbPx;
-    var nowFracX = _nowPx  / _canvPx;
-    var orbFracX = Math.max(0.1, Math.min(0.9, _orbPx / _canvPx));
+    // "now" is always exactly canvas center — independent of tile/overlay widths.
+    var _nowPx = W / 2;
+    var orbFracX = 0.5;
 
     var nowMs = Date.now();
     // SIDESCROLLER: fixed 8-minute rolling window — the trail slides left in real time.
