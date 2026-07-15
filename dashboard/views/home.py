@@ -5918,8 +5918,7 @@ setTimeout(function() {{
     _submitOrder(sym, 'buy', amt, amt);
 
     // Optimistic tile — only create if tile doesn't already exist (avoid value overwrite)
-    var _TICKER_PAL_JS = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
-    var col = _TICKER_PAL_JS[sym.split('').reduce(function(a,c){{return a+c.charCodeAt(0);}},0) % _TICKER_PAL_JS.length];
+    var col = _symCol(sym);
     if (window._etUpsert && !(window._etBySym||{{}})[sym]) {{
       window._etUpsert({{
         sym: sym, col: col, val: amt, pnl: 0, pnlPct: 0,
@@ -7002,7 +7001,7 @@ setTimeout(function() {{
 
     var _CARD_W = 148; // crypto column width
     var _EQ_W   = 130; // equity column width
-    var _EQ_H   = 82;  // tile height px
+    var _EQ_H   = 58;  // tile height px — content ends at y+49 (VU bar), 9px margin
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CANVAS EQUITY TILE ENGINE
@@ -7418,7 +7417,11 @@ setTimeout(function() {{
         existing.inSignal = data.inSignal  !== undefined ? data.inSignal : existing.inSignal;
         existing.rank     = data.rank      || existing.rank;
         existing.holdText = data.holdText  || existing.holdText;
-        if (data.enteredAt) existing.enteredAt = data.enteredAt;
+        // Only accept an enteredAt that is *older* than what we already have —
+        // prevents price-poller re-calls from stomping the real DB timestamp with Date.now()
+        if (data.enteredAt && (!existing.enteredAt || data.enteredAt < existing.enteredAt)) {{
+          existing.enteredAt = data.enteredAt;
+        }}
         return existing;
       }}
       var tile = {{
