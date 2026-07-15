@@ -7029,41 +7029,41 @@ setTimeout(function() {{
           _etPaintTile(ctx, t, x, y, ts);
 
         }} else if (t.phase === 'bit-crush') {{
-          // Bitcrusher exit: pixels decay in increasing block-size quantization steps
-          var crushT = Math.min(1, age / 1000);
-          _etPaintTile(ctx, t, x, y, ts);
-
-          // Progressive pixel-block overlay — block size grows as crush progresses
-          var bSz = Math.max(1, Math.round(crushT * crushT * 10));
-          for (var by = 0; by < _EQ_H; by += bSz) {{
-            for (var bx2 = 0; bx2 < _EQ_W; bx2 += bSz) {{
-              if (Math.random() < crushT * 1.3) {{
-                ctx.fillStyle = Math.random() < 0.12
-                  ? (t.exitPnl >= 0 ? 'rgba(0,255,157,0.5)' : 'rgba(255,51,102,0.5)')
-                  : 'rgba(0,0,0,' + (0.5 + crushT * 0.5) + ')';
-                ctx.fillRect(x + bx2, y + by, bSz, bSz);
+          // Phase 1 (0–500ms): pixel decay → clearRect blocks eat tile to transparent
+          // Phase 2 (500–2300ms): P&L ghost in Press Start 2P lingers in cleared space
+          var crushDur = 500, ghostDur = 1800;
+          if (age < crushDur) {{
+            var crushT = age / crushDur; // 0→1
+            _etPaintTile(ctx, t, x, y, ts);
+            // Quantize: block size grows from 2px → 14px
+            var bSz = Math.max(2, Math.round(2 + crushT * crushT * 12));
+            for (var by = 0; by < _EQ_H; by += bSz) {{
+              for (var bx2 = 0; bx2 < _EQ_W; bx2 += bSz) {{
+                if (Math.random() < crushT * 1.5) {{
+                  ctx.clearRect(x + bx2, y + by, bSz, bSz);
+                }}
               }}
             }}
+          }} else {{
+            // Tile space is now fully cleared — just draw PnL ghost
+            var ghostT  = Math.min(1, (age - crushDur) / ghostDur);
+            var ghostA  = ghostT < 0.08 ? ghostT / 0.08 : Math.max(0, 1 - (ghostT - 0.08) / 0.92);
+            if (ghostA > 0.02) {{
+              var ec = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
+              var ep = Math.abs(t.exitPnl);
+              var es = (t.exitPnl >= 0 ? '+$' : '-$') + (ep >= 1000 ? (ep/1000).toFixed(1)+'k' : ep.toFixed(2));
+              ctx.save();
+              ctx.globalAlpha = ghostA;
+              ctx.shadowColor = ec; ctx.shadowBlur = 14;
+              ctx.fillStyle = ec;
+              ctx.font = '8px "Press Start 2P",monospace';
+              ctx.textAlign = 'center';
+              ctx.fillText(es, x + _EQ_W/2, y + _EQ_H/2 + 4);
+              ctx.textAlign = 'left';
+              ctx.restore();
+            }}
+            if (ghostT >= 1) {{ t.phase = 'done'; _etDirty = true; }}
           }}
-
-          // PnL ghost text: peaks at 30-60% then fades out
-          var textA = crushT < 0.3 ? crushT/0.3 : Math.max(0, 1-(crushT-0.3)/0.7);
-          if (textA > 0.05) {{
-            var ec = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
-            var ep = Math.abs(t.exitPnl);
-            var es = (t.exitPnl >= 0 ? '+$' : '-$') + (ep >= 1000 ? (ep/1000).toFixed(1)+'k' : ep.toFixed(0));
-            ctx.save();
-            ctx.globalAlpha = textA;
-            ctx.shadowColor = ec; ctx.shadowBlur = 12;
-            ctx.fillStyle = ec;
-            ctx.font = 'bold 14px Consolas,monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(es, x + _EQ_W/2, y + _EQ_H/2 + 5);
-            ctx.textAlign = 'left';
-            ctx.restore();
-          }}
-
-          if (crushT >= 1) {{ t.phase = 'done'; _etDirty = true; }}
         }}
         // 'done' tiles excluded by live filter
       }}
@@ -7272,12 +7272,12 @@ setTimeout(function() {{
           sr: t.pnl>=0?0:255, sg: t.pnl>=0?255:51, sb: t.pnl>=0?157:102 }};
         delete _satAngles[_exitSym];
       }}
-      // Clean up after bit-crush completes (1s animation + margin)
+      // Clean up after bit-crush completes (500ms decay + 1800ms ghost + margin)
       setTimeout(function() {{
         delete _etBySym[sym];
         _ET = _ET.filter(function(tile) {{ return tile.sym !== sym; }});
         _updateOverlayWidth();
-      }}, 1400);
+      }}, 2500);
     }};
 
     function _updateOverlayWidth() {{
