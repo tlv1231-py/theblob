@@ -2963,46 +2963,20 @@ var _hysaDates = [], _hysaVals = [], _tgt20Dates = [], _tgt20Vals = [];
 }})();
 
 var traces = [
-  // 20% annual target trajectory — replaces flat baseline (trace index 0)
-  {{
-    x: _tgt20Dates, y: _tgt20Vals,
-    type:'scatter', mode:'lines',
-    line:{{ color:'rgba(0,229,100,0.4)', width:1, dash:'dashdot' }},
-    name:'20% TARGET',
-    hovertemplate:'<b style="color:#00e564">TARGET $%{{y:,.0f}}</b><extra></extra>',
-  }},
-  {{
-    x: spyDates, y: spyNorm,
-    type:'scatter', mode:'lines',
-    line:{{ color:'#00e5ff', width:1.5, dash:'dot' }},
-    name:'SPY (norm)',
-    hovertemplate:'<b style="color:#00e5ff">SPY $%{{y:,.0f}}</b><extra></extra>',
-  }},
-  {{
-    x: qqqDates, y: qqqNorm,
-    type:'scatter', mode:'lines',
-    line:{{ color:'#9400ff', width:1.5, dash:'dot' }},
-    name:'QQQ (norm)',
-    hovertemplate:'<b style="color:#9400ff">QQQ $%{{y:,.0f}}</b><extra></extra>',
-  }},
-  // Traces 3+4 — kept as empty stubs; actual line drawn on #nav-canvas overlay
-  {{ x:[], y:[], type:'scatter', mode:'lines', line:{{color:'transparent',width:0}}, showlegend:false, hoverinfo:'skip' }},
-  {{ x:[], y:[], type:'scatter', mode:'lines', line:{{color:'transparent',width:0}}, showlegend:false, hoverinfo:'skip', name:'PORTFOLIO' }},
-  // HYSA 4.8% benchmark (trace index 5)
-  {{
-    x: _hysaDates, y: _hysaVals,
-    type:'scatter', mode:'lines',
-    line:{{ color:'rgba(255,200,0,0.3)', width:1, dash:'dash' }},
-    name:'HYSA 4.8%',
-    hovertemplate:'<b style="color:#ffc800">HYSA $%{{y:,.0f}}</b><extra></extra>',
-  }},
-  // Portfolio line — fed from nav_snapshots DB, appends live (index 6)
+  // 0-5: hidden stubs — keep index positions for any code that references them
+  {{ x:[], y:[], visible:false, showlegend:false, hoverinfo:'skip', type:'scatter' }},
+  {{ x:[], y:[], visible:false, showlegend:false, hoverinfo:'skip', type:'scatter' }},
+  {{ x:[], y:[], visible:false, showlegend:false, hoverinfo:'skip', type:'scatter' }},
+  {{ x:[], y:[], visible:false, showlegend:false, hoverinfo:'skip', type:'scatter' }},
+  {{ x:[], y:[], visible:false, showlegend:false, hoverinfo:'skip', type:'scatter' }},
+  {{ x:[], y:[], visible:false, showlegend:false, hoverinfo:'skip', type:'scatter' }},
+  // Index 6: Portfolio — the only visible line
   {{
     x:[], y:[], name:'PORTFOLIO',
     type:'scatter', mode:'lines',
     line:{{ color:'rgba(255,0,204,0.9)', width:2 }},
     hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
-    showlegend:true,
+    showlegend:false,
   }},
   // Trade event markers — ENTER (index 7), EXIT (index 8)
   {{
@@ -7621,7 +7595,22 @@ setTimeout(function() {{
       }}
       requestAnimationFrame(_etRafLoop);
     }}
-    document.fonts.ready.then(function() {{ requestAnimationFrame(_etRafLoop); }});
+    // Force Orbitron to actually render before the RAF loop draws tiles.
+    // document.fonts.ready resolves even if the font failed to load;
+    // document.fonts.load() triggers a real load, and the warm-up fillText
+    // forces the browser to finish rasterizing the glyphs before first draw.
+    Promise.all([
+      document.fonts.load('700 11px Orbitron'),
+      document.fonts.load('400 9px Orbitron')
+    ]).then(function() {{
+      var _tmp = document.createElement('canvas');
+      var _tc = _tmp.getContext('2d');
+      _tc.font = '700 11px Orbitron';
+      _tc.fillText('BTC', 0, 10);
+      _tc.font = '400 9px Orbitron';
+      _tc.fillText('BTC', 0, 10);
+      requestAnimationFrame(_etRafLoop);
+    }});
     window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
       // Route all crypto tiles to the unified canvas engine — no DOM element created
