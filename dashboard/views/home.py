@@ -4375,13 +4375,22 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   var _navPts = [];   // {{ms, v}}
   var _navPtSet = {{}}; // ms→true for dedup
 
+  var _navJoltAt  = 0;   // timestamp of last significant NAV move
+  var _navJoltDir = 0;   // +1 profit, -1 loss
+
   function _navIngest(ms, v) {{
     if (!ms || isNaN(ms) || !v || isNaN(v)) return;
     var key = Math.round(ms / 500); // bucket to 500ms
     if (_navPtSet[key]) return;
     _navPtSet[key] = true;
+    // Detect significant move → jolt at the tip
+    var prev = _navPts.length ? _navPts[_navPts.length - 1].v : 0;
     _navPts.push({{ ms: ms, v: v }});
     _navPts.sort(function(a,b){{ return a.ms - b.ms; }});
+    if (prev && Math.abs(v - prev) > 5) {{
+      _navJoltAt  = Date.now();
+      _navJoltDir = v > prev ? 1 : -1;
+    }}
   }}
 
   // Seed from Python-injected history on load
@@ -4424,11 +4433,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var orbFracX = Math.max(0.1, Math.min(0.9, _orbPx / _canvPx));
 
     var nowMs = Date.now();
-    // Window: span from earliest historical point → now so EOD snapshots are visible.
-    // At least 24h wide; grows automatically if older data exists.
-    var _oldestMs = _navPts.length ? _navPts[0].ms : nowMs - 86400000;
-    var _spanMs   = Math.max(nowMs - _oldestMs, 86400000);
-    var windowMs  = window._navWindowMs || _spanMs;
+    // SIDESCROLLER: fixed 8-minute rolling window — the trail slides left in real time.
+    // History scrolls off the left edge; Y auto-scales to the visible range so every
+    // P&L move fills the chart vertically. Feels like a side-scrolling game.
+    var windowMs   = window._navWindowMs || (8 * 60 * 1000);
     var leftEdgeMs = nowMs - windowMs;
 
     // tx: maps a timestamp to canvas X. leftEdgeMs → 0, nowMs → _nowPx.
@@ -4444,8 +4452,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
     if (_seedIdx >= 0) {{
       var _seedAge = leftEdgeMs - _navPts[_seedIdx].ms;
-      // If seed is more than 10 min old, use liveNav so chart shows flat at current level
-      var _seedV   = _seedAge > 600000 ? liveNav : _navPts[_seedIdx].v;
+      // Seed older than the window itself → use liveNav so chart doesn't diagonal from the past
+      var _seedV   = _seedAge > windowMs ? liveNav : _navPts[_seedIdx].v;
       visible.push({{ ms: leftEdgeMs, v: _seedV }});
     }}
     for (var i = 0; i < _navPts.length; i++) {{
@@ -4575,6 +4583,23 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.fillStyle='rgba(255,255,255,'+(0.5+pulse*0.5)+')'; ctx.fill();
     ctx.beginPath(); ctx.arc(tipX,tipY,10+pulse*8,0,Math.PI*2);
     ctx.fillStyle='rgba(255,0,204,'+(0.15+pulse*0.2)+')'; ctx.fill();
+
+    // Jolt burst ring — fires on significant P&L move (profit=cyan, loss=magenta)
+    var _joltAge = Date.now() - _navJoltAt;
+    if (_joltAge < 700) {{
+      var _jt  = 1 - _joltAge / 700;         // 1 (fresh) → 0 (faded)
+      var _jr1 = 5  + (1 - _jt) * 32;        // inner ring expands out
+      var _jr2 = 12 + (1 - _jt) * 52;        // outer ring expands faster
+      var _jcol= _navJoltDir >= 0 ? '0,220,255' : '255,10,138';
+      // Inner ring
+      ctx.beginPath(); ctx.arc(tipX,tipY,_jr1,0,Math.PI*2);
+      ctx.strokeStyle='rgba('+_jcol+','+(_jt*0.9)+')';
+      ctx.lineWidth=2+_jt*4; ctx.stroke();
+      // Outer ring (fades faster)
+      ctx.beginPath(); ctx.arc(tipX,tipY,_jr2,0,Math.PI*2);
+      ctx.strokeStyle='rgba('+_jcol+','+(_jt*_jt*0.4)+')';
+      ctx.lineWidth=1.5; ctx.stroke();
+    }}
   }};
 
   // Cap nav canvas to ~30fps — it carries no per-frame animation data,
