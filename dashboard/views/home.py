@@ -4519,11 +4519,11 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
     ctx.clearRect(0, 0, W, H);
 
-    // Diagnostic beacon — always visible; confirms canvas is alive
+    // Diagnostic beacon — center of chart, visible above any overlay
     ctx.fillStyle = '#ff00cc';
-    ctx.fillRect(4, 4, 8, 8);
-    ctx.font = '10px Consolas'; ctx.fillStyle = '#ff00cc'; ctx.textAlign='left';
-    ctx.fillText('W='+Math.round(W)+' H='+Math.round(H)+' nav='+(window._lastKnownNav||'null'), 18, 13);
+    ctx.fillRect(W/2 - 4, H/2 - 4, 8, 8);
+    ctx.font = 'bold 12px Consolas'; ctx.fillStyle = '#ff00cc'; ctx.textAlign='center';
+    ctx.fillText('canvas OK  W='+Math.round(W)+'  H='+Math.round(H)+'  nav='+(window._lastKnownNav||'NULL'), W/2, H/2 - 10);
 
     var liveNav = window._lastKnownNav;
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
