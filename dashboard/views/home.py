@@ -5820,9 +5820,10 @@ setTimeout(function() {{
       var hhmm = now.toLocaleTimeString('en-US', {{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit', hour12:false}});
       var row  = document.createElement('div');
       var isTrade = (_h.indexOf('>enter<') !== -1 || _h.indexOf('>exit<') !== -1) && _h.indexOf('@') !== -1;
-      if (isTrade) {{
+      var isUser  = plain && plain.indexOf('[USER]') === 0;
+      if (isTrade || isUser) {{
         row.className = 'te te-new';
-        var _isEntry  = _h.indexOf('>enter<') !== -1;
+        var _isEntry  = isUser ? (plain.indexOf('BUY') !== -1) : (_h.indexOf('>enter<') !== -1);
         var _isWin    = !_isEntry && (_h.indexOf('color:#00ff9d') !== -1);
         var _flashCol = _isEntry ? '#ffffff' : (_isWin ? '#00ff9d' : '#ff4466');
         var _dimCol   = _isEntry ? 'rgba(200,200,220,.55)' : (_isWin ? 'rgba(0,210,130,.55)' : 'rgba(255,60,80,.55)');
