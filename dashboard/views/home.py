@@ -3805,58 +3805,58 @@ function _playTones(freqs, dur, type, stagger, vol) {{
     }});
   }} catch(e) {{}}
 }}
-// Entry: short analog relay click — noise burst through low-pass
+// Acquisition: neutral rising 8-bit blip — two square notes, subtle
 window._soundEntry = function() {{
   if (_audioMuted || !_audioReady || !_audioCtx) return;
   try {{
     var ctx = _audioCtx;
     if (ctx.state === 'suspended') {{ ctx.resume(); return; }}
-    var len = Math.floor(ctx.sampleRate * 0.055);
-    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    var d = buf.getChannelData(0);
-    for (var i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.exp(-i/(ctx.sampleRate*0.012));
-    var src = ctx.createBufferSource();
-    src.buffer = buf;
-    var lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=520;
-    var g = ctx.createGain(); g.gain.value = 0.22;
-    src.connect(lp); lp.connect(g); g.connect(ctx.destination);
-    src.start();
+    [[330, 0], [440, 0.055]].forEach(function(p) {{
+      var osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.type = 'square'; osc.frequency.value = p[0];
+      var t = ctx.currentTime + p[1];
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.055, t+0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.08);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(t); osc.stop(t+0.10);
+    }});
   }} catch(e) {{}}
 }};
-// Win exit: bright two-tone chime (major third up — C5→E5) with fast decay
+// Win exit: ascending 8-bit arpeggio (E5→G5→B5) — bright, punchy
 window._soundWin = function() {{
   if (_audioMuted || !_audioReady || !_audioCtx) return;
   try {{
     var ctx = _audioCtx;
     if (ctx.state === 'suspended') {{ ctx.resume(); return; }}
-    [[523, 0], [659, 0.13]].forEach(function(p) {{
+    [[659, 0], [784, 0.07], [988, 0.14]].forEach(function(p) {{
       var osc = ctx.createOscillator(), g = ctx.createGain();
-      osc.type = 'sine'; osc.frequency.value = p[0];
+      osc.type = 'square'; osc.frequency.value = p[0];
       var t = ctx.currentTime + p[1];
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.14, t+0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.38);
+      g.gain.linearRampToValueAtTime(0.07, t+0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.11);
       osc.connect(g); g.connect(ctx.destination);
-      osc.start(t); osc.stop(t+0.42);
+      osc.start(t); osc.stop(t+0.13);
     }});
   }} catch(e) {{}}
 }};
-// Loss exit: dull descending thud (minor sixth down — G4→Bb3) — muted, no zing
+// Loss exit: descending 8-bit bloop (G4→Eb4→Bb3) — muted, downward
 window._soundLoss = function() {{
   if (_audioMuted || !_audioReady || !_audioCtx) return;
   try {{
     var ctx = _audioCtx;
     if (ctx.state === 'suspended') {{ ctx.resume(); return; }}
-    [[392, 0], [233, 0.16]].forEach(function(p) {{
+    [[392, 0], [311, 0.07], [233, 0.14]].forEach(function(p) {{
       var osc = ctx.createOscillator(), g = ctx.createGain();
-      osc.type = 'triangle'; osc.frequency.value = p[0];
-      var lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=600;
+      osc.type = 'square'; osc.frequency.value = p[0];
+      var lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=700;
       var t = ctx.currentTime + p[1];
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.11, t+0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.45);
+      g.gain.linearRampToValueAtTime(0.055, t+0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.12);
       osc.connect(lp); lp.connect(g); g.connect(ctx.destination);
-      osc.start(t); osc.stop(t+0.50);
+      osc.start(t); osc.stop(t+0.14);
     }});
   }} catch(e) {{}}
 }};
@@ -6180,7 +6180,7 @@ setTimeout(function() {{
                 }}
                 // No callout for entries — card appearing in positions panel is enough
                 if (window._orbTradeFlash) window._orbTradeFlash(true);
-                if (window._soundEntry) window._soundEntry();
+                // sound fires from _etUpsert when tile animates in
                 // Upsert crypto tile on canvas engine
                 (function() {{
                   var _symE = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
@@ -6247,11 +6247,7 @@ setTimeout(function() {{
                 }}
                 // 2. Orb bloom
                 if (window._orbTradeFlash) window._orbTradeFlash(false, _isWin);
-                // 3. Sound
-                if (pnlM) {{
-                  if (_isWin) {{ if (window._soundWin) window._soundWin(); }}
-                  else {{ if (window._soundLoss) window._soundLoss(); }}
-                }}
+                // 3. Sound fires from _etExit when tile animation starts
                 // 4. Satellite shoot-out + immediate map removal (1:1 with tile)
                 var _exitSymFull = sym.indexOf('/') !== -1 ? sym : sym + '/USD';
                 var _satKey = _satAngles[_exitSymFull] !== undefined ? _exitSymFull
@@ -7059,7 +7055,10 @@ setTimeout(function() {{
       var now = Date.now();
       var lerpK = 0.03; // lerp speed per frame (~30fps → ~10s to converge; slow = more cinematic)
 
-      var allLive = layout.crypto.concat(layout.equity);
+      // Render order: ghosts first so entering/live tiles paint on top of them
+      var _allTiles = layout.crypto.concat(layout.equity);
+      var allLive = _allTiles.filter(function(t) {{ return t.phase === 'bit-crush'; }})
+                   .concat(_allTiles.filter(function(t) {{ return t.phase !== 'bit-crush'; }}));
       for (var i = 0; i < allLive.length; i++) {{
         var t = allLive[i];
         var pos = _etTilePos(t, layout);
@@ -7075,22 +7074,30 @@ setTimeout(function() {{
         t._dPnlPct += (t.pnlPct- t._dPnlPct) * lerpK;
 
         if (t.phase === 'entering') {{
-          // Powerup pickup: scanline wipe from transparent (top→bottom, 80ms) + corner sparks (100ms)
-          if (age < 80) {{
-            // A: reveal tile top-to-bottom — unrevealed area stays clearRect (transparent)
-            var wipeT   = age / 80;
-            var revealY = Math.round(_EQ_H * wipeT); // px revealed so far
-            // Paint only the revealed strip
+          // 8-bit fly-in from canvas center (120ms) + corner sparks (80ms)
+          var _flyDur = 120, _sparkDur = 80;
+          if (age < _flyDur) {{
+            // Cubic-out ease so it snaps in fast then sticks the landing
+            var _flyT = age / _flyDur;
+            var _flyE = 1 - Math.pow(1 - _flyT, 3);
+            // Origin: canvas center minus half tile size
+            var _ox = Math.round((_etCanvas.width  * 0.5 - _EQ_W * 0.5) / 8) * 8;
+            var _oy = Math.round((_etCanvas.height * 0.5 - _EQ_H * 0.5) / 8) * 8;
+            // Quantize current position to 4px grid for 8-bit chunky feel
+            var _fx = Math.round((_ox + (x - _ox) * _flyE) / 4) * 4;
+            var _fy = Math.round((_oy + (y - _oy) * _flyE) / 4) * 4;
+            // Scale from 0.35 at origin to 1.0 at target
+            var _fsc = 0.35 + _flyE * 0.65;
             ctx.save();
-            ctx.beginPath();
-            ctx.rect(x, y + _EQ_H - revealY, _EQ_W, revealY);
-            ctx.clip();
-            _etPaintTile(ctx, t, x, y, ts);
+            ctx.translate(_fx + _EQ_W * 0.5, _fy + _EQ_H * 0.5);
+            ctx.scale(_fsc, _fsc);
+            ctx.translate(-_EQ_W * 0.5, -_EQ_H * 0.5);
+            _etPaintTile(ctx, t, 0, 0, ts);
             ctx.restore();
           }} else {{
-            // B: tile fully visible — B&W corner sparks fade out over 100ms
+            // Tile landed — white corner sparks fade over 80ms
             _etPaintTile(ctx, t, x, y, ts);
-            var sparkA = Math.max(0, 1 - (age - 80) / 100);
+            var sparkA = Math.max(0, 1 - (age - _flyDur) / _sparkDur);
             if (sparkA > 0) {{
               ctx.fillStyle = 'rgba(255,255,255,' + sparkA + ')';
               var sp = Math.round(6 * sparkA);
@@ -7100,7 +7107,7 @@ setTimeout(function() {{
               ctx.fillRect(x+_EQ_W-2, y+_EQ_H-sp,2, sp); ctx.fillRect(x+_EQ_W-sp,y+_EQ_H-2,sp, 2);
             }}
           }}
-          if (age > 180) {{ t.phase = 'live'; }}
+          if (age > _flyDur + _sparkDur) {{ t.phase = 'live'; }}
 
         }} else if (t.phase === 'live') {{
           _etPaintTile(ctx, t, x, y, ts);
@@ -7108,7 +7115,7 @@ setTimeout(function() {{
         }} else if (t.phase === 'bit-crush') {{
           // Phase 1 (0–500ms): pixel decay → clearRect blocks eat tile to transparent
           // Phase 2 (500–2300ms): P&L ghost in Press Start 2P lingers in cleared space
-          var crushDur = 500, ghostDur = 1800;
+          var crushDur = 500, ghostDur = 2800;
           if (age < crushDur) {{
             var crushT = age / crushDur; // 0→1
             _etPaintTile(ctx, t, x, y, ts);
@@ -7124,10 +7131,10 @@ setTimeout(function() {{
           }} else {{
             // Tile space cleared — ghost: sym name + P&L in Press Start 2P
             var ghostT = Math.min(1, (age - crushDur) / ghostDur);
-            // Fast in (5%), hold at full (until 50%), smooth out (to 100%)
-            var ghostA = ghostT < 0.05 ? ghostT / 0.05
-                       : ghostT < 0.50 ? 1
-                       : Math.max(0, 1 - (ghostT - 0.50) / 0.50);
+            // Fast in (3%), short hold (until 25%), long fade to true zero (25%→100%)
+            var ghostA = ghostT < 0.03 ? ghostT / 0.03
+                       : ghostT < 0.25 ? 1
+                       : Math.max(0, 1 - (ghostT - 0.25) / 0.75);
             if (ghostA > 0.01) {{
               var ec = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
               var ep = Math.abs(t.exitPnl);
@@ -7373,6 +7380,8 @@ setTimeout(function() {{
       _etBySym[data.sym] = tile;
       _etDirty = true;
       _updateOverlayWidth();
+      // Sound fires when tile first appears (on the tile, not the notification)
+      if (window._soundEntry) window._soundEntry();
       return tile;
     }}
     window._etUpsert = _etUpsert;
@@ -7382,6 +7391,9 @@ setTimeout(function() {{
       var t = _etBySym[sym];
       if (!t || t.phase === 'bit-crush' || t.phase === 'done') return;
       t.exitPnl = (pnl !== null && pnl !== undefined) ? pnl : t.pnl;
+      // Sound fires when exit animation starts (on the tile, not the notification)
+      if (t.exitPnl >= 0) {{ if (window._soundWin)  window._soundWin();  }}
+      else                 {{ if (window._soundLoss) window._soundLoss(); }}
       t.phase = 'bit-crush';
       t.phaseStart = Date.now();
       _etDirty = true;
@@ -7393,12 +7405,12 @@ setTimeout(function() {{
           sr: t.pnl>=0?0:255, sg: t.pnl>=0?255:51, sb: t.pnl>=0?157:102 }};
         delete _satAngles[_exitSym];
       }}
-      // Clean up after bit-crush completes (500ms decay + 1800ms ghost + margin)
+      // Clean up after bit-crush completes (500ms decay + 2800ms ghost + margin)
       setTimeout(function() {{
         delete _etBySym[sym];
         _ET = _ET.filter(function(tile) {{ return tile.sym !== sym; }});
         _updateOverlayWidth();
-      }}, 2500);
+      }}, 3500);
     }};
 
     function _updateOverlayWidth() {{
