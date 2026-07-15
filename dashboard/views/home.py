@@ -4533,9 +4533,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = window._lastKnownNav;
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // Normal real-time line: time flows left→right, dot at right edge.
-    // No centering, no side-scroller — just a plain chart.
-    var pts = window._intradayPts || [];
+    // DB-driven line. Reads nav_snapshots rows fetched every 30s.
+    var pts = window._navDbPts || [];
     var nowMs = Date.now();
     var windowMs = window._navWindowMs || (8 * 3600 * 1000);
     var leftEdgeMs = nowMs - windowMs;
@@ -5039,30 +5038,25 @@ setInterval(_fetchIntradayMarks, 15000);
 // Each poller writes its slice; both read the combined total so NAV doesn't alternate.
 window._livePnlBySource = {{ equity: 0, crypto: 0 }};
 
-// ── Live intraday NAV accumulator — fed by Binance price poll every 4s ────────
-// Persist on window so Streamlit component re-renders don't wipe history
-if (!window._intradayPts) window._intradayPts = [];
-var _intradayPts = window._intradayPts;
+// ── Nav chart DB poll — fetches nav_snapshots every 30s, replaces chart data ──
+// The chart is purely DB-driven. No session accumulation, no seed complexity.
+if (!window._navDbPts) window._navDbPts = [];
+var _intradayPts = window._navDbPts; // alias so _pushIntradayPoint still writes to DB
 
-// Seed _intradayPts from DB exactly once per page load — guarded so Streamlit
-// re-renders don't re-run this and append duplicate rows.
-if (!window._navSeedDone) {{
-  window._navSeedDone = true;
-  var _since = new Date(Date.now() - 24*3600000).toISOString();
-  fetch(SUPA_URL + '/rest/v1/nav_snapshots?select=recorded_at,nav&recorded_at=gte.' + _since + '&order=recorded_at.asc&limit=2000',
+function _fetchNavDb() {{
+  var since = new Date(Date.now() - 24*3600000).toISOString();
+  fetch(SUPA_URL + '/rest/v1/nav_snapshots?select=recorded_at,nav&recorded_at=gte.' + since + '&order=recorded_at.asc&limit=2000',
     {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
-    if (!Array.isArray(rows) || !rows.length) return;
-    // Merge without duplicates (guard against race with live pusher)
-    var existing = new Set(window._intradayPts.map(function(p) {{ return p.t; }}));
-    rows.forEach(function(r) {{
-      if (!existing.has(r.recorded_at)) window._intradayPts.push({{ t: r.recorded_at, v: r.nav }});
-    }});
-    window._intradayPts.sort(function(a,b) {{ return a.t < b.t ? -1 : 1; }});
-    console.log('[nav] seeded', window._intradayPts.length, 'points');
-  }}).catch(function(e) {{ console.warn('[nav] seed fetch failed', e); }});
+    if (!Array.isArray(rows)) return;
+    // Replace entirely — no append, no dedup needed
+    window._navDbPts = rows.map(function(r) {{ return {{ t: r.recorded_at, v: r.nav }}; }});
+    _intradayPts = window._navDbPts;
+  }}).catch(function() {{}});
 }}
+_fetchNavDb(); // immediate on load
+setInterval(_fetchNavDb, 30000); // refresh every 30s
 
 // Force-push a nav snapshot immediately (bypasses 30s dedup) — call on trade events
 window._forceNavSnapshot = function() {{
