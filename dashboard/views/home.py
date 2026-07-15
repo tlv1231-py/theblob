@@ -7018,12 +7018,40 @@ setTimeout(function() {{
         t._dPnlPct += (t.pnlPct- t._dPnlPct) * lerpK;
 
         if (t.phase === 'entering') {{
-          var step  = Math.floor(age / 40);
-          var alpha = Math.min(1, step / 8);
-          ctx.globalAlpha = alpha;
-          _etPaintTile(ctx, t, x, y, ts);
-          ctx.globalAlpha = 1;
-          if (age > 320) {{ t.phase = 'live'; }}
+          // Powerup pickup — B&W only, fully contained, ~140ms total
+          if (age < 35) {{
+            // A: white flash
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x, y, _EQ_W, _EQ_H);
+          }} else if (age < 95) {{
+            // B: scanline wipe — white field, horizontal black lines sweep down,
+            //    revealing tile content through the gaps
+            _etPaintTile(ctx, t, x, y, ts);
+            var wipeT   = (age - 35) / 60;           // 0→1 over 60ms
+            var revealY = Math.round(_EQ_H * wipeT); // how many px are revealed
+            // Still-white area above reveal front
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x, y, _EQ_W, _EQ_H - revealY);
+            // Scanlines over revealed area (2px black / 2px gap)
+            for (var sl = 0; sl < revealY; sl += 4) {{
+              ctx.fillStyle = 'rgba(0,0,0,0.18)';
+              ctx.fillRect(x, y + _EQ_H - revealY + sl, _EQ_W, 2);
+            }}
+          }} else {{
+            // C: tile live — white corner sparks fade out over 45ms
+            _etPaintTile(ctx, t, x, y, ts);
+            var sparkA = Math.max(0, 1 - (age - 95) / 45);
+            if (sparkA > 0) {{
+              ctx.fillStyle = 'rgba(255,255,255,' + sparkA + ')';
+              var sp = Math.round(6 * sparkA);
+              // 4-corner L-shaped sparks (all within tile bounds)
+              ctx.fillRect(x,            y,            2,  sp); ctx.fillRect(x,            y,            sp, 2);
+              ctx.fillRect(x+_EQ_W-2,    y,            2,  sp); ctx.fillRect(x+_EQ_W-sp,   y,            sp, 2);
+              ctx.fillRect(x,            y+_EQ_H-sp,   2,  sp); ctx.fillRect(x,            y+_EQ_H-2,    sp, 2);
+              ctx.fillRect(x+_EQ_W-2,    y+_EQ_H-sp,  2,  sp); ctx.fillRect(x+_EQ_W-sp,   y+_EQ_H-2,    sp, 2);
+            }}
+          }}
+          if (age > 140) {{ t.phase = 'live'; }}
 
         }} else if (t.phase === 'live') {{
           _etPaintTile(ctx, t, x, y, ts);
