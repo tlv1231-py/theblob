@@ -627,8 +627,8 @@ def _build_daw_html(data: dict) -> str:
         return _TICKER_PALETTE[h % len(_TICKER_PALETTE)]
 
     def _ts(sym: str) -> str:
-        """Wrap a ticker symbol in its color span."""
-        return f'<span style="color:{_tc(sym)};font-weight:700">{sym}</span>'
+        """Wrap a ticker symbol in its color span. data-sym enables popup on click."""
+        return f'<span data-sym="{sym}" style="color:{_tc(sym)};font-weight:700;cursor:pointer">{sym}</span>'
 
     def _humanize(ev: dict, nav_col: str | None) -> str:
         """Convert a pipeline event into natural inner-monologue prose."""
@@ -6736,6 +6736,10 @@ setTimeout(function() {{
       }}
     }}
     window._redrawNavTraces = _redrawNavTraces;
+    // Draw immediately with whatever data arrived during page init, then keep a
+    // 5s heartbeat so timing gaps between fetch and chart init never leave it blank.
+    _redrawNavTraces();
+    setInterval(_redrawNavTraces, 5000);
 
     function _pollNav() {{
       var url = SUPA_URL + '/rest/v1/portfolio_snapshots'
@@ -7334,7 +7338,8 @@ setTimeout(function() {{
       if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
       if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
 
-      var _F1 = '700 16px VT323,monospace'; // ticker + value  (VT323 is a DOS VGA 437 revival)
+      var _F1 = '700 16px VT323,monospace'; // ticker sym (bold)
+      var _FV = '400 16px VT323,monospace'; // right-side value (not bold)
       var _F2 = '400 14px VT323,monospace'; // entry, pnl, timer
 
       // ── ROW 1 left: SYM ──
@@ -7356,7 +7361,7 @@ setTimeout(function() {{
         var flashAge = t._flashStart ? (ts - t._flashStart) : 9999;
         var isFlashing = flashAge < 180;
         var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
-        ctx.font = _F1;
+        ctx.font = _FV;
         ctx.fillStyle = isFlashing ? (t._flashDir > 0 ? '#00ff9d' : '#ff3366') : valCol;
         ctx.textAlign = 'right';
         ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 15);
@@ -7663,6 +7668,153 @@ setTimeout(function() {{
       _tc.fillText('BTC', 0, 10);
       requestAnimationFrame(_etRafLoop);
     }});
+    // ── Ticker popup ──────────────────────────────────────────────────────────
+    (function() {{
+      var _popup = null;
+      var _popupSym = null;
+
+      function _openPopup(sym, anchorX, anchorY) {{
+        var clean = sym.replace('/USD','').replace('USD','');
+        if (_popup && _popupSym === clean) {{ _closePopup(); return; }}
+        _closePopup();
+        _popupSym = clean;
+
+        var p = document.createElement('div');
+        p.id = 'ticker-popup';
+        p.style.cssText = [
+          'position:fixed;z-index:9999',
+          'background:rgba(8,0,18,0.97)',
+          'border:1px solid ' + (_symCol(sym)),
+          'border-radius:4px',
+          'padding:12px 14px',
+          'min-width:260px;max-width:320px',
+          'font:400 13px VT323,monospace',
+          'color:#e0d0ff',
+          'box-shadow:0 0 24px rgba(0,0,0,0.8)',
+        ].join(';');
+
+        // Position near click, keep on screen
+        var W = window.innerWidth, H = window.innerHeight;
+        var px = Math.min(anchorX + 12, W - 340);
+        var py = Math.min(anchorY + 12, H - 420);
+        p.style.left = px + 'px'; p.style.top = py + 'px';
+
+        var col = (window._TICKER_OVR && window._TICKER_OVR[clean]) || _symCol(sym);
+
+        p.innerHTML = [
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">',
+            '<span style="font:700 18px VT323,monospace;color:' + col + '">' + clean + '</span>',
+            '<div style="display:flex;align-items:center;gap:8px">',
+              '<label style="font-size:11px;color:#6a4a8a">COLOR</label>',
+              '<input type="color" id="tp-colorpick" value="' + col + '" ',
+                'style="width:28px;height:20px;border:none;background:none;cursor:pointer;padding:0">',
+            '</div>',
+            '<span id="tp-close" style="cursor:pointer;color:#6a4a8a;font-size:16px;padding:0 4px">✕</span>',
+          '</div>',
+          '<div style="border-top:1px solid rgba(255,255,255,0.07);padding-top:8px;font-size:12px;color:#5a3a7a;margin-bottom:6px">',
+            'RECENT TRADES',
+          '</div>',
+          '<div id="tp-history" style="max-height:280px;overflow-y:auto;font:400 13px VT323,monospace">',
+            '<div style="color:#3a1a5a">loading…</div>',
+          '</div>',
+        ].join('');
+
+        document.body.appendChild(p);
+        _popup = p;
+
+        // Color picker
+        p.querySelector('#tp-colorpick').addEventListener('input', function(e) {{
+          var newCol = e.target.value;
+          if (!window._TICKER_OVR) window._TICKER_OVR = {{}};
+          window._TICKER_OVR[clean] = newCol;
+          // Update any live tile that has this sym
+          (window._ET||[]).forEach(function(t) {{
+            var ts = t.sym.replace('/USD','').replace('USD','');
+            if (ts === clean) t.col = newCol;
+          }});
+          p.style.borderColor = newCol;
+          p.querySelector('#tp-close').previousElementSibling.previousElementSibling.style.color = newCol;
+        }});
+
+        // Close button
+        p.querySelector('#tp-close').addEventListener('click', _closePopup);
+
+        // Click outside to close
+        setTimeout(function() {{
+          document.addEventListener('click', _outsideClose);
+        }}, 50);
+
+        // Fetch fill history
+        var histUrl = SUPA_URL + '/rest/v1/fills'
+          + '?select=symbol,side,quantity,fill_price,filled_at'
+          + '&symbol=eq.' + sym
+          + '&order=filled_at.desc&limit=30';
+        fetch(histUrl, {{headers:{{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}}}})
+        .then(function(r){{return r.json();}})
+        .then(function(rows){{
+          var el = document.getElementById('tp-history');
+          if (!el) return;
+          if (!Array.isArray(rows) || !rows.length) {{
+            el.innerHTML = '<div style="color:#3a1a5a">no fills found</div>'; return;
+          }}
+          el.innerHTML = rows.map(function(f) {{
+            var side = f.side === 'buy' ? '<span style="color:#00b4ff">enter</span>' : '<span style="color:#ff9900">exit</span>';
+            var price = f.fill_price < 1 ? '$'+parseFloat(f.fill_price).toFixed(4) : '$'+parseFloat(f.fill_price).toLocaleString('en-US',{{maximumFractionDigits:2}});
+            var qty   = parseFloat(f.qty || f.quantity || 0);
+            var t     = new Date(f.filled_at);
+            var ts    = (t.getMonth()+1)+'/'+(t.getDate())+' '+(t.getHours()%12||12)+':'+(('0'+t.getMinutes()).slice(-2))+(t.getHours()<12?'a':'p');
+            return '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04)">'
+              +'<span style="color:#3a1a5a;font-size:11px">'+ts+'</span>'
+              +side+' '+price
+              +'</div>';
+          }}).join('');
+        }}).catch(function(){{
+          var el = document.getElementById('tp-history');
+          if (el) el.innerHTML = '<div style="color:#3a1a5a">error fetching fills</div>';
+        }});
+      }}
+
+      function _closePopup() {{
+        if (_popup) {{ _popup.remove(); _popup = null; _popupSym = null; }}
+        document.removeEventListener('click', _outsideClose);
+      }}
+
+      function _outsideClose(e) {{
+        if (_popup && !_popup.contains(e.target)) _closePopup();
+      }}
+
+      // Canvas click → hit-test tiles
+      document.addEventListener('click', function(e) {{
+        var canvas = document.getElementById('eq-tiles-canvas');
+        if (!canvas || !window._ET) return;
+        var rect = canvas.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX > rect.right ||
+            e.clientY < rect.top  || e.clientY > rect.bottom) return;
+        var mx = (e.clientX - rect.left) * (canvas.width / rect.width / _etDpr);
+        var my = (e.clientY - rect.top)  * (canvas.height / rect.height / _etDpr);
+        var layout = _etLayout();
+        var hit = null;
+        window._ET.forEach(function(t) {{
+          if (t.phase === 'done') return;
+          var pos = _etTilePos(t, layout);
+          if (mx >= pos.x && mx < pos.x + _EQ_W && my >= pos.y && my < pos.y + _EQ_H) hit = t;
+        }});
+        if (hit) {{ e.stopPropagation(); _openPopup(hit.sym, e.clientX, e.clientY); }}
+      }});
+
+      // Terminal feed click — delegate on the feed container
+      document.addEventListener('click', function(e) {{
+        var span = e.target;
+        if (span.tagName !== 'SPAN' || !span.dataset.sym) return;
+        var feedEl = document.getElementById('feed-overlay');
+        if (!feedEl || !feedEl.contains(span)) return;
+        e.stopPropagation();
+        _openPopup(span.dataset.sym, e.clientX, e.clientY);
+      }});
+
+      window._openTickerPopup = _openPopup;
+    }})();
+
     window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
       // Route all crypto tiles to the unified canvas engine — no DOM element created
