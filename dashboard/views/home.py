@@ -2155,54 +2155,76 @@ body::after {{
 .pos-hold {{ font-size:8.5px; color:#4a2a6a; margin-top:2px; letter-spacing:.02em; }}
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
-/* ── Capital floating popup ── */
-#capital-fab {{
-  position:fixed; bottom:52px; right:16px; z-index:300;
-  background:rgba(6,0,8,.92); border:1px solid #2a003d; border-top:2px solid #ff00cc;
-  color:#ff00cc; font:700 8px Consolas,monospace; letter-spacing:.2em;
-  padding:6px 10px; cursor:pointer;
-  text-shadow:0 0 8px rgba(255,0,204,.5);
-  transition:all .2s; user-select:none;
+/* ── Trade console (bottom-right) ── */
+#trade-console {{
+  position:fixed; bottom:16px; right:16px; z-index:300;
+  width:220px;
+  background:rgba(0,2,12,.96);
+  border:1px solid #0a1a2a;
+  border-top:2px solid #00e5ff;
+  box-shadow:0 -6px 40px rgba(0,229,255,.10);
+  font:700 8px Consolas,monospace;
+  letter-spacing:.14em;
+  display:flex; flex-direction:column;
+  user-select:none;
 }}
-#capital-fab:hover {{ background:rgba(255,0,204,.1); box-shadow:0 0 16px rgba(255,0,204,.25); }}
-#capital-popup {{
-  position:fixed; bottom:84px; right:16px; z-index:299;
-  width:240px; background:#00000a; border:1px solid #1a0028; border-top:2px solid #ff00cc;
-  display:flex; flex-direction:column; overflow:hidden;
-  transform:translateY(20px); opacity:0; pointer-events:none;
-  transition:transform .35s cubic-bezier(.22,1,.36,1), opacity .25s ease;
-  box-shadow:0 -8px 40px rgba(255,0,204,.15);
+/* Header row */
+#tc-hdr {{
+  display:flex; align-items:center; gap:6px; padding:5px 8px;
+  border-bottom:1px solid #0a1a2a; color:#00e5ff;
+  text-shadow:0 0 8px rgba(0,229,255,.5); font-size:7px; letter-spacing:.22em;
 }}
-#capital-popup.open {{ transform:translateY(0); opacity:1; pointer-events:all; }}
-#dep-body {{ flex:1; overflow-y:auto; scrollbar-width:none; padding:8px 12px; display:flex; flex-direction:column; gap:8px; }}
-#dep-body::-webkit-scrollbar {{ display:none; }}
-.dep-tabs {{ display:flex; gap:0; }}
-.dep-tab {{
-  flex:1; padding:5px 0; font-size:9px; letter-spacing:.16em; text-align:center;
-  cursor:pointer; border:1px solid #1a0028; color:#4a2a6a;
-  background:#000; transition:all .15s;
+#tc-hdr .tc-dot {{ width:5px; height:5px; border-radius:50%; background:#00e5ff;
+  box-shadow:0 0 6px #00e5ff; flex-shrink:0; }}
+/* Side tabs BUY / SELL */
+#tc-tabs {{ display:flex; }}
+.tc-tab {{
+  flex:1; padding:5px 0; text-align:center; font-size:8px; letter-spacing:.2em;
+  cursor:pointer; border-bottom:2px solid transparent;
+  transition:all .12s;
 }}
-.dep-tab.active {{ color:#ff00cc; border-color:#ff00cc; background:rgba(255,0,204,.06);
-  text-shadow:0 0 8px rgba(255,0,204,.5); }}
-.dep-amt-row {{ display:flex; gap:6px; align-items:center; }}
-.dep-input {{
-  flex:1; background:#000; border:1px solid #1a0028; color:#f0e0ff;
-  font-family:Consolas,monospace; font-size:13px; padding:5px 8px;
-  outline:none; letter-spacing:.02em;
+.tc-tab[data-side="buy"]  {{ color:#003d30; }}
+.tc-tab[data-side="sell"] {{ color:#3d0010; }}
+.tc-tab[data-side="buy"].tc-active  {{ color:#00ff9d; border-color:#00ff9d;
+  text-shadow:0 0 8px rgba(0,255,157,.5); background:rgba(0,255,157,.04); }}
+.tc-tab[data-side="sell"].tc-active {{ color:#ff3366; border-color:#ff3366;
+  text-shadow:0 0 8px rgba(255,51,102,.5); background:rgba(255,51,102,.04); }}
+/* Form body */
+#tc-body {{ padding:8px 8px 6px; display:flex; flex-direction:column; gap:6px; }}
+.tc-row {{ display:flex; gap:5px; align-items:center; }}
+.tc-label {{ font-size:7px; letter-spacing:.18em; color:#1a3a4a; width:36px; flex-shrink:0; }}
+.tc-input {{
+  flex:1; background:#000d1a; border:1px solid #0a1a2a; color:#c8f0ff;
+  font-family:Consolas,monospace; font-size:12px; padding:4px 7px;
+  outline:none; min-width:0; letter-spacing:.02em;
+  transition:border-color .12s;
 }}
-.dep-input:focus {{ border-color:#ff00cc; box-shadow:0 0 8px rgba(255,0,204,.2); }}
-.dep-btn {{
-  padding:5px 12px; background:transparent; border:1px solid #ff00cc;
-  color:#ff00cc; font-family:Consolas,monospace; font-size:9px; letter-spacing:.18em;
-  cursor:pointer; transition:all .15s;
-  text-shadow:0 0 6px rgba(255,0,204,.4);
+.tc-input:focus {{ border-color:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,.18); }}
+/* Quick-qty chips */
+#tc-chips {{ display:flex; gap:3px; flex-wrap:wrap; }}
+.tc-chip {{
+  padding:2px 6px; font-size:7px; letter-spacing:.12em;
+  border:1px solid #0a1a2a; color:#1a3a4a; cursor:pointer;
+  transition:all .1s;
 }}
-.dep-btn:hover {{ background:rgba(255,0,204,.1); }}
-.dep-note {{ font-size:8px; color:#2a0040; letter-spacing:.04em; line-height:1.5; }}
-.dep-hist-hdr {{ font-size:7px; letter-spacing:.28em; color:#2a0040; text-transform:uppercase; border-top:1px solid #0a0018; padding-top:8px; }}
-.dep-hist-item {{ font-size:10px; color:#4a2a6a; display:flex; gap:6px; }}
-.dep-hist-amt {{ font-weight:700; }}
-.dep-hist-date {{ color:#1a0028; font-size:9px; margin-left:auto; }}
+.tc-chip:hover {{ border-color:#00e5ff; color:#00e5ff; }}
+/* Submit button */
+#tc-submit {{
+  width:100%; padding:6px 0; margin-top:2px;
+  font-family:Consolas,monospace; font-size:9px; letter-spacing:.2em;
+  border:none; cursor:pointer; transition:all .15s;
+}}
+#tc-submit.buy-mode  {{ background:rgba(0,255,157,.12); color:#00ff9d; border:1px solid #00ff9d;
+  text-shadow:0 0 6px rgba(0,255,157,.5); }}
+#tc-submit.sell-mode {{ background:rgba(255,51,102,.12); color:#ff3366; border:1px solid #ff3366;
+  text-shadow:0 0 6px rgba(255,51,102,.5); }}
+#tc-submit:hover {{ filter:brightness(1.25); }}
+/* Confirm/status line */
+#tc-status {{
+  font-size:7px; letter-spacing:.1em; text-align:center; padding:4px 8px 6px;
+  color:#1a3a4a; min-height:14px; border-top:1px solid #060e18;
+  transition:color .2s;
+}}
 /* ── Runner health chip ── */
 #runner-health {{
   display:flex; align-items:center; gap:5px; padding:0 10px; flex-shrink:0;
@@ -3218,9 +3240,6 @@ var ambCanvas = document.getElementById('ambient-canvas');
   drawAmb();
 }})();
 
-function toggleCapital() {{
-  document.getElementById('capital-popup').classList.toggle('open');
-}}
 
 // ── Pulsing canvas dots ────────────────────────────────
 var canvas = document.getElementById('pulse-canvas');
@@ -5246,25 +5265,42 @@ setTimeout(function() {{
   <div id="pos-panel" style="display:none"></div>
 </div>
 
-<!-- Capital FAB + popup (fixed position, outside term-overlay) -->
-<div id="capital-fab" onclick="toggleCapital()">◈ CAPITAL</div>
-<div id="capital-popup">
-  <div class="panel-hdr" style="cursor:pointer" onclick="toggleCapital()"><div class="term-dot"></div>CAPITAL <span style="margin-left:auto;font-size:8px;opacity:.5">✕</span></div>
-  <div id="dep-body">
-    <div class="dep-tabs">
-      <div class="dep-tab active" id="tab-dep" onclick="setDepMode('deposit')">DEPOSIT</div>
-      <div class="dep-tab" id="tab-wdw" onclick="setDepMode('withdraw')">WITHDRAW</div>
-    </div>
-    <div class="dep-amt-row">
-      <input class="dep-input" id="dep-amount" type="number" placeholder="0.00" min="0" step="100">
-      <button class="dep-btn" onclick="submitTransfer()">TRANSFER</button>
-    </div>
-    <div class="dep-note" id="dep-note">ACH · free · 1-3 business days to settle</div>
-    <div class="dep-hist-hdr">history</div>
-    <div id="dep-hist">
-      <div class="dep-hist-item" style="color:#1a0028;font-size:9px">no transfers yet</div>
-    </div>
+<!-- Trade console (fixed bottom-right) -->
+<div id="trade-console">
+  <div id="tc-hdr">
+    <div class="tc-dot"></div>
+    TRADE CONSOLE
+    <span style="margin-left:auto;opacity:.35;letter-spacing:.05em">PAPER</span>
   </div>
+  <div id="tc-tabs">
+    <div class="tc-tab tc-active" data-side="buy"  onclick="tcSetSide('buy')">BUY</div>
+    <div class="tc-tab"           data-side="sell" onclick="tcSetSide('sell')">SELL</div>
+  </div>
+  <div id="tc-body">
+    <div class="tc-row">
+      <div class="tc-label">SYM</div>
+      <input class="tc-input" id="tc-sym" type="text" placeholder="AAPL" maxlength="8"
+             oninput="this.value=this.value.toUpperCase()" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="tc-row">
+      <div class="tc-label">QTY</div>
+      <input class="tc-input" id="tc-qty" type="number" placeholder="10" min="1" step="1">
+    </div>
+    <div id="tc-chips">
+      <div class="tc-chip" onclick="tcSetQty(1)">1</div>
+      <div class="tc-chip" onclick="tcSetQty(5)">5</div>
+      <div class="tc-chip" onclick="tcSetQty(10)">10</div>
+      <div class="tc-chip" onclick="tcSetQty(25)">25</div>
+      <div class="tc-chip" onclick="tcSetQty(50)">50</div>
+      <div class="tc-chip" onclick="tcSetQty(100)">100</div>
+    </div>
+    <div class="tc-row">
+      <div class="tc-label">PRICE</div>
+      <input class="tc-input" id="tc-price" type="number" placeholder="market" min="0" step="0.01">
+    </div>
+    <button id="tc-submit" class="buy-mode" onclick="tcSubmit()">▶ PLACE BUY</button>
+  </div>
+  <div id="tc-status">ready</div>
 </div>
 
 <script>
@@ -5929,44 +5965,102 @@ setTimeout(function() {{
     }} catch(e) {{}}
   }}
 
-  // ── Deposit / Withdraw panel ──────────────────────────────────────────────────
-  var _depMode = 'deposit';
-  function setDepMode(m) {{
-    _depMode = m;
-    document.getElementById('tab-dep').classList.toggle('active', m==='deposit');
-    document.getElementById('tab-wdw').classList.toggle('active', m==='withdraw');
-    var note = document.getElementById('dep-note');
-    if (note) note.textContent = m === 'deposit'
-      ? 'ACH · free · 1-3 business days to settle'
-      : 'ACH · free · available in 1-3 business days';
-  }}
-  function submitTransfer() {{
-    var amt = parseFloat(document.getElementById('dep-amount').value);
-    if (!amt || amt <= 0) return;
-    var sign    = _depMode === 'deposit' ? '+' : '-';
-    var col     = _depMode === 'deposit' ? '#00ff9d' : '#ff9900';
-    var now     = new Date();
-    var label   = (now.getMonth()+1)+'/'+now.getDate()+'/'+String(now.getFullYear()).slice(2);
-    var amtStr  = amt.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+  // ── Trade console ─────────────────────────────────────────────────────────────
+  var _tcSide = 'buy';
 
-    // Log to capital history panel
-    var hist = document.getElementById('dep-hist');
-    var row  = document.createElement('div');
-    row.className = 'dep-hist-item';
-    row.innerHTML = '<span class="dep-hist-amt" style="color:'+col+'">'+sign+'$'+amtStr+'</span>'
-      + '<span style="color:#3a2a5a">'+_depMode+'</span>'
-      + '<span class="dep-hist-date">'+label+'</span>';
-    var noTx = hist.querySelector('div');
-    if (noTx && noTx.textContent.includes('no transfers')) noTx.remove();
-    hist.insertBefore(row, hist.firstChild);
-    document.getElementById('dep-amount').value = '';
-
-    // Route through Status → System Feed like every other event
-    var feedMsg = _depMode === 'deposit'
-      ? 'ACH deposit initiated · $' + amtStr + ' · pending 1-3 business days'
-      : 'ACH withdrawal initiated · $' + amtStr + ' · pending 1-3 business days';
-    if (window._postToFeed) window._postToFeed(feedMsg);
+  function tcSetSide(s) {{
+    _tcSide = s;
+    document.querySelectorAll('.tc-tab').forEach(function(el) {{
+      el.classList.toggle('tc-active', el.dataset.side === s);
+    }});
+    var btn = document.getElementById('tc-submit');
+    if (btn) {{
+      btn.className = s === 'buy' ? 'buy-mode' : 'sell-mode';
+      btn.textContent = s === 'buy' ? '▶ PLACE BUY' : '▶ PLACE SELL';
+    }}
+    tcStatus('ready', '');
   }}
+
+  function tcSetQty(n) {{
+    var el = document.getElementById('tc-qty');
+    if (el) {{ el.value = n; el.focus(); }}
+  }}
+
+  function tcStatus(msg, col) {{
+    var el = document.getElementById('tc-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = col || '#1a3a4a';
+  }}
+
+  function tcSubmit() {{
+    var sym   = (document.getElementById('tc-sym').value  || '').trim().toUpperCase();
+    var qty   = parseFloat(document.getElementById('tc-qty').value   || 0);
+    var price = parseFloat(document.getElementById('tc-price').value || 0);
+
+    if (!sym)       {{ tcStatus('⚠ enter a symbol', '#ff9900'); return; }}
+    if (!qty || qty <= 0) {{ tcStatus('⚠ enter quantity', '#ff9900'); return; }}
+
+    var btn = document.getElementById('tc-submit');
+    if (btn) btn.disabled = true;
+    tcStatus('submitting…', '#00e5ff');
+
+    var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
+    var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
+
+    // Build order payload — paper executor style
+    var payload = {{
+      strategy:   'momentum',
+      symbol:     sym,
+      side:       _tcSide,
+      qty:        qty,
+      order_type: price > 0 ? 'limit' : 'market',
+      limit_price: price > 0 ? price : null,
+      status:     'pending',
+      created_at: new Date().toISOString(),
+    }};
+
+    fetch(SUPA_URL + '/rest/v1/orders', {{
+      method:  'POST',
+      headers: {{
+        'apikey':        SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type':  'application/json',
+        'Prefer':        'return=representation',
+      }},
+      body: JSON.stringify(payload),
+    }})
+    .then(function(r) {{
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    }})
+    .then(function(rows) {{
+      var orderId = (rows && rows[0] && rows[0].id) ? rows[0].id : '?';
+      var priceStr = price > 0 ? ' @ $' + price.toFixed(2) : ' @ market';
+      var col = _tcSide === 'buy' ? '#00ff9d' : '#ff3366';
+      tcStatus('✓ ' + _tcSide.toUpperCase() + ' ' + qty + ' ' + sym + priceStr, col);
+      var feedMsg = _tcSide.toUpperCase() + ' ' + qty + 'x ' + sym + priceStr + ' · paper order #' + String(orderId).slice(0,8);
+      if (window._postToFeed) window._postToFeed(feedMsg);
+      if (window._recordTradeForGauge) window._recordTradeForGauge();
+      document.getElementById('tc-sym').value   = '';
+      document.getElementById('tc-qty').value   = '';
+      document.getElementById('tc-price').value = '';
+      setTimeout(function() {{ tcStatus('ready', ''); }}, 4000);
+    }})
+    .catch(function(err) {{
+      tcStatus('⚠ error · ' + err.message, '#ff3366');
+    }})
+    .finally(function() {{
+      if (btn) btn.disabled = false;
+    }});
+  }}
+
+  // Focus sym field on console keydown shortcut: B = buy, S = sell
+  document.addEventListener('keydown', function(e) {{
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'b' || e.key === 'B') {{ tcSetSide('buy');  document.getElementById('tc-sym').focus(); }}
+    if (e.key === 's' || e.key === 'S') {{ tcSetSide('sell'); document.getElementById('tc-sym').focus(); }}
+  }});
 
   // ── Live feed poller — Supabase REST, no page reload ────────────────────────
   (function() {{
