@@ -348,14 +348,19 @@ def _load_chart_data() -> dict:
                 """), {"syms": syms}).fetchall()
                 prices_map = {r.symbol: float(r.adj_close) for r in price_rows}
 
-                # Entry fills — earliest BUY per symbol
+                # Entry fills — earliest BUY per symbol (full timestamp preserved)
                 entry_rows = s.execute(text("""
-                    SELECT DISTINCT ON (symbol) symbol, fill_price, filled_at::date as entry_date
+                    SELECT DISTINCT ON (symbol) symbol, fill_price, filled_at,
+                                                filled_at::date as entry_date
                     FROM fills WHERE side = 'BUY' AND symbol = ANY(:syms)
                     ORDER BY symbol, filled_at ASC
                 """), {"syms": syms}).fetchall()
                 entry_map = {
-                    r.symbol: {"price": float(r.fill_price), "date": str(r.entry_date)}
+                    r.symbol: {
+                        "price": float(r.fill_price),
+                        "date": str(r.entry_date),
+                        "filled_at": r.filled_at.isoformat() if r.filled_at else None,
+                    }
                     for r in entry_rows
                 }
 
@@ -408,6 +413,7 @@ def _load_chart_data() -> dict:
                         "in_signal": bool(sig), "rank": rank,
                         "entry_price": entry_price,
                         "entry_date": entry_date,
+                        "entry_filled_at": entry.get("filled_at"),
                         "entry_cost": entry_cost,
                         "entry_pnl": entry_pnl,
                         "entry_pnl_pct": entry_pnl_pct,
@@ -985,7 +991,7 @@ def _build_daw_html(data: dict) -> str:
             "target":     float(p.get("target_price") or 0),
             "curPrice":   float(p.get("price") or p["entry_price"] or 0),
             "days":       int(p.get("days_held") or 0),
-            "enteredAt":  int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
+            "enteredAt":  int(datetime.fromisoformat(p["entry_filled_at"]).timestamp() * 1000) if p.get("entry_filled_at") else int((datetime.now().timestamp() - (p.get("days_held") or 0) * 86400) * 1000),
             "inSignal":   bool(p.get("in_signal", True)),
             "rank":       int(p.get("rank") or 0),
             "holdText":   str(p.get("hold_text") or ""),
