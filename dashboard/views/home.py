@@ -8355,11 +8355,12 @@ setTimeout(function() {{
         var maRect = ma ? ma.getBoundingClientRect() : rect;
         var orbX = (window._navOrbFracX || 0.5) * rect.width;
         var orbY = (window._navOrbFracY || 0.5) * rect.height;
-        // Orbit radius is ~56px in pulse-canvas; place popup 80px to right of that
-        var popX = orbX + 140;
+        // Place popup LEFT of orb — text anchored right so it extends further left
+        var popX = orbX - 140;
         var popY = orbY;
-        popup.style.left = (rect.left - maRect.left + popX) + 'px';
-        popup.style.top  = (rect.top  - maRect.top  + popY) + 'px';
+        popup.style.left      = (rect.left - maRect.left + popX) + 'px';
+        popup.style.top       = (rect.top  - maRect.top  + popY) + 'px';
+        popup.style.transform = 'translate(-100%, -50%)';
         var isPos = pnl >= 0;
         popup.style.color = isPos ? '#00ff9d' : '#ff3366';
         popup.textContent = (isPos ? '+$' : '-$') + Math.abs(pnl).toLocaleString('en-US', {{minimumFractionDigits:2,maximumFractionDigits:2}});
@@ -8368,7 +8369,7 @@ setTimeout(function() {{
         _orbPopupTimer = setTimeout(function() {{
           popup.style.transition = 'opacity 1.4s ease';
           popup.style.opacity = '0';
-        }}, 5000);
+        }}, 8000);
       }};
 
       // ── System health tracking ────────────────────────────────
