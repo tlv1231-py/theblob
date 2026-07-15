@@ -7314,15 +7314,18 @@ setTimeout(function() {{
       if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
       if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
 
-      // ── ROW 1 left: SYM in unique color ──
-      ctx.font = '700 9px Orbitron,Consolas,monospace';
+      var _F1 = '700 11px Orbitron,monospace'; // ticker + value
+      var _F2 = '400 9px Orbitron,monospace';  // entry, pnl, timer
+
+      // ── ROW 1 left: SYM ──
+      ctx.font = _F1;
       ctx.fillStyle = t.col;
       ctx.textAlign = 'left';
       ctx.shadowColor = t.col; ctx.shadowBlur = 6;
-      ctx.fillText(t.sym, lx, y + 14);
+      ctx.fillText(t.sym, lx, y + 15);
       ctx.shadowBlur = 0;
 
-      // ── ROW 1 right: value — tints with P&L direction ──
+      // ── ROW 1 right: value ──
       if (dVal > 0.5) {{
         if (dPnl > 0.01)       t._valDir = 1;
         else if (dPnl < -0.01) t._valDir = -1;
@@ -7335,10 +7338,10 @@ setTimeout(function() {{
         var flashAge = t._flashStart ? (ts - t._flashStart) : 9999;
         var isFlashing = flashAge < 180;
         var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
-        ctx.font = '700 9px Orbitron,Consolas,monospace';
+        ctx.font = _F1;
         ctx.fillStyle = isFlashing ? (t._flashDir > 0 ? '#00ff9d' : '#ff3366') : valCol;
         ctx.textAlign = 'right';
-        ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 14);
+        ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 15);
         ctx.textAlign = 'left';
         if (t._valFlash) {{ t._flashStart = ts; t._flashDir = t._valFlash; t._valFlash = 0; }}
       }}
@@ -7346,9 +7349,9 @@ setTimeout(function() {{
       // ── ROW 2 left: entry price ──
       if (t.entry > 0) {{
         var entryStr = '@$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry < 100 ? t.entry.toFixed(2) : Math.round(t.entry).toLocaleString('en-US'));
-        ctx.font = '400 7px Orbitron,Consolas,monospace';
+        ctx.font = _F2;
         ctx.fillStyle = t.col;
-        ctx.fillText(entryStr, lx, y + 26);
+        ctx.fillText(entryStr, lx, y + 28);
       }}
 
       // ── ROW 2 right: P&L with scale-pulse ──
@@ -7362,14 +7365,14 @@ setTimeout(function() {{
         var pScale = pnlFlashAge < 260 ? (1 + 0.15 * Math.max(0, 1 - pnlFlashAge/260)) : 1;
         ctx.save();
         if (pScale > 1) {{
-          ctx.translate(x + W - 5, y + 26);
+          ctx.translate(x + W - 5, y + 28);
           ctx.scale(pScale, pScale);
-          ctx.translate(-(x + W - 5), -(y + 26));
+          ctx.translate(-(x + W - 5), -(y + 28));
         }}
-        ctx.font = '400 7px Orbitron,Consolas,monospace';
+        ctx.font = _F2;
         ctx.fillStyle = showPnl >= 0 ? '#00c87a' : '#e03355';
         ctx.textAlign = 'right';
-        ctx.fillText(pnlDisp, x + W - 5, y + 26);
+        ctx.fillText(pnlDisp, x + W - 5, y + 28);
         ctx.textAlign = 'left';
         ctx.restore();
       }}
@@ -7381,9 +7384,9 @@ setTimeout(function() {{
       else if (holdMs < 3600000)  holdStr = Math.floor(holdMs/60000) + 'm';
       else if (holdMs < 86400000) {{ var hH=Math.floor(holdMs/3600000),hM=Math.floor((holdMs%3600000)/60000); holdStr=hH+'h'+(hM?' '+hM+'m':''); }}
       else                        {{ var hD=Math.floor(holdMs/86400000),hHr=Math.floor((holdMs%86400000)/3600000); holdStr=hD+'d'+(hHr?' '+hHr+'h':''); }}
-      ctx.font = '400 7px Orbitron,Consolas,monospace';
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillText(holdStr, lx, y + 38);
+      ctx.font = _F2;
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillText(holdStr, lx, y + 41);
 
       // ── VU meter bar + peak hat (y+46) ──
       // Equity: rank-based (rank 1=strong hold→low, rank 5=weak hold→high, EXIT=full)
@@ -7615,6 +7618,11 @@ setTimeout(function() {{
       _eqCanvasInitData.forEach(function(d) {{ _etUpsert(d); }});
       _etInitPhase = false; // future tile inserts play entry sound
     }})();
+
+    // Pre-load Orbitron before the draw loop starts so canvas font matches the HUD
+    document.fonts.load('700 9px Orbitron').then(function() {{
+      document.fonts.load('400 7px Orbitron');
+    }});
 
     // 30fps canvas draw loop
     var _etRafLast = 0;
