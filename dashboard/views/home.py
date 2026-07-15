@@ -4604,14 +4604,22 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     if (visible.length < 2) {{ window._navOrbFracX=orbFracX; window._navOrbFracY=0.5; return; }}
 
-    // Y: pin liveNav at H/2 (orb always centered vertically); history scales relative to it
-    var maxDev = 0;
+    // Y: pin liveNav at H/2; history scales relative to it.
+    // Use EMA-smoothed maxDev with a 0.5%-of-NAV floor so tiny dollar moves
+    // don't fill the chart (which caused the spike/flat oscillation).
+    var rawMaxDev = 0;
     for (var vi = 0; vi < visible.length; vi++) {{
       var dev = Math.abs(visible[vi].v - liveNav);
-      if (dev > maxDev) maxDev = dev;
+      if (dev > rawMaxDev) rawMaxDev = dev;
     }}
-    if (maxDev < 1) maxDev = liveNav * 0.002 || 50;
-    var yScale = (H * 0.42) / maxDev; // 42% of half-height per deviation unit
+    var _devFloor = Math.max(liveNav * 0.005, 50); // floor = 0.5% of NAV
+    rawMaxDev = Math.max(rawMaxDev, _devFloor);
+    // EMA: slow the scale changes so it can't snap frame-to-frame
+    window._navMaxDevEma = window._navMaxDevEma
+      ? 0.04 * rawMaxDev + 0.96 * window._navMaxDevEma
+      : rawMaxDev;
+    var maxDev = window._navMaxDevEma;
+    var yScale = (H * 0.42) / maxDev;
     function ty(v) {{ return H / 2 - (v - liveNav) * yScale; }}
 
     var orbY = H / 2;  // always centered
@@ -5059,8 +5067,9 @@ setInterval(_fetchIntradayMarks, 15000);
           _eqCount++;
         }}
       }});
+      // Always update equity slice — reset to 0 when no live tiles so stale PnL doesn't inflate NAV
+      window._livePnlBySource.equity = _eqCount > 0 ? _eqLivePnl : 0;
       if (_eqCount > 0) {{
-        window._livePnlBySource.equity = _eqLivePnl;
         var _combinedPnl = window._livePnlBySource.equity + window._livePnlBySource.crypto;
         var _eqNav = (window._portfolioBaseline || 100000) + _combinedPnl;
         window._lastLivePriceMs = Date.now();
