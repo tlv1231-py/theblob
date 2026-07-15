@@ -4394,7 +4394,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll wheel zooms the time window (hours visible to the left of now)
-  window._navWindowMs = 4 * 3600000; // default: 4 hours of history
+  window._navWindowMs = 8 * 60 * 1000; // 8-minute rolling sidescroller
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
@@ -6935,8 +6935,12 @@ setTimeout(function() {{
       var sbH = stratBar ? stratBar.offsetHeight : 46;
       var availH = window.innerHeight - sbH - 4;
       var perCol = Math.max(1, Math.floor(availH / _EQ_H));
-      var crypto = _ET.filter(function(t) {{ return t.phase !== 'done' && t.isCrypto; }});
-      var equity = _ET.filter(function(t) {{ return t.phase !== 'done' && !t.isCrypto; }});
+      // Stable sort: within each group, sort by enteredAt so positions don't
+      // shuffle when tiles enter/exit (newest at top, oldest at bottom)
+      var crypto = _ET.filter(function(t) {{ return t.phase !== 'done' && t.isCrypto; }})
+                      .sort(function(a,b) {{ return (b.enteredAt||0) - (a.enteredAt||0); }});
+      var equity = _ET.filter(function(t) {{ return t.phase !== 'done' && !t.isCrypto; }})
+                      .sort(function(a,b) {{ return (b.enteredAt||0) - (a.enteredAt||0); }});
       var cryptoCols = Math.max(1, Math.ceil(crypto.length / perCol));
       var equityCols = equity.length > 0 ? Math.max(1, Math.ceil(equity.length / perCol)) : 0;
       var totalCols  = cryptoCols + equityCols;
@@ -7073,20 +7077,30 @@ setTimeout(function() {{
               }}
             }}
           }} else {{
-            // Tile space is now fully cleared — just draw PnL ghost
-            var ghostT  = Math.min(1, (age - crushDur) / ghostDur);
-            var ghostA  = ghostT < 0.08 ? ghostT / 0.08 : Math.max(0, 1 - (ghostT - 0.08) / 0.92);
-            if (ghostA > 0.02) {{
+            // Tile space cleared — ghost: sym name + P&L in Press Start 2P
+            var ghostT = Math.min(1, (age - crushDur) / ghostDur);
+            // Fast in (5%), hold at full (until 50%), smooth out (to 100%)
+            var ghostA = ghostT < 0.05 ? ghostT / 0.05
+                       : ghostT < 0.50 ? 1
+                       : Math.max(0, 1 - (ghostT - 0.50) / 0.50);
+            if (ghostA > 0.01) {{
               var ec = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
               var ep = Math.abs(t.exitPnl);
               var es = (t.exitPnl >= 0 ? '+$' : '-$') + (ep >= 1000 ? (ep/1000).toFixed(1)+'k' : ep.toFixed(2));
+              var cx2 = x + _EQ_W/2, cy2 = y + _EQ_H/2;
               ctx.save();
               ctx.globalAlpha = ghostA;
-              ctx.shadowColor = ec; ctx.shadowBlur = 14;
+              // Ticker name above
+              ctx.shadowColor = 'rgba(255,255,255,0.4)'; ctx.shadowBlur = 6;
+              ctx.fillStyle = 'rgba(255,255,255,0.7)';
+              ctx.font = '7px Consolas,monospace';
+              ctx.textAlign = 'center';
+              ctx.fillText(t.sym, cx2, cy2 - 8);
+              // P&L value
+              ctx.shadowColor = ec; ctx.shadowBlur = 16;
               ctx.fillStyle = ec;
               ctx.font = '8px "Press Start 2P",monospace';
-              ctx.textAlign = 'center';
-              ctx.fillText(es, x + _EQ_W/2, y + _EQ_H/2 + 4);
+              ctx.fillText(es, cx2, cy2 + 6);
               ctx.textAlign = 'left';
               ctx.restore();
             }}
@@ -7160,28 +7174,37 @@ setTimeout(function() {{
       var dPnl    = t._dPnl   !== undefined ? t._dPnl    : (t.pnl    || 0);
       var dPnlPct = t._dPnlPct!== undefined ? t._dPnlPct : (t.pnlPct || 0);
 
-      var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
-      ctx.font = 'bold 10px Consolas,monospace';
-      ctx.fillStyle = t._valFlash ? (t._valFlash > 0 ? '#00ff9d' : '#ff3366') : '#ffffff';
-      ctx.textAlign = 'right';
-      ctx.fillText(valStr, x + W - 5, r1y);
-      ctx.textAlign = 'left';
-      if (t._valFlash) {{ t._valFlash = 0; }}
+      // Snap tiny lerp tails to zero to avoid -$0 / 0.0% noise
+      if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
+      if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
 
-      // ── ROW 2 (y+30): P&L · % ──
+      // ROW 1 right: value (only if meaningful)
+      if (dVal > 0.5) {{
+        var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
+        ctx.font = 'bold 10px Consolas,monospace';
+        ctx.fillStyle = t._valFlash ? (t._valFlash > 0 ? '#00ff9d' : '#ff3366') : '#ffffff';
+        ctx.textAlign = 'right';
+        ctx.fillText(valStr, x + W - 5, r1y);
+        ctx.textAlign = 'left';
+        if (t._valFlash) {{ t._valFlash = 0; }}
+      }}
+
+      // ── ROW 2 (y+30): P&L · % (skip if both are zero) ──
       var r2y = y + 30;
-      var pnlCol  = dPnl >= 0 ? '#00c87a' : '#e03355';
-      var pnlSign = dPnl >= 0 ? '+' : '-';
-      var absP    = Math.abs(dPnl);
-      var pct     = dPnlPct;
-      ctx.font = '10px Consolas,monospace';
-      ctx.fillStyle = pnlCol;
-      var pnlStr = pnlSign + '$' + Math.round(absP).toLocaleString('en-US');
-      ctx.fillText(pnlStr, lx, r2y);
-      var pnlStrW = ctx.measureText(pnlStr).width;
-      ctx.font = '8px Consolas,monospace';
-      ctx.fillStyle = 'rgba(200,200,200,0.4)';
-      ctx.fillText(' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)', lx + pnlStrW, r2y);
+      if (Math.abs(dPnl) >= 0.005 || Math.abs(dPnlPct) >= 0.005) {{
+        var pnlIsPos = dPnl >= 0;
+        var pnlCol   = pnlIsPos ? '#00c87a' : '#e03355';
+        var pnlSign  = pnlIsPos ? '+' : '-';
+        var absP     = Math.abs(dPnl);
+        ctx.font = '10px Consolas,monospace';
+        ctx.fillStyle = pnlCol;
+        var pnlStr = pnlSign + '$' + Math.round(absP).toLocaleString('en-US');
+        ctx.fillText(pnlStr, lx, r2y);
+        var pnlStrW = ctx.measureText(pnlStr).width;
+        ctx.font = '8px Consolas,monospace';
+        ctx.fillStyle = 'rgba(200,200,200,0.4)';
+        ctx.fillText(' (' + (dPnlPct>=0?'+':'') + dPnlPct.toFixed(1) + '%)', lx + pnlStrW, r2y);
+      }}
 
       // ── ROW 3 (y+45–48): age bar ──
       var aBarX = lx, aBarW = W - lx - 5;
@@ -8353,8 +8376,8 @@ setTimeout(function() {{
         var maRect = ma ? ma.getBoundingClientRect() : rect;
         var orbX = (window._navOrbFracX || 0.5) * rect.width;
         var orbY = (window._navOrbFracY || 0.5) * rect.height;
-        // Place popup just left of orb; drift animation carries it further left
-        var popX = orbX - 30;
+        // Place popup left of orb; drift animation carries it further left
+        var popX = orbX - 70;
         var popY = orbY;
         popup.style.left      = (rect.left - maRect.left + popX) + 'px';
         popup.style.top       = (rect.top  - maRect.top  + popY) + 'px';
