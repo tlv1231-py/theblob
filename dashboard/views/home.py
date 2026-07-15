@@ -4711,7 +4711,12 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.fillText(tm.sym || '', tmx, isEnter ? tmy - 15 : tmy + 23);
     }}
 
-    }} catch(e) {{ console.error('[navChart]', e); }}
+    }} catch(e) {{
+      console.error('[navChart]', e);
+      var _ectx = _nc.getContext('2d');
+      _ectx.font = 'bold 11px Consolas'; _ectx.fillStyle = '#ff4400'; _ectx.textAlign = 'center';
+      _ectx.fillText('ERR: ' + (e.message || String(e)), (_nc.width/_dpr)/2, (_nc.height/_dpr)/2 + 28);
+    }}
   }};
 
   // ~30fps — enough for a smooth breathing dot without burning GPU
