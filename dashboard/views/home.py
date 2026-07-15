@@ -4537,10 +4537,14 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   // Daily snapshots go to Plotly equity-curve only — the live canvas gets session-only points.
   window._navSessionStart = Date.now();
 
-  // Live updates: call this whenever we get a new NAV reading
+  // Live updates — throttled: only record a new point if value moved >$2 or >30s elapsed.
+  // This prevents micro-noise from cluttering the buffer with near-identical points.
   window._navPush = function(v, isoTs) {{
     var ms = isoTs ? new Date(isoTs).getTime() : Date.now();
-    _navIngest(ms, v);
+    var last = _navPts.length ? _navPts[_navPts.length - 1] : null;
+    var valueMoved = !last || Math.abs(v - last.v) > 2;
+    var timeElapsed = !last || (ms - last.ms) > 30000;
+    if (valueMoved || timeElapsed) _navIngest(ms, v);
   }};
 
   window._drawNavCanvas = function() {{
@@ -4582,55 +4586,32 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     if (visible.length < 2) {{ window._navOrbFracX=orbFracX; window._navOrbFracY=0.5; return; }}
 
-    // Y: pin liveNav at H/2; history scales relative to it.
-    // Use EMA-smoothed maxDev with a 0.5%-of-NAV floor so tiny dollar moves
-    // don't fill the chart (which caused the spike/flat oscillation).
-    var rawMaxDev = 0;
-    for (var vi = 0; vi < visible.length; vi++) {{
-      var dev = Math.abs(visible[vi].v - liveNav);
-      if (dev > rawMaxDev) rawMaxDev = dev;
-    }}
-    var _devFloor = Math.max(liveNav * 0.005, 50); // floor = 0.5% of NAV
-    rawMaxDev = Math.max(rawMaxDev, _devFloor);
-    // EMA: slow the scale changes so it can't snap frame-to-frame
-    window._navMaxDevEma = window._navMaxDevEma
-      ? 0.04 * rawMaxDev + 0.96 * window._navMaxDevEma
-      : rawMaxDev;
-    var maxDev = window._navMaxDevEma;
-    var yScale = (H * 0.42) / maxDev;
-    function ty(v) {{ return H / 2 - (v - liveNav) * yScale; }}
+    // ── Fixed Y scale — permanently anchored to portfolio baseline.
+    // Historical points NEVER change their Y position after being drawn.
+    // The orb drifts up (profit) or down (loss) relative to the baseline midline.
+    // Scale: ±1% of baseline = ±40% of canvas height.
+    var _baseline = window._portfolioBaseline || 100000;
+    var _halfRange = _baseline * 0.01; // $1k for $100k portfolio; scales with portfolio size
+    var yScale = (H * 0.40) / _halfRange;
+    function ty(v) {{ return H / 2 - (v - _baseline) * yScale; }}
 
-    var orbY = H / 2;  // always centered
+    // Smooth the "now" orb position with a fast EMA so it drifts rather than snaps
+    window._navSmoothedNav = window._navSmoothedNav
+      ? 0.08 * liveNav + 0.92 * window._navSmoothedNav
+      : liveNav;
+    var drawNav = window._navSmoothedNav;
+    var orbY = ty(drawNav);
+
     window._navOrbFracX = orbFracX;
-    window._navOrbFracY = 0.5;         // force orb to vertical center
+    window._navOrbFracY = Math.max(0.05, Math.min(0.95, orbY / H));
 
-    // Map to canvas coords; final point pinned to chart right edge
+    // Map to canvas coords — historical points use fixed ty(), now-point uses smoothed orb Y
     var mapped = [];
     for (var mi = 0; mi < visible.length - 1; mi++) {{
       mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
     mapped.push({{ x: _nowPx, y: orbY }});
     if (mapped.length < 2) return;
-
-    // Y-axis labels (relative to liveNav)
-    (function() {{
-      var fmt = function(v) {{
-        if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
-        return '$' + v.toFixed(0);
-      }};
-      ctx.save();
-      ctx.setLineDash([3,7]); ctx.lineWidth=1;
-      ctx.font='8px Consolas,monospace'; ctx.textBaseline='bottom';
-      [-0.6,-0.3,0.3,0.6].forEach(function(lvl) {{
-        var val = liveNav + maxDev * lvl;
-        var yy  = ty(val);
-        if(yy<6||yy>H-6) return;
-        ctx.strokeStyle='rgba(255,0,204,0.07)';
-        ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy); ctx.stroke();
-        ctx.fillStyle='rgba(200,80,255,0.3)'; ctx.fillText(fmt(val),4,yy-2);
-      }});
-      ctx.restore();
-    }})();
 
     var m = mapped;
     var n = m.length;
