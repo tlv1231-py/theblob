@@ -4877,69 +4877,99 @@ setInterval(_fetchIntradayMarks, 15000);
   }}
 
   function _pollEqPrices() {{
-    // Read tile state from canvas engine — no DOM queries needed
-    var liveTiles = (window._ET||[]).filter(function(t) {{ return t.phase === 'live' || t.phase === 'entering'; }});
+    var liveTiles = (window._ET||[]).filter(function(t) {{
+      return !t.isCrypto && (t.phase === 'live' || t.phase === 'entering');
+    }});
     if (!liveTiles.length) return;
     var syms = liveTiles.map(function(t) {{ return t.sym; }});
 
-    var url = SUPA_URL + '/rest/v1/price_bars'
-      + '?select=symbol,close,date&symbol=in.(' + syms.join(',') + ')'
-      + '&order=date.desc&limit=' + (syms.length * 3);
-    fetch(url, {{headers:{{ 'apikey':SUPA_KEY, 'Authorization':'Bearer '+SUPA_KEY }}}})
-    .then(function(r) {{ return r.json(); }})
-    .then(function(rows) {{
-      if (!Array.isArray(rows)) return;
+    // Fetch live quotes from Yahoo Finance (same source as yfinance, no auth needed).
+    // crumb/cookie not required for the simple quote endpoint.
+    var yfUrl = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols='
+      + syms.join(',') + '&fields=regularMarketPrice,symbol';
+    fetch(yfUrl, {{ headers: {{ 'Accept': 'application/json' }} }})
+    .then(function(r) {{ return r.ok ? r.json() : null; }})
+    .then(function(data) {{
       var latest = {{}};
-      rows.forEach(function(row) {{
-        if (!latest[row.symbol]) latest[row.symbol] = row.close;
-      }});
-
-      liveTiles.forEach(function(t) {{
-        var price = latest[t.sym];
-        if (!price) return;
-        var val = t.qty * price;
-        var pnl = t.entry > 0 ? (price - t.entry) * t.qty : 0;
-        var pct = t.entry > 0 ? (price - t.entry) / t.entry * 100 : 0;
-        // Flash indicator for next draw
-        var prev = _eqPrev[t.sym];
-        if (prev !== undefined && Math.abs(val - prev) > 0.50) {{
-          t._valFlash = val > prev ? 1 : -1;
-        }}
-        _eqPrev[t.sym] = val;
-        // Update tile state — canvas draw loop picks it up next frame
-        t.curPrice = price;
-        t.val = val;
-        t.pnl = pnl;
-        t.pnlPct = pct;
-      }});
-
-      // Compute live equity NAV and push intraday point — drives NET DATA + nav line
-      var _eqLivePnl = 0, _eqCount = 0;
-      liveTiles.forEach(function(t) {{
-        if (t.qty > 0 && t.entry > 0 && t.curPrice > 0) {{
-          _eqLivePnl += t.qty * (t.curPrice - t.entry);
-          _eqCount++;
-        }}
-      }});
-      // Update equity PnL slice — crypto poller is the sole writer of _lastKnownNav/_navPush.
-      // Equity poller only updates tile display + its PnL slice; crypto poller reads both slices.
-      window._livePnlBySource.equity = _eqCount > 0 ? _eqLivePnl : 0;
-      if (_eqCount > 0) {{
-        // Drive blob mood from live P&L direction
-        (function() {{
-          var baseline = window._portfolioBaseline || 100000;
-          var mood = _eqLivePnl > 0 ? 'bs-happy' : _eqLivePnl < 0 ? 'bs-sad' : '';
-          var g  = document.getElementById('bs-g');
-          var hl = document.getElementById('bs-hl');
-          if (g) {{ g.classList.remove('bs-happy','bs-sad'); if (mood) g.classList.add(mood); }}
-          if (hl) {{
-            hl.classList.remove('bs-hl-happy','bs-hl-sad');
-            if (mood === 'bs-happy') hl.classList.add('bs-hl-happy');
-            else if (mood === 'bs-sad') hl.classList.add('bs-hl-sad');
-          }}
-        }})();
+      if (data && data.quoteResponse && Array.isArray(data.quoteResponse.result)) {{
+        data.quoteResponse.result.forEach(function(q) {{
+          if (q.symbol && q.regularMarketPrice) latest[q.symbol] = q.regularMarketPrice;
+        }});
       }}
-    }}).catch(function() {{}});
+      // Fallback: if Yahoo blocked (CORS on cloud), pull yesterday's close from Supabase
+      var missing = syms.filter(function(s) {{ return !latest[s]; }});
+      function _applyPrices() {{
+        liveTiles.forEach(function(t) {{
+          var price = latest[t.sym];
+          if (!price) return;
+          var val = t.qty * price;
+          var pnl = t.entry > 0 ? (price - t.entry) * t.qty : 0;
+          var pct = t.entry > 0 ? (price - t.entry) / t.entry * 100 : 0;
+          var prev = _eqPrev[t.sym];
+          if (prev !== undefined && Math.abs(val - prev) > 0.50) {{
+            t._valFlash = val > prev ? 1 : -1;
+          }}
+          _eqPrev[t.sym] = val;
+          t.curPrice = price;
+          t.val = val;
+          t.pnl = pnl;
+          t.pnlPct = pct;
+        }});
+
+        // Equity NAV slice
+        var _eqLivePnl = 0, _eqCount = 0;
+        liveTiles.forEach(function(t) {{
+          if (t.qty > 0 && t.entry > 0 && t.curPrice > 0) {{
+            _eqLivePnl += t.qty * (t.curPrice - t.entry);
+            _eqCount++;
+          }}
+        }});
+        window._livePnlBySource.equity = _eqCount > 0 ? _eqLivePnl : 0;
+        if (_eqCount > 0) {{
+          var mood = _eqLivePnl > 0 ? 'bs-happy' : _eqLivePnl < 0 ? 'bs-sad' : '';
+          var g = document.getElementById('bs-g'), hl = document.getElementById('bs-hl');
+          if (g) {{ g.classList.remove('bs-happy','bs-sad'); if (mood) g.classList.add(mood); }}
+          if (hl) {{ hl.classList.remove('bs-hl-happy','bs-hl-sad');
+            if (mood === 'bs-happy') hl.classList.add('bs-hl-happy');
+            else if (mood === 'bs-sad') hl.classList.add('bs-hl-sad'); }}
+        }}
+      }}
+
+      if (missing.length) {{
+        // Yahoo blocked — fallback to Supabase price_bars (yesterday's close)
+        var fbUrl = SUPA_URL + '/rest/v1/price_bars'
+          + '?select=symbol,close&symbol=in.(' + missing.join(',') + ')'
+          + '&order=date.desc&limit=' + (missing.length * 2);
+        fetch(fbUrl, {{headers:{{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}}}})
+        .then(function(r) {{ return r.json(); }})
+        .then(function(rows) {{
+          if (!Array.isArray(rows)) return;
+          rows.forEach(function(row) {{ if (!latest[row.symbol]) latest[row.symbol] = row.close; }});
+          _applyPrices();
+        }}).catch(function() {{}});
+      }} else {{
+        _applyPrices();
+      }}
+    }}).catch(function() {{
+      // Yahoo fetch failed entirely — fall back to Supabase
+      var fbUrl = SUPA_URL + '/rest/v1/price_bars'
+        + '?select=symbol,close&symbol=in.(' + syms.join(',') + ')'
+        + '&order=date.desc&limit=' + (syms.length * 2);
+      fetch(fbUrl, {{headers:{{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}}}})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows)) return;
+        var latest2 = {{}};
+        rows.forEach(function(row) {{ if (!latest2[row.symbol]) latest2[row.symbol] = row.close; }});
+        liveTiles.forEach(function(t) {{
+          var price = latest2[t.sym]; if (!price) return;
+          t.curPrice = price;
+          t.val = t.qty * price;
+          t.pnl = t.entry > 0 ? (price - t.entry) * t.qty : 0;
+          t.pnlPct = t.entry > 0 ? (price - t.entry) / t.entry * 100 : 0;
+        }});
+      }}).catch(function() {{}});
+    }});
   }}
 
   setTimeout(_pollEqPrices, 4000);
