@@ -4499,7 +4499,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll wheel zooms the time window (hours visible to the left of now)
-  window._navWindowMs = 8 * 60 * 1000; // 8-minute rolling sidescroller
+  window._navWindowMs = 30 * 24 * 60 * 60 * 1000; // default 30-day view; scroll wheel zooms
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
@@ -4511,40 +4511,46 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}, {{ passive: false }});
   }})();
 
-  // Master data store — accumulates all known NAV points, sorted by ms
-  var _navPts = [];   // {{ms, v}}
-  var _navPtSet = {{}}; // ms→true for dedup
-
-  var _navJoltAt  = 0;   // timestamp of last significant NAV move
-  var _navJoltDir = 0;   // +1 profit, -1 loss
-
-  function _navIngest(ms, v) {{
-    if (!ms || isNaN(ms) || !v || isNaN(v)) return;
-    var key = Math.round(ms / 500); // bucket to 500ms
-    if (_navPtSet[key]) return;
-    _navPtSet[key] = true;
-    // Detect significant move → jolt at the tip
-    var prev = _navPts.length ? _navPts[_navPts.length - 1].v : 0;
-    _navPts.push({{ ms: ms, v: v }});
-    _navPts.sort(function(a,b){{ return a.ms - b.ms; }});
-    if (prev && Math.abs(v - prev) > 5) {{
-      _navJoltAt  = Date.now();
-      _navJoltDir = v > prev ? 1 : -1;
+  // ── Historical backbone from DB (portDates/portValues) ─────────────────────
+  // These are authoritative, identical on every screen, and never change.
+  var _navHist = [];
+  (function() {{
+    var pd = portDates || [], pv = portValues || [];
+    for (var i = 0; i < pd.length; i++) {{
+      var ms = new Date(pd[i]).getTime();
+      if (ms && !isNaN(ms) && pv[i] && !isNaN(pv[i])) {{
+        _navHist.push({{ ms: ms, v: pv[i] }});
+      }}
     }}
-  }}
+    _navHist.sort(function(a,b){{ return a.ms - b.ms; }});
+  }})();
 
-  // Mark session start BEFORE any historical injection so rolling chart can filter them out.
-  // Daily snapshots go to Plotly equity-curve only — the live canvas gets session-only points.
-  window._navSessionStart = Date.now();
+  // ── Y scale — computed ONCE from the full DB history, never recalculated ──
+  // This means historical points never change pixel positions across frames.
+  var _navYMid = 0, _navYScale = 1;
+  (function() {{
+    if (!_navHist.length) {{ _navYMid = window._portfolioBaseline || 100000; }}
+    else {{
+      var lo = Infinity, hi = -Infinity;
+      _navHist.forEach(function(p) {{ if(p.v<lo) lo=p.v; if(p.v>hi) hi=p.v; }});
+      var range = Math.max(hi - lo, lo * 0.01); // min 1% of portfolio
+      _navYMid   = (lo + hi) / 2;
+      _navYScale = (500 * 0.70) / range; // 70% of nominal 500px height; rescaled per frame by H
+    }}
+  }})();
 
-  // Live updates — throttled: only record a new point if value moved >$2 or >30s elapsed.
-  // This prevents micro-noise from cluttering the buffer with near-identical points.
+  // ── Live intraday points — extend the DB backbone with today's pollers ───
+  var _navLive = [];   // {{ms, v}} — session only, appended, never modified
+  var _navLiveLastV = null;
+
   window._navPush = function(v, isoTs) {{
+    if (!v || isNaN(v)) return;
     var ms = isoTs ? new Date(isoTs).getTime() : Date.now();
-    var last = _navPts.length ? _navPts[_navPts.length - 1] : null;
-    var valueMoved = !last || Math.abs(v - last.v) > 2;
-    var timeElapsed = !last || (ms - last.ms) > 30000;
-    if (valueMoved || timeElapsed) _navIngest(ms, v);
+    // Throttle: only record if value moved >$2 or >30s since last live point
+    var last = _navLive.length ? _navLive[_navLive.length-1] : null;
+    if (last && Math.abs(v - last.v) <= 2 && (ms - last.ms) < 30000) return;
+    _navLive.push({{ ms: ms, v: v }});
+    _navLiveLastV = v;
   }};
 
   window._drawNavCanvas = function() {{
@@ -4553,56 +4559,58 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var ctx = _nc.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // Current live value (most recent known)
-    var liveNav = window._lastKnownNav || (_navPts.length ? _navPts[_navPts.length-1].v : null);
-    if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    // Authoritative live value — EMA-smoothed so orb drifts, never snaps
+    var rawLive = window._lastKnownNav || (_navHist.length ? _navHist[_navHist.length-1].v : null);
+    if (!rawLive) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    window._navSmoothedNav = window._navSmoothedNav
+      ? 0.06 * rawLive + 0.94 * window._navSmoothedNav
+      : rawLive;
+    var liveNav = window._navSmoothedNav;
 
-    // "now" is always exactly canvas center — independent of tile/overlay widths.
-    var _nowPx = W / 2;
-    var orbFracX = 0.5;
-
-    var nowMs = Date.now();
-    // SIDESCROLLER: fixed 8-minute rolling window — the trail slides left in real time.
-    // History scrolls off the left edge; Y auto-scales to the visible range so every
-    // P&L move fills the chart vertically. Feels like a side-scrolling game.
-    var windowMs   = window._navWindowMs || (8 * 60 * 1000);
+    // "now" pinned at canvas center; history scrolls left
+    var _nowPx   = W / 2;
+    var nowMs    = Date.now();
+    var windowMs = window._navWindowMs || (30 * 24 * 60 * 60 * 1000); // default: 30 days
     var leftEdgeMs = nowMs - windowMs;
 
-    // tx: maps a timestamp to canvas X. leftEdgeMs → 0, nowMs → _nowPx.
+    // X: maps timestamp → canvas X in [0, W/2]; nowMs → W/2
     function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * _nowPx; }}
 
-    // Collect only session-live points (no daily historical snapshots — those corrupt the Y scale).
-    // Left edge always starts flat at liveNav; history is whatever the live pollers have pushed.
-    var _sessionStart = window._navSessionStart || 0;
+    // Y: fixed scale computed from DB history — historical points NEVER move
+    var yScale = _navYScale * (H / 500); // rescale to actual canvas height
+    var yMid   = _navYMid;
+    function ty(v) {{ return H / 2 - (v - yMid) * yScale; }}
+
+    // Collect visible points: DB history + today's live points + "now"
     var visible = [];
-    visible.push({{ ms: leftEdgeMs, v: liveNav }});  // left anchor always flat
-    for (var i = 0; i < _navPts.length; i++) {{
-      var _pt = _navPts[i];
-      if (_pt.ms > _sessionStart && _pt.ms > leftEdgeMs && _pt.ms < nowMs) {{
-        visible.push({{ ms: _pt.ms, v: _pt.v }});
+    // Seed: last DB point before the window left edge (so line starts at canvas left, not mid-air)
+    var seedV = null;
+    for (var si = _navHist.length - 1; si >= 0; si--) {{
+      if (_navHist[si].ms <= leftEdgeMs) {{ seedV = _navHist[si].v; break; }}
+    }}
+    if (seedV !== null) visible.push({{ ms: leftEdgeMs, v: seedV }});
+    // DB history within the window
+    for (var hi = 0; hi < _navHist.length; hi++) {{
+      if (_navHist[hi].ms > leftEdgeMs && _navHist[hi].ms < nowMs) {{
+        visible.push({{ ms: _navHist[hi].ms, v: _navHist[hi].v }});
       }}
     }}
-    visible.push({{ ms: nowMs, v: liveNav }});  // right anchor always at current NAV
+    // Live intraday points within the window
+    for (var li = 0; li < _navLive.length; li++) {{
+      if (_navLive[li].ms > leftEdgeMs && _navLive[li].ms < nowMs) {{
+        visible.push({{ ms: _navLive[li].ms, v: _navLive[li].v }});
+      }}
+    }}
+    // Sort by time (hist + live are both sorted, but interleave for safety)
+    visible.sort(function(a,b){{ return a.ms - b.ms; }});
+    // "Now" endpoint — smoothed live value at W/2
+    visible.push({{ ms: nowMs, v: liveNav }});
 
-    if (visible.length < 2) {{ window._navOrbFracX=orbFracX; window._navOrbFracY=0.5; return; }}
+    if (visible.length < 2) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // ── Fixed Y scale — permanently anchored to portfolio baseline.
-    // Historical points NEVER change their Y position after being drawn.
-    // The orb drifts up (profit) or down (loss) relative to the baseline midline.
-    // Scale: ±1% of baseline = ±40% of canvas height.
-    var _baseline = window._portfolioBaseline || 100000;
-    var _halfRange = _baseline * 0.01; // $1k for $100k portfolio; scales with portfolio size
-    var yScale = (H * 0.40) / _halfRange;
-    function ty(v) {{ return H / 2 - (v - _baseline) * yScale; }}
+    var orbY = ty(liveNav);
 
-    // Smooth the "now" orb position with a fast EMA so it drifts rather than snaps
-    window._navSmoothedNav = window._navSmoothedNav
-      ? 0.08 * liveNav + 0.92 * window._navSmoothedNav
-      : liveNav;
-    var drawNav = window._navSmoothedNav;
-    var orbY = ty(drawNav);
-
-    window._navOrbFracX = orbFracX;
+    window._navOrbFracX = 0.5;
     window._navOrbFracY = Math.max(0.05, Math.min(0.95, orbY / H));
 
     // Map to canvas coords — historical points use fixed ty(), now-point uses smoothed orb Y
