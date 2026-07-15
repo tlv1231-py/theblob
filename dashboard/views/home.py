@@ -6048,11 +6048,30 @@ setTimeout(function() {{
     }}, '*');
   }}
 
+  function _isNYSEOpen() {{
+    var now = new Date();
+    // Convert to ET
+    var etStr = now.toLocaleString('en-US', {{timeZone: 'America/New_York'}});
+    var et = new Date(etStr);
+    var day = et.getDay(); // 0=Sun, 6=Sat
+    if (day === 0 || day === 6) return false;
+    var h = et.getHours(), m = et.getMinutes();
+    var mins = h * 60 + m;
+    return mins >= 570 && mins < 960; // 9:30am–4:00pm ET
+  }}
+
   function bcSubmit() {{
     var sym = (document.getElementById('bc-sym').value || '').trim().toUpperCase();
     var amt = parseFloat(document.getElementById('bc-amt').value || 0);
     if (!sym) {{ bcStatus('⚠ enter a ticker', '#ff9900'); return; }}
     if (!amt || amt <= 0) {{ bcStatus('⚠ enter dollar amount', '#ff9900'); return; }}
+
+    // Block NYSE equities outside market hours
+    var isCrypto = sym.indexOf('/') !== -1;
+    if (!isCrypto && !_isNYSEOpen()) {{
+      bcStatus('⚠ NYSE closed · crypto only', '#ff9900');
+      return;
+    }}
 
     var btn = document.getElementById('bc-buy');
     if (btn) btn.disabled = true;
@@ -6060,11 +6079,10 @@ setTimeout(function() {{
 
     _submitOrder(sym, 'buy', amt, amt);
 
-    // Optimistic entrance — tile appears immediately, reconciles on next poll
-    var isCrypto = sym.indexOf('/') !== -1;
+    // Optimistic tile — only create if tile doesn't already exist (avoid value overwrite)
     var _TICKER_PAL_JS = ['#00e5ff','#9400ff','#ff9900','#e040fb','#40c4ff','#b2ff59','#ff6b35','#00ffcc'];
     var col = _TICKER_PAL_JS[sym.split('').reduce(function(a,c){{return a+c.charCodeAt(0);}},0) % _TICKER_PAL_JS.length];
-    if (window._etUpsert) {{
+    if (window._etUpsert && !(window._etBySym||{{}})[sym]) {{
       window._etUpsert({{
         sym: sym, col: col, val: amt, pnl: 0, pnlPct: 0,
         entry: 0, qty: 0, stop: 0, target: 0, curPrice: 0,
