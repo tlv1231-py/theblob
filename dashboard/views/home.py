@@ -1137,7 +1137,7 @@ def _build_daw_html(data: dict) -> str:
 <meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@700;900&family=Bangers&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@700;900&family=Bangers&family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 html {{
@@ -1703,7 +1703,7 @@ body::after {{
 .hud-timer.hud-imminent {{ color:#ff3366; animation:q-pulse .5s ease-in-out infinite; }}
 @keyframes q-pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
 /* ── Report panel — Alpaca wallet display ── */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Press+Start+2P&family=Bangers&family=Silkscreen:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Press+Start+2P&family=Bangers&family=Silkscreen:wght@400;700&family=VT323&display=swap');
 #report-panel {{
   flex:1.4; min-width:200px; max-width:460px;
   background:#000308; display:flex; flex-direction:column;
@@ -4459,47 +4459,34 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = window._lastKnownNav;
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // DB-driven line. Reads nav_snapshots rows fetched every 30s.
+    // All DB points + live point — no time windowing, just show everything.
     var pts = window._navDbPts || [];
-    var nowMs = Date.now();
-    var windowMs = window._navWindowMs || (8 * 3600 * 1000);
-    var leftEdgeMs = nowMs - windowMs;
-
-    // Build visible points — absolute NAV, no delta math
-    var visible = [];
+    var allPts = [];
     for (var i = 0; i < pts.length; i++) {{
-      var ms = new Date(pts[i].t).getTime();
-      if (ms >= leftEdgeMs) visible.push({{ ms: ms, v: pts[i].v }});
+      allPts.push({{ ms: new Date(pts[i].t).getTime(), v: pts[i].v }});
     }}
-    visible.push({{ ms: nowMs, v: liveNav }});
-    if (visible.length < 2) visible.unshift({{ ms: leftEdgeMs, v: liveNav }});
+    allPts.push({{ ms: Date.now(), v: liveNav }});
+    if (allPts.length < 2) {{ allPts.unshift({{ ms: Date.now() - 60000, v: liveNav }}); }}
 
-    // X: full canvas width. Left edge = oldest, right edge = now.
-    function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * W; }}
+    var t0 = allPts[0].ms, t1 = allPts[allPts.length-1].ms;
+    var tSpan = Math.max(t1 - t0, 1);
+    function tx(ms) {{ return (ms - t0) / tSpan * (W - 16) + 8; }}
 
-    // Y: smooth-tracking scale. Both expand and contract at the same gentle rate
-    // so no jump ever happens — the scale drifts to fit the data.
-    var rawLo = liveNav, rawHi = liveNav;
-    for (var vi = 0; vi < visible.length; vi++) {{
-      if (visible[vi].v < rawLo) rawLo = visible[vi].v;
-      if (visible[vi].v > rawHi) rawHi = visible[vi].v;
+    // Y: fit to all visible data, no smoothing.
+    var lo = liveNav, hi = liveNav;
+    for (var vi = 0; vi < allPts.length; vi++) {{
+      if (allPts[vi].v < lo) lo = allPts[vi].v;
+      if (allPts[vi].v > hi) hi = allPts[vi].v;
     }}
-    var span = Math.max(rawHi - rawLo, liveNav * 0.0005);
-    var pad  = span * 0.3;
-    rawLo -= pad; rawHi += pad;
-    if (window._navYLo === undefined) {{ window._navYLo = rawLo; window._navYHi = rawHi; }}
-    window._navYLo += (rawLo - window._navYLo) * 0.008;
-    window._navYHi += (rawHi - window._navYHi) * 0.008;
-    var lo = window._navYLo, hi = window._navYHi;
-    function ty(v) {{ return H - ((v - lo) / (hi - lo || 1)) * H * 0.88 - H * 0.06; }}
+    var pad = Math.max(hi - lo, liveNav * 0.001) * 0.2;
+    lo -= pad; hi += pad;
+    function ty(v) {{ return H - ((v - lo) / (hi - lo)) * (H - 20) - 10; }}
 
     // Map to canvas coords
     var mapped = [];
-    for (var mi = 0; mi < visible.length; mi++) {{
-      mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
+    for (var mi = 0; mi < allPts.length; mi++) {{
+      mapped.push({{ x: tx(allPts[mi].ms), y: ty(allPts[mi].v) }});
     }}
-    // Dot is always the last point — leave a small margin from hard right edge
-    mapped[mapped.length-1].x = W - 8;
     if (mapped.length < 2) return;
 
     // Orb tracks the dot's actual SCREEN position as a fraction of the full page.
@@ -7280,8 +7267,8 @@ setTimeout(function() {{
       if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
       if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
 
-      var _F1 = '700 11px Orbitron,monospace'; // ticker + value
-      var _F2 = '400 9px Orbitron,monospace';  // entry, pnl, timer
+      var _F1 = '700 16px VT323,monospace'; // ticker + value  (VT323 is a DOS VGA 437 revival)
+      var _F2 = '400 14px VT323,monospace'; // entry, pnl, timer
 
       // ── ROW 1 left: SYM ──
       ctx.font = _F1;
@@ -7600,14 +7587,14 @@ setTimeout(function() {{
     // document.fonts.load() triggers a real load, and the warm-up fillText
     // forces the browser to finish rasterizing the glyphs before first draw.
     Promise.all([
-      document.fonts.load('700 11px Orbitron'),
-      document.fonts.load('400 9px Orbitron')
+      document.fonts.load('700 16px VT323'),
+      document.fonts.load('400 14px VT323')
     ]).then(function() {{
       var _tmp = document.createElement('canvas');
       var _tc = _tmp.getContext('2d');
-      _tc.font = '700 11px Orbitron';
+      _tc.font = '700 16px VT323';
       _tc.fillText('BTC', 0, 10);
-      _tc.font = '400 9px Orbitron';
+      _tc.font = '400 14px VT323';
       _tc.fillText('BTC', 0, 10);
       requestAnimationFrame(_etRafLoop);
     }});
