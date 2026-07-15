@@ -4476,7 +4476,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   if (!_nc) return;
   var _dpr = window.devicePixelRatio || 1;
 
-  // Margins — leave room for Y-axis labels on left, X labels at bottom
+  // Margins — computed dynamically each draw to avoid overlays
   var _ML = 64, _MR = 20, _MT = 28, _MB = 32;
 
   function _resize() {{
@@ -4519,14 +4519,15 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
     ctx.clearRect(0, 0, W, H);
 
-    // Diagnostic beacon — center of chart, visible above any overlay
-    ctx.fillStyle = '#ff00cc';
-    ctx.fillRect(W/2 - 4, H/2 - 4, 8, 8);
-    ctx.font = 'bold 12px Consolas'; ctx.fillStyle = '#ff00cc'; ctx.textAlign='center';
-    ctx.fillText('canvas OK  W='+Math.round(W)+'  H='+Math.round(H)+'  nav='+(window._lastKnownNav||'NULL'), W/2, H/2 - 10);
+    // Dynamic margins: leave room for feed overlay (left) and holdings panel (right)
+    var feedEl = document.getElementById('feed-overlay');
+    var tileEl = document.getElementById('pos-overlay');
+    _ML = feedEl ? Math.min(feedEl.offsetWidth + 8, W * 0.35) : 64;
+    _MR = tileEl ? Math.min(tileEl.offsetWidth + 16, W * 0.55) : 20;
+    _MT = 28; _MB = 32;
 
-    var liveNav = window._lastKnownNav;
-    if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    var liveNav = parseFloat(window._lastKnownNav);
+    if (!liveNav || isNaN(liveNav)) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
     // Time window: rolling, anchored to now
     var winMs   = window._navWindowMs || 4 * 3600 * 1000;
@@ -4568,13 +4569,13 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     for (var ti = 0; ti <= nTicks; ti++) {{
       var yv  = lo + (hi - lo) * ti / nTicks;
       var yy  = ty(yv);
-      ctx.strokeStyle = 'rgba(42,0,61,0.55)';
+      ctx.strokeStyle = 'rgba(140,60,200,0.25)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 5]);
       ctx.beginPath(); ctx.moveTo(cx0, yy); ctx.lineTo(cx1, yy); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#3a1a4a';
-      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 - 6, yy + 3.5);
+      ctx.fillStyle = 'rgba(200,160,255,0.7)';
+      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 - 4, yy + 3.5);
     }}
 
     // ── X-axis time labels ─────────────────────────────────────────────────
@@ -4587,7 +4588,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       var hh   = xd.getHours() % 12 || 12;
       var mm   = ('0' + xd.getMinutes()).slice(-2);
       var ampm = xd.getHours() < 12 ? 'a' : 'p';
-      ctx.fillStyle = '#2a1040';
+      ctx.fillStyle = 'rgba(180,130,255,0.6)';
       ctx.fillText(hh + ':' + mm + ampm, xx, cy1 + 18);
     }}
 
@@ -4646,8 +4647,12 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
 
     // ── Orb position for pulse canvas ──────────────────────────────────────
-    var tipX = n ? m[n-1].x : cx0 + cW / 2;
-    var tipY = n ? m[n-1].y : cy0 + cH / 2;
+    // When only 1 point (no history yet), center the dot in the visible area
+    var tipX = (n > 1) ? m[n-1].x : (cx0 + cW * 0.85);
+    var tipY = (n > 0) ? m[n-1].y : (cy0 + cH * 0.5);
+    // Clamp dot to visible chart area (keep it from landing behind tiles)
+    tipX = Math.max(cx0 + 10, Math.min(tipX, cx1 - 10));
+    tipY = Math.max(cy0 + 10, Math.min(tipY, cy1 - 10));
     var ncRect = _nc.getBoundingClientRect();
     var scrX = ncRect.left + tipX * (ncRect.width  / W);
     var scrY = ncRect.top  + tipY * (ncRect.height / H);
@@ -4666,11 +4671,22 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
 
+    // ── "Building history" label when no trail yet ─────────────────────────
+    if (n < 2) {{
+      ctx.font = '11px Consolas,monospace';
+      ctx.fillStyle = 'rgba(160,80,255,0.45)';
+      ctx.textAlign = 'center';
+      ctx.fillText('building history…', cx0 + cW * 0.5, cy1 - 20);
+    }}
+
     // ── Current value callout ───────────────────────────────────────────────
     var valStr = '$' + liveNav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
     ctx.font = 'bold 13px Consolas,monospace';
     var tw = ctx.measureText(valStr).width;
-    var lx = Math.min(tipX + 14, W - _MR - tw - 6);
+    // Keep callout inside chart area: prefer right of dot, fall back left
+    var lx = tipX + 14;
+    if (lx + tw + 4 > cx1) lx = tipX - tw - 18;
+    lx = Math.max(cx0 + 2, lx);
     var ly = Math.max(cy0 + 16, Math.min(tipY + 4, cy1 - 6));
     // Pill background (manual rounded rect — roundRect not in all Chrome versions)
     ctx.fillStyle = 'rgba(8,0,18,0.85)';
