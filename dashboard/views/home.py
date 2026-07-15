@@ -4198,10 +4198,45 @@ document.addEventListener('fullscreenchange', function() {{
   // ── Canonical ticker color system ────────────────────────────────────────────
   // Single palette + override map shared by every _symCol site in this file.
   // Override map wins over hash — keeps colliding tickers visually distinct.
+  // Override map is persisted to Supabase ticker_colors table so it survives
+  // across sessions and machines.
   var PALETTE = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
   window._TICKER_OVR = {{ ETH:'#e040fb', CRV:'#f7b731', XTZ:'#00bfff', NUE:'#ff4dd2' }};
   function _hashCol(s) {{ var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
   function symCol(s) {{ var c=s.replace('/USD','').replace('USD',''); return window._TICKER_OVR[c]||_hashCol(c); }}
+
+  // Load persisted colors from Supabase on startup — overwrites defaults
+  (function() {{
+    fetch(SUPA_URL + '/rest/v1/ticker_colors?select=ticker,color',
+      {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+    .then(function(r) {{ return r.ok ? r.json() : null; }})
+    .then(function(rows) {{
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function(row) {{
+        if (row.ticker && row.color) window._TICKER_OVR[row.ticker] = row.color;
+      }});
+      // Re-tint any already-painted canvas tiles
+      (window._ET||[]).forEach(function(t) {{
+        var c = t.sym.replace('/USD','').replace('USD','');
+        if (window._TICKER_OVR[c]) t.col = window._TICKER_OVR[c];
+      }});
+    }}).catch(function() {{}});
+  }})();
+
+  // Persist a single color override to Supabase
+  window._saveTickerColor = function(ticker, color) {{
+    fetch(SUPA_URL + '/rest/v1/ticker_colors',
+      {{
+        method: 'POST',
+        headers: {{
+          'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+        }},
+        body: JSON.stringify({{ ticker: ticker, color: color }}),
+      }}
+    ).catch(function() {{}});
+  }};
 
   var particles = [];
   var MAX_P = 60;
@@ -4485,24 +4520,28 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = window._lastKnownNav;
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // All DB points + live point — no time windowing, just show everything.
+    // Anchor: the first time we have a live value defines "session start."
+    // The dot starts at canvas center and moves right as time accumulates.
+    // After half a session-window (15min default) has elapsed, the window
+    // starts scrolling normally and the dot stays near the right edge.
+    var halfSpan = 15 * 60 * 1000;
+    if (!window._navSessionT0) window._navSessionT0 = Date.now();
+    var _sT0 = window._navSessionT0;
+    // Window: from (sT0 - halfSpan) to max(now, sT0 + halfSpan)
+    // This centers the dot at session start, then grows the window rightward.
+    var now_ms = Date.now();
+    var t0 = _sT0 - halfSpan;
+    var t1 = Math.max(now_ms, _sT0 + halfSpan);
+
+    // Merge DB points into the visible window
     var pts = window._navDbPts || [];
     var allPts = [];
     for (var i = 0; i < pts.length; i++) {{
-      allPts.push({{ ms: new Date(pts[i].t).getTime(), v: pts[i].v }});
+      var ms = new Date(pts[i].t).getTime();
+      if (ms >= t0 && ms <= t1) allPts.push({{ ms: ms, v: pts[i].v }});
     }}
-    allPts.push({{ ms: Date.now(), v: liveNav }});
-
-    var t1 = allPts[allPts.length-1].ms;
-    var t0 = allPts[0].ms;
-    // Enforce a minimum visible window: at least 30 min so a fresh session
-    // doesn't squish all points to the right edge.
-    var minSpan = 30 * 60 * 1000;
-    if (t1 - t0 < minSpan) {{ t0 = t1 - minSpan; }}
-    // Filter to points within window, then re-add live point
-    allPts = allPts.filter(function(p) {{ return p.ms >= t0; }});
-    if (!allPts.length) allPts = [{{ ms: t0, v: liveNav }}];
-    allPts.push({{ ms: t1, v: liveNav }});
+    // Always add the live point at now
+    allPts.push({{ ms: now_ms, v: liveNav }});
 
     var tSpan = t1 - t0;
     function tx(ms) {{ return (ms - t0) / tSpan * (W - 16) + 8; }}
@@ -4522,7 +4561,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     for (var mi = 0; mi < allPts.length; mi++) {{
       mapped.push({{ x: tx(allPts[mi].ms), y: ty(allPts[mi].v) }});
     }}
-    if (mapped.length < 2) return;
+    if (!mapped.length) return;
 
     // Orb tracks the dot's actual SCREEN position as a fraction of the full page.
     // Nav canvas is only the left panel — must convert to page coordinates so the
@@ -7748,11 +7787,12 @@ setTimeout(function() {{
         document.body.appendChild(p);
         _popup = p;
 
-        // Color picker — updates tiles, terminal feed spans, and popup header live
+        // Color picker — updates tiles, terminal feed spans, popup header, and saves to DB
         p.querySelector('#tp-colorpick').addEventListener('input', function(e) {{
           var newCol = e.target.value;
           if (!window._TICKER_OVR) window._TICKER_OVR = {{}};
           window._TICKER_OVR[clean] = newCol;
+          if (window._saveTickerColor) window._saveTickerColor(clean, newCol);
           // Canvas tiles
           (window._ET||[]).forEach(function(t) {{
             if (t.sym.replace('/USD','').replace('USD','') === clean) t.col = newCol;
@@ -7788,7 +7828,7 @@ setTimeout(function() {{
             el.innerHTML = '<div style="color:#3a1a5a">no fills found</div>'; return;
           }}
           el.innerHTML = rows.map(function(f) {{
-            var side = f.side === 'buy' ? '<span style="color:#00b4ff">enter</span>' : '<span style="color:#ff9900">exit</span>';
+            var side = (f.side||'').toUpperCase() === 'BUY' ? '<span style="color:#00b4ff">enter</span>' : '<span style="color:#ff9900">exit</span>';
             var price = f.fill_price < 1 ? '$'+parseFloat(f.fill_price).toFixed(4) : '$'+parseFloat(f.fill_price).toLocaleString('en-US',{{maximumFractionDigits:2}});
             var qty   = parseFloat(f.qty || f.quantity || 0);
             var t     = new Date(f.filled_at);
