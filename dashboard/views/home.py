@@ -4503,20 +4503,19 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
 
     if (visible.length < 2) {{ window._navOrbFracX=orbFracX; window._navOrbFracY=0.5; return; }}
 
-    // Y: auto-scale to fit all visible values with 20% padding
-    var minV = Infinity, maxV = -Infinity;
+    // Y: pin liveNav at H/2 (orb always centered vertically); history scales relative to it
+    var maxDev = 0;
     for (var vi = 0; vi < visible.length; vi++) {{
-      if (visible[vi].v < minV) minV = visible[vi].v;
-      if (visible[vi].v > maxV) maxV = visible[vi].v;
+      var dev = Math.abs(visible[vi].v - liveNav);
+      if (dev > maxDev) maxDev = dev;
     }}
-    var range = maxV - minV || liveNav * 0.005 || 100;
-    var pad   = range * 0.25;
-    var vLo   = minV - pad, vHi = maxV + pad;
-    function ty(v) {{ return H - (v - vLo) / (vHi - vLo) * H; }}
+    if (maxDev < 1) maxDev = liveNav * 0.002 || 50;
+    var yScale = (H * 0.42) / maxDev; // 42% of half-height per deviation unit
+    function ty(v) {{ return H / 2 - (v - liveNav) * yScale; }}
 
-    var orbY = ty(liveNav);
-    window._navOrbFracX = orbFracX;   // visual center of chart between panels
-    window._navOrbFracY = Math.max(0.02, Math.min(0.98, orbY / H));
+    var orbY = H / 2;  // always centered
+    window._navOrbFracX = orbFracX;
+    window._navOrbFracY = 0.5;         // force orb to vertical center
 
     // Map to canvas coords; final point pinned to chart right edge
     var mapped = [];
@@ -4526,10 +4525,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     mapped.push({{ x: _nowPx, y: orbY }});
     if (mapped.length < 2) return;
 
-    // Y-axis labels
+    // Y-axis labels (relative to liveNav)
     (function() {{
-      var base = (vLo + vHi) / 2;
-      var halfRange = (vHi - vLo) / 2;
       var fmt = function(v) {{
         if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
         return '$' + v.toFixed(0);
@@ -4538,7 +4535,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.setLineDash([3,7]); ctx.lineWidth=1;
       ctx.font='8px Consolas,monospace'; ctx.textBaseline='bottom';
       [-0.6,-0.3,0.3,0.6].forEach(function(lvl) {{
-        var val=base+halfRange*lvl, yy=ty(val);
+        var val = liveNav + maxDev * lvl;
+        var yy  = ty(val);
         if(yy<6||yy>H-6) return;
         ctx.strokeStyle='rgba(255,0,204,0.07)';
         ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy); ctx.stroke();
@@ -6936,18 +6934,33 @@ setTimeout(function() {{
       var sbH = stratBar ? stratBar.offsetHeight : 46;
       var availH = window.innerHeight - sbH - 4;
       var perCol = Math.max(1, Math.floor(availH / _EQ_H));
-      var liveTiles = _ET.filter(function(t) {{ return t.phase !== 'done'; }});
-      var numCols = Math.max(1, Math.ceil(liveTiles.length / perCol));
-      return {{ perCol: perCol, numCols: numCols, availH: availH, live: liveTiles }};
+      var crypto = _ET.filter(function(t) {{ return t.phase !== 'done' && t.isCrypto; }});
+      var equity = _ET.filter(function(t) {{ return t.phase !== 'done' && !t.isCrypto; }});
+      var cryptoCols = Math.max(1, Math.ceil(crypto.length / perCol));
+      var equityCols = equity.length > 0 ? Math.max(1, Math.ceil(equity.length / perCol)) : 0;
+      var totalCols  = cryptoCols + equityCols;
+      return {{ perCol: perCol, totalCols: totalCols, cryptoCols: cryptoCols, equityCols: equityCols,
+                crypto: crypto, equity: equity, availH: availH,
+                live: crypto.concat(equity) }};
     }}
 
-    function _etTilePos(idx, layout) {{
-      // Columns grow leftward: rightmost column = column 0
-      var col = Math.floor(idx / layout.perCol);
-      var row = idx % layout.perCol;
-      var x = (layout.numCols - 1 - col) * _EQ_W;
-      var y = row * _EQ_H;
-      return {{ x: x, y: y }};
+    function _etTilePos(t, layout) {{
+      // Crypto: rightmost columns (col 0 = far right)
+      // Equity: columns just left of crypto (separated by 2px gap)
+      if (t.isCrypto) {{
+        var ci  = layout.crypto.indexOf(t);
+        var col = Math.floor(ci / layout.perCol);
+        var row = ci % layout.perCol;
+        var x   = (layout.totalCols - 1 - col) * _EQ_W;
+        return {{ x: x, y: row * _EQ_H }};
+      }} else {{
+        var ei  = layout.equity.indexOf(t);
+        var col2 = Math.floor(ei / layout.perCol);
+        var row2 = ei % layout.perCol;
+        // Equity columns sit to the LEFT of crypto columns
+        var x2  = (layout.equityCols - 1 - col2) * _EQ_W;
+        return {{ x: x2, y: row2 * _EQ_H }};
+      }}
     }}
 
     var _etCanvas = null, _etCtx = null;
@@ -6965,7 +6978,7 @@ setTimeout(function() {{
     function _etResize() {{
       if (!_etCanvas) return;
       var layout = _etLayout();
-      var cw = _EQ_W * layout.numCols;
+      var cw = _EQ_W * layout.totalCols;
       var ch = layout.availH;
       if (_etCanvas.width !== cw || _etCanvas.height !== ch) {{
         _etCanvas.width  = cw;
@@ -6986,17 +6999,25 @@ setTimeout(function() {{
       ctx.clearRect(0, 0, _etCanvas.width, _etCanvas.height);
 
       var now = Date.now();
-      var liveTiles = layout.live;
+      var lerpK = 0.10; // lerp speed per frame (~30fps → ~3s to converge)
 
-      for (var i = 0; i < liveTiles.length; i++) {{
-        var t = liveTiles[i];
-        var pos = _etTilePos(i, layout);
+      var allLive = layout.crypto.concat(layout.equity);
+      for (var i = 0; i < allLive.length; i++) {{
+        var t = allLive[i];
+        var pos = _etTilePos(t, layout);
         var x = pos.x, y = pos.y;
         var age = now - t.phaseStart;
 
+        // Lerp display values toward actual values (smooths batch-update flashes)
+        if (t._dVal   === undefined) t._dVal   = t.val;
+        if (t._dPnl   === undefined) t._dPnl   = t.pnl;
+        if (t._dPnlPct=== undefined) t._dPnlPct= t.pnlPct;
+        t._dVal    += (t.val    - t._dVal)    * lerpK;
+        t._dPnl    += (t.pnl   - t._dPnl)    * lerpK;
+        t._dPnlPct += (t.pnlPct- t._dPnlPct) * lerpK;
+
         if (t.phase === 'entering') {{
-          // 8-step opacity ramp over 320ms
-          var step = Math.floor(age / 40);
+          var step  = Math.floor(age / 40);
           var alpha = Math.min(1, step / 8);
           ctx.globalAlpha = alpha;
           _etPaintTile(ctx, t, x, y, ts);
@@ -7006,73 +7027,53 @@ setTimeout(function() {{
         }} else if (t.phase === 'live') {{
           _etPaintTile(ctx, t, x, y, ts);
 
-        }} else if (t.phase === 'exit-flash') {{
-          // White flash: bright overlay steps down to zero over 200ms
+        }} else if (t.phase === 'bit-crush') {{
+          // Bitcrusher exit: pixels decay in increasing block-size quantization steps
+          var crushT = Math.min(1, age / 1000);
           _etPaintTile(ctx, t, x, y, ts);
-          var flashStep = Math.floor(age / 28);  // 7 steps = 196ms
-          var flashAlpha = Math.max(0, 1 - flashStep / 7);
-          ctx.fillStyle = 'rgba(255,255,255,' + flashAlpha + ')';
-          ctx.fillRect(x, y, _EQ_W, _EQ_H);
-          if (age > 200) {{
-            t.phase = 'pnl-ghost';
-            t.phaseStart = now;
-            // Spawn particles at canvas-relative screen position
-            if (_etCanvas) {{
-              var cr = _etCanvas.getBoundingClientRect();
-              _spawnParticles(
-                cr.left + x + _EQ_W / 2,
-                cr.top  + y + _EQ_H / 2,
-                t.pnl >= 0 ? '#00ff9d' : '#ff3366'
-              );
+
+          // Progressive pixel-block overlay — block size grows as crush progresses
+          var bSz = Math.max(1, Math.round(crushT * crushT * 10));
+          for (var by = 0; by < _EQ_H; by += bSz) {{
+            for (var bx2 = 0; bx2 < _EQ_W; bx2 += bSz) {{
+              if (Math.random() < crushT * 1.3) {{
+                ctx.fillStyle = Math.random() < 0.12
+                  ? (t.exitPnl >= 0 ? 'rgba(0,255,157,0.5)' : 'rgba(255,51,102,0.5)')
+                  : 'rgba(0,0,0,' + (0.5 + crushT * 0.5) + ')';
+                ctx.fillRect(x + bx2, y + by, bSz, bSz);
+              }}
             }}
           }}
 
-        }} else if (t.phase === 'pnl-ghost') {{
-          // Ghost: dim tile background, large P&L text centered, fade out at end
-          var ghostAge = now - t.phaseStart;
-          var ghostFade = ghostAge < 2400 ? 1 : Math.max(0, 1 - (ghostAge - 2400) / 400);
-          ctx.globalAlpha = ghostFade;
-
-          // Subtle dark background
-          ctx.fillStyle = 'rgba(0,0,8,0.5)';
-          ctx.fillRect(x, y, _EQ_W, _EQ_H);
-          // Thin left border in ticker color
-          ctx.fillStyle = t.col;
-          ctx.globalAlpha = ghostFade * 0.4;
-          ctx.fillRect(x, y, 2, _EQ_H);
-          ctx.globalAlpha = ghostFade;
-
-          var pnlCol = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
-          var absP = Math.abs(t.exitPnl);
-          var sign = t.exitPnl >= 0 ? '+' : '−';
-          var pnlStr = sign + '$' + (absP >= 1000 ? (absP/1000).toFixed(1)+'k' : absP.toFixed(2));
-
-          // Sym label (tiny, dim)
-          ctx.fillStyle = 'rgba(255,255,255,0.25)';
-          ctx.font = '7px Consolas,monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(t.sym, x + _EQ_W/2, y + _EQ_H/2 - 12);
-
-          // P&L value (large, glowing)
-          ctx.shadowColor = pnlCol;
-          ctx.shadowBlur = 14;
-          ctx.fillStyle = pnlCol;
-          ctx.font = 'bold 15px Consolas,monospace';
-          ctx.fillText(pnlStr, x + _EQ_W/2, y + _EQ_H/2 + 5);
-          ctx.shadowBlur = 0;
-
-          ctx.globalAlpha = 1;
-          ctx.textAlign = 'left';
-
-          if (ghostAge > 2800) {{
-            t.phase = 'done';
-            _etDirty = true;
+          // PnL ghost text: peaks at 30-60% then fades out
+          var textA = crushT < 0.3 ? crushT/0.3 : Math.max(0, 1-(crushT-0.3)/0.7);
+          if (textA > 0.05) {{
+            var ec = t.exitPnl >= 0 ? '#00ff9d' : '#ff3366';
+            var ep = Math.abs(t.exitPnl);
+            var es = (t.exitPnl >= 0 ? '+$' : '-$') + (ep >= 1000 ? (ep/1000).toFixed(1)+'k' : ep.toFixed(0));
+            ctx.save();
+            ctx.globalAlpha = textA;
+            ctx.shadowColor = ec; ctx.shadowBlur = 12;
+            ctx.fillStyle = ec;
+            ctx.font = 'bold 14px Consolas,monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(es, x + _EQ_W/2, y + _EQ_H/2 + 5);
+            ctx.textAlign = 'left';
+            ctx.restore();
           }}
+
+          if (crushT >= 1) {{ t.phase = 'done'; _etDirty = true; }}
         }}
-        // 'done' tiles are excluded by liveTiles filter
+        // 'done' tiles excluded by live filter
       }}
 
-      // Sync overlay width from canvas tile count
+      // Draw equity/crypto separator if both types present
+      if (layout.equityCols > 0 && layout.cryptoCols > 0) {{
+        var sepX = layout.equityCols * _EQ_W;
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(sepX, 0, 2, layout.availH);
+      }}
+
       _updateOverlayWidth();
     }}
 
@@ -7125,7 +7126,12 @@ setTimeout(function() {{
       ctx.fillStyle = badgeCol;
       ctx.fillText(badgeText, lx + 6 + symW + 3, r1y);
 
-      var valStr = '$' + (t.val||0).toLocaleString('en-US',{{maximumFractionDigits:0}});
+      // Use lerped display values for smooth updates
+      var dVal    = t._dVal    !== undefined ? t._dVal    : (t.val    || 0);
+      var dPnl    = t._dPnl   !== undefined ? t._dPnl    : (t.pnl    || 0);
+      var dPnlPct = t._dPnlPct!== undefined ? t._dPnlPct : (t.pnlPct || 0);
+
+      var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
       ctx.font = 'bold 10px Consolas,monospace';
       ctx.fillStyle = t._valFlash ? (t._valFlash > 0 ? '#00ff9d' : '#ff3366') : '#ffffff';
       ctx.textAlign = 'right';
@@ -7133,111 +7139,69 @@ setTimeout(function() {{
       ctx.textAlign = 'left';
       if (t._valFlash) {{ t._valFlash = 0; }}
 
-      // ── ROW 2 (y+26): P&L · % ──
-      var r2y = y + 26;
-      var pnlCol  = (t.pnl||0) >= 0 ? '#00c87a' : '#e03355';
-      var pnlSign = (t.pnl||0) >= 0 ? '+' : '-';
-      var absP    = Math.abs(t.pnl||0);
-      var pct     = t.pnlPct || 0;
+      // ── ROW 2 (y+30): P&L · % ──
+      var r2y = y + 30;
+      var pnlCol  = dPnl >= 0 ? '#00c87a' : '#e03355';
+      var pnlSign = dPnl >= 0 ? '+' : '-';
+      var absP    = Math.abs(dPnl);
+      var pct     = dPnlPct;
       ctx.font = '10px Consolas,monospace';
       ctx.fillStyle = pnlCol;
-      var pnlStr = pnlSign + '$' + absP.toLocaleString('en-US',{{maximumFractionDigits:0}});
+      var pnlStr = pnlSign + '$' + Math.round(absP).toLocaleString('en-US');
       ctx.fillText(pnlStr, lx, r2y);
       var pnlStrW = ctx.measureText(pnlStr).width;
       ctx.font = '8px Consolas,monospace';
       ctx.fillStyle = 'rgba(200,200,200,0.4)';
       ctx.fillText(' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)', lx + pnlStrW, r2y);
 
-      // ── ROW 3 (y+37–45): PROXIMITY BAR ──
-      if (t.entry > 0 && t.stop > 0) {{
-        var tgt  = t.target > 0 ? t.target : t.entry * 1.008;
-        var cur  = t.curPrice > 0 ? t.curPrice : t.entry;
-        var rng  = tgt - t.stop;
-        var prox = rng > 0 ? Math.max(0, Math.min(1, (cur - t.stop) / rng)) : 0.5;
-        var barX = lx, barW = W - lx - 5;
-        var r3labelY = y + 37, r3barY = y + 42;
-        var fillCol  = prox < 0.33 ? '#a03050' : prox < 0.66 ? '#4080b0' : '#00a060';
-
-        // Stop / target labels
-        ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = 'rgba(200,200,210,0.3)';
-        ctx.fillText(t.stop < 1 ? '$'+t.stop.toFixed(4) : '$'+t.stop.toFixed(2), barX, r3labelY);
-        ctx.textAlign = 'right';
-        ctx.fillText(tgt < 1 ? '$'+tgt.toFixed(4) : '$'+tgt.toFixed(2), x + W - 5, r3labelY);
-        ctx.textAlign = 'left';
-
-        // Segmented bar (10 blocks)
-        var nB = 10, bkW = Math.floor((barW - (nB - 1)) / nB);
-        for (var bi = 0; bi < nB; bi++) {{
-          ctx.fillStyle = bi < Math.round(prox * nB) ? fillCol : 'rgba(255,255,255,0.07)';
-          ctx.fillRect(barX + bi * (bkW + 1), r3barY, bkW, 3);
-        }}
-
-        // Pixel cursor (4×5)
-        ctx.fillStyle = fillCol;
-        ctx.fillRect(Math.round(barX + barW * prox) - 2, r3barY - 1, 4, 5);
-
-        // Current price at cursor
-        var curStr = cur < 1 ? '$'+cur.toFixed(4) : '$'+cur.toFixed(2);
-        ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = t.col;
-        ctx.textAlign = 'center';
-        ctx.fillText(curStr, Math.max(barX+12, Math.min(x+W-16, barX+barW*prox)), r3labelY);
-        ctx.textAlign = 'left';
-      }}
-
-      // ── ROW 4+: crypto=age bar (no row 5), equity=days/entry + status ──
+      // ── ROW 3 (y+45–48): age bar ──
+      var aBarX = lx, aBarW = W - lx - 5;
+      var r3barY = y + 48;
       if (t.isCrypto) {{
         var ageMs  = t.enteredAt ? (ts - t.enteredAt) : 0;
         var ageHrs = ageMs / 3600000;
         var agePct = Math.min(ageHrs / 4, 1);
         var ageCol = agePct < 0.33 ? '#00c8ff' : agePct < 0.66 ? '#ffaa00' : '#ff2844';
-        var aBarX  = lx, aBarW = W - lx - 5;
-        var r4barY = y + 57, r4txtY = y + 74;
-
-        // Segmented age bar
-        var aN = 10, aBlockW = Math.floor((aBarW - (aN - 1)) / aN);
+        var aN = 10, aBlockW = Math.floor((aBarW - (aN-1)) / aN);
         for (var ai = 0; ai < aN; ai++) {{
-          ctx.fillStyle = ai < Math.round(agePct * aN) ? ageCol : 'rgba(255,255,255,0.07)';
-          ctx.fillRect(aBarX + ai * (aBlockW + 1), r4barY, aBlockW, 3);
+          ctx.fillStyle = ai < Math.round(agePct * aN) ? ageCol : 'rgba(255,255,255,0.06)';
+          ctx.fillRect(aBarX + ai*(aBlockW+1), r3barY, aBlockW, 3);
         }}
-
-        // Age label (left) + entry price (right)
-        var ageLabel = ageMs < 60000 ? '<1m'
-                     : ageMs < 3600000 ? Math.round(ageMs/60000)+'m'
-                     : ageHrs.toFixed(1)+'h';
+        var ageLabel = ageMs < 60000 ? '<1m' : ageMs < 3600000 ? Math.round(ageMs/60000)+'m' : ageHrs.toFixed(1)+'h';
         ctx.font = '7px Consolas,monospace';
         ctx.fillStyle = ageCol;
-        ctx.fillText(ageLabel, lx, r4txtY);
+        ctx.fillText(ageLabel, lx, r3barY + 13);
         if (t.entry > 0) {{
-          ctx.fillStyle = 'rgba(180,180,180,0.35)';
+          ctx.fillStyle = 'rgba(180,180,180,0.3)';
           ctx.textAlign = 'right';
-          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r4txtY);
+          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r3barY+13);
           ctx.textAlign = 'left';
         }}
-
       }} else {{
-        var r4y = y + 57, r5y = y + 73;
-
-        // Row 4: days held + entry price
+        // Days-held bar: fill by days/60 (60-day max)
+        var dayPct = Math.min(1, (t.days||0) / 60);
+        var dCol   = dayPct < 0.33 ? '#00c8ff' : dayPct < 0.66 ? '#ffaa00' : '#ff2844';
+        var dN = 10, dBlockW = Math.floor((aBarW - (dN-1)) / dN);
+        for (var di = 0; di < dN; di++) {{
+          ctx.fillStyle = di < Math.round(dayPct * dN) ? dCol : 'rgba(255,255,255,0.06)';
+          ctx.fillRect(aBarX + di*(dBlockW+1), r3barY, dBlockW, 3);
+        }}
         ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = 'rgba(0,200,220,0.55)';
-        ctx.fillText((t.days||0)+(t.days===1?' day':' days'), lx, r4y);
+        ctx.fillStyle = dCol;
+        ctx.fillText((t.days||0)+(t.days===1?' day':' days'), lx, r3barY+13);
         if (t.entry > 0) {{
           ctx.fillStyle = 'rgba(140,110,170,0.45)';
           ctx.textAlign = 'right';
-          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r4y);
+          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r3barY+13);
           ctx.textAlign = 'left';
         }}
 
-        // Separator
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';
-        ctx.fillRect(x + 2, r5y - 7, W - 4, 1);
-
-        // Row 5: HOLD / EXIT signal status
+        // ── ROW 4 (y+76): HOLD / EXIT signal status ──
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(x+2, y+68, W-4, 1);
         ctx.font = '7px Consolas,monospace';
         ctx.fillStyle = t.inSignal ? 'rgba(0,200,140,0.5)' : 'rgba(220,120,0,0.6)';
-        ctx.fillText(t.holdText || (t.inSignal ? 'HOLD' : 'EXIT'), lx, r5y);
+        ctx.fillText(t.holdText || (t.inSignal ? 'HOLD' : 'EXIT'), lx, y+76);
       }}
     }}
 
@@ -7289,9 +7253,9 @@ setTimeout(function() {{
     // Exit a tile (called by notification handler or poll)
     window._etExit = function(sym, pnl, exitPrice) {{
       var t = _etBySym[sym];
-      if (!t || t.phase === 'exit-flash' || t.phase === 'pnl-ghost' || t.phase === 'done') return;
+      if (!t || t.phase === 'bit-crush' || t.phase === 'done') return;
       t.exitPnl = (pnl !== null && pnl !== undefined) ? pnl : t.pnl;
-      t.phase = 'exit-flash';
+      t.phase = 'bit-crush';
       t.phaseStart = Date.now();
       _etDirty = true;
       // Satellite ejection still uses existing system
@@ -7302,12 +7266,12 @@ setTimeout(function() {{
           sr: t.pnl>=0?0:255, sg: t.pnl>=0?255:51, sb: t.pnl>=0?157:102 }};
         delete _satAngles[_exitSym];
       }}
-      // Clean up after animation completes
+      // Clean up after bit-crush completes (1s animation + margin)
       setTimeout(function() {{
         delete _etBySym[sym];
         _ET = _ET.filter(function(tile) {{ return tile.sym !== sym; }});
         _updateOverlayWidth();
-      }}, 3200);
+      }}, 1400);
     }};
 
     function _updateOverlayWidth() {{
@@ -7317,7 +7281,7 @@ setTimeout(function() {{
       var posLeft = document.getElementById('pos-left');
       if (posLeft) posLeft.style.width = '0';
       var layout = _etLayout();
-      var eqW = layout.numCols * _EQ_W;
+      var eqW = layout.totalCols * _EQ_W;
       overlay.style.width = eqW + 'px';
       // Also resize the canvas
       if (_etCanvas) {{
