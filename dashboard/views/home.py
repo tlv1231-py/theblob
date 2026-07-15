@@ -4971,13 +4971,14 @@ function _fetchNavDb() {{
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
     if (!Array.isArray(rows)) return;
-    // Replace entirely — no append, no dedup needed
     window._navDbPts = rows.map(function(r) {{ return {{ t: r.recorded_at, v: r.nav }}; }});
     _intradayPts = window._navDbPts;
+    // Update the Plotly trace every time fresh DB data arrives
+    if (window._redrawNavTraces) window._redrawNavTraces();
   }}).catch(function() {{}});
 }}
-_fetchNavDb(); // immediate on load
-setInterval(_fetchNavDb, 30000); // refresh every 30s
+_fetchNavDb();
+setInterval(_fetchNavDb, 30000);
 
 // Force-push a nav snapshot immediately (bypasses 30s dedup) — call on trade events
 window._forceNavSnapshot = function() {{
@@ -6690,6 +6691,7 @@ setTimeout(function() {{
         Plotly.relayout(_gd, {{ 'xaxis.autorange': true, 'yaxis.autorange': true }});
       }}
     }}
+    window._redrawNavTraces = _redrawNavTraces;
 
     function _pollNav() {{
       var url = SUPA_URL + '/rest/v1/portfolio_snapshots'
@@ -7073,16 +7075,20 @@ setTimeout(function() {{
       _etCanvas.style.zIndex = '2';
     }}
 
+    var _etDpr = window.devicePixelRatio || 1;
     function _etResize() {{
       if (!_etCanvas) return;
       var layout = _etLayout();
       var cw = _EQ_W * layout.totalCols;
       var ch = layout.availH;
-      if (_etCanvas.width !== cw || _etCanvas.height !== ch) {{
-        _etCanvas.width  = cw;
-        _etCanvas.height = ch;
+      var pw = Math.round(cw * _etDpr);
+      var ph = Math.round(ch * _etDpr);
+      if (_etCanvas.width !== pw || _etCanvas.height !== ph) {{
+        _etCanvas.width  = pw;
+        _etCanvas.height = ph;
         _etCanvas.style.width  = cw + 'px';
         _etCanvas.style.height = ch + 'px';
+        _etCtx.scale(_etDpr, _etDpr);
         _etDirty = true;
       }}
     }}
