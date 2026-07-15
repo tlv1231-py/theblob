@@ -990,22 +990,17 @@ def _build_daw_html(data: dict) -> str:
             f'<span class="pos-corner tr" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner bl" style="border-color:{tcol}"></span>'
             f'<span class="pos-corner br" style="border-color:{tcol}"></span>'
-            # Row 1: sym + badge + value
+            # Row 1: sym (left, unique color) + value (right, white)
             f'<div class="pc-row1">'
-            f'  <span class="pc-live-dot"></span>'
             f'  <span class="pc-sym" style="color:{tcol}">{p["sym"]}</span>'
-            f'  {badge_html}'
-            f'  <span class="pc-val" id="pcval-{p["sym"]}">${p["value"]:,.0f}</span>'
+            f'  <span class="pc-val" id="pcval-{p["sym"]}" data-raw="{p["value"]:.0f}">${p["value"]:,.0f}</span>'
             f'</div>'
-            # Bottom: P&L orb (color = direction/magnitude, pulse = age)
-            f'<div class="pc-orb-wrap">'
-            f'  <div class="pc-orb" id="pcorb-{p["sym"]}"'
-            f'    data-pnl="{epnl}" data-pct="{epct}" data-days="{days}"'
-            f'    style="--orb-h:{_orb_hue(epnl,epct)};--orb-s:{_orb_sat(epnl)};--orb-l:{_orb_lit(epnl,epct)};--orb-dur:{_orb_dur(days)}s">'
-            f'  </div>'
-            f'  <span class="pc-orb-val" id="pcpnl-{p["sym"]}" style="color:{pnl_col}">'
-            f'    {pnl_sign}${abs(epnl):,.0f}'
-            f'  </span>'
+            # Row 2: entry price in unique color
+            f'<div class="pc-entry-price" style="color:{tcol}">@${ep:,.2f}</div>'
+            # Row 3: hold timer + XP bar
+            f'<div class="pc-bottom-row">'
+            f'  <span class="pc-hold-timer">{days}d</span>'
+            f'  <div class="pc-xp-wrap"><div class="pc-xp-fill" style="width:{min(int(days/60*100),100)}%"></div></div>'
             f'</div>'
             f'</div>'
         )
@@ -1990,31 +1985,30 @@ body::after {{
   font-weight:700; color:#ffffff; font-variant-numeric:tabular-nums;
   letter-spacing:-.01em;
 }}
-.pc-pnl {{ font-family:Consolas,monospace; font-size:10px; font-weight:400; font-variant-numeric:tabular-nums; }}
-/* ── P&L orb replacing bottom rows ── */
-.pc-orb-wrap {{
-  display:flex; align-items:center; gap:10px; margin-top:6px; padding-bottom:2px;
-}}
-@keyframes pc-orb-pulse {{
-  0%,100% {{ box-shadow:0 0 4px 1px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.35),
-                        0 0 10px 2px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.15); }}
-  50%      {{ box-shadow:0 0 8px 3px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.7),
-                        0 0 18px 6px hsla(var(--orb-h),var(--orb-s),var(--orb-l),.3); }}
-}}
-.pc-orb {{
-  flex-shrink:0; width:18px; height:18px; border-radius:50%;
-  background:radial-gradient(circle at 35% 35%,
-    hsla(var(--orb-h),var(--orb-s),calc(var(--orb-l) + 22%),1) 0%,
-    hsl(var(--orb-h),var(--orb-s),var(--orb-l)) 55%,
-    hsla(var(--orb-h),var(--orb-s),calc(var(--orb-l) - 15%),1) 100%
-  );
-  animation:pc-orb-pulse var(--orb-dur,1.2s) ease-in-out infinite;
-  transition:background .8s ease, box-shadow .8s ease;
-}}
-.pc-orb-val {{
-  font-family:Consolas,monospace; font-size:10px; font-weight:400;
+/* ── Equity tile new layout ── */
+.pc-entry-price {{
+  font-family:Consolas,monospace; font-size:8px; margin-top:3px;
   font-variant-numeric:tabular-nums;
 }}
+.pc-bottom-row {{
+  display:flex; align-items:center; gap:8px; margin-top:6px;
+}}
+.pc-hold-timer {{
+  font-family:Consolas,monospace; font-size:8px; color:rgba(255,255,255,0.75);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}}
+.pc-xp-wrap {{
+  flex:1; height:3px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;
+}}
+.pc-xp-fill {{
+  height:100%; background:linear-gradient(90deg,#4488ff,#9944ff);
+  border-radius:2px; transition:width 4s cubic-bezier(.1,0,.2,1);
+}}
+/* value scramble flash */
+@keyframes pc-val-flash {{
+  0%,100% {{ opacity:1; }} 50% {{ opacity:.4; }}
+}}
+.pc-val-flashing {{ animation:pc-val-flash .06s steps(2,end) 3 forwards; }}
 .pc-pnl-pct {{
   font-family:Consolas,monospace; font-size:9px; opacity:.55; margin-left:3px;
 }}
@@ -7170,8 +7164,19 @@ setTimeout(function() {{
       _updateOverlayWidth();
     }}
 
+    var _SCRAMBLE_CHARS = '0123456789';
+    function _scrambleDigits(str) {{
+      var out = '';
+      for (var si = 0; si < str.length; si++) {{
+        var c = str[si];
+        out += (c >= '0' && c <= '9') ? _SCRAMBLE_CHARS[Math.floor(Math.random()*10)] : c;
+      }}
+      return out;
+    }}
+
     function _etPaintTile(ctx, t, x, y, ts) {{
       var W = _EQ_W, H = _EQ_H;
+      var lx = x + 8;
 
       // Background
       ctx.fillStyle = 'rgba(0,0,8,0.92)';
@@ -7182,132 +7187,72 @@ setTimeout(function() {{
       ctx.fillRect(x, y, 2, H);
 
       // Bottom separator
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
       ctx.fillRect(x, y + H - 1, W, 1);
 
-      // Scanline sweep
-      var scanPos = Math.round(((ts % 4000) / 4000) * (H + 8) - 4);
-      if (scanPos >= 0 && scanPos < H) {{
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
-        ctx.fillRect(x + 2, y + scanPos, W - 2, 1);
-      }}
-
-      var lx = x + 6;
-
-      // ── ROW 1 (y+13): pixel-dot · SYM · [badge] · VALUE ──
-      var r1y = y + 13;
-      // 8-bit live dot (3×3 square)
-      var dotPulse = 0.5 + 0.5 * Math.sin(ts / 600);
-      ctx.fillStyle = 'rgba(255,0,204,' + (0.45 + dotPulse * 0.55) + ')';
-      ctx.fillRect(lx, r1y - 4, 3, 3);
-
+      // ── ROW 1 (y+15): SYM in unique color ──
       ctx.font = 'bold 10px Consolas,monospace';
       ctx.fillStyle = t.col;
       ctx.textAlign = 'left';
-      ctx.fillText(t.sym, lx + 6, r1y);
+      ctx.fillText(t.sym, lx, y + 15);
 
-      var badgeText, badgeCol;
-      if (t.isCrypto) {{
-        badgeText = '[' + (t.direction || 'LONG').toUpperCase() + ']';
-        badgeCol  = (t.direction||'long') === 'short' ? '#ff5040' : '#00c87a';
-      }} else {{
-        badgeText = t.inSignal ? ('[#' + (t.rank||'?') + ']') : '[EXIT]';
-        badgeCol  = t.inSignal ? '#00c87a' : '#dca000';
-      }}
-      var symW = ctx.measureText(t.sym).width;
-      ctx.font = '7px Consolas,monospace';
-      ctx.fillStyle = badgeCol;
-      ctx.fillText(badgeText, lx + 6 + symW + 3, r1y);
-
-      // Use lerped display values for smooth updates
-      var dVal    = t._dVal    !== undefined ? t._dVal    : (t.val    || 0);
-      var dPnl    = t._dPnl   !== undefined ? t._dPnl    : (t.pnl    || 0);
-      var dPnlPct = t._dPnlPct!== undefined ? t._dPnlPct : (t.pnlPct || 0);
-
-      // Snap tiny lerp tails to zero to avoid -$0 / 0.0% noise
-      if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
-      if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
-
-      // ROW 1 right: value (only if meaningful)
+      // ── ROW 1 right: holdings value, scramble-flash on update ──
+      var dVal = t._dVal !== undefined ? t._dVal : (t.val || 0);
       if (dVal > 0.5) {{
         var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
+        var flashAge = t._flashStart ? (ts - t._flashStart) : 9999;
+        var isFlashing = flashAge < 220;
+        var flashCol = t._flashDir > 0 ? '#00ff9d' : '#ff3366';
         ctx.font = 'bold 10px Consolas,monospace';
-        ctx.fillStyle = t._valFlash ? (t._valFlash > 0 ? '#00ff9d' : '#ff3366') : '#ffffff';
+        ctx.fillStyle = isFlashing ? flashCol : '#ffffff';
         ctx.textAlign = 'right';
-        ctx.fillText(valStr, x + W - 5, r1y);
+        ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 15);
         ctx.textAlign = 'left';
-        if (t._valFlash) {{ t._valFlash = 0; }}
-      }}
-
-      // ── BOTTOM: P&L orb + value (replaces text rows 2–4) ───────────────────
-      // Orb color = P&L direction + magnitude; pulse speed = position age
-      var orbCx = x + 18, orbCy = y + H - 24, orbR = 9;
-
-      // Color: green→yellow→red by magnitude; neutral grey when flat
-      var orbHue, orbSat, orbLit;
-      if (Math.abs(dPnl) < 0.005) {{
-        orbHue = 0; orbSat = 0; orbLit = 28; // grey
-      }} else {{
-        var mag = Math.min(Math.abs(dPnlPct) / 5, 1); // 0→1 over ±5%
-        if (dPnl >= 0) {{
-          orbHue = 140 - mag * 60; // green(140) → yellow(80)
-          orbSat = 70 + mag * 30;
-          orbLit = 42 + mag * 10;
-        }} else {{
-          orbHue = 20 + mag * 0;   // red-orange
-          orbSat = 70 + mag * 30;
-          orbLit = 42 + mag * 10;
+        if (t._valFlash) {{
+          t._flashStart = ts;
+          t._flashDir   = t._valFlash;
+          t._valFlash   = 0;
         }}
       }}
 
-      // Pulse speed: faster when older (age encodes urgency)
-      var ageForPulse = t.enteredAt ? (ts - t.enteredAt) : (t.days||0) * 3600000;
-      var ageFrac = Math.min(ageForPulse / (4 * 3600000), 1); // 0→1 over 4h
-      var pulseHz  = 0.6 + ageFrac * 1.8;  // 0.6–2.4 Hz
-      var pulse    = 0.55 + 0.45 * Math.sin(ts / 1000 * pulseHz * Math.PI * 2);
-
-      // Outer glow
-      var glowR = ctx.createRadialGradient(orbCx, orbCy, 0, orbCx, orbCy, orbR * 2.2);
-      var glowCol = 'hsla(' + orbHue + ',' + orbSat + '%,' + orbLit + '%,';
-      glowR.addColorStop(0,   glowCol + (pulse * 0.5) + ')');
-      glowR.addColorStop(1,   glowCol + '0)');
-      ctx.beginPath();
-      ctx.arc(orbCx, orbCy, orbR * 2.2, 0, Math.PI * 2);
-      ctx.fillStyle = glowR;
-      ctx.fill();
-
-      // Orb body
-      var bodyR = ctx.createRadialGradient(orbCx - orbR*0.3, orbCy - orbR*0.3, 1, orbCx, orbCy, orbR);
-      bodyR.addColorStop(0,   'hsla(' + orbHue + ',' + orbSat + '%,' + Math.min(orbLit+30,80) + '%,' + pulse + ')');
-      bodyR.addColorStop(0.6, 'hsla(' + orbHue + ',' + orbSat + '%,' + orbLit + '%,' + pulse + ')');
-      bodyR.addColorStop(1,   'hsla(' + orbHue + ',' + orbSat + '%,' + Math.max(orbLit-20,10) + '%,' + (pulse*0.8) + ')');
-      ctx.beginPath();
-      ctx.arc(orbCx, orbCy, orbR, 0, Math.PI * 2);
-      ctx.fillStyle = bodyR;
-      ctx.fill();
-
-      // Specular glint
-      ctx.beginPath();
-      ctx.arc(orbCx - orbR*0.28, orbCy - orbR*0.28, orbR * 0.28, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,' + (pulse * 0.35) + ')';
-      ctx.fill();
-
-      // P&L value text to the right of orb
-      if (Math.abs(dPnl) >= 0.005) {{
-        var pnlSign2 = dPnl >= 0 ? '+' : '-';
-        var absP2 = Math.abs(dPnl);
-        var pnlStr2 = pnlSign2 + '$' + (absP2 >= 1000 ? (absP2/1000).toFixed(1)+'k' : Math.round(absP2).toLocaleString('en-US'));
-        ctx.font = '9px Consolas,monospace';
-        ctx.fillStyle = dPnl >= 0 ? '#00c87a' : '#e03355';
-        ctx.textAlign = 'left';
-        ctx.fillText(pnlStr2, orbCx + orbR + 5, orbCy + 3);
-        // % in dimmer text
-        var pctStr2 = (dPnlPct >= 0 ? '+' : '') + dPnlPct.toFixed(1) + '%';
-        ctx.font = '7px Consolas,monospace';
-        ctx.fillStyle = 'rgba(200,200,200,0.4)';
-        ctx.fillText(pctStr2, orbCx + orbR + 5, orbCy + 13);
-        ctx.textAlign = 'left';
+      // ── ROW 2 (y+28): entry price in unique color ──
+      if (t.entry > 0) {{
+        var entryStr = '@$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry < 100 ? t.entry.toFixed(2) : Math.round(t.entry).toLocaleString('en-US'));
+        ctx.font = '8px Consolas,monospace';
+        ctx.fillStyle = t.col;
+        ctx.fillText(entryStr, lx, y + 28);
       }}
+
+      // ── ROW 3 (y+42): hold timer in white ──
+      var holdMs = t.enteredAt ? (ts - t.enteredAt) : (t.days||0) * 86400000;
+      var holdStr;
+      if (holdMs < 60000)       holdStr = Math.floor(holdMs/1000) + 's';
+      else if (holdMs < 3600000) holdStr = Math.floor(holdMs/60000) + 'm';
+      else if (holdMs < 86400000) holdStr = Math.floor(holdMs/3600000) + 'h ' + Math.floor((holdMs%3600000)/60000) + 'm';
+      else {{
+        var hDays = Math.floor(holdMs/86400000);
+        var hHrs  = Math.floor((holdMs%86400000)/3600000);
+        holdStr = hDays + 'd' + (hHrs > 0 ? ' ' + hHrs + 'h' : '');
+      }}
+      ctx.font = '8px Consolas,monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText(holdStr, lx, y + 42);
+
+      // ── XP progress bar bottom-right ──
+      // Progress = age fraction toward 60-day horizon (equity) / 4h (crypto)
+      var xpMax  = t.isCrypto ? (4 * 3600000) : (60 * 86400000);
+      var xpFrac = Math.min(holdMs / xpMax, 1);
+      // Boost to near-full if exit signal fired
+      if (!t.inSignal && t.inSignal !== undefined) xpFrac = Math.max(xpFrac, 0.88);
+      var xpW = 62, xpH = 3, xpX = x + W - xpW - 5, xpY = y + H - 8;
+      // Track
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(xpX, xpY, xpW, xpH);
+      // Fill — smooth color: blue→purple→gold as it fills
+      var xpHue = 200 + xpFrac * 160; // 200(blue) → 360→ wraps to 40(gold)
+      if (xpHue > 360) xpHue -= 360;
+      ctx.fillStyle = 'hsl(' + xpHue + ',80%,55%)';
+      ctx.fillRect(xpX, xpY, Math.round(xpW * xpFrac), xpH);
     }}
 
     // Add or replace a tile (upsert)
