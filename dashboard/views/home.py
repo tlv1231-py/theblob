@@ -2942,49 +2942,9 @@ function _datePlus_from(isoDateStr, days) {{
 }}
 
 var latestPortDate = portDates.length ? portDates[portDates.length - 1] : null;
-// Intraday sliding window — "now" always at center
-var _CENTER_DAYS = 1;
-var _HALF_WIN_MS = 20 * 60 * 1000;  // 20 min each side — tight, makes movement dramatic
-function _intradayStart() {{ return new Date(Date.now() - _HALF_WIN_MS).toISOString(); }}
-function _intradayEnd()   {{ return new Date(Date.now() + _HALF_WIN_MS).toISOString(); }}
-var xStart = _intradayStart();
-var xEnd   = _intradayEnd();
-
-// Dynamic Y range from _navHistory — uses only data within the visible window
-function yRange(x0, x1) {{
-  var history = window._navHistory || [];
-  var minV = Infinity, maxV = -Infinity;
-  for (var i = 0; i < history.length; i++) {{
-    var p = history[i];
-    if ((!x0 || p.x >= x0) && (!x1 || p.x <= x1)) {{
-      if (p.y < minV) minV = p.y;
-      if (p.y > maxV) maxV = p.y;
-    }}
-  }}
-  // Always include current NAV in range
-  var curNav = window._lastKnownNav;
-  if (curNav) {{
-    if (curNav < minV) minV = curNav;
-    if (curNav > maxV) maxV = curNav;
-  }}
-  if (minV === Infinity) {{
-    // No history yet — center on current NAV with a 0.3% window
-    var base = curNav || 100000;
-    return [base * 0.997, base * 1.003];
-  }}
-  var spread = maxV - minV;
-  var minSpread = (curNav || 100000) * 0.003;
-  if (spread < minSpread) {{
-    var mid = (minV + maxV) / 2;
-    minV = mid - minSpread / 2;
-    maxV = mid + minSpread / 2;
-    spread = minSpread;
-  }}
-  var pad = spread * 0.4;
-  return [minV - pad, maxV + pad];
-}}
-
-var yr = yRange(xStart, xEnd);
+// Fixed x range: portfolio start → tomorrow. No auto-scrolling.
+var xStart = portDates.length ? portDates[0] : '2026-05-29';
+var xEnd   = _datePlus(1);
 
 // ── Benchmark trajectories ───────────────────────────────────────────────
 var _benchStart = portDates.length ? new Date(portDates[0]+'T00:00:00Z') : new Date('2026-05-29T00:00:00Z');
@@ -3036,12 +2996,13 @@ var traces = [
     name:'HYSA 4.8%',
     hovertemplate:'<b style="color:#ffc800">HYSA $%{{y:,.0f}}</b><extra></extra>',
   }},
-  // Intraday "marked the book" values — live portfolio value within the day (index 6)
+  // Portfolio line — fed from nav_snapshots DB, appends live (index 6)
   {{
-    x:[], y:[], name:'INTRADAY',
+    x:[], y:[], name:'PORTFOLIO',
     type:'scatter', mode:'lines',
-    line:{{ color:'rgba(255,0,204,.55)', width:1.5 }},
-    hoverinfo:'skip', showlegend:false,
+    line:{{ color:'rgba(255,0,204,0.9)', width:2 }},
+    hovertemplate:'<b style="color:#ff00cc">PORTFOLIO $%{{y:,.0f}}</b><extra></extra>',
+    showlegend:true,
   }},
   // Trade event markers — ENTER (index 7), EXIT (index 8)
   {{
@@ -3102,7 +3063,7 @@ var layout = {{
   margin:{{ t:30, b:50, l:60, r:16 }},
 
   xaxis:{{
-    range: xStart ? [xStart, xEnd] : undefined,
+    range: [xStart, xEnd],
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
     tickformat:'%b %d', zeroline:false, showline:false, type:'date', fixedrange:false,
@@ -3110,18 +3071,17 @@ var layout = {{
   yaxis:{{
     autorange:false,
     range: (function() {{
-      var _v = {port_values_j};
-      var _clean = _v.filter(function(x){{ return x > 0; }});
-      if (!_clean.length) return [90000, 110000];
-      var _lo = Math.min.apply(null, _clean), _hi = Math.max.apply(null, _clean);
-      var _spread = Math.max(_hi - _lo, _lo * 0.004, 200);
-      var _c = (_lo + _hi) / 2;
-      return [_c - _spread * 0.7, _c + _spread * 0.7];
+      // Fit to SPY, QQQ, and portfolio snapshots combined
+      var all = spyNorm.concat(qqqNorm, {port_values_j}).filter(function(x){{ return x > 0; }});
+      if (!all.length) return [90000, 115000];
+      var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+      var pad = Math.max(hi - lo, lo * 0.01) * 0.12;
+      return [lo - pad, hi + pad];
     }})(),
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
     tickformat:'$,.0f',
-    zeroline:false, showline:false, fixedrange:true,
+    zeroline:false, showline:false, fixedrange:false,
     tickprefix:'', nticks:6,
   }},
 
@@ -5189,29 +5149,8 @@ function _updateOrbMetrics(todayTrades, wins, losses) {{
 }}
 setInterval(function() {{ _updateOrbMetrics(0,0,0); }}, 1000);
 
-// ── Smooth ticker-tape scroll — keeps "now" always centered ────────────────────
 var _scrollBusy = false;
-// Smoothed Y bounds — lerp toward target each tick so chart doesn't snap violently
 var _smoothYMin = null, _smoothYMax = null;
-function _recenterOnLatest(_ignored) {{
-  if (_scrollBusy || _userInteracting) return;
-  var nowIso   = new Date().toISOString();
-  var newStart = _intradayStart();
-  var newEnd   = _intradayEnd();
-  _defaultXRange = [newStart, newEnd];
-
-  _scrollBusy = true;
-  _programmaticRelayout = true;
-  // Only xaxis here — Y is handled atomically in _redrawNavTraces to avoid fighting
-  Plotly.relayout(gd, {{
-    'xaxis.range': [newStart, newEnd],
-    'xaxis.autorange': false
-  }}).then(function() {{
-    _scrollBusy = false;
-    setTimeout(function() {{ _programmaticRelayout = false; }}, 80);
-  }}).catch(function() {{ _scrollBusy = false; _programmaticRelayout = false; }});
-}}
-setInterval(function() {{ _recenterOnLatest(null); }}, 10000);
 
 // ── Wallet selector ───────────────────────────────────────────────────────────
 var _walletModes = ['PAPER', 'LIVE ●'];
@@ -5233,28 +5172,9 @@ function _cycleWallet() {{
   }}
 }}
 
-// ── Auto-reset chart to default view after 10s idle ──────────────────────────
-var _defaultXRange = [xStart, xEnd];
-var _resetTimer = null;
 var _userInteracting = false;
-gd.on('plotly_relayout', function(ev) {{
-  buildTargets();
-  // Detect user pan/zoom (not our programmatic relayouts)
-  if (ev['xaxis.range[0]'] !== undefined || ev['xaxis.autorange'] !== undefined) {{
-    if (!_programmaticRelayout) {{
-      _userInteracting = true;
-      clearTimeout(_resetTimer);
-      _resetTimer = setTimeout(function() {{
-        _programmaticRelayout = true;
-        Plotly.relayout(gd, {{ 'xaxis.range': _defaultXRange }}).then(function() {{
-          _programmaticRelayout = false;
-          _userInteracting = false;
-        }});
-      }}, 10000);
-    }}
-  }}
-}});
 var _programmaticRelayout = false;
+gd.on('plotly_relayout', function(ev) {{ buildTargets(); }});
 
 window.addEventListener('resize', function() {{
   resizeCanvas();
@@ -6788,27 +6708,20 @@ setTimeout(function() {{
       _updateAthShape(nav, isoTs);
     }}
 
-    // Single function for all nav trace redraws — uses Plotly.update (data+layout atomic)
-    // so xaxis.range is never lost to an autorange reset triggered by restyle.
+    // Redraw portfolio trace (index 6) from nav_snapshots DB data + live point.
+    // No axis relayout — chart stays wherever the user left it.
     function _redrawNavTraces() {{
       var _gd = document.getElementById('chart');
-      if (!_gd || !_gd.data || _gd.data.length <= 3) return;
-      var _xs = (window._navHistory || []).map(function(p) {{ return p.x; }});
-      var _ys = (window._navHistory || []).map(function(p) {{ return p.y; }});
-      var _ns = _intradayStart(), _ne = _intradayEnd(), _now = new Date().toISOString();
-      var _yr = yRange(_ns, _now);
-      if (_smoothYMin === null && _yr[0] !== null) {{ _smoothYMin = _yr[0]; _smoothYMax = _yr[1]; }}
-      else if (_yr[0] !== null) {{
-        _smoothYMin = _smoothYMin * 0.85 + _yr[0] * 0.15;
-        _smoothYMax = _smoothYMax * 0.85 + _yr[1] * 0.15;
+      if (!_gd || !_gd.data || _gd.data.length < 7) return;
+      var dbPts = window._navDbPts || [];
+      var _xs = dbPts.map(function(p) {{ return p.t; }});
+      var _ys = dbPts.map(function(p) {{ return p.v; }});
+      // Append live point
+      if (window._lastKnownNav && window._lastKnownTs) {{
+        _xs.push(window._lastKnownTs);
+        _ys.push(window._lastKnownNav);
       }}
-      Plotly.update(_gd,
-        {{ x: [_xs, _xs], y: [_ys, _ys] }},
-        {{ 'xaxis.range': [_ns, _ne], 'xaxis.autorange': false,
-           'yaxis.range': _smoothYMin !== null ? [_smoothYMin, _smoothYMax] : undefined,
-           'yaxis.autorange': _smoothYMin === null }},
-        [3, 4]
-      );
+      Plotly.restyle(_gd, {{ x: [_xs], y: [_ys] }}, [6]);
     }}
 
     function _pollNav() {{
