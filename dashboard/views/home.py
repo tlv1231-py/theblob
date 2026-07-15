@@ -7368,16 +7368,13 @@ setTimeout(function() {{
       var W = _EQ_W, H = _EQ_H;
       var now = Date.now(); // epoch ms — use for hold timer, NOT rAF ts
 
-      // Background
-      ctx.fillStyle = 'rgba(0,0,8,0.92)';
-      ctx.fillRect(x, y, W, H);
-
+      // Background — transparent
       // Left accent stripe (2px)
       ctx.fillStyle = t.col;
       ctx.fillRect(x, y, 2, H);
 
       // Bottom separator
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
       ctx.fillRect(x, y + H - 1, W, 1);
 
       // ── Strategy badge — glowing glyph left of ticker ──
@@ -7391,9 +7388,9 @@ setTimeout(function() {{
         ctx.shadowBlur  = 5;
         ctx.fillStyle   = _badge.c;
         ctx.globalAlpha = 0.85;
-        ctx.fillText(_badge.g, x + 4, y + 15);
+        ctx.fillText(_badge.g, x + 4, y + 14);
         ctx.restore();
-        _badgeOff = 14; // shift ticker right to clear the badge
+        _badgeOff = 14;
       }}
       var lx = x + 4 + _badgeOff;
 
@@ -7404,49 +7401,44 @@ setTimeout(function() {{
       if (Math.abs(dPnl)    < 0.005) dPnl    = 0;
       if (Math.abs(dPnlPct) < 0.005) dPnlPct = 0;
 
-      // ── ROW 1 left (y+15): SYM in unique color ──
-      ctx.font = 'bold 10px Consolas,monospace';
+      // ── ROW 1 left: SYM in unique color ──
+      ctx.font = '700 9px Orbitron,Consolas,monospace';
       ctx.fillStyle = t.col;
       ctx.textAlign = 'left';
-      ctx.fillText(t.sym, lx, y + 15);
+      ctx.shadowColor = t.col; ctx.shadowBlur = 6;
+      ctx.fillText(t.sym, lx, y + 14);
+      ctx.shadowBlur = 0;
 
-      // ── ROW 1 right (y+15): value — white at entry, tints with current P&L ──
-      // Color = direction of P&L from entry; intensity = magnitude. Persists once set.
+      // ── ROW 1 right: value — tints with P&L direction ──
       if (dVal > 0.5) {{
         if (dPnl > 0.01)       t._valDir = 1;
         else if (dPnl < -0.01) t._valDir = -1;
         var dir = t._valDir || 0;
-        var mag = Math.min(Math.abs(dPnlPct) / 5, 1); // 0→1 over ±5% move
+        var mag = Math.min(Math.abs(dPnlPct) / 5, 1);
         var valCol;
-        if (dir > 0) {{
-          // white → green; saturation and depth scale with magnitude
-          valCol = 'hsl(140,' + Math.round(mag*75) + '%,' + Math.round(88 - mag*38) + '%)';
-        }} else if (dir < 0) {{
-          valCol = 'hsl(350,' + Math.round(mag*75) + '%,' + Math.round(88 - mag*44) + '%)';
-        }} else {{
-          valCol = '#ffffff';
-        }}
+        if (dir > 0)      valCol = 'hsl(140,' + Math.round(mag*75) + '%,' + Math.round(88 - mag*38) + '%)';
+        else if (dir < 0) valCol = 'hsl(350,' + Math.round(mag*75) + '%,' + Math.round(88 - mag*44) + '%)';
+        else               valCol = '#ffffff';
         var flashAge = t._flashStart ? (ts - t._flashStart) : 9999;
         var isFlashing = flashAge < 180;
         var valStr = '$' + Math.round(dVal).toLocaleString('en-US');
-        ctx.font = 'bold 10px Consolas,monospace';
+        ctx.font = '700 9px Orbitron,Consolas,monospace';
         ctx.fillStyle = isFlashing ? (t._flashDir > 0 ? '#00ff9d' : '#ff3366') : valCol;
         ctx.textAlign = 'right';
-        ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 15);
+        ctx.fillText(isFlashing ? _scrambleDigits(valStr) : valStr, x + W - 5, y + 14);
         ctx.textAlign = 'left';
         if (t._valFlash) {{ t._flashStart = ts; t._flashDir = t._valFlash; t._valFlash = 0; }}
       }}
 
-      // ── ROW 2 left (y+27): entry price in unique color ──
+      // ── ROW 2 left: entry price ──
       if (t.entry > 0) {{
         var entryStr = '@$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry < 100 ? t.entry.toFixed(2) : Math.round(t.entry).toLocaleString('en-US'));
-        ctx.font = '8px Consolas,monospace';
+        ctx.font = '400 7px Orbitron,Consolas,monospace';
         ctx.fillStyle = t.col;
-        ctx.fillText(entryStr, lx, y + 27);
+        ctx.fillText(entryStr, lx, y + 26);
       }}
 
-      // ── ROW 2 right (y+27): P&L — persistent, scale-pulse on update ──
-      // Store last non-zero pnl so it stays displayed even when lerp settles near 0
+      // ── ROW 2 right: P&L with scale-pulse ──
       if (Math.abs(dPnl) >= 0.001) t._lastPnl = dPnl;
       var showPnl = t._lastPnl !== undefined ? t._lastPnl : dPnl;
       if (Math.abs(showPnl) >= 0.001) {{
@@ -7457,28 +7449,28 @@ setTimeout(function() {{
         var pScale = pnlFlashAge < 260 ? (1 + 0.15 * Math.max(0, 1 - pnlFlashAge/260)) : 1;
         ctx.save();
         if (pScale > 1) {{
-          ctx.translate(x + W - 5, y + 27);
+          ctx.translate(x + W - 5, y + 26);
           ctx.scale(pScale, pScale);
-          ctx.translate(-(x + W - 5), -(y + 27));
+          ctx.translate(-(x + W - 5), -(y + 26));
         }}
-        ctx.font = '8px Consolas,monospace';
+        ctx.font = '400 7px Orbitron,Consolas,monospace';
         ctx.fillStyle = showPnl >= 0 ? '#00c87a' : '#e03355';
         ctx.textAlign = 'right';
-        ctx.fillText(pnlDisp, x + W - 5, y + 27);
+        ctx.fillText(pnlDisp, x + W - 5, y + 26);
         ctx.textAlign = 'left';
         ctx.restore();
       }}
 
-      // ── ROW 3 (y+39): hold timer ──
+      // ── ROW 3: hold timer ──
       var holdMs = t.enteredAt ? Math.max(0, now - t.enteredAt) : (t.days||0) * 86400000;
       var holdStr;
       if (holdMs < 60000)         holdStr = Math.floor(holdMs/1000) + 's';
       else if (holdMs < 3600000)  holdStr = Math.floor(holdMs/60000) + 'm';
       else if (holdMs < 86400000) {{ var hH=Math.floor(holdMs/3600000),hM=Math.floor((holdMs%3600000)/60000); holdStr=hH+'h'+(hM?' '+hM+'m':''); }}
       else                        {{ var hD=Math.floor(holdMs/86400000),hHr=Math.floor((holdMs%86400000)/3600000); holdStr=hD+'d'+(hHr?' '+hHr+'h':''); }}
-      ctx.font = '8px Consolas,monospace';
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(holdStr, lx, y + 39);
+      ctx.font = '400 7px Orbitron,Consolas,monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText(holdStr, lx, y + 38);
 
       // ── VU meter bar + peak hat (y+46) ──
       // Equity: rank-based (rank 1=strong hold→low, rank 5=weak hold→high, EXIT=full)
