@@ -4573,16 +4573,20 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     for (var mi = 0; mi < visible.length; mi++) {{
       mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
-    // Dot is always the last point — at the right edge
-    mapped[mapped.length-1].x = W - 2;
+    // Dot is always the last point — leave a small margin from hard right edge
+    mapped[mapped.length-1].x = W - 8;
     if (mapped.length < 2) return;
 
-    // Orb tracks the dot's actual canvas position (as fraction of canvas size).
-    // This is what positions the pulse-canvas blob and its orbiting particles.
+    // Orb tracks the dot's actual SCREEN position as a fraction of the full page.
+    // Nav canvas is only the left panel — must convert to page coordinates so the
+    // pulse canvas (full-screen) places the blob at the correct spot.
     var dotX = mapped[mapped.length-1].x;
     var dotY = mapped[mapped.length-1].y;
-    window._navOrbFracX = Math.max(0.05, Math.min(0.95, dotX / W));
-    window._navOrbFracY = Math.max(0.05, Math.min(0.95, dotY / H));
+    var ncRect = _nc.getBoundingClientRect();
+    var screenX = ncRect.left + dotX * (ncRect.width  / (W || 1));
+    var screenY = ncRect.top  + dotY * (ncRect.height / (H || 1));
+    window._navOrbFracX = Math.max(0.05, Math.min(0.95, screenX / (window.innerWidth  || 1)));
+    window._navOrbFracY = Math.max(0.05, Math.min(0.95, screenY / (window.innerHeight || 1)));
 
     var m = mapped;
     var n = m.length;
