@@ -1154,23 +1154,16 @@ body::after {{
   position:relative;
 }}
 #tile-headings {{
-  position:absolute; top:0; left:0; pointer-events:none; z-index:10; /* children set pointer-events:auto */
+  position:absolute; top:0; left:0; pointer-events:none; z-index:10;
 }}
 .tile-group-hdr {{
-  position:absolute; top:0; display:flex; align-items:center; gap:4px;
-  height:16px; padding:0 5px; box-sizing:border-box;
+  position:absolute; top:0; display:flex; align-items:center; gap:5px;
+  height:16px; padding:0 6px; box-sizing:border-box;
   border-bottom:1px solid rgba(255,255,255,0.06);
-  background:rgba(0,0,8,0.75);
+  background:rgba(0,0,8,0.70);
   font:700 7px Consolas,monospace; letter-spacing:.18em; text-transform:uppercase;
   white-space:nowrap; overflow:hidden;
-  pointer-events:auto; /* enable clicks for collapse/drag */
-  transition:width 0.18s ease;
 }}
-.tile-group-hdr--collapsed {{
-  opacity:.6;
-}}
-.tile-group-hdr .tgh-chev:hover {{ opacity:1 !important; }}
-.tile-group-hdr .tgh-drag:hover {{ opacity:.7 !important; }}
 #pos-left {{ flex:0 0 auto !important; overflow:hidden; width:0 !important; display:none; }}
 #pos-left .pos-section-label {{ display:none; }}
 #pos-overlay #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
@@ -7005,75 +6998,44 @@ setTimeout(function() {{
     var _ET = [];          // tile state objects (ordered display order)
     var _etBySym = {{}};   // sym → tile for O(1) lookup
 
-    var _HEADING_H  = 16;  // px reserved at top for strategy group labels
-    var _COLL_W     = 28;  // px width of a collapsed group header
-
-    // Group display state — order and collapse; persisted across tile changes
-    var _groupOrder     = ['crypto', 'momentum']; // left-to-right
-    var _groupCollapsed = {{}};  // key → true/false
-    var _draggingGroup  = null;  // key being dragged, or null
-
-    // Map strategy key → which tiles belong to it
-    function _groupTiles(key) {{
-      return _ET.filter(function(t) {{
-        if (t.phase === 'done') return false;
-        var s = t.strategy || (t.isCrypto ? 'crypto' : 'momentum');
-        return s === key;
-      }}).sort(function(a,b) {{ return (b.enteredAt||0) - (a.enteredAt||0); }});
-    }}
+    var _HEADING_H = 16; // px reserved at top of canvas for strategy group labels
 
     function _etLayout() {{
       var stratBar = document.getElementById('strat-bar');
       var sbH = stratBar ? stratBar.offsetHeight : 46;
       var availH = Math.floor((window.innerHeight - sbH - 4 - _HEADING_H) * 0.67);
       var perCol = Math.max(1, Math.floor(availH / _EQ_H));
-
-      // Build groups left-to-right in _groupOrder
-      var groups = [];
-      var xOff = 0;
-      _groupOrder.forEach(function(key) {{
-        var tiles = _groupTiles(key);
-        var collapsed = !!_groupCollapsed[key];
-        var cols = 0, w = 0;
-        if (collapsed) {{
-          w = _COLL_W;
-        }} else {{
-          cols = tiles.length > 0 ? Math.max(1, Math.ceil(tiles.length / perCol)) : 0;
-          // Always show at least a 1-col placeholder if group is the only one or has been active
-          if (cols === 0 && groups.length === 0) cols = 1;
-          w = cols * _EQ_W;
-        }}
-        groups.push({{ key:key, tiles:tiles, x:xOff, w:w, cols:cols, collapsed:collapsed }});
-        xOff += w + (w > 0 ? 2 : 0); // 2px gap between groups
-      }});
-
-      var totalW = xOff;
-      // Legacy compat fields used by draw loop / separator
-      var cg = groups.find(function(g) {{ return g.key === 'crypto'; }}) || {{}};
-      var eg = groups.find(function(g) {{ return g.key === 'momentum'; }}) || {{}};
-      return {{
-        perCol:perCol, availH:availH, totalW:totalW, groups:groups,
-        // backward compat
-        crypto:cg.tiles||[], equity:eg.tiles||[],
-        cryptoCols:cg.cols||0, equityCols:eg.cols||0,
-        totalCols: Math.ceil(totalW / _EQ_W),
-        live: groups.reduce(function(a,g) {{ return a.concat(g.tiles); }}, []),
-      }};
+      // Stable sort: within each group, sort by enteredAt so positions don't
+      // shuffle when tiles enter/exit (newest at top, oldest at bottom)
+      var crypto = _ET.filter(function(t) {{ return t.phase !== 'done' && t.isCrypto; }})
+                      .sort(function(a,b) {{ return (b.enteredAt||0) - (a.enteredAt||0); }});
+      var equity = _ET.filter(function(t) {{ return t.phase !== 'done' && !t.isCrypto; }})
+                      .sort(function(a,b) {{ return (b.enteredAt||0) - (a.enteredAt||0); }});
+      var cryptoCols = Math.max(1, Math.ceil(crypto.length / perCol));
+      var equityCols = equity.length > 0 ? Math.max(1, Math.ceil(equity.length / perCol)) : 0;
+      var totalCols  = cryptoCols + equityCols;
+      return {{ perCol: perCol, totalCols: totalCols, cryptoCols: cryptoCols, equityCols: equityCols,
+                crypto: crypto, equity: equity, availH: availH,
+                live: crypto.concat(equity) }};
     }}
 
     function _etTilePos(t, layout) {{
-      var s = t.strategy || (t.isCrypto ? 'crypto' : 'momentum');
-      for (var gi = 0; gi < layout.groups.length; gi++) {{
-        var g = layout.groups[gi];
-        if (g.key !== s) continue;
-        var idx = g.tiles.indexOf(t);
-        if (idx === -1) continue;
-        if (g.collapsed) return {{ x: g.x, y: -999 }}; // hidden off-canvas
-        var col = Math.floor(idx / layout.perCol);
-        var row = idx % layout.perCol;
-        return {{ x: g.x + col * _EQ_W, y: row * _EQ_H }};
+      // Equity (NYSE): rightmost columns (col 0 = far right)
+      // Crypto: columns just left of equity (separated by 2px gap)
+      if (!t.isCrypto) {{
+        var ei  = layout.equity.indexOf(t);
+        var col = Math.floor(ei / layout.perCol);
+        var row = ei % layout.perCol;
+        var x   = (layout.totalCols - 1 - col) * _EQ_W;
+        return {{ x: x, y: row * _EQ_H }};
+      }} else {{
+        var ci   = layout.crypto.indexOf(t);
+        var col2 = Math.floor(ci / layout.perCol);
+        var row2 = ci % layout.perCol;
+        // Crypto columns sit to the LEFT of equity columns
+        var x2   = (layout.cryptoCols - 1 - col2) * _EQ_W;
+        return {{ x: x2, y: row2 * _EQ_H }};
       }}
-      return {{ x: 0, y: 0 }};
     }}
 
     var _etCanvas = null, _etCtx = null;
@@ -7221,12 +7183,12 @@ setTimeout(function() {{
         // 'done' tiles excluded by live filter
       }}
 
-      // Draw group separators
-      layout.groups.forEach(function(g, gi) {{
-        if (gi === 0) return; // no separator before first group
+      // Draw equity/crypto separator if both types present
+      if (layout.equityCols > 0 && layout.cryptoCols > 0) {{
+        var sepX = layout.equityCols * _EQ_W;
         ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(g.x - 2, 0, 2, layout.availH);
-      }});
+        ctx.fillRect(sepX, 0, 2, layout.availH);
+      }}
 
       _updateOverlayWidth();
     }}
@@ -7534,110 +7496,59 @@ setTimeout(function() {{
       ensemble:  {{ g:'❋',  c:'#ffffff', n:'ENSEMBLE'  }},
     }};
 
-    // ── Drag-to-reorder group headers ────────────────────────────────────────
-    var _dragState = null; // {{ key, startX, startI, el }}
-
     function _updateHeadings(layout) {{
       var hdrEl = document.getElementById('tile-headings');
       if (!hdrEl) return;
 
-      hdrEl.innerHTML = '';
-      layout.groups.forEach(function(g) {{
-        var b = _HDR_BADGES[g.key] || {{ g: '◆', c: '#ffffff', n: g.key.toUpperCase() }};
-        var collapsed = !!_groupCollapsed[g.key];
+      // Collect strategy groups: {{ key, xStart, width, count }}
+      var groups = [];
+      // Crypto group (left side)
+      if (layout.cryptoCols > 0 && layout.crypto.length > 0) {{
+        // Identify strategy of first crypto tile (all crypto = same strategy for now)
+        var cKey = (layout.crypto[0] && layout.crypto[0].strategy) || 'crypto';
+        groups.push({{ key: cKey, x: 0, w: layout.cryptoCols * _EQ_W, n: layout.crypto.length }});
+      }}
+      // Equity group (right side)
+      if (layout.equityCols > 0 && layout.equity.length > 0) {{
+        var eKey = (layout.equity[0] && layout.equity[0].strategy) || 'momentum';
+        var eX = layout.cryptoCols * _EQ_W + (layout.cryptoCols > 0 && layout.equityCols > 0 ? 2 : 0);
+        groups.push({{ key: eKey, x: eX, w: layout.equityCols * _EQ_W, n: layout.equity.length }});
+      }}
 
+      // Rebuild heading elements
+      hdrEl.innerHTML = '';
+      groups.forEach(function(g) {{
+        var b = _HDR_BADGES[g.key] || {{ g: '◆', c: '#ffffff', n: g.key.toUpperCase() }};
         var div = document.createElement('div');
-        div.className = 'tile-group-hdr' + (collapsed ? ' tile-group-hdr--collapsed' : '');
-        div.dataset.key = g.key;
+        div.className = 'tile-group-hdr';
         div.style.left  = g.x + 'px';
         div.style.width = g.w + 'px';
         div.style.color = b.c;
+        div.style.borderBottomColor = b.c.replace(')', ',.15)').replace('rgb','rgba');
         div.style.textShadow = '0 0 8px ' + b.c;
-
-        // Drag handle
-        var drag = document.createElement('span');
-        drag.className = 'tgh-drag';
-        drag.title = 'Drag to reorder';
-        drag.textContent = '⠿';
-        drag.style.cssText = 'cursor:grab;opacity:.35;font-size:9px;margin-right:2px;user-select:none';
-        drag.addEventListener('mousedown', function(e) {{
-          e.preventDefault();
-          var idx = _groupOrder.indexOf(g.key);
-          _dragState = {{ key: g.key, startX: e.clientX, startI: idx, origOrder: _groupOrder.slice() }};
-          document.body.style.cursor = 'grabbing';
-        }});
-        div.appendChild(drag);
-
-        // Glyph
-        var glyph = document.createElement('span');
-        glyph.style.cssText = 'font-size:9px;filter:drop-shadow(0 0 4px '+b.c+')';
-        glyph.textContent = b.g;
-        div.appendChild(glyph);
-
-        // Name
-        var name = document.createElement('span');
-        name.textContent = b.n;
-        div.appendChild(name);
-
-        // Count (hidden when collapsed — only shows glyph+name)
-        if (!collapsed) {{
-          var cnt = document.createElement('span');
-          cnt.style.cssText = 'margin-left:auto;opacity:.45;letter-spacing:.05em';
-          cnt.textContent = g.tiles.length + (g.tiles.length === 1 ? ' HOLDING' : ' HOLDINGS');
-          div.appendChild(cnt);
-        }}
-
-        // Collapse/expand chevron button
-        var chev = document.createElement('span');
-        chev.className = 'tgh-chev';
-        chev.title = collapsed ? 'Expand' : 'Collapse';
-        chev.textContent = collapsed ? '▶' : '▼';
-        chev.style.cssText = 'cursor:pointer;margin-left:'+(collapsed?'2px':'auto')+';opacity:.55;font-size:7px;padding:0 2px;user-select:none';
-        chev.addEventListener('click', function(e) {{
-          e.stopPropagation();
-          _groupCollapsed[g.key] = !_groupCollapsed[g.key];
-          _updateOverlayWidth();
-        }});
-        div.appendChild(chev);
-
+        div.innerHTML = '<span style="font-size:9px;filter:drop-shadow(0 0 4px '+b.c+')">'
+          + b.g + '</span><span>' + b.n + '</span>'
+          + '<span style="margin-left:auto;opacity:.45;letter-spacing:.05em">'
+          + g.n + (g.n === 1 ? ' HOLDING' : ' HOLDINGS') + '</span>';
         hdrEl.appendChild(div);
       }});
     }}
 
-    // Global drag tracking for group reorder
-    document.addEventListener('mousemove', function(e) {{
-      if (!_dragState) return;
-      // Determine new index from horizontal drag distance
-      var dx = e.clientX - _dragState.startX;
-      var shift = Math.round(dx / (_EQ_W * 1.5)); // require 1.5 tile widths of drag to shift
-      var newI = Math.max(0, Math.min(_groupOrder.length - 1, _dragState.startI + shift));
-      if (newI !== _groupOrder.indexOf(_dragState.key)) {{
-        var arr = _dragState.origOrder.slice();
-        var fromI = arr.indexOf(_dragState.key);
-        arr.splice(fromI, 1);
-        arr.splice(newI, 0, _dragState.key);
-        _groupOrder = arr;
-        _updateOverlayWidth();
-      }}
-    }});
-    document.addEventListener('mouseup', function() {{
-      if (!_dragState) return;
-      _dragState = null;
-      document.body.style.cursor = '';
-    }});
-
     function _updateOverlayWidth() {{
       var overlay = document.getElementById('pos-overlay');
       if (!overlay) return;
+      // All tiles (crypto + equity) are on canvas — no separate left column
       var posLeft = document.getElementById('pos-left');
       if (posLeft) posLeft.style.width = '0';
       var layout = _etLayout();
-      var eqW = layout.totalW || layout.totalCols * _EQ_W;
+      var eqW = layout.totalCols * _EQ_W;
       overlay.style.width = eqW + 'px';
+      // Resize canvas
       if (_etCanvas) {{
         _etCanvas.style.width  = eqW + 'px';
         _etCanvas.style.height = layout.availH + 'px';
       }}
+      // Reposition strategy group headings
       _updateHeadings(layout);
     }}
 
