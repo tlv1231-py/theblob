@@ -3063,21 +3063,13 @@ var layout = {{
   margin:{{ t:30, b:50, l:60, r:16 }},
 
   xaxis:{{
-    range: [xStart, xEnd],
+    autorange:true,
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
-    tickformat:'%b %d', zeroline:false, showline:false, type:'date', fixedrange:false,
+    tickformat:'%b %d %H:%M', zeroline:false, showline:false, type:'date', fixedrange:false,
   }},
   yaxis:{{
-    autorange:false,
-    range: (function() {{
-      // Fit to SPY, QQQ, and portfolio snapshots combined
-      var all = spyNorm.concat(qqqNorm, {port_values_j}).filter(function(x){{ return x > 0; }});
-      if (!all.length) return [90000, 115000];
-      var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
-      var pad = Math.max(hi - lo, lo * 0.01) * 0.12;
-      return [lo - pad, hi + pad];
-    }})(),
+    autorange:true,
     showgrid:true, gridcolor:'rgba(42,0,61,0.5)', gridwidth:1,
     tickfont:{{ family:'Consolas', size:8, color:'#3a1a4a' }},
     tickformat:'$,.0f',
@@ -7619,21 +7611,17 @@ setTimeout(function() {{
       _etInitPhase = false; // future tile inserts play entry sound
     }})();
 
-    // Pre-load Orbitron before the draw loop starts so canvas font matches the HUD
-    document.fonts.load('700 9px Orbitron').then(function() {{
-      document.fonts.load('400 7px Orbitron');
-    }});
-
-    // 30fps canvas draw loop
+    // Wait for ALL fonts (including Orbitron) before starting the draw loop
     var _etRafLast = 0;
-    (function _etRaf(ts) {{
+    function _etRafLoop(ts) {{
       if (ts - _etRafLast >= 33) {{
         _etRafLast = ts;
         if (!_etCanvas) _etInitCanvas();
         if (_etCanvas) _etDraw(ts);
       }}
-      requestAnimationFrame(_etRaf);
-    }})(0);
+      requestAnimationFrame(_etRafLoop);
+    }}
+    document.fonts.ready.then(function() {{ requestAnimationFrame(_etRafLoop); }});
     window._makeCard = function(p) {{ return _makeCard(p); }};
     function _makeCard(p) {{
       // Route all crypto tiles to the unified canvas engine — no DOM element created
