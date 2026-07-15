@@ -7204,21 +7204,19 @@ setTimeout(function() {{
       ctx.textAlign = 'left';
       ctx.fillText(t.sym, lx, y + 15);
 
-      // ── ROW 1 right (y+15): value — white at entry, tints deeper over tile life ──
+      // ── ROW 1 right (y+15): value — white at entry, tints with current P&L ──
+      // Color = direction of P&L from entry; intensity = magnitude. Persists once set.
       if (dVal > 0.5) {{
-        // Persist direction: once we know gain/loss, store it; never revert to unknown
         if (dPnl > 0.01)       t._valDir = 1;
         else if (dPnl < -0.01) t._valDir = -1;
         var dir = t._valDir || 0;
-        // Tint intensity = time held (white at 0, deeper at 24h+)
-        var lifeFrac = Math.min(holdMs / (24 * 3600000), 1); // 0→1 over 24h
+        var mag = Math.min(Math.abs(dPnlPct) / 5, 1); // 0→1 over ±5% move
         var valCol;
         if (dir > 0) {{
-          var gLit = Math.round(92 - lifeFrac * 42); // 92% (near-white) → 50% (green)
-          valCol = 'hsl(140,60%,' + gLit + '%)';
+          // white → green; saturation and depth scale with magnitude
+          valCol = 'hsl(140,' + Math.round(mag*75) + '%,' + Math.round(88 - mag*38) + '%)';
         }} else if (dir < 0) {{
-          var rLit = Math.round(92 - lifeFrac * 48); // 92% (near-white) → 44% (red)
-          valCol = 'hsl(350,60%,' + rLit + '%)';
+          valCol = 'hsl(350,' + Math.round(mag*75) + '%,' + Math.round(88 - mag*44) + '%)';
         }} else {{
           valCol = '#ffffff';
         }}
