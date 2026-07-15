@@ -4489,6 +4489,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       // Seed older than the window itself → use liveNav so chart doesn't diagonal from the past
       var _seedV   = _seedAge > windowMs ? liveNav : _navPts[_seedIdx].v;
       visible.push({{ ms: leftEdgeMs, v: _seedV }});
+    }} else {{
+      // No historical data before window — start flat at current NAV (no mid-air diagonal)
+      visible.push({{ ms: leftEdgeMs, v: liveNav }});
     }}
     for (var i = 0; i < _navPts.length; i++) {{
       if (_navPts[i].ms > leftEdgeMs && _navPts[i].ms < nowMs) {{
@@ -4611,22 +4614,6 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.beginPath(); ctx.arc(tipX,tipY,10+pulse*8,0,Math.PI*2);
     ctx.fillStyle='rgba(255,0,204,'+(0.15+pulse*0.2)+')'; ctx.fill();
 
-    // Jolt burst ring — fires on significant P&L move (profit=cyan, loss=magenta)
-    var _joltAge = Date.now() - _navJoltAt;
-    if (_joltAge < 700) {{
-      var _jt  = 1 - _joltAge / 700;         // 1 (fresh) → 0 (faded)
-      var _jr1 = 5  + (1 - _jt) * 32;        // inner ring expands out
-      var _jr2 = 12 + (1 - _jt) * 52;        // outer ring expands faster
-      var _jcol= _navJoltDir >= 0 ? '0,220,255' : '255,10,138';
-      // Inner ring
-      ctx.beginPath(); ctx.arc(tipX,tipY,_jr1,0,Math.PI*2);
-      ctx.strokeStyle='rgba('+_jcol+','+(_jt*0.9)+')';
-      ctx.lineWidth=2+_jt*4; ctx.stroke();
-      // Outer ring (fades faster)
-      ctx.beginPath(); ctx.arc(tipX,tipY,_jr2,0,Math.PI*2);
-      ctx.strokeStyle='rgba('+_jcol+','+(_jt*_jt*0.4)+')';
-      ctx.lineWidth=1.5; ctx.stroke();
-    }}
   }};
 
   // Cap nav canvas to ~30fps — it carries no per-frame animation data,
@@ -7093,164 +7080,165 @@ setTimeout(function() {{
       var W = _EQ_W, H = _EQ_H;
 
       // Background
-      ctx.fillStyle = 'rgba(0,0,8,0.9)';
+      ctx.fillStyle = 'rgba(0,0,8,0.92)';
       ctx.fillRect(x, y, W, H);
 
-      // Left accent stripe
+      // Left accent stripe (2px)
       ctx.fillStyle = t.col;
-      ctx.fillRect(x, y, 3, H);
+      ctx.fillRect(x, y, 2, H);
 
       // Bottom separator
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
       ctx.fillRect(x, y + H - 1, W, 1);
 
-      // Scanline: single horizontal line that sweeps down every 4s
-      var scanPeriod = 4000;
-      var scanPosRaw = ((ts % scanPeriod) / scanPeriod) * (H + 8) - 4;
-      var scanPos = Math.round(scanPosRaw);
+      // Scanline sweep
+      var scanPos = Math.round(((ts % 4000) / 4000) * (H + 8) - 4);
       if (scanPos >= 0 && scanPos < H) {{
-        ctx.fillStyle = 'rgba(255,255,255,0.04)';
-        ctx.fillRect(x + 3, y + scanPos, W - 3, 1);
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillRect(x + 2, y + scanPos, W - 2, 1);
       }}
 
-      var lx = x + 8;  // left text margin (after stripe)
+      var lx = x + 6;
 
-      // Row 1: live-dot · sym · badge · value
-      var r1y = y + 15;
-      // Pulsing live dot
+      // ── ROW 1 (y+13): pixel-dot · SYM · [badge] · VALUE ──
+      var r1y = y + 13;
+      // 8-bit live dot (3×3 square)
       var dotPulse = 0.5 + 0.5 * Math.sin(ts / 600);
-      ctx.beginPath();
-      ctx.arc(lx + 2, r1y - 3, 2.5, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(255,0,204,' + (0.5 + dotPulse*0.5) + ')';
-      ctx.fill();
+      ctx.fillStyle = 'rgba(255,0,204,' + (0.45 + dotPulse * 0.55) + ')';
+      ctx.fillRect(lx, r1y - 4, 3, 3);
 
-      // Sym
+      ctx.font = 'bold 10px Consolas,monospace';
       ctx.fillStyle = t.col;
-      ctx.font = 'bold 11px Consolas,monospace';
-      ctx.fillText(t.sym, lx + 9, r1y);
+      ctx.textAlign = 'left';
+      ctx.fillText(t.sym, lx + 6, r1y);
 
-      // Badge (HOLD/SELL for equity, LONG/SHORT for crypto)
-      var symW = ctx.measureText(t.sym).width;
-      var bx = lx + 9 + symW + 5;
       var badgeText, badgeCol;
       if (t.isCrypto) {{
-        badgeText = (t.direction || 'long').toUpperCase();
-        badgeCol  = (t.direction||'long') === 'short' ? 'rgba(255,80,60,0.65)' : 'rgba(0,200,140,0.65)';
+        badgeText = '[' + (t.direction || 'LONG').toUpperCase() + ']';
+        badgeCol  = (t.direction||'long') === 'short' ? '#ff5040' : '#00c87a';
       }} else {{
-        badgeText = t.inSignal ? ('#' + (t.rank||'?') + ' HOLD') : 'EXIT';
-        badgeCol  = t.inSignal ? 'rgba(0,200,140,0.65)' : 'rgba(220,160,0,0.65)';
+        badgeText = t.inSignal ? ('[#' + (t.rank||'?') + ']') : '[EXIT]';
+        badgeCol  = t.inSignal ? '#00c87a' : '#dca000';
       }}
+      var symW = ctx.measureText(t.sym).width;
       ctx.font = '7px Consolas,monospace';
       ctx.fillStyle = badgeCol;
-      ctx.fillText(badgeText, bx, r1y);
+      ctx.fillText(badgeText, lx + 6 + symW + 3, r1y);
 
-      // Value (white, right-aligned)
       var valStr = '$' + (t.val||0).toLocaleString('en-US',{{maximumFractionDigits:0}});
-      ctx.font = 'bold 11px Consolas,monospace';
+      ctx.font = 'bold 10px Consolas,monospace';
       ctx.fillStyle = t._valFlash ? (t._valFlash > 0 ? '#00ff9d' : '#ff3366') : '#ffffff';
       ctx.textAlign = 'right';
-      ctx.fillText(valStr, x + W - 6, r1y);
+      ctx.fillText(valStr, x + W - 5, r1y);
       ctx.textAlign = 'left';
-      // Decay flash after 2 frames
       if (t._valFlash) {{ t._valFlash = 0; }}
 
-      // Row 2: P&L
-      var r2y = y + 29;
-      var pnlCol = (t.pnl||0) >= 0 ? '#00c880' : '#e03355';
-      var absP = Math.abs(t.pnl||0);
-      var pnlSign = (t.pnl||0) >= 0 ? '+' : '−';
-      var pct = t.pnlPct || 0;
-      ctx.fillStyle = pnlCol;
+      // ── ROW 2 (y+26): P&L · % ──
+      var r2y = y + 26;
+      var pnlCol  = (t.pnl||0) >= 0 ? '#00c87a' : '#e03355';
+      var pnlSign = (t.pnl||0) >= 0 ? '+' : '-';
+      var absP    = Math.abs(t.pnl||0);
+      var pct     = t.pnlPct || 0;
       ctx.font = '10px Consolas,monospace';
-      ctx.fillText(pnlSign + '$' + absP.toLocaleString('en-US',{{maximumFractionDigits:0}}), lx, r2y);
-      ctx.fillStyle = 'rgba(200,200,200,0.4)';
+      ctx.fillStyle = pnlCol;
+      var pnlStr = pnlSign + '$' + absP.toLocaleString('en-US',{{maximumFractionDigits:0}});
+      ctx.fillText(pnlStr, lx, r2y);
+      var pnlStrW = ctx.measureText(pnlStr).width;
       ctx.font = '8px Consolas,monospace';
-      var pnlW = ctx.measureText(pnlSign + '$' + absP.toLocaleString('en-US',{{maximumFractionDigits:0}})).width;
-      ctx.fillText(' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)', lx + pnlW, r2y);
+      ctx.fillStyle = 'rgba(200,200,200,0.4)';
+      ctx.fillText(' (' + (pct>=0?'+':'') + pct.toFixed(1) + '%)', lx + pnlStrW, r2y);
 
-      // Row 3: Proximity bar (stop→cur→target)
-      var r3y = y + 42;
+      // ── ROW 3 (y+37–45): PROXIMITY BAR ──
       if (t.entry > 0 && t.stop > 0) {{
-        var tgt = t.target > 0 ? t.target : t.entry * 1.008;
-        var cur = t.curPrice > 0 ? t.curPrice : t.entry;
-        var rng = tgt - t.stop;
+        var tgt  = t.target > 0 ? t.target : t.entry * 1.008;
+        var cur  = t.curPrice > 0 ? t.curPrice : t.entry;
+        var rng  = tgt - t.stop;
         var prox = rng > 0 ? Math.max(0, Math.min(1, (cur - t.stop) / rng)) : 0.5;
-        var barX = lx, barW = W - lx - 6;
+        var barX = lx, barW = W - lx - 5;
+        var r3labelY = y + 37, r3barY = y + 42;
+        var fillCol  = prox < 0.33 ? '#a03050' : prox < 0.66 ? '#4080b0' : '#00a060';
 
-        // Labels
-        ctx.fillStyle = 'rgba(200,200,210,0.35)';
+        // Stop / target labels
         ctx.font = '7px Consolas,monospace';
-        var stopStr = t.stop < 1 ? '$' + t.stop.toFixed(4) : '$' + t.stop.toFixed(2);
-        var tgtStr  = tgt  < 1 ? '$' + tgt.toFixed(4)  : '$' + tgt.toFixed(2);
-        ctx.fillText(stopStr, barX, r3y - 2);
+        ctx.fillStyle = 'rgba(200,200,210,0.3)';
+        ctx.fillText(t.stop < 1 ? '$'+t.stop.toFixed(4) : '$'+t.stop.toFixed(2), barX, r3labelY);
         ctx.textAlign = 'right';
-        ctx.fillText(tgtStr, x + W - 6, r3y - 2);
+        ctx.fillText(tgt < 1 ? '$'+tgt.toFixed(4) : '$'+tgt.toFixed(2), x + W - 5, r3labelY);
         ctx.textAlign = 'left';
 
-        // Track
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(barX, r3y + 2, barW, 2);
+        // Segmented bar (10 blocks)
+        var nB = 10, bkW = Math.floor((barW - (nB - 1)) / nB);
+        for (var bi = 0; bi < nB; bi++) {{
+          ctx.fillStyle = bi < Math.round(prox * nB) ? fillCol : 'rgba(255,255,255,0.07)';
+          ctx.fillRect(barX + bi * (bkW + 1), r3barY, bkW, 3);
+        }}
 
-        // Fill
-        var fillCol = prox < 0.33 ? '#a03050' : prox < 0.66 ? '#4080b0' : '#00a060';
+        // Pixel cursor (4×5)
         ctx.fillStyle = fillCol;
-        ctx.fillRect(barX, r3y + 2, barW * prox, 2);
+        ctx.fillRect(Math.round(barX + barW * prox) - 2, r3barY - 1, 4, 5);
 
-        // Cursor dot
-        ctx.beginPath();
-        ctx.arc(barX + barW * prox, r3y + 3, 3, 0, Math.PI*2);
-        ctx.fillStyle = fillCol;
-        ctx.fill();
-
-        // Current price label at cursor
-        var curStr = cur < 1 ? '$' + cur.toFixed(4) : '$' + cur.toFixed(2);
-        ctx.fillStyle = t.col;
+        // Current price at cursor
+        var curStr = cur < 1 ? '$'+cur.toFixed(4) : '$'+cur.toFixed(2);
         ctx.font = '7px Consolas,monospace';
+        ctx.fillStyle = t.col;
         ctx.textAlign = 'center';
-        var clampedX = Math.max(barX + 10, Math.min(x + W - 16, barX + barW * prox));
-        ctx.fillText(curStr, clampedX, r3y - 2);
+        ctx.fillText(curStr, Math.max(barX+12, Math.min(x+W-16, barX+barW*prox)), r3labelY);
         ctx.textAlign = 'left';
       }}
 
-      // Row 4: meta — age bar for crypto, days/entry for equity
-      var r4y = y + 62;
+      // ── ROW 4+: crypto=age bar (no row 5), equity=days/entry + status ──
       if (t.isCrypto) {{
         var ageMs  = t.enteredAt ? (ts - t.enteredAt) : 0;
         var ageHrs = ageMs / 3600000;
         var agePct = Math.min(ageHrs / 4, 1);
         var ageCol = agePct < 0.33 ? '#00c8ff' : agePct < 0.66 ? '#ffaa00' : '#ff2844';
-        var aBarX = lx, aBarW = W - lx - 6;
-        ctx.fillStyle = 'rgba(255,255,255,0.07)';
-        ctx.fillRect(aBarX, r4y - 3, aBarW, 3);
-        ctx.fillStyle = ageCol;
-        ctx.fillRect(aBarX, r4y - 3, aBarW * agePct, 3);
-        var ageLabel = ageMs < 60000 ? '<1m' : ageMs < 3600000
-          ? Math.round(ageMs/60000) + 'm' : ageHrs.toFixed(1) + 'h';
-        ctx.fillStyle = ageCol;
+        var aBarX  = lx, aBarW = W - lx - 5;
+        var r4barY = y + 57, r4txtY = y + 74;
+
+        // Segmented age bar
+        var aN = 10, aBlockW = Math.floor((aBarW - (aN - 1)) / aN);
+        for (var ai = 0; ai < aN; ai++) {{
+          ctx.fillStyle = ai < Math.round(agePct * aN) ? ageCol : 'rgba(255,255,255,0.07)';
+          ctx.fillRect(aBarX + ai * (aBlockW + 1), r4barY, aBlockW, 3);
+        }}
+
+        // Age label (left) + entry price (right)
+        var ageLabel = ageMs < 60000 ? '<1m'
+                     : ageMs < 3600000 ? Math.round(ageMs/60000)+'m'
+                     : ageHrs.toFixed(1)+'h';
         ctx.font = '7px Consolas,monospace';
-        ctx.fillText('⏱ ' + ageLabel, lx, r4y + 8);
-      }} else {{
-        ctx.fillStyle = 'rgba(0,200,220,0.5)';
-        ctx.font = '7px Consolas,monospace';
-        var dayStr = '⏱ ' + (t.days||0) + (t.days===1?' day':' days');
-        ctx.fillText(dayStr, lx, r4y);
+        ctx.fillStyle = ageCol;
+        ctx.fillText(ageLabel, lx, r4txtY);
         if (t.entry > 0) {{
-          var entStr = '$' + (t.entry < 1 ? t.entry.toFixed(4) : t.entry.toFixed(2));
-          ctx.fillStyle = 'rgba(140,110,170,0.4)';
-          ctx.font = '7px Consolas,monospace';
+          ctx.fillStyle = 'rgba(180,180,180,0.35)';
           ctx.textAlign = 'right';
-          ctx.fillText('entered ' + entStr, x + W - 6, r4y);
+          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r4txtY);
           ctx.textAlign = 'left';
         }}
-      }}
 
-      // Row 5: status
-      var r5y = y + 73;
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      ctx.fillRect(x + 3, r5y - 9, W - 6, 1);
-      ctx.fillStyle = t.inSignal ? 'rgba(0,200,140,0.45)' : 'rgba(220,120,0,0.55)';
-      ctx.font = '7px Consolas,monospace';
-      ctx.fillText(t.holdText || (t.inSignal ? 'HOLD — IN SIGNAL' : 'EXIT — DROPPED FROM SIGNAL'), lx, r5y);
+      }} else {{
+        var r4y = y + 57, r5y = y + 73;
+
+        // Row 4: days held + entry price
+        ctx.font = '7px Consolas,monospace';
+        ctx.fillStyle = 'rgba(0,200,220,0.55)';
+        ctx.fillText((t.days||0)+(t.days===1?' day':' days'), lx, r4y);
+        if (t.entry > 0) {{
+          ctx.fillStyle = 'rgba(140,110,170,0.45)';
+          ctx.textAlign = 'right';
+          ctx.fillText('@$'+(t.entry<1?t.entry.toFixed(4):t.entry.toFixed(2)), x+W-5, r4y);
+          ctx.textAlign = 'left';
+        }}
+
+        // Separator
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillRect(x + 2, r5y - 7, W - 4, 1);
+
+        // Row 5: HOLD / EXIT signal status
+        ctx.font = '7px Consolas,monospace';
+        ctx.fillStyle = t.inSignal ? 'rgba(0,200,140,0.5)' : 'rgba(220,120,0,0.6)';
+        ctx.fillText(t.holdText || (t.inSignal ? 'HOLD' : 'EXIT'), lx, r5y);
+      }}
     }}
 
     // Add or replace a tile (upsert)
