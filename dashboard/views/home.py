@@ -7204,16 +7204,21 @@ setTimeout(function() {{
       ctx.textAlign = 'left';
       ctx.fillText(t.sym, lx, y + 15);
 
-      // ── ROW 1 right (y+15): value, P&L-tinted persistently + scramble flash ──
+      // ── ROW 1 right (y+15): value — white at entry, tints deeper over tile life ──
       if (dVal > 0.5) {{
-        // Color scales from first non-zero P&L: bright green (gain) → dark red (loss)
-        // mag 0→1 over ±5% move; no white-only zone
-        var mag = Math.min(Math.abs(dPnlPct) / 5, 1);
+        // Persist direction: once we know gain/loss, store it; never revert to unknown
+        if (dPnl > 0.01)       t._valDir = 1;
+        else if (dPnl < -0.01) t._valDir = -1;
+        var dir = t._valDir || 0;
+        // Tint intensity = time held (white at 0, deeper at 24h+)
+        var lifeFrac = Math.min(holdMs / (24 * 3600000), 1); // 0→1 over 24h
         var valCol;
-        if (dPnl > 0) {{
-          valCol = 'hsl(140,85%,' + Math.round(32 + mag * 36) + '%)'; // dark→bright green
-        }} else if (dPnl < 0) {{
-          valCol = 'hsl(350,85%,' + Math.round(24 + mag * 28) + '%)'; // very dark→mid red
+        if (dir > 0) {{
+          var gLit = Math.round(92 - lifeFrac * 42); // 92% (near-white) → 50% (green)
+          valCol = 'hsl(140,60%,' + gLit + '%)';
+        }} else if (dir < 0) {{
+          var rLit = Math.round(92 - lifeFrac * 48); // 92% (near-white) → 44% (red)
+          valCol = 'hsl(350,60%,' + rLit + '%)';
         }} else {{
           valCol = '#ffffff';
         }}
@@ -7272,18 +7277,23 @@ setTimeout(function() {{
       ctx.fillText(holdStr, lx, y + 39);
 
       // ── VU meter bar + peak hat (y+46) ──
-      // Primary signal: momentum rank (1=strongest hold, 5=weakest, EXIT=full)
-      // Rank 1 → ~0.15 (far from sell), Rank 5 → ~0.80 (near sell), EXIT → 1.0
-      var rankBase;
-      if (!t.inSignal && t.inSignal !== undefined) {{
-        rankBase = 1.0; // EXIT: full bar, sell signal fired
+      // Equity: rank-based (rank 1=strong hold→low, rank 5=weak hold→high, EXIT=full)
+      // Crypto: P&L% based (loss=low, gain toward 3%=high)
+      var vuLevel;
+      if (!t.isCrypto) {{
+        // Equity — rank drives signal
+        if (!t.inSignal && t.inSignal !== undefined) {{
+          vuLevel = 1.0;
+        }} else {{
+          var r = t.rank ? Math.min(t.rank, 5) : 3;
+          vuLevel = 0.10 + (r / 5) * 0.72; // rank1→0.24, rank5→0.82
+        }}
+        // ±5% P&L micro-oscillation
+        vuLevel = Math.max(0, Math.min(vuLevel + dPnlPct / 100, 1));
       }} else {{
-        var r = t.rank ? Math.min(t.rank, 5) : 3;
-        rankBase = 0.10 + (r / 5) * 0.70; // rank 1→0.24, rank 5→0.80
+        // Crypto — P&L% is the signal; 0%=empty, 3%=full
+        vuLevel = Math.max(0, Math.min(dPnlPct / 3, 1));
       }}
-      // Micro-oscillation from P&L% so bar breathes between rebalances (±4% of bar)
-      var vuOsc = Math.max(-0.04, Math.min(dPnlPct / 20, 0.04));
-      var vuLevel = Math.max(0, Math.min(rankBase + vuOsc, 1));
 
       // Peak hold: new peak resets hold timer; after 1.5s hold, decay at ~0.25/s
       if (t._vuPeak === undefined) {{ t._vuPeak = 0; t._vuPeakTs = ts; }}
