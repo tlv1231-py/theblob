@@ -7272,11 +7272,18 @@ setTimeout(function() {{
       ctx.fillText(holdStr, lx, y + 39);
 
       // ── VU meter bar + peak hat (y+46) ──
-      // Audio signal = P&L% toward a 5% target; bar oscillates with price
-      var vuTarget = 5.0; // % → full bar
-      var vuLevel  = Math.max(0, Math.min(dPnlPct / vuTarget, 1));
-      // Boost level toward full when exit signal fires
-      if (!t.inSignal && t.inSignal !== undefined) vuLevel = Math.max(vuLevel, 0.90);
+      // Primary signal: momentum rank (1=strongest hold, 5=weakest, EXIT=full)
+      // Rank 1 → ~0.15 (far from sell), Rank 5 → ~0.80 (near sell), EXIT → 1.0
+      var rankBase;
+      if (!t.inSignal && t.inSignal !== undefined) {{
+        rankBase = 1.0; // EXIT: full bar, sell signal fired
+      }} else {{
+        var r = t.rank ? Math.min(t.rank, 5) : 3;
+        rankBase = 0.10 + (r / 5) * 0.70; // rank 1→0.24, rank 5→0.80
+      }}
+      // Micro-oscillation from P&L% so bar breathes between rebalances (±4% of bar)
+      var vuOsc = Math.max(-0.04, Math.min(dPnlPct / 20, 0.04));
+      var vuLevel = Math.max(0, Math.min(rankBase + vuOsc, 1));
 
       // Peak hold: new peak resets hold timer; after 1.5s hold, decay at ~0.25/s
       if (t._vuPeak === undefined) {{ t._vuPeak = 0; t._vuPeakTs = ts; }}
