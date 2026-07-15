@@ -4520,6 +4520,12 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
     ctx.clearRect(0, 0, W, H);
 
+    // Diagnostic beacon — always visible; confirms canvas is alive
+    ctx.fillStyle = '#ff00cc';
+    ctx.fillRect(4, 4, 8, 8);
+    ctx.font = '10px Consolas'; ctx.fillStyle = '#ff00cc'; ctx.textAlign='left';
+    ctx.fillText('W='+Math.round(W)+' H='+Math.round(H)+' nav='+(window._lastKnownNav||'null'), 18, 13);
+
     var liveNav = window._lastKnownNav;
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
