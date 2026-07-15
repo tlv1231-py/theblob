@@ -2217,69 +2217,47 @@ body::after {{
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
 /* ── Buy console (bottom-right) ── */
+/* Buy console — single inline row in arcade font */
 #buy-console {{
   position:fixed; bottom:16px; right:16px; z-index:300;
-  width:200px;
-  background:rgba(0,2,10,.97);
-  border:1px solid #091826;
-  border-top:2px solid #00ff9d;
-  box-shadow:0 -4px 32px rgba(0,255,157,.08);
-  font-family:Consolas,monospace;
-  display:flex; flex-direction:column;
+  display:flex; align-items:center; gap:0;
+  font-family:'Press Start 2P',monospace; font-size:9px;
+  color:rgba(0,255,157,.55);
+  background:transparent;
+  white-space:nowrap;
 }}
-#bc-hdr {{
-  display:flex; align-items:center; gap:5px;
-  padding:4px 8px; border-bottom:1px solid #091826;
-  font:700 7px Consolas,monospace; letter-spacing:.22em; color:#00ff9d;
-  text-shadow:0 0 8px rgba(0,255,157,.4);
-}}
-#bc-hdr .bc-dot {{ width:4px; height:4px; border-radius:50%; background:#00ff9d;
-  box-shadow:0 0 5px #00ff9d; flex-shrink:0; }}
-/* Dollar amount — big, same weight as portfolio number */
-#bc-amt-row {{
-  display:flex; align-items:center; padding:8px 8px 4px;
-  gap:0; border-bottom:1px solid #091826;
-}}
-#bc-dollar {{
-  font:700 22px Consolas,monospace; color:#1a4a2a; letter-spacing:-.02em;
-  line-height:1; padding-right:3px; flex-shrink:0;
+#buy-console .bc-lbl {{
+  letter-spacing:.04em; pointer-events:none; padding-right:6px;
 }}
 #bc-amt {{
-  flex:1; background:transparent; border:none; outline:none;
-  font:700 22px Consolas,monospace; color:#00ff9d; letter-spacing:-.02em;
-  min-width:0; padding:0;
-  text-shadow:0 0 12px rgba(0,255,157,.3);
-}}
-#bc-amt::placeholder {{ color:#0a3a1a; }}
-/* Ticker row */
-#bc-sym-row {{
-  display:flex; align-items:center; padding:6px 8px;
-  gap:8px; border-bottom:1px solid #091826;
-}}
-#bc-sym {{
-  flex:1; background:transparent; border:none; outline:none;
-  font:700 13px Consolas,monospace; color:#40c4ff; letter-spacing:.06em;
-  min-width:0; padding:0; text-transform:uppercase;
-  text-shadow:0 0 8px rgba(64,196,255,.3);
-  list-style:none;
-}}
-#bc-sym::placeholder {{ color:#0a1a2a; }}
-datalist {{ display:none; }}
-/* BUY button */
-#bc-buy {{
-  margin:6px 8px 8px; padding:7px 0;
-  background:rgba(0,255,157,.1); border:1px solid #00ff9d;
-  color:#00ff9d; font:700 10px Consolas,monospace; letter-spacing:.24em;
-  cursor:pointer; transition:all .12s;
+  background:transparent; border:none; border-bottom:1px solid rgba(0,255,157,.25);
+  outline:none; width:64px; text-align:center;
+  font:inherit; font-size:9px; color:#00ff9d; padding:1px 2px;
   text-shadow:0 0 8px rgba(0,255,157,.5);
 }}
-#bc-buy:hover {{ background:rgba(0,255,157,.2); box-shadow:0 0 16px rgba(0,255,157,.15); }}
-#bc-buy:disabled {{ opacity:.35; cursor:default; }}
-/* Status */
+#bc-amt::placeholder {{ color:rgba(0,255,157,.18); font-family:'Press Start 2P',monospace; font-size:9px; }}
+#bc-sym {{
+  background:transparent; border:none; border-bottom:1px solid rgba(64,196,255,.25);
+  outline:none; width:72px; text-align:center;
+  font:inherit; font-size:9px; color:#40c4ff; padding:1px 2px; text-transform:uppercase;
+  text-shadow:0 0 8px rgba(64,196,255,.4);
+}}
+#bc-sym::placeholder {{ color:rgba(64,196,255,.18); font-family:'Press Start 2P',monospace; font-size:9px; }}
+datalist {{ display:none; }}
+#bc-buy {{
+  background:transparent; border:none; outline:none;
+  font:inherit; font-size:9px; color:#00ff9d; letter-spacing:.06em;
+  cursor:pointer; padding-left:8px;
+  text-shadow:0 0 10px rgba(0,255,157,.6);
+  transition:text-shadow .1s;
+}}
+#bc-buy:hover {{ text-shadow:0 0 18px rgba(0,255,157,1); }}
+#bc-buy:disabled {{ opacity:.3; cursor:default; }}
 #bc-status {{
-  font-size:7px; letter-spacing:.08em; text-align:center;
-  padding:0 8px 6px; color:#0a2a1a; min-height:13px;
-  transition:color .2s;
+  font-family:'Press Start 2P',monospace; font-size:7px;
+  letter-spacing:.04em; padding-left:8px;
+  color:rgba(0,255,157,.4); transition:color .2s;
+  min-width:0;
 }}
 /* Double-click hint on tiles */
 .tc-dblclick-hint {{
@@ -5321,24 +5299,16 @@ setTimeout(function() {{
   <div id="pos-panel" style="display:none"></div>
 </div>
 
-<!-- Buy console (fixed bottom-right) -->
+<!-- Buy console — inline arcade row -->
 <div id="buy-console">
-  <div id="bc-hdr">
-    <div class="bc-dot"></div>
-    BUY
-    <span style="margin-left:auto;opacity:.3;letter-spacing:.05em">PAPER · [USER]</span>
-  </div>
-  <div id="bc-amt-row">
-    <span id="bc-dollar">$</span>
-    <input id="bc-amt" type="number" placeholder="0" min="0" step="1" autocomplete="off">
-  </div>
-  <div id="bc-sym-row">
-    <input id="bc-sym" type="text" placeholder="ticker" maxlength="12" list="bc-tickers"
-           autocomplete="off" spellcheck="false">
-    <datalist id="bc-tickers"></datalist>
-  </div>
+  <span class="bc-lbl">BUY $</span>
+  <input id="bc-amt" type="number" placeholder="amt" min="0" step="1" autocomplete="off">
+  <span class="bc-lbl">&nbsp;OF&nbsp;</span>
+  <input id="bc-sym" type="text" placeholder="ticker" maxlength="12" list="bc-tickers"
+         autocomplete="off" spellcheck="false">
+  <datalist id="bc-tickers"></datalist>
   <button id="bc-buy" onclick="bcSubmit()">▶ BUY</button>
-  <div id="bc-status">dbl-click holding to sell</div>
+  <span id="bc-status"></span>
 </div>
 
 <script>
