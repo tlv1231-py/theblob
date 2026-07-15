@@ -7304,40 +7304,43 @@ setTimeout(function() {{
         if (cStop > 0 && cTarget > cStop && cCur > 0) {{
           vuLevel = Math.max(0, Math.min((cCur - cStop) / (cTarget - cStop), 1));
         }} else {{
-          // fallback: midpoint + P&L drift (gives baseline activity even at 0 P&L)
-          vuLevel = Math.max(0, Math.min(0.45 + dPnlPct / 8, 1));
+          // Fallback: start at 0, let P&L% drift provide life (no instant baseline)
+          vuLevel = Math.max(0, Math.min(dPnlPct / 6, 1));
         }}
       }}
 
-      // Peak hold: new peak resets hold timer; after 1.5s hold, decay at ~0.25/s
+      // Display lerp — bar rises from 0 on spawn, never instantly full
+      if (t._dVu === undefined) t._dVu = 0;
+      t._dVu += (vuLevel - t._dVu) * 0.012; // ~8s to reach target at 30fps
+
+      // Peak hold tracks _dVu so hat also builds slowly; decays very slowly
       if (t._vuPeak === undefined) {{ t._vuPeak = 0; t._vuPeakTs = ts; }}
-      if (vuLevel >= t._vuPeak) {{
-        t._vuPeak   = vuLevel;
-        t._vuPeakTs = ts; // reset hold
+      if (t._dVu >= t._vuPeak) {{
+        t._vuPeak   = t._dVu;
+        t._vuPeakTs = ts;
       }} else {{
-        var holdDur = 1500; // ms before decay starts
+        var holdDur = 2000; // 2s hold before decay
         var decayAge = ts - t._vuPeakTs - holdDur;
         if (decayAge > 0) {{
-          // decay ~0.25 of full bar per second
-          t._vuPeak = Math.max(vuLevel, t._vuPeak - decayAge * 0.00025);
-          t._vuPeakTs = ts - holdDur; // advance so decay is frame-relative
+          // very slow fall — ~0.003/s, ~5 min from 1.0 to 0
+          t._vuPeak = Math.max(t._dVu, t._vuPeak - decayAge * 0.0001);
+          t._vuPeakTs = ts - holdDur;
         }}
       }}
 
       var xpW = W - 10, xpH = 3, xpX = x + 5, xpY = y + 46;
-      // Track (dim)
       ctx.fillStyle = 'rgba(255,255,255,0.09)';
       ctx.fillRect(xpX, xpY, xpW, xpH);
-      // Fill (current level)
       ctx.fillStyle = 'rgba(255,255,255,0.70)';
-      ctx.fillRect(xpX, xpY, Math.round(xpW * vuLevel), xpH);
-      // Peak hat — 2px wide block, bright white
+      ctx.fillRect(xpX, xpY, Math.round(xpW * t._dVu), xpH);
       var hatX = xpX + Math.round(xpW * t._vuPeak) - 2;
       if (hatX > xpX && hatX + 2 <= xpX + xpW) {{
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.fillRect(hatX, xpY - 1, 2, xpH + 2); // slightly taller than bar
+        ctx.fillRect(hatX, xpY - 1, 2, xpH + 2);
       }}
     }}
+
+    var _etInitPhase = true; // suppress entry sound for init seed tiles
 
     // Add or replace a tile (upsert)
     function _etUpsert(data) {{
@@ -7351,6 +7354,11 @@ setTimeout(function() {{
         existing.inSignal = data.inSignal  !== undefined ? data.inSignal : existing.inSignal;
         existing.rank     = data.rank      || existing.rank;
         existing.holdText = data.holdText  || existing.holdText;
+        // Update enteredAt if the new value is a real past timestamp (>1 min old),
+        // overwriting a Date.now() placeholder set when entered_at was null
+        if (data.enteredAt && data.enteredAt < Date.now() - 60000) {{
+          existing.enteredAt = data.enteredAt;
+        }}
         return existing;
       }}
       var tile = {{
@@ -7380,8 +7388,8 @@ setTimeout(function() {{
       _etBySym[data.sym] = tile;
       _etDirty = true;
       _updateOverlayWidth();
-      // Sound fires when tile first appears (on the tile, not the notification)
-      if (window._soundEntry) window._soundEntry();
+      // Sound fires when tile first appears — skip for page-init seed tiles
+      if (!_etInitPhase && window._soundEntry) window._soundEntry();
       return tile;
     }}
     window._etUpsert = _etUpsert;
@@ -7431,10 +7439,11 @@ setTimeout(function() {{
 
     window._updateOverlayWidth = _updateOverlayWidth;
 
-    // Seed tiles from Python init data
+    // Seed tiles from Python init data (sounds suppressed during this phase)
     (function() {{
       if (!window._eqCanvasInitData) return;
       _eqCanvasInitData.forEach(function(d) {{ _etUpsert(d); }});
+      _etInitPhase = false; // future tile inserts play entry sound
     }})();
 
     // 30fps canvas draw loop
