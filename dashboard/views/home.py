@@ -1191,7 +1191,7 @@ body::after {{
 }}
 /* flex children */
 #main-area {{ flex:1; position:relative; overflow:hidden; min-height:0; }}
-#chart {{ position:absolute; inset:0; width:100%; height:100%; }}
+#chart {{ display:none; }}
 #pulse-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:8; }}
 #particle-canvas {{ position:absolute; inset:0; pointer-events:none; z-index:1; width:100%; height:100%; }}
 
@@ -4468,183 +4468,248 @@ Plotly.newPlot(gd, traces, layout, config).then(function() {{
 
 gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }});
 
-// ── Canvas nav line — replaces Plotly portfolio traces for live intraday view ─────
-// Plotly's autorange and mixed date formats are fundamentally incompatible with a
-// locked 20-min sliding window. We draw the line ourselves on a canvas overlay.
+// ── Portfolio canvas chart — sole chart surface, no Plotly ──────────────────
+// Robinhood-style: dark bg, glowing trail line, gradient fill, Y labels,
+// X time labels, current-value callout, trade markers. Star canvas sits below.
 (function() {{
   var _nc = document.getElementById('nav-canvas');
   if (!_nc) return;
+  var _dpr = window.devicePixelRatio || 1;
+
+  // Margins — leave room for Y-axis labels on left, X labels at bottom
+  var _ML = 64, _MR = 20, _MT = 28, _MB = 32;
 
   function _resize() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     var r = ma.getBoundingClientRect();
-    _nc.width  = r.width  || 800;
-    _nc.height = r.height || 500;
+    var cw = r.width || 800, ch = r.height || 500;
+    if (_nc.width !== Math.round(cw * _dpr) || _nc.height !== Math.round(ch * _dpr)) {{
+      _nc.width  = Math.round(cw * _dpr);
+      _nc.height = Math.round(ch * _dpr);
+      _nc.style.width  = cw + 'px';
+      _nc.style.height = ch + 'px';
+      var ctx = _nc.getContext('2d');
+      ctx.setTransform(_dpr, 0, 0, _dpr, 0, 0);
+    }}
   }}
   _resize();
   window.addEventListener('resize', _resize);
 
-  // Scroll wheel zooms the time window (hours visible to the left of now)
-  window._navWindowMs = 8 * 3600 * 1000; // 8-hour rolling window; scroll wheel zooms
+  // Scroll wheel zooms the time window
+  window._navWindowMs = 4 * 3600 * 1000; // default: 4-hour window
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
-      var factor = e.deltaY > 0 ? 1.15 : 0.87;
+      var factor = e.deltaY > 0 ? 1.2 : 0.83;
       window._navWindowMs = Math.max(5 * 60000, Math.min(30 * 86400000,
-        (window._navWindowMs || 8*3600000) * factor));
-      window._navYLo = undefined; window._navYHi = undefined; // re-fit to new window
+        (window._navWindowMs || 4*3600000) * factor));
     }}, {{ passive: false }});
   }})();
 
-  // ── Session live points — appended only, never modified or reordered ────────
-  var _navLive = [];
-
   window._navPush = function(v, isoTs) {{
-    if (!v || isNaN(v)) return;
-    var ms = isoTs ? new Date(isoTs).getTime() : Date.now();
-    _navLive.push({{ ms: ms, v: v }});
-    // Trim to last 2h of points so the array doesn't grow unbounded
-    var cutoff = ms - 2 * 3600 * 1000;
-    while (_navLive.length > 1 && _navLive[0].ms < cutoff) _navLive.shift();
+    // kept for API compatibility — data now comes from _navDbPts
   }};
 
   window._drawNavCanvas = function() {{
     _resize();
-    var W = _nc.width, H = _nc.height;
     var ctx = _nc.getContext('2d');
+    var W = _nc.width / _dpr, H = _nc.height / _dpr;
     ctx.clearRect(0, 0, W, H);
 
     var liveNav = window._lastKnownNav;
     if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // Anchor: the first time we have a live value defines "session start."
-    // The dot starts at canvas center and moves right as time accumulates.
-    // After half a session-window (15min default) has elapsed, the window
-    // starts scrolling normally and the dot stays near the right edge.
-    var halfSpan = 15 * 60 * 1000;
-    if (!window._navSessionT0) window._navSessionT0 = Date.now();
-    var _sT0 = window._navSessionT0;
-    // Window: from (sT0 - halfSpan) to max(now, sT0 + halfSpan)
-    // This centers the dot at session start, then grows the window rightward.
-    var now_ms = Date.now();
-    var t0 = _sT0 - halfSpan;
-    var t1 = Math.max(now_ms, _sT0 + halfSpan);
+    // Time window: rolling, anchored to now
+    var winMs   = window._navWindowMs || 4 * 3600 * 1000;
+    var now_ms  = Date.now();
+    var t1      = now_ms;
+    var t0      = t1 - winMs;
 
-    // Merge DB points into the visible window
+    // Gather DB points in window + live point
     var pts = window._navDbPts || [];
     var allPts = [];
     for (var i = 0; i < pts.length; i++) {{
       var ms = new Date(pts[i].t).getTime();
-      if (ms >= t0 && ms <= t1) allPts.push({{ ms: ms, v: pts[i].v }});
+      if (ms >= t0) allPts.push({{ ms: ms, v: pts[i].v }});
     }}
-    // Always add the live point at now
     allPts.push({{ ms: now_ms, v: liveNav }});
+    // Sort ascending (just in case)
+    allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
-    var tSpan = t1 - t0;
-    function tx(ms) {{ return (ms - t0) / tSpan * (W - 16) + 8; }}
+    // Chart area in CSS pixels
+    var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
+    var cW = cx1 - cx0, cH = cy1 - cy0;
 
-    // Y: fit to all visible data, no smoothing.
+    // Y range: fit visible data with 8% padding each side
     var lo = liveNav, hi = liveNav;
     for (var vi = 0; vi < allPts.length; vi++) {{
       if (allPts[vi].v < lo) lo = allPts[vi].v;
       if (allPts[vi].v > hi) hi = allPts[vi].v;
     }}
-    var pad = Math.max(hi - lo, liveNav * 0.001) * 0.2;
-    lo -= pad; hi += pad;
-    function ty(v) {{ return H - ((v - lo) / (hi - lo)) * (H - 20) - 10; }}
+    var spread = Math.max(hi - lo, liveNav * 0.002);
+    lo -= spread * 0.12; hi += spread * 0.12;
 
-    // Map to canvas coords
-    var mapped = [];
-    for (var mi = 0; mi < allPts.length; mi++) {{
-      mapped.push({{ x: tx(allPts[mi].ms), y: ty(allPts[mi].v) }});
+    function tx(ms) {{ return cx0 + (ms - t0) / (t1 - t0) * cW; }}
+    function ty(v)  {{ return cy1 - (v - lo) / (hi - lo) * cH; }}
+
+    // ── Horizontal grid lines + Y-axis labels ──────────────────────────────
+    var nTicks = 5;
+    ctx.font = '10px Consolas,monospace';
+    ctx.textAlign = 'right';
+    for (var ti = 0; ti <= nTicks; ti++) {{
+      var yv  = lo + (hi - lo) * ti / nTicks;
+      var yy  = ty(yv);
+      ctx.strokeStyle = 'rgba(42,0,61,0.55)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(cx0, yy); ctx.lineTo(cx1, yy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#3a1a4a';
+      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 - 6, yy + 3.5);
     }}
-    if (!mapped.length) return;
 
-    // Orb tracks the dot's actual SCREEN position as a fraction of the full page.
-    // Nav canvas is only the left panel — must convert to page coordinates so the
-    // pulse canvas (full-screen) places the blob at the correct spot.
-    var dotX = mapped[mapped.length-1].x;
-    var dotY = mapped[mapped.length-1].y;
-    var ncRect = _nc.getBoundingClientRect();
-    var screenX = ncRect.left + dotX * (ncRect.width  / (W || 1));
-    var screenY = ncRect.top  + dotY * (ncRect.height / (H || 1));
-    window._navOrbFracX = Math.max(0.05, Math.min(0.95, screenX / (window.innerWidth  || 1)));
-    window._navOrbFracY = Math.max(0.05, Math.min(0.95, screenY / (window.innerHeight || 1)));
+    // ── X-axis time labels ─────────────────────────────────────────────────
+    var xTickCount = Math.min(6, Math.max(2, Math.floor(cW / 90)));
+    ctx.textAlign = 'center';
+    for (var xi = 0; xi <= xTickCount; xi++) {{
+      var xms  = t0 + (t1 - t0) * xi / xTickCount;
+      var xx   = tx(xms);
+      var xd   = new Date(xms);
+      var hh   = xd.getHours() % 12 || 12;
+      var mm   = ('0' + xd.getMinutes()).slice(-2);
+      var ampm = xd.getHours() < 12 ? 'a' : 'p';
+      ctx.fillStyle = '#2a1040';
+      ctx.fillText(hh + ':' + mm + ampm, xx, cy1 + 18);
+    }}
 
-    var m = mapped;
+    // ── Vertical "NOW" marker ──────────────────────────────────────────────
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath(); ctx.moveTo(cx1, cy0); ctx.lineTo(cx1, cy1); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // ── Milestone dotted horizontals (100k, 105k, etc.) ───────────────────
+    var _ms = [97000,98000,99000,100000,101000,102000,103000,104000,105000];
+    for (var mi2 = 0; mi2 < _ms.length; mi2++) {{
+      var mv = _ms[mi2];
+      if (mv < lo || mv > hi) continue;
+      var my = ty(mv);
+      ctx.strokeStyle = mv === 100000 ? 'rgba(255,0,204,0.3)' : 'rgba(120,0,160,0.18)';
+      ctx.lineWidth = mv === 100000 ? 1 : 1;
+      ctx.setLineDash([3, 8]);
+      ctx.beginPath(); ctx.moveTo(cx0, my); ctx.lineTo(cx1, my); ctx.stroke();
+      ctx.setLineDash([]);
+    }}
+
+    // ── Map data to screen coords ──────────────────────────────────────────
+    var m = allPts.map(function(p) {{ return {{ x: tx(p.ms), y: ty(p.v) }}; }});
     var n = m.length;
-    // Direct linear segments — no step chart, no vertical snaps.
-    // Sidescroller: the line is a smooth trail, up = profit, down = loss.
-    function _stroke(pts) {{
-      ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
-      for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
-    }}
 
-    // Under-fill: gradient from start color to end color
-    var _startDy = n > 1 ? m[1].y - m[0].y : 0;
-    var _endDy   = n > 1 ? m[n-1].y - m[n-2].y : 0;
-    var _startRGB = _startDy < -0.5 ? '0,220,255' : _startDy > 0.5 ? '255,10,138' : '148,0,255';
-    var _endRGB   = _endDy   < -0.5 ? '0,220,255' : _endDy   > 0.5 ? '255,10,138' : '148,0,255';
-    _stroke(m); ctx.lineTo(m[n-1].x,H); ctx.lineTo(m[0].x,H); ctx.closePath();
-    var fg = ctx.createLinearGradient(m[0].x,0,m[n-1].x,0);
-    fg.addColorStop(0,'rgba('+_startRGB+',0.04)');
-    fg.addColorStop(1,'rgba('+_endRGB+',0.12)');
-    ctx.fillStyle=fg; ctx.fill();
+    if (n >= 2) {{
+      // Under-fill gradient (vertical: line color → transparent at bottom)
+      var lastDelta = m[n-1].v - m[0].v; // not used but kept
+      var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
+      fillGrad.addColorStop(0,   'rgba(148,0,255,0.18)');
+      fillGrad.addColorStop(0.6, 'rgba(148,0,255,0.05)');
+      fillGrad.addColorStop(1,   'rgba(148,0,255,0)');
+      ctx.beginPath();
+      ctx.moveTo(m[0].x, m[0].y);
+      for (var pi = 1; pi < n; pi++) ctx.lineTo(m[pi].x, m[pi].y);
+      ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
+      ctx.fillStyle = fillGrad; ctx.fill();
 
-    // Per-segment glow: colored by direction (teal=up, magenta=down)
-    // Comet fade: oldest segment = 15% alpha, tip = 100%
-    function _segRGB(dy) {{
-      if (dy < -0.5) return '0,220,255';    // UP   → teal/cyan
-      if (dy >  0.5) return '255,10,138';   // DOWN → hot magenta
-      return '148,0,255';                   // FLAT → deep violet
-    }}
-    var _passes = [
-      {{w:18, a:0.14}},
-      {{w:7,  a:0.45}},
-      {{w:2.5,a:0.80}},
-      {{w:1.0,a:1.00}},
-    ];
-    for (var si = 0; si < n - 1; si++) {{
-      var _p1 = m[si], _p2 = m[si+1];
-      var _dy   = _p2.y - _p1.y;
-      var _rgb  = _segRGB(_dy);
-      var _fade = 0.15 + 0.85 * (si / Math.max(1, n - 2));
-      var _tip  = (si === n - 2) ? 1.3 : 1;
-      (function(_p1c,_p2c,_rgbc,_fadec,_tipc) {{
-        _passes.forEach(function(pass) {{
-          ctx.beginPath();
-          ctx.moveTo(_p1c.x, _p1c.y);
-          ctx.lineTo(_p2c.x, _p2c.y);   // direct linear — no vertical snap
-          ctx.strokeStyle = 'rgba('+_rgbc+','+(pass.a * _fadec * _tipc)+')';
-          ctx.lineWidth   = pass.w;
-          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-          ctx.stroke();
-        }});
-        // White highlight spine
+      // Glow passes (wide → thin)
+      var passes = [
+        {{ w:14, a:0.10, rgb:'148,0,255' }},
+        {{ w:5,  a:0.35, rgb:'148,0,255' }},
+        {{ w:2,  a:0.75, rgb:'200,60,255' }},
+        {{ w:1,  a:1.00, rgb:'220,120,255' }},
+      ];
+      passes.forEach(function(pass) {{
         ctx.beginPath();
-        ctx.moveTo(_p1c.x, _p1c.y);
-        ctx.lineTo(_p2c.x, _p2c.y);
-        ctx.strokeStyle = 'rgba(255,245,255,'+(0.45 * _fadec * _tipc)+')';
-        ctx.lineWidth = 0.7; ctx.lineJoin='round'; ctx.lineCap='round';
+        ctx.moveTo(m[0].x, m[0].y);
+        for (var pi2 = 1; pi2 < n; pi2++) ctx.lineTo(m[pi2].x, m[pi2].y);
+        ctx.strokeStyle = 'rgba(' + pass.rgb + ',' + pass.a + ')';
+        ctx.lineWidth = pass.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
         ctx.stroke();
-      }})(_p1,_p2,_rgb,_fade,_tip);
+      }});
     }}
 
-    // Breathing dot at trail tip
-    var pulse=0.5+0.5*Math.sin(Date.now()/400);
-    var tipX=m[n-1].x, tipY=m[n-1].y;
-    ctx.beginPath(); ctx.arc(tipX,tipY,4+pulse*3,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,255,255,'+(0.5+pulse*0.5)+')'; ctx.fill();
-    ctx.beginPath(); ctx.arc(tipX,tipY,10+pulse*8,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,0,204,'+(0.15+pulse*0.2)+')'; ctx.fill();
+    // ── Orb position for pulse canvas ──────────────────────────────────────
+    var tipX = n ? m[n-1].x : cx0 + cW / 2;
+    var tipY = n ? m[n-1].y : cy0 + cH / 2;
+    var ncRect = _nc.getBoundingClientRect();
+    var scrX = ncRect.left + tipX * (ncRect.width  / W);
+    var scrY = ncRect.top  + tipY * (ncRect.height / H);
+    window._navOrbFracX = Math.max(0.05, Math.min(0.95, scrX / (window.innerWidth  || 1)));
+    window._navOrbFracY = Math.max(0.05, Math.min(0.95, scrY / (window.innerHeight || 1)));
+
+    // ── Breathing dot at trail tip ──────────────────────────────────────────
+    var pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
+    // Outer glow
+    ctx.beginPath(); ctx.arc(tipX, tipY, 10 + pulse * 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(180,0,255,' + (0.12 + pulse * 0.18) + ')'; ctx.fill();
+    // Mid ring
+    ctx.beginPath(); ctx.arc(tipX, tipY, 5 + pulse * 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(220,100,255,' + (0.5 + pulse * 0.3) + ')'; ctx.fill();
+    // Core white dot
+    ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+
+    // ── Current value callout ───────────────────────────────────────────────
+    var valStr = '$' + liveNav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+    ctx.font = 'bold 13px Consolas,monospace';
+    var tw = ctx.measureText(valStr).width;
+    var lx = Math.min(tipX + 14, W - _MR - tw - 6);
+    var ly = Math.max(cy0 + 16, Math.min(tipY + 4, cy1 - 6));
+    // Pill background
+    ctx.fillStyle = 'rgba(8,0,18,0.85)';
+    ctx.beginPath();
+    ctx.roundRect(lx - 4, ly - 12, tw + 8, 17, 3);
+    ctx.fill();
+    // Text
+    ctx.fillStyle = '#e0c8ff';
+    ctx.textAlign = 'left';
+    ctx.fillText(valStr, lx, ly);
+
+    // ── ENTER / EXIT trade markers ──────────────────────────────────────────
+    var _tradeMarkers = window._navTradeMarkers || [];
+    for (var tmi = 0; tmi < _tradeMarkers.length; tmi++) {{
+      var tm = _tradeMarkers[tmi];
+      var tmMs = new Date(tm.ts).getTime();
+      if (tmMs < t0 || tmMs > t1) continue;
+      var tmx = tx(tmMs);
+      var tmy = tm.nav ? ty(tm.nav) : (tm.side === 'ENTER' ? cy0 + 20 : cy1 - 20);
+      var isEnter = tm.side === 'ENTER';
+      var tmCol = isEnter ? '#00ff9d' : '#ff3366';
+      // Vertical drop line
+      ctx.strokeStyle = isEnter ? 'rgba(0,255,157,0.2)' : 'rgba(255,51,102,0.2)';
+      ctx.lineWidth = 1; ctx.setLineDash([2,4]);
+      ctx.beginPath(); ctx.moveTo(tmx, cy0); ctx.lineTo(tmx, cy1); ctx.stroke();
+      ctx.setLineDash([]);
+      // Triangle marker
+      ctx.fillStyle = tmCol;
+      ctx.beginPath();
+      if (isEnter) {{
+        ctx.moveTo(tmx, tmy - 12); ctx.lineTo(tmx - 6, tmy - 2); ctx.lineTo(tmx + 6, tmy - 2);
+      }} else {{
+        ctx.moveTo(tmx, tmy + 12); ctx.lineTo(tmx - 6, tmy + 2); ctx.lineTo(tmx + 6, tmy + 2);
+      }}
+      ctx.closePath(); ctx.fill();
+      // Symbol label
+      ctx.font = '9px Consolas,monospace';
+      ctx.fillStyle = tmCol;
+      ctx.textAlign = 'center';
+      ctx.fillText(tm.sym || '', tmx, isEnter ? tmy - 15 : tmy + 23);
+    }}
 
   }};
 
-  // Cap nav canvas to ~30fps — it carries no per-frame animation data,
-  // so full 60fps redraws waste GPU time shared with the pulse/ambient canvases.
+  // ~30fps — enough for a smooth breathing dot without burning GPU
   var _navLastDraw = 0;
   (function _raf(ts) {{
     if (ts - _navLastDraw >= 33) {{ _navLastDraw = ts; window._drawNavCanvas(); }}
@@ -4854,16 +4919,11 @@ function _fetchTradeEvents() {{
       }}
     }});
 
-    // Rebuild traces 7 + 8 (entry/exit markers; 6 = intraday line)
-    if (gd && gd.data && gd.data.length >= 9) {{
-      Plotly.restyle(gd, {{ x:[enterXs], y:[enterYs], text:[enterTexts] }}, [7]);
-      Plotly.restyle(gd, {{ x:[exitXs],  y:[exitYs],  text:[exitTexts]  }}, [8]);
-      // Merge drop lines with current layout shapes (preserves ATH shape etc.)
-      var curShapes = (gd.layout && gd.layout.shapes) ? gd.layout.shapes.slice() : shapes.slice();
-      var baseShapes = curShapes.filter(function(s) {{ return !s._trade; }});
-      newShapes.forEach(function(s) {{ s._trade = true; }});
-      Plotly.relayout(gd, {{ shapes: baseShapes.concat(newShapes) }});
-    }}
+    // Feed trade markers to canvas chart
+    var canvasMarkers = [];
+    enterXs.forEach(function(ts, i) {{ canvasMarkers.push({{ ts:ts, nav:enterYs[i], sym:enterTexts[i], side:'ENTER' }}); }});
+    exitXs.forEach(function(ts, i)  {{ canvasMarkers.push({{ ts:ts, nav:exitYs[i],  sym:exitTexts[i],  side:'EXIT'  }}); }});
+    window._navTradeMarkers = canvasMarkers;
   }})
   .catch(function() {{}});
 }}
