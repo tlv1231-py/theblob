@@ -1148,9 +1148,7 @@ body::after {{
 #pos-overlay .panel-hdr {{ flex-shrink:0; padding:6px 12px 5px; border-bottom:1px solid #1a0022; display:none; }}
 #pos-overlay #pos-body {{ flex:1; overflow:hidden; display:flex; flex-direction:row; gap:0; }}
 #pos-right {{
-  background:linear-gradient(270deg,rgba(1,0,8,.88) 0%,rgba(1,0,8,.6) 80%,transparent 100%);
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
-  mask-image:linear-gradient(to bottom,transparent 0%,black 12%,black 88%,transparent 100%);
+  background:transparent;
 }}
 #pos-left {{ flex:0 0 auto !important; overflow:hidden; width:0 !important; display:none; }}
 #pos-left .pos-section-label {{ display:none; }}
@@ -2556,11 +2554,14 @@ body::after {{
 #orb-batch-popup {{
   position:absolute; pointer-events:none; z-index:30;
   font-family:'Bangers','Silkscreen',Consolas,monospace;
-  font-size:20px; letter-spacing:.08em; font-variant-numeric:tabular-nums;
+  font-size:18px; letter-spacing:.08em; font-variant-numeric:tabular-nums;
   opacity:0; white-space:nowrap;
   text-shadow:0 0 18px currentColor, 0 0 6px currentColor;
-  transition:opacity .15s;
-  transform:translateY(-50%);
+  transition:opacity 1.2s ease;
+}}
+@keyframes orb-popup-drift {{
+  from {{ transform:translate(-100%,-50%) translateX(0px);   }}
+  to   {{ transform:translate(-100%,-50%) translateX(-60px); }}
 }}
 </style>
 </head>
@@ -6945,20 +6946,20 @@ setTimeout(function() {{
     }}
 
     function _etTilePos(t, layout) {{
-      // Crypto: rightmost columns (col 0 = far right)
-      // Equity: columns just left of crypto (separated by 2px gap)
-      if (t.isCrypto) {{
-        var ci  = layout.crypto.indexOf(t);
-        var col = Math.floor(ci / layout.perCol);
-        var row = ci % layout.perCol;
+      // Equity (NYSE): rightmost columns (col 0 = far right)
+      // Crypto: columns just left of equity (separated by 2px gap)
+      if (!t.isCrypto) {{
+        var ei  = layout.equity.indexOf(t);
+        var col = Math.floor(ei / layout.perCol);
+        var row = ei % layout.perCol;
         var x   = (layout.totalCols - 1 - col) * _EQ_W;
         return {{ x: x, y: row * _EQ_H }};
       }} else {{
-        var ei  = layout.equity.indexOf(t);
-        var col2 = Math.floor(ei / layout.perCol);
-        var row2 = ei % layout.perCol;
-        // Equity columns sit to the LEFT of crypto columns
-        var x2  = (layout.equityCols - 1 - col2) * _EQ_W;
+        var ci   = layout.crypto.indexOf(t);
+        var col2 = Math.floor(ci / layout.perCol);
+        var row2 = ci % layout.perCol;
+        // Crypto columns sit to the LEFT of equity columns
+        var x2   = (layout.cryptoCols - 1 - col2) * _EQ_W;
         return {{ x: x2, y: row2 * _EQ_H }};
       }}
     }}
@@ -7196,12 +7197,17 @@ setTimeout(function() {{
           ctx.textAlign = 'left';
         }}
 
-        // ── ROW 4 (y+76): HOLD / EXIT signal status ──
+        // ── ROW 4 (y+76): HOLD / EXIT signal status (clipped to tile width) ──
         ctx.fillStyle = 'rgba(255,255,255,0.04)';
         ctx.fillRect(x+2, y+68, W-4, 1);
         ctx.font = '7px Consolas,monospace';
         ctx.fillStyle = t.inSignal ? 'rgba(0,200,140,0.5)' : 'rgba(220,120,0,0.6)';
-        ctx.fillText(t.holdText || (t.inSignal ? 'HOLD' : 'EXIT'), lx, y+76);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(lx, y+68, W - lx - 5, 12); ctx.clip();
+        var statusText = t.inSignal ? 'HOLD' : 'EXIT';
+        if (t.holdText) {{ statusText = t.holdText.length > 14 ? t.holdText.slice(0,13)+'…' : t.holdText; }}
+        ctx.fillText(statusText, lx, y+76);
+        ctx.restore();
       }}
     }}
 
@@ -8319,21 +8325,22 @@ setTimeout(function() {{
         var maRect = ma ? ma.getBoundingClientRect() : rect;
         var orbX = (window._navOrbFracX || 0.5) * rect.width;
         var orbY = (window._navOrbFracY || 0.5) * rect.height;
-        // Place popup LEFT of orb — text anchored right so it extends further left
-        var popX = orbX - 140;
+        // Place popup just left of orb; drift animation carries it further left
+        var popX = orbX - 30;
         var popY = orbY;
         popup.style.left      = (rect.left - maRect.left + popX) + 'px';
         popup.style.top       = (rect.top  - maRect.top  + popY) + 'px';
-        popup.style.transform = 'translate(-100%, -50%)';
+        popup.style.animation = 'none';
+        void popup.offsetWidth; // force reflow to restart animation
+        popup.style.animation = 'orb-popup-drift 5s ease-in forwards';
         var isPos = pnl >= 0;
         popup.style.color = isPos ? '#00ff9d' : '#ff3366';
         popup.textContent = (isPos ? '+$' : '-$') + Math.abs(pnl).toLocaleString('en-US', {{minimumFractionDigits:2,maximumFractionDigits:2}});
         popup.style.opacity = '1';
         if (_orbPopupTimer) clearTimeout(_orbPopupTimer);
         _orbPopupTimer = setTimeout(function() {{
-          popup.style.transition = 'opacity 1.4s ease';
           popup.style.opacity = '0';
-        }}, 8000);
+        }}, 4000);
       }};
 
       // ── System health tracking ────────────────────────────────
