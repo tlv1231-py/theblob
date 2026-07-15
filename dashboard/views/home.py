@@ -4531,7 +4531,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.clearRect(0, 0, W, H);
 
     var liveNav = window._lastKnownNav;
-    if (!liveNav) {{ window._navOrbFracX=0.9; window._navOrbFracY=0.5; return; }}
+    if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
     // Normal real-time line: time flows left→right, dot at right edge.
     // No centering, no side-scroller — just a plain chart.
