@@ -4480,20 +4480,19 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   var _ML = 64, _MR = 20, _MT = 28, _MB = 32;
 
   function _resize() {{
-    var ma = document.getElementById('main-area');
-    if (!ma) return;
-    var r = ma.getBoundingClientRect();
-    var cw = r.width || 800, ch = r.height || 500;
-    if (_nc.width !== Math.round(cw * _dpr) || _nc.height !== Math.round(ch * _dpr)) {{
-      _nc.width  = Math.round(cw * _dpr);
-      _nc.height = Math.round(ch * _dpr);
-      _nc.style.width  = cw + 'px';
-      _nc.style.height = ch + 'px';
+    // offsetWidth/Height are always layout-correct; getBoundingClientRect can
+    // return 0 when #chart is display:none and the parent hasn't reflowed yet.
+    var cw = _nc.offsetWidth  || (window.innerWidth  - 60)  || 800;
+    var ch = _nc.offsetHeight || (window.innerHeight - 140) || 500;
+    var pw = Math.round(cw * _dpr), ph = Math.round(ch * _dpr);
+    if (_nc.width !== pw || _nc.height !== ph) {{
+      _nc.width = pw; _nc.height = ph;
       var ctx = _nc.getContext('2d');
       ctx.setTransform(_dpr, 0, 0, _dpr, 0, 0);
     }}
   }}
-  _resize();
+  // Delay first resize until layout has settled
+  setTimeout(_resize, 100);
   window.addEventListener('resize', _resize);
 
   // Scroll wheel zooms the time window
