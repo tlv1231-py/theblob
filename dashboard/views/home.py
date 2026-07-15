@@ -4499,15 +4499,16 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll wheel zooms the time window (hours visible to the left of now)
-  window._navWindowMs = 8 * 60 * 1000; // 8-minute rolling window; scroll wheel zooms
+  window._navWindowMs = 8 * 3600 * 1000; // 8-hour rolling window; scroll wheel zooms
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
       var factor = e.deltaY > 0 ? 1.15 : 0.87;
-      window._navWindowMs = Math.max(30000, Math.min(30 * 86400000,
-        (window._navWindowMs || 5*60000) * factor));
+      window._navWindowMs = Math.max(5 * 60000, Math.min(30 * 86400000,
+        (window._navWindowMs || 8*3600000) * factor));
+      window._navYLo = undefined; window._navYHi = undefined; // re-fit to new window
     }}, {{ passive: false }});
   }})();
 
@@ -4530,57 +4531,58 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.clearRect(0, 0, W, H);
 
     var liveNav = window._lastKnownNav;
-    if (!liveNav) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
+    if (!liveNav) {{ window._navOrbFracX=0.9; window._navOrbFracY=0.5; return; }}
 
-    // X: "now" pinned at canvas center; history scrolls left
-    var _nowPx     = W / 2;
-    var nowMs      = Date.now();
-    var windowMs   = window._navWindowMs || (8 * 60 * 1000);
+    // Normal real-time line: time flows left→right, dot at right edge.
+    // No centering, no side-scroller — just a plain chart.
+    var pts = window._intradayPts || [];
+    var nowMs = Date.now();
+    var windowMs = window._navWindowMs || (8 * 3600 * 1000);
     var leftEdgeMs = nowMs - windowMs;
-    function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * _nowPx; }}
 
-    // Collect visible session points
+    // Build visible points — absolute NAV, no delta math
     var visible = [];
-    for (var li = 0; li < _navLive.length; li++) {{
-      var pt = _navLive[li];
-      if (pt.ms >= leftEdgeMs && pt.ms <= nowMs) visible.push(pt);
+    for (var i = 0; i < pts.length; i++) {{
+      var ms = new Date(pts[i].t).getTime();
+      if (ms >= leftEdgeMs) visible.push({{ ms: ms, v: pts[i].v }});
     }}
-    // Always cap with the live "now" value at the right edge
-    if (!visible.length || visible[visible.length-1].v !== liveNav) {{
-      visible.push({{ ms: nowMs, v: liveNav }});
-    }}
-    // If we have no history yet, add a flat left anchor so there's a line to draw
+    visible.push({{ ms: nowMs, v: liveNav }});
     if (visible.length < 2) visible.unshift({{ ms: leftEdgeMs, v: liveNav }});
 
-    // Y: fit to the ACTUAL visible range, EMA-smoothed so the scale changes slowly.
-    // This means the chart auto-zooms to show real movement, like Robinhood.
-    var lo = liveNav, hi = liveNav;
+    // X: full canvas width. Left edge = oldest, right edge = now.
+    function tx(ms) {{ return (ms - leftEdgeMs) / windowMs * W; }}
+
+    // Y: smooth-tracking scale. Both expand and contract at the same gentle rate
+    // so no jump ever happens — the scale drifts to fit the data.
+    var rawLo = liveNav, rawHi = liveNav;
     for (var vi = 0; vi < visible.length; vi++) {{
-      if (visible[vi].v < lo) lo = visible[vi].v;
-      if (visible[vi].v > hi) hi = visible[vi].v;
+      if (visible[vi].v < rawLo) rawLo = visible[vi].v;
+      if (visible[vi].v > rawHi) rawHi = visible[vi].v;
     }}
-    var rawRange = hi - lo;
-    var rawMid   = (hi + lo) / 2;
-    // Floor: at least 0.1% of portfolio so a truly flat line shows centered, not invisible
-    var minRange = liveNav * 0.001;
-    if (rawRange < minRange) {{ rawRange = minRange; rawMid = liveNav; }}
-    // EMA: scale/center adapt slowly so past points don't visibly jump
-    window._navRangeEma = window._navRangeEma ? 0.03*rawRange + 0.97*window._navRangeEma : rawRange;
-    window._navMidEma   = window._navMidEma   ? 0.03*rawMid   + 0.97*window._navMidEma   : rawMid;
-    var yScale = (H * 0.75) / window._navRangeEma;
-    function ty(v) {{ return H/2 - (v - window._navMidEma) * yScale; }}
+    var span = Math.max(rawHi - rawLo, liveNav * 0.0005);
+    var pad  = span * 0.3;
+    rawLo -= pad; rawHi += pad;
+    if (window._navYLo === undefined) {{ window._navYLo = rawLo; window._navYHi = rawHi; }}
+    window._navYLo += (rawLo - window._navYLo) * 0.008;
+    window._navYHi += (rawHi - window._navYHi) * 0.008;
+    var lo = window._navYLo, hi = window._navYHi;
+    function ty(v) {{ return H - ((v - lo) / (hi - lo || 1)) * H * 0.88 - H * 0.06; }}
 
-    var orbY = ty(liveNav);
-    window._navOrbFracX = 0.5;
-    window._navOrbFracY = Math.max(0.05, Math.min(0.95, orbY / H));
-
+    // Map to canvas coords
     var mapped = [];
     for (var mi = 0; mi < visible.length; mi++) {{
       mapped.push({{ x: tx(visible[mi].ms), y: ty(visible[mi].v) }});
     }}
-    // Pin the last mapped point to exact center-x so "now" dot is always at W/2
-    mapped[mapped.length-1].x = _nowPx;
+    // Dot is always the last point — at the right edge
+    mapped[mapped.length-1].x = W - 2;
     if (mapped.length < 2) return;
+
+    // Orb tracks the dot's actual canvas position (as fraction of canvas size).
+    // This is what positions the pulse-canvas blob and its orbiting particles.
+    var dotX = mapped[mapped.length-1].x;
+    var dotY = mapped[mapped.length-1].y;
+    window._navOrbFracX = Math.max(0.05, Math.min(0.95, dotX / W));
+    window._navOrbFracY = Math.max(0.05, Math.min(0.95, dotY / H));
 
     var m = mapped;
     var n = m.length;
@@ -5034,21 +5036,71 @@ setInterval(_fetchIntradayMarks, 15000);
 window._livePnlBySource = {{ equity: 0, crypto: 0 }};
 
 // ── Live intraday NAV accumulator — fed by Binance price poll every 4s ────────
-var _intradayPts = [];  // {{t: isoStr, v: number}}
+// Persist on window so Streamlit component re-renders don't wipe history
+if (!window._intradayPts) window._intradayPts = [];
+var _intradayPts = window._intradayPts;
+
+// Seed _intradayPts from DB exactly once per page load — guarded so Streamlit
+// re-renders don't re-run this and append duplicate rows.
+if (!window._navSeedDone) {{
+  window._navSeedDone = true;
+  var _since = new Date(Date.now() - 24*3600000).toISOString();
+  fetch(SUPA_URL + '/rest/v1/nav_snapshots?select=recorded_at,nav&recorded_at=gte.' + _since + '&order=recorded_at.asc&limit=2000',
+    {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(rows) {{
+    if (!Array.isArray(rows) || !rows.length) return;
+    // Merge without duplicates (guard against race with live pusher)
+    var existing = new Set(window._intradayPts.map(function(p) {{ return p.t; }}));
+    rows.forEach(function(r) {{
+      if (!existing.has(r.recorded_at)) window._intradayPts.push({{ t: r.recorded_at, v: r.nav }});
+    }});
+    window._intradayPts.sort(function(a,b) {{ return a.t < b.t ? -1 : 1; }});
+    console.log('[nav] seeded', window._intradayPts.length, 'points');
+  }}).catch(function(e) {{ console.warn('[nav] seed fetch failed', e); }});
+}}
+
+// Force-push a nav snapshot immediately (bypasses 30s dedup) — call on trade events
+window._forceNavSnapshot = function() {{
+  var nav = window._lastKnownNav;
+  if (!nav) return;
+  var isoTs = new Date().toISOString();
+  _intradayPts.push({{ t: isoTs, v: nav }});
+  window._intradayPts = _intradayPts;
+  fetch(SUPA_URL + '/rest/v1/nav_snapshots', {{
+    method: 'POST',
+    headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+                'Content-Type': 'application/json', 'Prefer': 'return=minimal' }},
+    body: JSON.stringify({{ recorded_at: isoTs, nav: nav }})
+  }}).catch(function(e) {{ console.warn('[nav] force snapshot failed', e); }});
+}};
+
 window._pushIntradayPoint = function(isoTs, val) {{
   var now = Date.now();
-  var cutoff = now - 10 * 3600000;  // keep 10h of points
+  var cutoff = now - 24 * 3600000;  // keep 24h of points
   _intradayPts = _intradayPts.filter(function(p) {{ return new Date(p.t).getTime() > cutoff; }});
-  // Overwrite last point if less than 30s old (smooth, not spiky)
+  // Overwrite last point if less than 30s old (smooth, not spiky); otherwise push new + persist
+  var isNew = false;
   if (_intradayPts.length) {{
     var last = _intradayPts[_intradayPts.length - 1];
     if (now - new Date(last.t).getTime() < 30000) {{
       last.t = isoTs; last.v = val;
     }} else {{
       _intradayPts.push({{ t: isoTs, v: val }});
+      isNew = true;
     }}
   }} else {{
     _intradayPts.push({{ t: isoTs, v: val }});
+    isNew = true;
+  }}
+  // Persist new points to DB so the chart survives page reloads and overnight
+  if (isNew) {{
+    fetch(SUPA_URL + '/rest/v1/nav_snapshots', {{
+      method: 'POST',
+      headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+                  'Content-Type': 'application/json', 'Prefer': 'return=minimal' }},
+      body: JSON.stringify({{ recorded_at: isoTs, nav: val }})
+    }}).catch(function(e) {{ console.warn('[nav] snapshot write failed', e); }});
   }}
   // Mark this as authoritative live source — gates pipeline-stamp overrides below
   window._lastLivePriceMs = now;
@@ -6001,6 +6053,7 @@ setTimeout(function() {{
     var feedMsg = '[USER] BUY $' + amt.toLocaleString('en-US',{{maximumFractionDigits:0}}) + ' ' + sym + ' · market · routed to Alpaca';
     if (window._postToFeed) window._postToFeed(feedMsg);
     if (window._recordTradeForGauge) window._recordTradeForGauge();
+    setTimeout(function() {{ if (window._pushIntradayPoint && window._lastKnownNav) window._pushIntradayPoint(new Date().toISOString(), window._lastKnownNav); }}, 5000);
 
     bcStatus('✓ BUY ' + sym + ' $' + amt.toLocaleString('en-US',{{maximumFractionDigits:0}}), '#00ff9d');
     document.getElementById('bc-amt').value = '';
@@ -6043,6 +6096,7 @@ setTimeout(function() {{
       var feedMsg = '[USER] SELL ' + hit.sym + ' · full position · market · routed to Alpaca';
       if (window._postToFeed) window._postToFeed(feedMsg);
       if (window._recordTradeForGauge) window._recordTradeForGauge();
+      setTimeout(function() {{ if (window._pushIntradayPoint && window._lastKnownNav) window._pushIntradayPoint(new Date().toISOString(), window._lastKnownNav); }}, 5000);
 
       // Trigger exit animation
       if (window._etExit) window._etExit(hit.sym, null, null);
@@ -8156,6 +8210,31 @@ setTimeout(function() {{
     }}
     setTimeout(_pollCryptoPrices, 3500);
     setInterval(_pollCryptoPrices, 4000);
+
+    // ── Canonical NAV from DB — source of truth for displayed Portfolio number ──
+    // All tabs read the latest nav_snapshots row so every screen shows the same value.
+    function _pollCanonicalNav() {{
+      fetch(SUPA_URL + '/rest/v1/nav_snapshots?select=recorded_at,nav&order=recorded_at.desc&limit=1',
+        {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(rows) {{
+        if (!Array.isArray(rows) || !rows.length) return;
+        var row = rows[0];
+        var age = Date.now() - new Date(row.recorded_at).getTime();
+        if (age > 120000) return; // ignore rows older than 2 min — stale
+        var nav = parseFloat(row.nav);
+        if (!nav || nav < 50000 || nav > 5000000) return;
+        // Only update display if DB value differs meaningfully from what's shown
+        var shown = window._lastKnownNav || 0;
+        if (Math.abs(nav - shown) < 0.01) return;
+        window._lastKnownNav = nav;
+        if (window._updateNavDisplays_ext) window._updateNavDisplays_ext(nav, row.recorded_at);
+      }}).catch(function() {{}});
+    }}
+    // Expose _updateNavDisplays so canonical poller can call it
+    window._updateNavDisplays_ext = function(nav, ts) {{ _updateNavDisplays(nav, ts); }};
+    setTimeout(_pollCanonicalNav, 6000); // slight delay so local compute runs first
+    setInterval(_pollCanonicalNav, 5000);
 
     // ── Equity pipeline countdown (daily 4:05pm ET) ───────────────────────────
     (function() {{

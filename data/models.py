@@ -149,6 +149,15 @@ class CryptoPosition(Base):
     strategy:     Mapped[str]  = mapped_column(String(50), default="crypto_momentum")
 
 
+class NavSnapshot(Base):
+    """Intraday NAV samples written every ~30s by the dashboard crypto poller."""
+    __tablename__ = "nav_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    nav: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 class ExperimentRecord(Base):
     __tablename__ = "experiments"
 
