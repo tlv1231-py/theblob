@@ -6670,18 +6670,25 @@ setTimeout(function() {{
 
     // Redraw portfolio trace (index 6) from nav_snapshots DB data + live point.
     // No axis relayout — chart stays wherever the user left it.
+    var _navTraceInited = false;
     function _redrawNavTraces() {{
       var _gd = document.getElementById('chart');
       if (!_gd || !_gd.data || _gd.data.length < 7) return;
       var dbPts = window._navDbPts || [];
       var _xs = dbPts.map(function(p) {{ return p.t; }});
       var _ys = dbPts.map(function(p) {{ return p.v; }});
-      // Append live point
       if (window._lastKnownNav && window._lastKnownTs) {{
         _xs.push(window._lastKnownTs);
         _ys.push(window._lastKnownNav);
       }}
+      if (!_xs.length) return;
       Plotly.restyle(_gd, {{ x: [_xs], y: [_ys] }}, [6]);
+      // On first real data load, force both axes to autorange so the line
+      // fills the chart and the dot is visible without panning.
+      if (!_navTraceInited) {{
+        _navTraceInited = true;
+        Plotly.relayout(_gd, {{ 'xaxis.autorange': true, 'yaxis.autorange': true }});
+      }}
     }}
 
     function _pollNav() {{
@@ -7241,6 +7248,9 @@ setTimeout(function() {{
     function _etPaintTile(ctx, t, x, y, ts) {{
       var W = _EQ_W, H = _EQ_H;
       var now = Date.now(); // epoch ms — use for hold timer, NOT rAF ts
+
+      // Hard-reset shadow so exit-ghost glow doesn't leak into live tile text
+      ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
 
       // Background — transparent
       // Left accent stripe (2px)
