@@ -604,15 +604,23 @@ def _build_daw_html(data: dict) -> str:
     # Canonical cyberpunk ticker palette — no greens, no reds (those are PnL colors).
     # JS side uses the same palette + same djb2-style hash so colors match everywhere.
     _TICKER_PALETTE = ["#00e5ff","#cc00ff","#ff9900","#e040fb","#40c4ff","#ff6b35","#00ffcc","#f7b731","#7c4dff","#18ffff"]
+    # Manual overrides for tickers whose hash collides with another open position.
+    # Must be kept in sync with _TICKER_OVERRIDES_JS below.
+    _TICKER_OVERRIDES = {
+        "ETH": "#e040fb",   # electric magenta
+        "CRV": "#f7b731",   # amber
+        "XTZ": "#00bfff",   # electric sky blue
+        "NUE": "#ff4dd2",   # neon rose
+    }
     _SYSTEM_SYMS = {"PIPELINE", "PORTFOLIO", "RUN", "INGEST", "SIGNAL", "HOLD",
                     "SNAPSHOT", "PNL", "NAV", "UPDATE", "DATA", "START", "COMPLETE", "VETO"}
 
     def _tc(sym: str) -> str:
         if not sym or sym.upper() in _SYSTEM_SYMS:
             return "#f0e0ff"
-        # Normalize same as JS: strip /USD suffix so BTC/USD == BTC
         s = sym.replace("/USD", "").replace("USD", "")
-        # djb2-style hash — must match JS _symCol exactly
+        if s in _TICKER_OVERRIDES:
+            return _TICKER_OVERRIDES[s]
         h = 0
         for c in s:
             h = (h * 31 + ord(c)) & 0xffff
@@ -4181,9 +4189,13 @@ document.addEventListener('fullscreenchange', function() {{
   if (!pc) return;
   var pCtx = pc.getContext('2d');
 
-  // palette pulled from open positions' accent colors
+  // ── Canonical ticker color system ────────────────────────────────────────────
+  // Single palette + override map shared by every _symCol site in this file.
+  // Override map wins over hash — keeps colliding tickers visually distinct.
   var PALETTE = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
-  function symCol(s) {{ var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
+  window._TICKER_OVR = {{ ETH:'#e040fb', CRV:'#f7b731', XTZ:'#00bfff', NUE:'#ff4dd2' }};
+  function _hashCol(s) {{ var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
+  function symCol(s) {{ var c=s.replace('/USD','').replace('USD',''); return window._TICKER_OVR[c]||_hashCol(c); }}
 
   var particles = [];
   var MAX_P = 60;
@@ -6218,9 +6230,11 @@ setTimeout(function() {{
             var verbCol   = isEntry ? '#00b4ff' : '#ff9900';
             var verbHtml  = '<span style="color:' + verbCol + '">' + verbPlain + '</span>';
             var symCol    = (function(s) {{
+              var _c=sym.replace('/USD','').replace('USD','');
+              if(window._TICKER_OVR&&window._TICKER_OVR[_c]) return window._TICKER_OVR[_c];
               var _p=['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
-              var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return _p[h%_p.length];
-            }})(sym.replace('/USD','').replace('USD',''));
+              var h=0; for(var i=0;i<_c.length;i++)h=(h*31+_c.charCodeAt(i))&0xffff; return _p[h%_p.length];
+            }})(sym);
             var symHtml   = '<span style="color:' + symCol + ';font-weight:700">' + sym + '</span>';
             var priceM    = raw.match(/@\s*\$([\d,]+(?:\.\d+)?)/);
             var priceS    = priceM ? ' @ <span style="color:rgba(255,255,255,.55)">$' + priceM[1] + '</span>' : '';
@@ -6784,6 +6798,7 @@ setTimeout(function() {{
     var _TICKER_COLS = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
     function _symCol(sym) {{
       var s = sym.replace('/USD','').replace('USD','');
+      if (window._TICKER_OVR && window._TICKER_OVR[s]) return window._TICKER_OVR[s];
       var h = 0;
       for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff;
       return _TICKER_COLS[h % _TICKER_COLS.length];
@@ -7919,7 +7934,7 @@ setTimeout(function() {{
         var rpSection = document.getElementById('rp-crypto-section');
         if (rpSection) {{
           var PALETTE = ['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
-          function _symCol(s) {{ var c=s.replace('/USD','').replace('USD',''); var h=0; for(var i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
+          function _symCol(s) {{ var c=s.replace('/USD','').replace('USD',''); if(window._TICKER_OVR&&window._TICKER_OVR[c])return window._TICKER_OVR[c]; var h=0; for(var i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))&0xffff; return PALETTE[h%PALETTE.length]; }}
           function _rpPnlStr(p) {{
             if (!p.entry_price) return '—';
             // For crypto we don't have current price in this fetch — show entry info
@@ -8574,9 +8589,10 @@ setTimeout(function() {{
       var _calloutRail = document.getElementById('callout-rail');
 
       function _symColor(sym) {{
+        var s=sym.replace('/USD','').replace('USD','');
+        if(window._TICKER_OVR&&window._TICKER_OVR[s])return window._TICKER_OVR[s];
         var _p=['#00e5ff','#cc00ff','#ff9900','#e040fb','#40c4ff','#ff6b35','#00ffcc','#f7b731','#7c4dff','#18ffff'];
-        var s=sym.replace('/USD','').replace('USD',''); var h=0;
-        for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return _p[h%_p.length];
+        var h=0; for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))&0xffff; return _p[h%_p.length];
       }}
 
       function _spawnCallout(cfg) {{
