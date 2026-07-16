@@ -4525,27 +4525,28 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var liveNav = parseFloat(window._lastKnownNav);
     if (!liveNav || isNaN(liveNav)) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // Gather ALL DB points + live point first, then decide the window
-    var now_ms  = Date.now();
-    var t1      = now_ms;
+    // Gather DB points
+    var now_ms = Date.now();
     var pts = window._navDbPts || [];
     var allPts = [];
     for (var i = 0; i < pts.length; i++) {{
       var ms = new Date(pts[i].t).getTime();
       allPts.push({{ ms: ms, v: pts[i].v }});
     }}
-    allPts.push({{ ms: now_ms, v: liveNav }});
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
-    // t0 = earliest point OR (now - user window), whichever gives more data,
-    // but never more than the user-set window and never less than 2 minutes.
+    // t0 = earliest data point (so existing history fills the full width).
+    // Cap at user-set window; floor at 2 minutes so a single point doesn't collapse.
     var winMs = window._navWindowMs || 4 * 3600 * 1000;
-    var dataStart = allPts.length ? allPts[0].ms : t1;
-    var t0 = Math.min(dataStart, t1 - winMs);
-    // Clamp: never a window shorter than 2 minutes (keeps early dots spread out)
-    t0 = Math.min(t0, t1 - 2 * 60000);
-    // Remove points outside the window after t0 is decided
+    var dataStart = allPts.length ? allPts[0].ms : now_ms - 2*60000;
+    var t0 = Math.max(dataStart, now_ms - winMs);  // MAX = most recent of the two starts
+    t0 = Math.min(t0, now_ms - 2 * 60000);         // floor: at least 2min window
+    var t1 = now_ms;
+
+    // Add live point and filter to window
+    allPts.push({{ ms: now_ms, v: liveNav }});
     allPts = allPts.filter(function(p) {{ return p.ms >= t0; }});
+    allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
     // Chart area in CSS pixels
     var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
