@@ -210,6 +210,18 @@ def _load_chart_data() -> dict:
         qqq_dates  = [r.d    for r in bench_rows if r.symbol == "QQQ"]
         qqq_prices = [float(r.close) for r in bench_rows if r.symbol == "QQQ"]
 
+        # Nav snapshots — last 6h, seeded into JS so chart renders immediately on load
+        nav_snap_rows = s.execute(text("""
+            SELECT recorded_at, nav FROM nav_snapshots
+            WHERE recorded_at >= NOW() - INTERVAL '6 hours'
+            ORDER BY recorded_at ASC
+            LIMIT 2000
+        """)).fetchall()
+        nav_snap_pts = [
+            {"t": r.recorded_at.isoformat(), "v": float(r.nav)}
+            for r in nav_snap_rows
+        ]
+
         # Status scalars
         mon_days = s.execute(text(
             "SELECT COUNT(DISTINCT date) FROM pnl WHERE strategy='momentum'"
@@ -549,6 +561,7 @@ def _load_chart_data() -> dict:
         "newest_ev_ts": _newest_ev_ts,
         "positions_data": positions_data,
         "queued_actions": queued_actions,
+        "nav_snap_pts": nav_snap_pts,
     }
 
 
@@ -1152,6 +1165,7 @@ def _build_daw_html(data: dict) -> str:
     spy_norm_j    = json.dumps(spy_norm)
     qqq_dates_j   = json.dumps(qqq["dates"])
     qqq_norm_j    = json.dumps(qqq_norm)
+    nav_snap_pts_j = json.dumps(data.get("nav_snap_pts", []))
 
     return f"""<!DOCTYPE html>
 <html>
@@ -2944,6 +2958,9 @@ var spyDates   = {spy_dates_j};
 var spyNorm    = {spy_norm_j};
 var qqqDates   = {qqq_dates_j};
 var qqqNorm    = {qqq_norm_j};
+
+// Nav snapshots seeded at render time — chart draws immediately, no wait for Supabase poll
+window._navDbPts = {nav_snap_pts_j};
 
 var latestDate = portDates.length ? portDates[portDates.length-1] : null;
 
@@ -5141,8 +5158,8 @@ window._livePnlBySource = {{ equity: 0, crypto: 0 }};
 
 // ── Nav chart DB poll — fetches nav_snapshots every 30s, replaces chart data ──
 // The chart is purely DB-driven. No session accumulation, no seed complexity.
-if (!window._navDbPts) window._navDbPts = [];
-var _intradayPts = window._navDbPts; // alias so _pushIntradayPoint still writes to DB
+// _navDbPts already seeded from Python at render time; poll merges new points in
+var _intradayPts = window._navDbPts;
 
 function _fetchNavDb() {{
   var since = new Date(Date.now() - 24*3600000).toISOString();
