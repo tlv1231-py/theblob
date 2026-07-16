@@ -1553,15 +1553,13 @@ body::after {{
 .ss-wallet-val {{
   font-family:'Press Start 2P',monospace; font-size:14px; font-weight:400;
   letter-spacing:.04em; font-variant-numeric:tabular-nums;
-  color:#ffe566;
-  -webkit-text-stroke:1px rgba(0,0,0,.6);
+  color:#ffffff;
+  -webkit-text-stroke:1px rgba(0,0,0,.5);
   text-shadow:
-    1px 1px 0 #b85c00,
-    2px 2px 0 #9a4a00,
-    3px 3px 0 #7a3600,
-    4px 4px 0 rgba(0,0,0,.7),
-    0 0 18px rgba(255,180,0,.5),
-    0 0 6px  rgba(255,200,0,.3);
+    1px 1px 0 #222,
+    2px 2px 0 #111,
+    3px 3px 0 rgba(0,0,0,.8),
+    4px 4px 0 rgba(0,0,0,.5);
   white-space:nowrap; line-height:1;
   transition:color .4s ease, text-shadow .4s ease;
 }}
