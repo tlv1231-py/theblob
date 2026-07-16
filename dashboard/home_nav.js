@@ -1680,8 +1680,6 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     var liveNav = allPts.length ? allPts[allPts.length-1].v : parseFloat(window._lastKnownNav);
     if (!liveNav || isNaN(liveNav)) { window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }
 
-    // ── Margins ────────────────────────────────────────────────────────────
-    var _ML = 8, _MR = 8, _MT = 52, _MB = 28;
     var now_ms = Date.now();
 
     // ── Auto-return pan (3s idle → drift back to center) ─────────────────
@@ -1856,12 +1854,12 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
 
     var vcx = W / 2;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 16px Consolas,monospace';
+    ctx.font = 'bold 13px Consolas,monospace';
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.fillText(valStr, vcx, cy0 - 22);
-    ctx.font = '10px Consolas,monospace';
+    ctx.fillText(valStr, vcx, cy0 - 8);
+    ctx.font = '9px Consolas,monospace';
     ctx.fillStyle = _pnlColor;
-    ctx.fillText(_pnlStr, vcx, cy0 - 8);
+    ctx.fillText(_pnlStr, vcx, cy0 + 6);
 
     // ── Hover crosshair + tooltip ──────────────────────────────────────────
     if (window._navHoverX !== null && allPts.length > 0) {
