@@ -4632,7 +4632,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       n = 2;
     }}
 
-    // ── Catmull-Rom path builder (smooth curve through all points) ────────────
+    // ── Catmull-Rom path builder with clamped control points (no overshooting) ─
     function _crPath(pts2) {{
       ctx.beginPath();
       ctx.moveTo(pts2[0].x, pts2[0].y);
@@ -4645,6 +4645,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
         var cp1y = p1.y + (p2.y - p0.y) / 6;
         var cp2x = p2.x - (p3.x - p1.x) / 6;
         var cp2y = p2.y - (p3.y - p1.y) / 6;
+        // Clamp Y control points so curve can't overshoot segment bounds
+        var yLo = Math.min(p1.y, p2.y), yHi = Math.max(p1.y, p2.y);
+        cp1y = Math.max(yLo, Math.min(yHi, cp1y));
+        cp2y = Math.max(yLo, Math.min(yHi, cp2y));
         ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
       }}
     }}
