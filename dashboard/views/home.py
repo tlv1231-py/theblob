@@ -8450,7 +8450,7 @@ setTimeout(function() {{
             window._livePnlBySource.crypto = livePnl;
             var _combinedPnl = window._livePnlBySource.equity + window._livePnlBySource.crypto;
             var nav = baseline + _combinedPnl;
-            if (nav > 50000 && nav < 5000000) {{
+            if (nav > 1000 && nav < 5000000) {{
               window._pushIntradayPoint(new Date().toISOString(), nav);
             }}
           }}
