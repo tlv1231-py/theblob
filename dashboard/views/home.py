@@ -4512,10 +4512,12 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   setTimeout(_resize, 100);
   window.addEventListener('resize', _resize);
 
-  // Scroll: pan history. Ctrl+scroll: zoom time window.
-  window._navWindowMs       = 4 * 3600 * 1000;  // current (lerped)
-  window._navTargetWindowMs = 4 * 3600 * 1000;  // target (set by ctrl+wheel)
-  window._navPanOffsetMs    = 0;                  // 0=live, negative=past
+  // Scroll = zoom. Shift+scroll = pan. After 3s idle, gently return to default.
+  var _NAV_DEFAULT_WIN = 4 * 3600 * 1000;
+  window._navWindowMs       = _NAV_DEFAULT_WIN;
+  window._navTargetWindowMs = _NAV_DEFAULT_WIN;
+  window._navPanOffsetMs    = 0;
+  window._navLastInteractMs = 0;
   var _WIN_MIN = 5  * 60 * 1000;
   var _WIN_MAX = 365 * 86400 * 1000;
   (function() {{
@@ -4523,15 +4525,16 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
-      if (e.ctrlKey || e.metaKey) {{
-        // Ctrl+scroll = zoom
+      window._navLastInteractMs = Date.now();
+      if (e.shiftKey) {{
+        // Shift+scroll = pan through history
+        var panStep = window._navWindowMs * 0.20 * (e.deltaY > 0 ? -1 : 1);
+        window._navPanOffsetMs = Math.min(0, window._navPanOffsetMs + panStep);
+      }} else {{
+        // Scroll = zoom
         var factor = e.deltaY > 0 ? 1.6 : 0.625;
         window._navTargetWindowMs = Math.max(_WIN_MIN,
           Math.min(_WIN_MAX, window._navTargetWindowMs * factor));
-      }} else {{
-        // Scroll = pan history (scroll down = go further back, up = forward)
-        var panStep = window._navWindowMs * 0.25 * (e.deltaY > 0 ? -1 : 1);
-        window._navPanOffsetMs = Math.min(0, window._navPanOffsetMs + panStep);
       }}
     }}, {{ passive: false }});
   }})();
@@ -4561,6 +4564,14 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       if (!isNaN(ms)) allPts.push({{ ms: ms, v: parseFloat(pts[i].v) }});
     }}
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
+
+    // ── Auto-return: after 3s idle, gently pull zoom+pan back to default ──────
+    var _idleMs = now_ms - (window._navLastInteractMs || 0);
+    if (_idleMs > 3000) {{
+      var _returnRate = 0.012;  // ~1.2% per frame — slow drift, not a snap
+      window._navTargetWindowMs += (_NAV_DEFAULT_WIN - window._navTargetWindowMs) * _returnRate;
+      window._navPanOffsetMs    += (0                - window._navPanOffsetMs)    * _returnRate;
+    }}
 
     // ── Smooth zoom: lerp current window toward target each frame ─────────────
     var _tgt = window._navTargetWindowMs || window._navWindowMs || 4*3600*1000;
