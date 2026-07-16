@@ -4614,9 +4614,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // Clamp pan so we can't pan before the earliest data
     panOff = Math.max(dataStart - lastPtMs, Math.min(0, panOff));
     window._navPanOffsetMs = panOff;
-    var centerMs   = lastPtMs + panOff;
-    // Pin tip at 70% from left — data scrolls in from the right like a live feed
-    var t0 = centerMs - winMs * 0.70;
+    // Anchor to now_ms so the chart scrolls in real time even with no new data
+    var centerMs   = now_ms + panOff;
+    var t0 = centerMs - winMs * 0.70;  // last point sits at ~70% from left
     var t1 = centerMs + winMs * 0.30;
 
     // Filter to window (no synthetic live point — 100% DB-sourced)
@@ -4743,15 +4743,6 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       ctx.stroke();
     }});
 
-    // ── Scanline sidescroll shimmer — horizontal light bar drifting right ──────
-    var _scanPhase = (Date.now() % 3000) / 3000;
-    var _scanX = cx0 + _scanPhase * cW;
-    var _scanGrad = ctx.createLinearGradient(_scanX - 40, 0, _scanX + 40, 0);
-    _scanGrad.addColorStop(0,   'rgba(255,255,255,0)');
-    _scanGrad.addColorStop(0.5, 'rgba(255,200,255,0.18)');
-    _scanGrad.addColorStop(1,   'rgba(255,255,255,0)');
-    ctx.fillStyle = _scanGrad;
-    ctx.fillRect(_scanX - 40, cy0, 80, cH);
 
     // ── Orb tip: last real data point (tx(now_ms) is 90% width due to t1 pad) ──
     var tipX = m[n-1].x;
@@ -4772,20 +4763,18 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
 
-    // ── Current value callout ───────────────────────────────────────────────
-    var valStr = '$' + liveNav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+    // ── Current value — centered below outer orb, transparent background ──────
+    var valStr = '$' + (allPts.length ? allPts[allPts.length-1].v : liveNav)
+                       .toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
     ctx.font = 'bold 13px Consolas,monospace';
     var tw = ctx.measureText(valStr).width;
-    // Keep callout inside chart area: prefer right of dot, fall back left
-    var lx = tipX + 14;
-    if (lx + tw + 4 > cx1) lx = tipX - tw - 18;
-    lx = Math.max(cx0 + 2, lx);
-    var ly = Math.max(cy0 + 16, Math.min(tipY + 4, cy1 - 6));
-    // Pill background (manual rounded rect — roundRect not in all Chrome versions)
-    ctx.fillStyle = 'rgba(8,0,18,0.85)';
-    ctx.fillRect(lx - 4, ly - 13, tw + 8, 17);
-    // Text
-    ctx.fillStyle = '#e0c8ff';
+    var outerR = 10 + pulse * 8;  // matches outer glow radius
+    var lx = tipX - tw / 2;       // centered under dot
+    lx = Math.max(cx0 + 4, Math.min(cx1 - tw - 4, lx));
+    var ly = tipY + outerR + 18;  // below outer ring
+    ly = Math.min(cy1 - 4, ly);
+    // No background — transparent
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.textAlign = 'left';
     ctx.fillText(valStr, lx, ly);
 
