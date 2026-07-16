@@ -236,26 +236,16 @@ _STAGE_HTML = """
     <div id="vignette"></div>
 
     <!-- ── SAFE BOX — 870 x 1160 @ (90, 380) ──────────────────────────── -->
+    <!-- THREE THINGS: the board, him, the score. The status strip, the
+         holdings header, the day P&L and the strategy P&L are all gone — none
+         of them was what anyone tuned in for, and every one was taxing the
+         three that are. Those figures live on the Command Center, where
+         someone is reading rather than watching. -->
     <div id="safe">
 
-      <div id="s-status">
-        <span class="st-live"><i class="dot"></i>LIVE</span>
-        <span class="st-chip" id="chip-status">PAPER</span>
-        <span class="st-chip st-dim" id="chip-day">DAY &mdash;/20</span>
-        <span class="st-spacer"></span>
-        <span class="st-sess" id="hd-sess">&mdash;</span>
-        <span class="st-clock" id="hd-clock">--:--:--</span>
-      </div>
-
-      <!-- Stream events announce here, directly over his head. Gameboy
-           dialogue box: bezel, LCD dot grid, typewriter reveal. -->
-      <!-- The board sits above his head: it is the action, and he is the one
-           working it. Two rows of seven chunky slots. -->
+      <!-- The board. It sits above his head because it is the action and he is
+           the one working it. Two rows of seven slots, no header. -->
       <div id="s-pos">
-        <div class="pos-hdr">
-          <span class="pos-name">HOLDINGS</span>
-          <span class="pos-meta" id="pos-meta">&mdash;</span>
-        </div>
         <div id="pos-list"></div>
       </div>
 
@@ -266,11 +256,10 @@ _STAGE_HTML = """
         <div class="blob-mood" id="blob-mood">IDLE</div>
       </div>
 
+      <!-- THE SCORE. -->
       <div id="s-nav">
         <div class="nav-label">PORTFOLIO VALUE</div>
         <div class="nav-big" id="hero-nav">$&mdash;</div>
-        <div class="nav-day" id="hero-day">&mdash;</div>
-        <div class="nav-sub" id="chip-total">&mdash;</div>
       </div>
 
       <!-- Bottom of the stage, growing UPWARD — which is where a Gameboy text

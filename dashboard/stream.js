@@ -64,16 +64,9 @@
     var mins = parseInt(p.hour, 10) * 60 + parseInt(p.minute, 10);
     return mins >= 570 && mins < 960;          // 09:30 → 16:00 ET
   }
-  function tickClock() {
-    var p = etParts();
-    $('hd-clock').textContent = p.hour + ':' + p.minute + ':' + p.second + ' ET';
-    var open = isMarketOpen();
-    var el = $('hd-sess');
-    el.textContent = open ? 'MARKET OPEN' : 'MARKET CLOSED';
-    el.className = 'hd-sess ' + (open ? 'open' : 'closed');
-  }
-  tickClock();
-  setInterval(tickClock, 1000);
+  // The clock and session light went with the status strip. isMarketOpen is
+  // kept because it is genuinely useful context, but nothing renders it now —
+  // the Blob's wake state runs off isSystemLive(), not NYSE hours.
 
   // ── The Blob ─────────────────────────────────────────────────────────────
   // Wired per the BLOB.md table. He is the reason this page is watchable
@@ -220,27 +213,12 @@
     animateNav(nav);
   }
 
-  // ── NAV block ────────────────────────────────────────────────────────────
+  // ── The score ────────────────────────────────────────────────────────────
+  // One number. The day P&L, strategy P&L and status chips are gone from the
+  // stage — dayPnlPct is still tracked because the Blob's shape and his SCARED
+  // threshold both read it, it just isn't printed anywhere.
   function renderHero() {
     updateNav(state.nav);
-    var d = $('hero-day');
-    d.textContent = signed(state.dayPnl) + '  ' + pct(state.dayPnlPct);
-    d.className = 'nav-day ' + dirClass(state.dayPnlPct);
-
-    $('chip-status').textContent = S.status || 'PAPER';
-    $('chip-day').textContent = 'DAY ' + (S.monitoring_days || 0) + '/20';
-
-    // Deliberately NOT (nav - starting_capital) / starting_capital. The NAV
-    // series comes from nav_snapshots, which is keyed only by timestamp and is
-    // written by whichever Alpaca wallet happens to be active in the browser —
-    // so it is not denominated in the $100k model baseline, and that ratio
-    // renders as a ~-72% "loss" that never happened. The pnl table's own
-    // cumulative figure is the only honest strategy-scoped number here.
-    var cum = Number(S.cumulative_pnl || 0);
-    var ct = $('chip-total');
-    ct.textContent = 'STRATEGY P&L  ' + signed(cum);
-    ct.className = 'nav-sub ' + dirClass(cum);
-
     blob.setPnl(state.dayPnlPct);
     $('blob-mood').textContent = blob.getMood();
   }
@@ -430,18 +408,12 @@
 
     if (!ps.length) {
       list.innerHTML = '<div class="pos-empty">NO OPEN POSITIONS</div>';
-      $('pos-meta').textContent = '—';
       _lastRoster = '';
       return;
     }
 
-    var known = 0, wins = 0, gross = 0;
-    ps.forEach(function(p) {
-      gross += (p.price || p.entry || 0) * (p.qty || 0);
-      if (p.price > 0 && p.entry > 0) { known++; if (p.price > p.entry) wins++; }
-    });
-    $('pos-meta').textContent = wins + '/' + known + ' UP  ·  ' +
-                                ps.length + ' OPEN  ·  ' + usd(gross) + ' GROSS';
+    // The UP / OPEN / GROSS meta went with the header — it was a stat line on a
+    // board whose whole job is to be glanced at.
 
     function tintOf(p) {
       var live = p.price > 0 && p.entry > 0;
@@ -1093,10 +1065,78 @@
     if (!msg) return null;
     if (msg.indexOf('ENTER') >= 0) return { dir: 'ENTER', pnl: null };
     if (msg.indexOf('EXIT') >= 0) {
-      var m = msg.match(/pnl\s+(-?[\d.]+)/);
+      // [+-]? — a win reads "pnl +0.42". Without the plus this matched only
+      // losses and silently dropped every profitable exit.
+      var m = msg.match(/pnl\s+([+-]?[\d.]+)/);
       return { dir: 'EXIT', pnl: m ? parseFloat(m[1]) : null };
     }
     return null;
+  }
+
+  // ── The trade queue ──────────────────────────────────────────────────────
+  // One trade at a time, 1s apart. The book fires ~9/min and arrives in bursts
+  // — four fills inside one 4s poll is normal. Played simultaneously they
+  // collapse into a single indistinguishable flinch; played 1s apart each one
+  // is a discrete beat you can actually count.
+  //
+  // Every beat moves all three together — the slot, the Blob, and the score —
+  // because they are three views of one event, and staggering them would read
+  // as three unrelated things twitching.
+  var tradeQ = [], tradeBusy = false;
+  var TRADE_COOLDOWN = 1000;
+
+  function tradePush(t) {
+    tradeQ.push(t);
+    // A long backlog is stale by the time it plays — better to drop the oldest
+    // than to narrate a minute-old fill as if it just happened.
+    if (tradeQ.length > 8) tradeQ.splice(0, tradeQ.length - 8);
+    if (!tradeBusy) tradeNext();
+  }
+
+  function tradeNext() {
+    if (!tradeQ.length) { tradeBusy = false; return; }
+    tradeBusy = true;
+    applyTrade(tradeQ.shift());
+    setTimeout(tradeNext, TRADE_COOLDOWN);
+  }
+
+  function applyTrade(t) {
+    var verdict = t.dir === 'ENTER' ? 'enter' : (t.pnl > 0 ? 'win' : 'loss');
+
+    // ── He acts FIRST ──────────────────────────────────────────────────
+    // Everything here is the cause; the board is not touched yet.
+    if (verdict === 'win')       blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
+    else if (verdict === 'enter') blob.setMood('ALERT', 18);
+    else                          blob.setMood('ALERT', 12);
+    glanceAt(t.sym);                       // looks at the slot he's about to work
+    flashTrade(t.dir, t.sym, t.pnl);
+    $('blob-mood').textContent = blob.getMood();
+
+    // Sound follows the verdict: acquisitions are neutral because buying is
+    // not yet good or bad news.
+    if (verdict === 'enter')     SFX.entry();
+    else if (verdict === 'win')  SFX.win();
+    else                         SFX.loss();
+    bg.pulse(verdict, 0.42);               // the room answers too
+
+    // THE SCORE MOVES ON THE TRADE. A realised exit changes NAV, so the number
+    // reacts now rather than waiting up to 10s for the next engine UPDATE to
+    // tell it. The UPDATE still lands and corrects — this is a prediction the
+    // authoritative feed immediately confirms, not a second source of truth.
+    if (t.dir === 'EXIT' && t.pnl != null) {
+      state.nav += t.pnl;
+      updateNav(state.nav);
+    }
+
+    // ── ...and the board answers ───────────────────────────────────────
+    // 220ms is the whole illusion. Fire on the same frame and the eye reads two
+    // simultaneous symptoms of an unseen cause; delay it and the Blob becomes
+    // the cause. Refresh FIRST, hit SECOND — a rebuild would throw away the
+    // node the hit is animating.
+    setTimeout(function() {
+      refreshCrypto();
+      hitTile(t.sym);
+    }, 220);
   }
 
   function pollEvents() {
@@ -1161,54 +1201,17 @@
 
         if (firstRun) return;   // hydration history is old — don't react to it
 
-        // React to the most significant thing that happened, not the last.
-        // Priority: a real win > an entry > an exit. Losses do NOT scare him
-        // here: the book times out at ~-$0.50 constantly, and a permanently
-        // terrified Blob is a broken signal. Real risk reaches him through
-        // syncBlobMood's drawdown check instead.
-        var best = null;
+        // EVERY trade queues. This used to pick one "best" event per poll and
+        // drop the rest, which meant a burst of four fills showed as one — the
+        // stream silently under-reported its own activity. The queue plays them
+        // one at a time instead, so nothing is invented and nothing is lost.
         fresh.forEach(function(r) {
           if (r.event_type !== 'TRADE') return;
           var t = parseTrade(r.message);
           if (!t) return;
           t.sym = r.symbol || '';
-          var rank = (t.dir === 'EXIT' && t.pnl > 0) ? 3 : (t.dir === 'ENTER' ? 2 : 1);
-          if (!best || rank >= best.rank) { t.rank = rank; best = t; }
+          tradePush(t);
         });
-        if (!best) return;
-
-        // ── He acts FIRST ────────────────────────────────────────────────
-        // Everything below is the cause. The board is not touched yet.
-        if (best.rank === 3)      blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
-        else if (best.rank === 2) blob.setMood('ALERT', 18);
-        else                      blob.setMood('ALERT', 12);
-        glanceAt(best.sym);                    // looks at the slot he's about to work
-        flashTrade(best.dir, best.sym, best.pnl);
-        $('blob-mood').textContent = blob.getMood();
-
-        // Sound follows the verdict, not the event: acquisitions are neutral
-        // because buying is not yet good or bad news.
-        var verdict = best.dir === 'ENTER' ? 'enter' : (best.pnl > 0 ? 'win' : 'loss');
-        if (verdict === 'enter')     SFX.entry();
-        else if (verdict === 'win')  SFX.win();
-        else                         SFX.loss();
-        // The room answers too — a shockwave from behind him, same verdict.
-        bg.pulse(verdict, 0.42);
-
-        // ── ...and the board answers ─────────────────────────────────────
-        // 220ms is the whole illusion. Fire this on the same frame and the eye
-        // reads two simultaneous symptoms of an unseen cause; delay it and the
-        // Blob becomes the cause. Long enough to register as consequence,
-        // short enough to still feel connected.
-        if (fresh.some(function(r) { return r.event_type === 'TRADE'; })) {
-          setTimeout(function() {
-            // Refresh FIRST, hit SECOND. If the roster changed this rebuilds
-            // the board, and hitting before that would animate a node that the
-            // rebuild is about to throw away.
-            refreshCrypto();
-            hitTile(best.sym);
-          }, 220);
-        }
       })
       .catch(function() {});
   }

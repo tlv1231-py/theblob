@@ -162,60 +162,28 @@ html, body {
   flex-direction: column;
 }
 
-/* 44 + 288 + 576 + 252 = 1160. Each band is fixed so the stack can never
-   reflow into the reserved zones.
+/* 280 + 720 + 160 = 1160. Each band is fixed so the stack can never reflow
+   into the reserved zones.
 
-   Order top-to-bottom: status / HOLDINGS / Blob / NAV.
+   THREE THINGS: HOLDINGS / Blob / SCORE. Nothing else is on the stage.
 
-   The board sits ABOVE his head because it is the action and he is the one
-   working it — he reaches up into it.
+   The status strip (LIVE / PAPER / DAY / clock), the holdings header and the
+   day+strategy P&L lines are deleted. They were ~110px of chrome and metrics
+   that nobody watches a stream to read, and they were taxing the only three
+   things that matter. All of it still lives on the Command Center.
 
-   NOTHING sits below the NAV any more: the number owns everything from the
-   Blob's feet to the safe-box floor at y1540. The event box was taking 144px
-   of that to display an idle strip most of the time, which is a lot of the
-   most valuable real estate on the stage spent saying nothing. It is now an
-   OVERLAY — absolutely positioned, absent until an event fires, covering the
-   NAV while it speaks. Which is exactly what a Gameboy text box does: it does
-   not reserve a slot, it interrupts. */
+   The Blob takes the reclaimed space: 576 -> 720 (48x15, still integer scale).
+   That is 37.5% of the whole canvas and 62% of the safe box — he is finally
+   as big as "he's the streamer" implies.
 
-/* ── Status strip · 44 ────────────────────────────────────────────────── */
-#s-status {
-  height: 44px; flex: none;
-  display: flex; align-items: center; gap: 11px;
-  border-bottom: 1px solid var(--border);
-}
-.st-live {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 15px; font-weight: 700; letter-spacing: 0.22em;
-  color: var(--accent);
-}
-.st-live .dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent); box-shadow: 0 0 12px var(--accent);
-  animation: dot-pulse 1.2s ease-in-out infinite;
-}
-@keyframes dot-pulse {
-  0%, 100% { opacity: 1;    box-shadow: 0 0 14px rgba(255,0,204,0.9); }
-  50%      { opacity: 0.25; box-shadow: 0 0 4px rgba(255,0,204,0.2); }
-}
-.st-chip {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
-  padding: 4px 9px;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  background: rgba(255,0,204,0.07);
-}
-.st-dim { border-color: var(--border2); color: var(--text-mid); background: none; }
-.st-spacer { flex: 1; }
-.st-sess {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.18em;
-  color: var(--text-dim);
-}
-.st-sess.open { color: var(--ok); }
-.st-clock {
-  font-size: 15px; font-weight: 700; letter-spacing: 0.08em;
-  color: var(--text-mid); font-variant-numeric: tabular-nums;
-}
+   The event box reserves nothing: it is an overlay, absent until it fires,
+   covering the score while it speaks. A Gameboy text box interrupts; it does
+   not hold a slot open. */
+
+/* The status strip is GONE — LIVE / PAPER / DAY / market-session / clock. It
+   was 44px telling a viewer things they did not come for. YouTube already
+   renders its own LIVE badge and viewer count directly over that band anyway,
+   so half of it was duplicating the platform's own chrome. */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STREAM EVENTS · 96 — Gameboy dialogue box meets cyberpunk
@@ -414,15 +382,15 @@ html, body {
                      0 0 22px -6px var(--ev-c); }
 }
 
-/* ── Blob · 576 — THE STREAMER ────────────────────────────────────────── */
+/* ── Blob · 720 — THE STREAMER ────────────────────────────────────────── */
 #s-blob {
-  height: 576px; flex: none;
+  height: 720px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
 .blob-bloom {
   position: absolute; top: 50%; left: 50%;
-  width: 680px; height: 680px;
+  width: 840px; height: 840px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255,0,204,0.26), transparent 66%);
@@ -431,7 +399,7 @@ html, body {
 }
 #blobCanvas {
   position: relative;
-  width: 576px; height: 576px;   /* 48 x 12 — integer scale, no resample.
+  width: 720px; height: 720px;   /* 48 x 15 — integer scale, no resample.
                                     Any resize MUST stay on a 48px multiple or
                                     his pixels get resampled and the whole
                                     8-bit read collapses. */
@@ -471,11 +439,11 @@ html, body {
   to   { transform: translateX(-50%) scale(1); }
 }
 
-/* ── NAV · 252 — his feet to the floor ───────────────────────────────── */
+/* ── SCORE · 160 — his feet to the floor ─────────────────────────────── */
 #s-nav {
-  height: 252px; flex: none;
+  height: 160px; flex: none;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 8px;
+  justify-content: center; gap: 10px;
 }
 .nav-label {
   font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
@@ -528,60 +496,21 @@ html, body {
     0 0 30px rgba(255,51,102,0.7),
     0 0 12px rgba(255,51,102,0.4);
 }
-.nav-day {
-  font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 22px; font-weight: 400; line-height: 1.3;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.9);
-}
-.nav-day.up   { color: var(--ok);      text-shadow: 0 0 24px rgba(0,255,157,0.4); }
-.nav-day.down { color: var(--danger);  text-shadow: 0 0 24px rgba(255,51,102,0.4); }
-.nav-day.flat { color: var(--text-mid); }
-.nav-sub {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
-  color: var(--text-mid);
-}
-.nav-sub.up   { color: var(--ok); }
-.nav-sub.down { color: var(--danger); }
-
-/* The NAV chart is deliberately GONE. "He's the streamer, not the charts."
-   At 160px it was a direction cue, not a chart, and it cost a 20fps canvas
-   repaint that the animated background now spends better. The long-horizon
-   numbers live on the Command Center, where someone is actually reading. */
+/* .nav-day and .nav-sub are GONE — the day P&L and the strategy P&L that sat
+   under the score in red. The score is the score; a second and third number
+   arguing with it underneath is a dashboard, not a scoreboard. Both still live
+   on the Command Center. The NAV chart went earlier for the same reason. */
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HOLDINGS — arcade tiles · 502
-   One board for the whole book: crypto (crypto_positions) and equity
-   (positions_data) as identical cabinet slots, distinguished by badge and
-   colour rather than by living in separate widgets.
-
-   The 8-bit read comes from three things, same as the Blob:
-     1. NO border-radius, NO gradients on structure — hard pixel edges only.
-     2. Bevels are stepped box-shadows (light top-left, dark bottom-right),
-        the way a sprite fakes depth. Never a soft shadow.
-     3. The meter is DISCRETE SEGMENTS, not a smooth fill. A continuous bar
-        instantly reads as a modern web progress bar.
+   HOLDINGS · 280 — the board
+   7 x 2 transparent slots, one per position, ticker only. No header: the word
+   "HOLDINGS" and the gross/UP metrics were labelling something already obvious
+   and costing the slots height.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-pos {
-  height: 288px; flex: none;
+  height: 280px; flex: none;
   display: flex; flex-direction: column;
-}
-.pos-hdr {
-  height: 24px; flex: none;
-  display: flex; align-items: baseline; justify-content: space-between;
-}
-.pos-name {
-  font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 11px; letter-spacing: 0.16em;
-  color: var(--accent);
-  text-shadow: 0 0 14px rgba(255,0,204,0.7), 2px 2px 0 rgba(148,0,255,0.4);
-}
-.pos-meta {
-  font-family: VT323, Consolas, monospace;
-  font-size: 18px; color: var(--text-mid);
-  letter-spacing: 0.06em;
-  font-variant-numeric: tabular-nums;
 }
 
 /* 7 x 2 = 14 slots, one per position. Row-major: the board reads left-to-right
