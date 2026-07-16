@@ -4572,6 +4572,15 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
+    // ── Thin: one point per 30s bucket (last value wins) — kills vertical spikes ─
+    var _bucket = 30000;
+    var _thinned = {{}};
+    for (var ti = 0; ti < allPts.length; ti++) {{
+      var bk = Math.floor(allPts[ti].ms / _bucket);
+      _thinned[bk] = allPts[ti];
+    }}
+    allPts = Object.keys(_thinned).sort().map(function(k) {{ return _thinned[k]; }});
+
     // ── Chart area ─────────────────────────────────────────────────────────
     var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
     var cW = cx1 - cx0, cH = cy1 - cy0;
