@@ -584,136 +584,50 @@ html, body {
 }
 
 /* ── The tile ─────────────────────────────────────────────────────────── */
-/* A CARTRIDGE SLOT, not a table row. Everything that was a number in a column
-   is gone — no qty, no entry price, no dollar P&L. What survives is what reads
-   from across a room: what is it, is it up or down, how close to the wall.
-   Anything a viewer would have to squint at was costing the thing they can
-   actually see. */
+/* STRIPPED TO THE TICKER. No panel, no bevel, no accent bar, no scanlines —
+   the slot is a transparent hole in the stage and the starfield shows straight
+   through it. Just the name, in the same face and the same four-layer stacked
+   shadow as the portfolio number, so the board and the NAV read as one system.
+   The shadow is not decoration here: white type floating over a moving
+   starfield needs it to stay legible.
+   Deliberately a floor to build up from, not a finished state. */
 .tile {
   position: relative;
   min-height: 0;
-  display: flex; flex-direction: column;
+  display: flex;
   align-items: center; justify-content: center;
-  gap: 5px;
-  padding: 8px 5px 7px;
-  background: linear-gradient(180deg, rgba(24,0,34,0.96), rgba(8,0,14,0.92));
-  /* Stepped bevel — hard offsets only. --tc is the P&L tint, set inline. */
-  box-shadow:
-    inset 2px 2px 0 rgba(255,255,255,0.09),
-    inset -2px -2px 0 rgba(0,0,0,0.7),
-    0 0 0 1px rgba(42,0,61,0.9),
-    0 0 16px -4px var(--tc, transparent);
-  overflow: hidden;
-}
-/* Top accent bar — the slot's P&L identity, now across the head of the tile
-   rather than down its side: at this shape a horizontal bar reads as a status
-   light, a vertical one as a list bullet. */
-.tile::before {
-  content: '';
-  position: absolute; left: 0; right: 0; top: 0;
-  height: 5px;
-  background: var(--tc, #8060a0);
-  box-shadow: 0 0 14px var(--tc, transparent);
-}
-/* Scanlines, per-tile so they ride the bevel. */
-.tile::after {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg, transparent 0 2px, rgba(0,0,0,0.26) 2px 3px);
+  background: none;
+  box-shadow: none;
+  overflow: visible;
 }
 
-.t-badge {
-  font-size: 13px; line-height: 1;
-  color: var(--accent2);
-  text-shadow: 0 0 10px currentColor;
-  position: relative; z-index: 1;
-}
-.t-badge.crypto { color: var(--accent3); }
-
-/* The ticker — biggest thing in the slot. Crypto loses its /USD suffix; the
-   badge already says what it is, and the symbol has to survive at 12px. */
 .t-sym {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 12px; line-height: 1;
-  color: var(--text-hi);
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.95), 0 0 12px var(--tc, transparent);
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 17px; line-height: 1;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.5);
+  text-shadow:
+    2px 2px 0 #222,
+    3px 3px 0 #111,
+    4px 4px 0 rgba(0,0,0,0.8),
+    5px 5px 0 rgba(0,0,0,0.5);
   white-space: nowrap;
-  position: relative; z-index: 1;
-}
-.t-pct {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 13px; line-height: 1;
-  color: var(--tc);
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.95), 0 0 16px var(--tc);
-  position: relative; z-index: 1;
-  font-variant-numeric: tabular-nums;
 }
 
-/* ── Segmented meter ──────────────────────────────────────────────────── */
-/* Discrete LED blocks. The entry tick sits dead centre: left is travel toward
-   the stop, right toward the target — the band risk_limits defines. This is
-   the bar's whole job: how close to the stop. */
-.t-meter {
-  display: flex; gap: 2px; height: 7px;
-  width: 100%;
-  position: relative; z-index: 1;
-}
-.t-seg {
-  flex: 1;
-  background: rgba(255,255,255,0.06);
-  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.05);
-}
-.t-seg.on {
-  background: var(--tc);
-  box-shadow: 0 0 6px var(--tc), inset 1px 1px 0 rgba(255,255,255,0.35);
-}
-/* Leading segment pulses — the cabinet tell that this is live, not a still. */
-.t-seg.tip { animation: seg-tip 0.75s steps(2, end) infinite; }
-@keyframes seg-tip { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-.t-seg.entry {
-  background: rgba(255,255,255,0.45);
-  box-shadow: 0 0 5px rgba(255,255,255,0.55);
-}
+/* The meter, the landing sparks, the fill acknowledgement and the stop alarm
+   all came out with the panel — every one of them painted a box-shadow or an
+   accent bar that no longer exists. They are not "temporarily disabled", they
+   are deleted; re-adding any of them means re-adding the surface it painted on.
+   The JS still applies .spawn / .hit and still computes the P&L tint into --tc,
+   so those hooks are live and inert rather than removed.
 
-/* He places it. The tile flies in FROM his position (--fx/--fy are set inline
-   per tile, measured against his canvas centre) and lands in its slot.
-   steps(4) not ease: the position snaps across four frames the way a sprite
-   moves, instead of gliding the way a web element does. Origin is the whole
-   point — a tile that grows in place appeared on its own; a tile that arrives
-   from the Blob was put there by him. */
+   Only the fly-in survives, because it moves the whole slot rather than
+   decorating it — and the ticker is a slot. */
 .tile.spawn { animation: tile-spawn 0.16s steps(4, end); }
 @keyframes tile-spawn {
   from { transform: translate(var(--fx, 0), var(--fy, 0)) scale(0.35); opacity: 0.55; }
   to   { transform: none; opacity: 1; }
-}
-/* Corner sparks on landing — 80ms, same as the Command Center's tile engine. */
-.tile.spawn::before { animation: spawn-spark 0.24s steps(3, end); }
-@keyframes spawn-spark {
-  0%   { box-shadow: 0 0 24px 4px #fff; background: #fff; }
-  100% { box-shadow: 0 0 12px var(--tc); background: var(--tc); }
-}
-
-/* A fill just landed on this symbol — the slot itself acknowledges it. */
-.tile.hit { animation: tile-hit 0.42s steps(3, end); }
-@keyframes tile-hit {
-  0%   { box-shadow: inset 0 0 0 2px var(--tc), 0 0 30px -2px var(--tc); }
-  100% { box-shadow:
-    inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
-    0 0 0 1px rgba(42,0,61,0.9), 0 0 14px -4px var(--tc); }
-}
-
-/* Breach of the stop: the cabinet alarms. Reserved for a real risk state,
-   never decoration — it must mean something every time it fires. */
-.tile.danger { animation: tile-alarm 0.9s steps(2, end) infinite; }
-@keyframes tile-alarm {
-  0%, 100% { box-shadow:
-    inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
-    0 0 0 1px rgba(255,51,102,0.9), 0 0 22px -2px #ff3366; }
-  50%      { box-shadow:
-    inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
-    0 0 0 1px rgba(42,0,61,0.9), 0 0 8px -4px #ff3366; }
 }
 
 .pos-empty {

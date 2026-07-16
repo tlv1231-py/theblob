@@ -379,15 +379,10 @@
   // live price comes from, not by living in separate widgets.
   // ═══════════════════════════════════════════════════════════════════════
 
-  var SEGS = 8;    // meter resolution. Fewer, fatter blocks now that the slot
-                   // is 4x the area — chunky is the whole read.
-
-  // Matches _TILE_BADGES in home_nav.js so a symbol carries the same glyph on
-  // both surfaces. A viewer should never have to relearn the iconography.
-  var BADGES = {
-    momentum: '▲▲', crypto: '◈', crypto_momentum: '◈', user: '◎',
-    daytrader: '⊕', reversion: '⇌', sentiment: '◉', volatility: '⚡', factor: '✦'
-  };
+  // The meter, badges and stop/target band math came out with the dense tile.
+  // The data still arrives in the payload (stop_price, target_price, strategy),
+  // so putting any of it back is a rendering change only — nothing upstream had
+  // to be unpicked to strip the slot down to a name.
 
   // CoinGecko ids — free, no auth, no key. Same map home_nav.js uses.
   var CG_MAP = {
@@ -446,45 +441,17 @@
     list.innerHTML = ps.map(function(p) {
       var live = p.price > 0 && p.entry > 0;
       var pc   = live ? (p.price - p.entry) / p.entry * 100 : 0;
-      var abs  = live ? (p.price - p.entry) * (p.qty || 0) : 0;
       var col  = !live ? '#8060a0'
                : (pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0'));
 
-      // Normalise against THIS position's real stop/target band rather than a
-      // fixed percentage. Crypto runs a ~0.3% stop and equity 5% — one shared
-      // percentage scale would peg every crypto tile at full deflection.
-      var frac = 0;
-      if (live && p.stop > 0 && p.target > 0) {
-        frac = p.price >= p.entry
-          ? Math.min(1, (p.price - p.entry) / Math.max(1e-9, p.target - p.entry))
-          : Math.max(-1, -(p.entry - p.price) / Math.max(1e-9, p.entry - p.stop));
-      }
-      var mid = SEGS / 2;
-      var lit = Math.round(Math.abs(frac) * mid);
-
-      var segs = '';
-      for (var i = 0; i < SEGS; i++) {
-        var on, tip = false;
-        if (frac >= 0) { on = i >= mid && i < mid + lit;  tip = on && i === mid + lit - 1; }
-        else           { on = i < mid  && i >= mid - lit; tip = on && i === mid - lit; }
-        segs += '<span class="t-seg' + (on ? ' on' : '') + (tip ? ' tip' : '') +
-                (i === mid ? ' entry' : '') + '"></span>';
-      }
-
-      // Alarm only on a genuine stop breach — see .tile.danger in stream.css.
-      var breached = live && p.stop > 0 && p.price <= p.stop;
-
-      // Badge, ticker, P&L, meter. Nothing else. Everything cut here — qty,
-      // entry price, dollar P&L, hold time — was a number you had to squint at,
-      // and it was costing the things you can actually read from a couch.
+      // Just the ticker. Transparent slot, white name, nothing else — the
+      // simplest thing that still identifies the book, to build back up from.
+      // --tc and data-sym stay even though nothing paints them yet: the P&L
+      // tint and the per-symbol hooks that spawnNewTiles / hitTile / glanceAt
+      // target are still wired, so whatever goes back in inherits them free.
       return '' +
-        '<div class="tile' + (breached ? ' danger' : '') + '" data-sym="' + p.sym +
-             '" style="--tc:' + col + '">' +
-          '<span class="t-badge' + (p.isCrypto ? ' crypto' : '') + '">' +
-            (BADGES[p.strategy] || BADGES.momentum) + '</span>' +
+        '<div class="tile" data-sym="' + p.sym + '" style="--tc:' + col + '">' +
           '<span class="t-sym">' + p.sym.replace('/USD', '') + '</span>' +
-          '<span class="t-pct">' + (live ? pct(pc, 1) : '··') + '</span>' +
-          '<div class="t-meter">' + segs + '</div>' +
         '</div>';
     }).join('');
   }
