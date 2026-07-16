@@ -379,7 +379,8 @@
   // live price comes from, not by living in separate widgets.
   // ═══════════════════════════════════════════════════════════════════════
 
-  var SEGS = 16;   // meter resolution. Low on purpose: chunky reads as 8-bit.
+  var SEGS = 8;    // meter resolution. Fewer, fatter blocks now that the slot
+                   // is 4x the area — chunky is the whole read.
 
   // Matches _TILE_BADGES in home_nav.js so a symbol carries the same glyph on
   // both surfaces. A viewer should never have to relearn the iconography.
@@ -420,18 +421,9 @@
     return out;
   }
 
-  function qtyStr(q) {
-    var n = Number(q || 0);
-    if (n >= 1000) return Math.round(n).toLocaleString('en-US');
-    if (n >= 1)    return n.toFixed(2);
-    return n.toFixed(4);
-  }
-  function priceStr(v) {
-    var n = Number(v || 0);
-    if (n >= 1000) return '$' + Math.round(n).toLocaleString('en-US');
-    if (n >= 1)    return '$' + n.toFixed(2);
-    return '$' + n.toFixed(4);
-  }
+  // qtyStr/priceStr are gone with the dense tile — the slot shows no quantities
+  // or entry prices any more. They live on the Command Center, where someone is
+  // reading rather than watching.
 
   function renderPositions() {
     var list = $('pos-list');
@@ -482,21 +474,16 @@
       // Alarm only on a genuine stop breach — see .tile.danger in stream.css.
       var breached = live && p.stop > 0 && p.price <= p.stop;
 
+      // Badge, ticker, P&L, meter. Nothing else. Everything cut here — qty,
+      // entry price, dollar P&L, hold time — was a number you had to squint at,
+      // and it was costing the things you can actually read from a couch.
       return '' +
         '<div class="tile' + (breached ? ' danger' : '') + '" data-sym="' + p.sym +
              '" style="--tc:' + col + '">' +
-          '<div class="t-top">' +
-            '<span class="t-name">' +
-              '<span class="t-badge' + (p.isCrypto ? ' crypto' : '') + '">' +
-                (BADGES[p.strategy] || BADGES.momentum) + '</span>' +
-              '<span class="t-sym">' + p.sym.replace('/USD', '') + '</span>' +
-            '</span>' +
-            '<span class="t-pct">' + (live ? pct(pc, 1) : '· ·') + '</span>' +
-          '</div>' +
-          '<div class="t-bot">' +
-            '<span class="t-entry">' + qtyStr(p.qty) + ' @ ' + priceStr(p.entry) + '</span>' +
-            '<span class="t-abs">' + (live ? signed(abs, 2) : '—') + '</span>' +
-          '</div>' +
+          '<span class="t-badge' + (p.isCrypto ? ' crypto' : '') + '">' +
+            (BADGES[p.strategy] || BADGES.momentum) + '</span>' +
+          '<span class="t-sym">' + p.sym.replace('/USD', '') + '</span>' +
+          '<span class="t-pct">' + (live ? pct(pc, 1) : '··') + '</span>' +
           '<div class="t-meter">' + segs + '</div>' +
         '</div>';
     }).join('');

@@ -249,9 +249,33 @@ _STAGE_HTML = """
 
       <!-- Stream events announce here, directly over his head. Gameboy
            dialogue box: bezel, LCD dot grid, typewriter reveal. -->
-      <!-- Idle it is a thin strip; a viewer event expands it into a Gameboy
-           dialogue box over his head. The name is its own element because the
-           name is the point — someone paid to be on screen. -->
+      <!-- The board sits above his head: it is the action, and he is the one
+           working it. Two rows of seven chunky slots. -->
+      <div id="s-pos">
+        <div class="pos-hdr">
+          <span class="pos-name">HOLDINGS</span>
+          <span class="pos-meta" id="pos-meta">&mdash;</span>
+        </div>
+        <div id="pos-list"></div>
+      </div>
+
+      <div id="s-blob">
+        <div class="blob-bloom" id="blob-bloom"></div>
+        <canvas id="blobCanvas"></canvas>
+        <div class="trade-flash" id="trade-flash"></div>
+        <div class="blob-mood" id="blob-mood">IDLE</div>
+      </div>
+
+      <div id="s-nav">
+        <div class="nav-label">PORTFOLIO VALUE</div>
+        <div class="nav-big" id="hero-nav">$&mdash;</div>
+        <div class="nav-day" id="hero-day">&mdash;</div>
+        <div class="nav-sub" id="chip-total">&mdash;</div>
+      </div>
+
+      <!-- Bottom of the stage, growing UPWARD — which is where a Gameboy text
+           box actually lives. Idle it is a thin strip; a viewer event expands
+           it. The name is its own element because the name is the point. -->
       <div id="s-events">
         <div class="ev-lcd" id="ev-lcd">
           <div class="ev-corners"></div>
@@ -270,28 +294,6 @@ _STAGE_HTML = """
           <span class="ev-more" id="ev-more">&#x25BC;</span>
           <span class="ev-badge" id="ev-badge"></span>
         </div>
-      </div>
-
-      <div id="s-blob">
-        <div class="blob-bloom" id="blob-bloom"></div>
-        <canvas id="blobCanvas"></canvas>
-        <div class="trade-flash" id="trade-flash"></div>
-        <div class="blob-mood" id="blob-mood">IDLE</div>
-      </div>
-
-      <div id="s-nav">
-        <div class="nav-label">PORTFOLIO VALUE</div>
-        <div class="nav-big" id="hero-nav">$&mdash;</div>
-        <div class="nav-day" id="hero-day">&mdash;</div>
-        <div class="nav-sub" id="chip-total">&mdash;</div>
-      </div>
-
-      <div id="s-pos">
-        <div class="pos-hdr">
-          <span class="pos-name">HOLDINGS</span>
-          <span class="pos-meta" id="pos-meta">&mdash;</span>
-        </div>
-        <div id="pos-list"></div>
       </div>
 
     </div>

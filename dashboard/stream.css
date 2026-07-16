@@ -162,18 +162,22 @@ html, body {
   flex-direction: column;
 }
 
-/* 48 + 88 + 672 + 120 + 232 = 1160. Each band is fixed so the stack can never
+/* 44 + 288 + 576 + 108 + 144 = 1160. Each band is fixed so the stack can never
    reflow into the reserved zones.
-   THE BLOB IS THE STREAMER. He takes 672px — 58% of the safe box and ~35% of
-   the whole canvas, 2.8x his previous size. The NAV chart is deleted outright
-   to pay for it: nobody tunes in to watch a sparkline, and at 160px it was
-   never a chart anyway. Holdings compress to a 3-column board to fit the rest.
-   Deleting the chart also retires a 20fps canvas repaint, which buys back the
-   budget the animated background spends. */
 
-/* ── Status strip · 48 ────────────────────────────────────────────────── */
+   Order top-to-bottom: status / HOLDINGS / Blob / NAV / EVENTS.
+
+   The board sits ABOVE his head because it is the action and he is the one
+   working it — he reaches up into it. The event box sits at the BOTTOM growing
+   upward, which is where a Gameboy text box actually lives; it interrupts the
+   scene from below rather than hovering over the star.
+
+   The Blob gives up 672 -> 576 (48x12, still integer scale) to pay for bigger
+   slots. He is still 30% of the whole canvas and half the safe box. */
+
+/* ── Status strip · 44 ────────────────────────────────────────────────── */
 #s-status {
-  height: 48px; flex: none;
+  height: 44px; flex: none;
   display: flex; align-items: center; gap: 11px;
   border-bottom: 1px solid var(--border);
 }
@@ -226,15 +230,18 @@ html, body {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-events {
-  height: 88px; flex: none;
+  height: 144px; flex: none;
   position: relative;
-  z-index: 20;                 /* the box expands over his head — it must win */
+  z-index: 20;                 /* the box expands over the NAV — it must win */
 }
 
+/* Anchored to the BOTTOM so growth pushes the top edge UP over the NAV — the
+   way a Gameboy text box rises from the floor of the screen to interrupt.
+   Anchoring the top instead would make it drop onto the Blob's face. */
 .ev-lcd {
   position: absolute;
-  top: 4px; left: 0; right: 0;
-  height: 80px;
+  bottom: 0; left: 0; right: 0;
+  height: 136px;
   padding: 11px 14px;
   background: linear-gradient(180deg, #10001a, #06000c);
   /* Stepped bezel — outer frame, inner rule, hard shadow. No soft edges. */
@@ -259,9 +266,9 @@ html, body {
               box-shadow 0.25s steps(2, end);
   overflow: hidden;
 }
-/* Open — a viewer event. Grows down over the Blob's head, exactly the way a
-   Gameboy text box covers the world it interrupts. */
-.ev-lcd.open { height: 232px; }
+/* Open — a viewer event. Grows UP over the NAV, exactly the way a Gameboy text
+   box covers the world it interrupts. */
+.ev-lcd.open { height: 248px; }
 
 /* THE POKEMON TELL. A Gen-1 text box has NOTCHED corners — the frame steps in
    by one pixel block at each corner rather than mitring or rounding. This one
@@ -292,7 +299,7 @@ html, body {
 .ev-lcd.idle { --ev-c: #2a003d; opacity: 0.5; }
 
 /* ── Idle strip ───────────────────────────────────────────────────────── */
-.ev-idle { display: flex; align-items: baseline; gap: 10px; }
+.ev-idle { display: flex; align-items: center; gap: 12px; height: 100%; }
 .ev-lcd.open .ev-idle { display: none; }
 .ev-icon {
   font-size: 17px; line-height: 1; flex: none;
@@ -397,15 +404,15 @@ html, body {
                      0 0 22px -6px var(--ev-c); }
 }
 
-/* ── Blob · 672 — THE STREAMER ────────────────────────────────────────── */
+/* ── Blob · 576 — THE STREAMER ────────────────────────────────────────── */
 #s-blob {
-  height: 672px; flex: none;
+  height: 576px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
 .blob-bloom {
   position: absolute; top: 50%; left: 50%;
-  width: 760px; height: 760px;
+  width: 680px; height: 680px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255,0,204,0.26), transparent 66%);
@@ -414,7 +421,7 @@ html, body {
 }
 #blobCanvas {
   position: relative;
-  width: 672px; height: 672px;   /* 48 x 14 — integer scale, no resample.
+  width: 576px; height: 576px;   /* 48 x 12 — integer scale, no resample.
                                     Any resize MUST stay on a 48px multiple or
                                     his pixels get resampled and the whole
                                     8-bit read collapses. */
@@ -458,7 +465,7 @@ html, body {
 /* One line now: the number and the day, on the same row. The Blob took the
    height and the number is still the second thing you read. */
 #s-nav {
-  height: 120px; flex: none;
+  height: 108px; flex: none;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 2px;
 }
@@ -543,11 +550,11 @@ html, body {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-pos {
-  height: 232px; flex: none;
+  height: 288px; flex: none;
   display: flex; flex-direction: column;
 }
 .pos-hdr {
-  height: 26px; flex: none;
+  height: 24px; flex: none;
   display: flex; align-items: baseline; justify-content: space-between;
 }
 .pos-name {
@@ -563,42 +570,50 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 3 x 5 = 15 slots for a 14-position book. Column-major so a new position
-   lands in a stable slot instead of reshuffling the whole grid. Three columns
-   rather than two because the Blob took the height — the board went wide to
-   stay legible instead of tall. */
+/* 7 x 2 = 14 slots, one per position. Row-major: the board reads left-to-right
+   like a party lineup, not a spreadsheet column. Each slot is ~120x128 — nearly
+   4x the area of the old dense row, which is the entire point: these are the
+   most interesting thing on the stage and they were previously a footnote. */
 #pos-list {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(5, 1fr);
-  grid-auto-flow: column;
-  gap: 3px 6px;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 6px;
   overflow: hidden;
 }
 
 /* ── The tile ─────────────────────────────────────────────────────────── */
+/* A CARTRIDGE SLOT, not a table row. Everything that was a number in a column
+   is gone — no qty, no entry price, no dollar P&L. What survives is what reads
+   from across a room: what is it, is it up or down, how close to the wall.
+   Anything a viewer would have to squint at was costing the thing they can
+   actually see. */
 .tile {
   position: relative;
   min-height: 0;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 0 6px 0 11px;
-  background: linear-gradient(90deg, rgba(20,0,28,0.96), rgba(10,0,16,0.9));
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 5px;
+  padding: 8px 5px 7px;
+  background: linear-gradient(180deg, rgba(24,0,34,0.96), rgba(8,0,14,0.92));
   /* Stepped bevel — hard offsets only. --tc is the P&L tint, set inline. */
   box-shadow:
-    inset 2px 2px 0 rgba(255,255,255,0.07),
-    inset -2px -2px 0 rgba(0,0,0,0.65),
+    inset 2px 2px 0 rgba(255,255,255,0.09),
+    inset -2px -2px 0 rgba(0,0,0,0.7),
     0 0 0 1px rgba(42,0,61,0.9),
-    0 0 14px -4px var(--tc, transparent);
+    0 0 16px -4px var(--tc, transparent);
   overflow: hidden;
 }
-/* Left accent slab — the tile's P&L identity, 6px of pure colour. */
+/* Top accent bar — the slot's P&L identity, now across the head of the tile
+   rather than down its side: at this shape a horizontal bar reads as a status
+   light, a vertical one as a list bullet. */
 .tile::before {
   content: '';
-  position: absolute; left: 0; top: 0; bottom: 0;
-  width: 6px;
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 5px;
   background: var(--tc, #8060a0);
-  box-shadow: 0 0 12px var(--tc, transparent);
+  box-shadow: 0 0 14px var(--tc, transparent);
 }
 /* Scanlines, per-tile so they ride the bevel. */
 .tile::after {
@@ -609,56 +624,46 @@ html, body {
     0deg, transparent 0 2px, rgba(0,0,0,0.26) 2px 3px);
 }
 
-.t-top, .t-bot {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 5px; position: relative; z-index: 1;
-}
-.t-top { margin-bottom: 2px; }
-
-.t-name { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .t-badge {
-  font-size: 9px; line-height: 1; flex: none;
+  font-size: 13px; line-height: 1;
   color: var(--accent2);
-  text-shadow: 0 0 8px currentColor;
+  text-shadow: 0 0 10px currentColor;
+  position: relative; z-index: 1;
 }
 .t-badge.crypto { color: var(--accent3); }
+
+/* The ticker — biggest thing in the slot. Crypto loses its /USD suffix; the
+   badge already says what it is, and the symbol has to survive at 12px. */
 .t-sym {
   font-family: 'Press Start 2P', monospace;
-  font-size: 9px;
+  font-size: 12px; line-height: 1;
   color: var(--text-hi);
-  text-shadow: 1px 1px 0 rgba(0,0,0,0.9), 0 0 10px var(--tc, transparent);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.95), 0 0 12px var(--tc, transparent);
+  white-space: nowrap;
+  position: relative; z-index: 1;
 }
 .t-pct {
   font-family: 'Press Start 2P', monospace;
-  font-size: 10px; flex: none;
-  color: var(--tc);
-  text-shadow: 1px 1px 0 rgba(0,0,0,0.9), 0 0 14px var(--tc);
-}
-.t-entry, .t-abs {
-  font-family: VT323, monospace;
   font-size: 13px; line-height: 1;
-  color: var(--text-mid);
-  letter-spacing: 0.03em;
+  color: var(--tc);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.95), 0 0 16px var(--tc);
+  position: relative; z-index: 1;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
-.t-entry { overflow: hidden; text-overflow: ellipsis; }
-.t-abs { flex: none; color: var(--tc); opacity: 0.85; }
 
 /* ── Segmented meter ──────────────────────────────────────────────────── */
 /* Discrete LED blocks. The entry tick sits dead centre: left is travel toward
    the stop, right toward the target — the band risk_limits defines. This is
    the bar's whole job: how close to the stop. */
 .t-meter {
-  display: flex; gap: 1px; height: 5px;
-  margin-top: 3px;
+  display: flex; gap: 2px; height: 7px;
+  width: 100%;
   position: relative; z-index: 1;
 }
 .t-seg {
   flex: 1;
-  background: rgba(255,255,255,0.05);
-  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.06);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.05);
 }
 .t-seg.on {
   background: var(--tc);
