@@ -6489,3 +6489,265 @@ setTimeout(function() {
 
   })();
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STRATEGIES MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function() {
+
+var _P = '#ff00cc';
+var _D = '#3a3a52';
+var _PS2P = '"Press Start 2P",monospace';
+
+// ── SVG icon symbol defs ──────────────────────────────────────────────────────
+var _ICON_DEFS = '<svg width="0" height="0" style="position:absolute;overflow:hidden"><defs>'
+  + '<symbol id="sm-rebal" viewBox="0 0 48 48"><rect x="4" y="6" width="40" height="36" stroke="'+_D+'" stroke-width="1.5" fill="none"/><line x1="4" y1="16" x2="44" y2="16" stroke="'+_D+'" stroke-width="1.5"/><line x1="15" y1="4" x2="15" y2="10" stroke="'+_D+'" stroke-width="1.5"/><line x1="33" y1="4" x2="33" y2="10" stroke="'+_D+'" stroke-width="1.5"/><rect x="9" y="22" width="4" height="4" fill="'+_P+'"/><rect x="20" y="22" width="4" height="4" fill="'+_P+'"/><rect x="31" y="22" width="4" height="4" fill="'+_P+'"/><rect x="9" y="32" width="4" height="4" fill="'+_P+'"/><rect x="20" y="32" width="4" height="4" fill="'+_P+'"/><rect x="31" y="32" width="4" height="4" fill="'+_D+'"/><rect x="38" y="22" width="4" height="4" fill="'+_D+'"/><rect x="38" y="32" width="4" height="4" fill="'+_D+'"/></symbol>'
+  + '<symbol id="sm-universe" viewBox="0 0 48 48"><line x1="8" y1="46" x2="8" y2="28" stroke="'+_D+'" stroke-width="5"/><line x1="20" y1="46" x2="20" y2="18" stroke="'+_D+'" stroke-width="5"/><line x1="32" y1="46" x2="32" y2="34" stroke="'+_D+'" stroke-width="5"/><line x1="44" y1="46" x2="44" y2="8" stroke="'+_P+'" stroke-width="5"/><line x1="4" y1="47" x2="48" y2="47" stroke="'+_D+'" stroke-width="1.5"/><polyline points="40,5 44,1 48,5" fill="none" stroke="'+_P+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-momentum" viewBox="0 0 48 48"><line x1="8" y1="46" x2="8" y2="36" stroke="'+_D+'" stroke-width="4"/><line x1="18" y1="46" x2="18" y2="28" stroke="'+_D+'" stroke-width="4"/><line x1="28" y1="46" x2="28" y2="18" stroke="'+_D+'" stroke-width="4"/><line x1="38" y1="46" x2="38" y2="6" stroke="'+_P+'" stroke-width="4"/><line x1="4" y1="47" x2="48" y2="47" stroke="'+_D+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-filter" viewBox="0 0 48 48"><path d="M4 6 H44 L28 26 V42 L20 38 V26 Z" stroke="'+_D+'" stroke-width="1.5" fill="none" stroke-linejoin="miter"/><line x1="4" y1="3" x2="8" y2="3" stroke="'+_P+'" stroke-width="2"/><line x1="12" y1="3" x2="16" y2="3" stroke="'+_P+'" stroke-width="2"/><line x1="20" y1="3" x2="24" y2="3" stroke="'+_P+'" stroke-width="2"/><line x1="28" y1="3" x2="32" y2="3" stroke="'+_P+'" stroke-width="2"/><line x1="36" y1="3" x2="40" y2="3" stroke="'+_P+'" stroke-width="2"/></symbol>'
+  + '<symbol id="sm-size" viewBox="0 0 48 48"><line x1="4" y1="22" x2="44" y2="22" stroke="'+_D+'" stroke-width="1.5"/><line x1="24" y1="22" x2="24" y2="44" stroke="'+_D+'" stroke-width="1.5"/><line x1="16" y1="44" x2="32" y2="44" stroke="'+_D+'" stroke-width="1.5"/><line x1="4" y1="22" x2="4" y2="32" stroke="'+_D+'" stroke-width="1.5"/><line x1="0" y1="32" x2="10" y2="32" stroke="'+_P+'" stroke-width="2"/><line x1="44" y1="22" x2="44" y2="32" stroke="'+_D+'" stroke-width="1.5"/><line x1="38" y1="32" x2="48" y2="32" stroke="'+_P+'" stroke-width="2"/><rect x="22" y="18" width="4" height="4" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-risk" viewBox="0 0 48 48"><path d="M24 2 L42 9 V24 C42 34 34 42 24 46 C14 42 6 34 6 24 V9 Z" stroke="'+_D+'" stroke-width="1.5" fill="none" stroke-linejoin="miter"/><line x1="15" y1="19" x2="33" y2="19" stroke="'+_P+'" stroke-width="1.5" opacity=".35"/><line x1="15" y1="26" x2="33" y2="26" stroke="'+_P+'" stroke-width="1.5" opacity=".65"/><line x1="15" y1="33" x2="33" y2="33" stroke="'+_P+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-execute" viewBox="0 0 48 48"><polygon points="28,2 14,26 24,26 20,48 36,22 26,22" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-wave" viewBox="0 0 48 48"><line x1="2" y1="28" x2="46" y2="28" stroke="'+_D+'" stroke-width="1" stroke-dasharray="3 3"/><polyline points="2,28 10,28 16,46 24,28 30,28" stroke="'+_D+'" stroke-width="1.5" fill="none" stroke-linejoin="miter" stroke-linecap="square"/><line x1="30" y1="28" x2="46" y2="28" stroke="'+_P+'" stroke-width="1.5"/><line x1="16" y1="46" x2="16" y2="32" stroke="'+_P+'" stroke-width="1.5"/><polyline points="12,36 16,30 20,36" stroke="'+_P+'" stroke-width="1.5" fill="none" stroke-linejoin="miter"/></symbol>'
+  + '<symbol id="sm-trend" viewBox="0 0 48 48"><line x1="4" y1="44" x2="44" y2="12" stroke="'+_D+'" stroke-width="1.5" stroke-dasharray="3 3"/><polyline points="4,40 12,34 20,28 28,20 38,10 44,6" stroke="'+_P+'" stroke-width="2" fill="none" stroke-linejoin="miter" stroke-linecap="square"/><rect x="41" y="3" width="6" height="6" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-coins" viewBox="0 0 48 48"><ellipse cx="24" cy="38" rx="14" ry="5" stroke="'+_D+'" stroke-width="1.5" fill="none"/><ellipse cx="24" cy="30" rx="14" ry="5" stroke="'+_D+'" stroke-width="1.5" fill="#13131c"/><ellipse cx="24" cy="22" rx="14" ry="5" stroke="'+_P+'" stroke-width="1.5" fill="#13131c"/><rect x="18" y="17" width="3" height="3" fill="'+_P+'"/><rect x="27" y="21" width="3" height="3" fill="'+_P+'"/><line x1="20" y1="25" x2="27" y2="18" stroke="'+_P+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-spread" viewBox="0 0 48 48"><line x1="6" y1="14" x2="42" y2="14" stroke="'+_P+'" stroke-width="2"/><line x1="6" y1="34" x2="42" y2="34" stroke="'+_D+'" stroke-width="2"/><line x1="24" y1="34" x2="24" y2="16" stroke="'+_P+'" stroke-width="1.5" stroke-dasharray="2 2"/><polyline points="20,18 24,13 28,18" stroke="'+_P+'" stroke-width="1.5" fill="none" stroke-linejoin="miter"/></symbol>'
+  + '<symbol id="sm-pulse" viewBox="0 0 48 48"><polyline points="2,24 10,24 15,10 21,38 27,16 33,30 37,24 46,24" stroke="'+_P+'" stroke-width="1.5" fill="none" stroke-linejoin="miter" stroke-linecap="square"/></symbol>'
+  + '<symbol id="sm-beta" viewBox="0 0 48 48"><line x1="6" y1="44" x2="44" y2="6" stroke="'+_D+'" stroke-width="1.5"/><line x1="6" y1="38" x2="44" y2="18" stroke="'+_P+'" stroke-width="2"/><text x="3" y="14" font-size="11" fill="'+_P+'" font-family="Consolas,monospace" font-weight="700">b&lt;1</text></symbol>'
+  + '<symbol id="sm-clock-o" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" stroke="'+_D+'" stroke-width="1.5" fill="none"/><line x1="24" y1="24" x2="13" y2="20" stroke="'+_P+'" stroke-width="2" stroke-linecap="square"/><line x1="24" y1="24" x2="24" y2="9" stroke="'+_P+'" stroke-width="1.5" stroke-linecap="square"/><rect x="22" y="22" width="4" height="4" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-orb" viewBox="0 0 48 48"><rect x="16" y="18" width="16" height="22" stroke="'+_D+'" stroke-width="1.5" fill="none" stroke-dasharray="3 2"/><rect x="18" y="5" width="12" height="14" fill="'+_P+'"/><line x1="24" y1="2" x2="24" y2="5" stroke="'+_P+'" stroke-width="1.5"/><line x1="24" y1="19" x2="24" y2="40" stroke="'+_D+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-rvol" viewBox="0 0 48 48"><rect x="4" y="34" width="7" height="14" fill="'+_D+'"/><rect x="14" y="28" width="7" height="20" fill="'+_D+'"/><rect x="24" y="22" width="7" height="26" fill="'+_D+'"/><rect x="34" y="8" width="7" height="40" fill="'+_P+'"/><line x1="2" y1="49" x2="46" y2="49" stroke="'+_D+'" stroke-width="1.5"/><line x1="2" y1="22" x2="46" y2="22" stroke="'+_P+'" stroke-width="1" stroke-dasharray="2 3" opacity=".4"/></symbol>'
+  + '<symbol id="sm-vwap" viewBox="0 0 48 48"><polyline points="4,42 14,34 24,28 34,20 44,14" stroke="'+_D+'" stroke-width="1.5" fill="none" stroke-linecap="square"/><polyline points="4,40 14,32 24,26 34,22 44,16" stroke="'+_P+'" stroke-width="1.5" fill="none" stroke-dasharray="4 2" stroke-linecap="square"/><rect x="31" y="19" width="6" height="6" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-bracket" viewBox="0 0 48 48"><line x1="6" y1="12" x2="42" y2="12" stroke="'+_P+'" stroke-width="1.5"/><line x1="6" y1="38" x2="42" y2="38" stroke="'+_P+'" stroke-width="1.5" opacity=".35"/><line x1="6" y1="24" x2="42" y2="24" stroke="'+_D+'" stroke-width="1"/><rect x="21" y="21" width="6" height="6" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-clock-c" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" stroke="'+_D+'" stroke-width="1.5" fill="none"/><line x1="24" y1="24" x2="38" y2="28" stroke="'+_P+'" stroke-width="2" stroke-linecap="square"/><line x1="24" y1="24" x2="24" y2="9" stroke="'+_P+'" stroke-width="1.5" stroke-linecap="square"/><rect x="22" y="22" width="4" height="4" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-longs" viewBox="0 0 48 48"><rect x="4" y="28" width="8" height="20" fill="'+_P+'" opacity=".45"/><rect x="15" y="20" width="8" height="28" fill="'+_P+'" opacity=".6"/><rect x="26" y="24" width="8" height="24" fill="'+_P+'" opacity=".75"/><rect x="37" y="10" width="8" height="38" fill="'+_P+'"/><line x1="2" y1="49" x2="48" y2="49" stroke="'+_D+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-bell" viewBox="0 0 48 48"><path d="M2 44 Q8 44 14 30 Q18 16 24 12 Q30 16 34 30 Q40 44 46 44" stroke="'+_D+'" stroke-width="1.5" fill="none"/><path d="M34 30 Q40 44 46 44" stroke="'+_P+'" stroke-width="2" fill="none"/><line x1="2" y1="44" x2="46" y2="44" stroke="'+_D+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-strike" viewBox="0 0 48 48"><line x1="6" y1="10" x2="42" y2="10" stroke="'+_D+'" stroke-width="1.5"/><line x1="6" y1="18" x2="42" y2="18" stroke="'+_D+'" stroke-width="1.5"/><rect x="4" y="23" width="40" height="8" fill="'+_P+'" opacity=".12"/><line x1="6" y1="27" x2="42" y2="27" stroke="'+_P+'" stroke-width="2"/><line x1="6" y1="36" x2="42" y2="36" stroke="'+_D+'" stroke-width="1.5"/><line x1="6" y1="44" x2="42" y2="44" stroke="'+_D+'" stroke-width="1.5"/><rect x="40" y="24" width="6" height="6" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-sell" viewBox="0 0 48 48"><line x1="24" y1="6" x2="24" y2="34" stroke="'+_P+'" stroke-width="2" stroke-linecap="square"/><polyline points="14,26 24,38 34,26" fill="none" stroke="'+_P+'" stroke-width="2" stroke-linejoin="miter"/><line x1="8" y1="44" x2="40" y2="44" stroke="'+_P+'" stroke-width="2" opacity=".35"/></symbol>'
+  + '<symbol id="sm-collect" viewBox="0 0 48 48"><ellipse cx="24" cy="40" rx="14" ry="5" stroke="'+_D+'" stroke-width="1.5" fill="none"/><ellipse cx="24" cy="32" rx="14" ry="5" stroke="'+_P+'" stroke-width="1.5" fill="#13131c"/><polyline points="18,26 24,16 30,26" fill="none" stroke="'+_P+'" stroke-width="2" stroke-linejoin="miter"/><line x1="24" y1="16" x2="24" y2="32" stroke="'+_P+'" stroke-width="1.5"/></symbol>'
+  + '<symbol id="sm-cal" viewBox="0 0 48 48"><rect x="4" y="8" width="40" height="36" stroke="'+_D+'" stroke-width="1.5" fill="none"/><line x1="4" y1="18" x2="44" y2="18" stroke="'+_D+'" stroke-width="1.5"/><line x1="15" y1="4" x2="15" y2="12" stroke="'+_D+'" stroke-width="1.5"/><line x1="33" y1="4" x2="33" y2="12" stroke="'+_D+'" stroke-width="1.5"/><rect x="16" y="24" width="16" height="12" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-eps" viewBox="0 0 48 48"><rect x="6" y="28" width="12" height="20" fill="'+_D+'"/><rect x="30" y="10" width="12" height="38" fill="'+_P+'"/><line x1="2" y1="49" x2="46" y2="49" stroke="'+_D+'" stroke-width="1.5"/><polyline points="27,24 31,28 27,32" fill="none" stroke="'+_P+'" stroke-width="1.5" stroke-linejoin="miter"/></symbol>'
+  + '<symbol id="sm-entry" viewBox="0 0 48 48"><polyline points="2,44 14,38 26,32 38,22 46,16" stroke="'+_D+'" stroke-width="1.5" fill="none" stroke-linecap="square"/><rect x="22" y="28" width="8" height="8" fill="'+_P+'"/><line x1="26" y1="28" x2="26" y2="14" stroke="'+_P+'" stroke-width="1.5" stroke-dasharray="2 2"/><polyline points="22,17 26,11 30,17" fill="none" stroke="'+_P+'" stroke-width="1.5" stroke-linejoin="miter"/></symbol>'
+  + '<symbol id="sm-hold" viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" stroke="'+_D+'" stroke-width="1.5" fill="none"/><path d="M24 6 A18 18 0 0 1 42 24" stroke="'+_P+'" stroke-width="2" fill="none" stroke-linecap="square"/><line x1="24" y1="24" x2="24" y2="9" stroke="'+_P+'" stroke-width="1.5" stroke-linecap="square"/><line x1="24" y1="24" x2="38" y2="24" stroke="'+_P+'" stroke-width="1.5" stroke-linecap="square"/><rect x="22" y="22" width="4" height="4" fill="'+_P+'"/></symbol>'
+  + '<symbol id="sm-rotate" viewBox="0 0 48 48"><path d="M10 24 A14 14 0 1 1 24 38" stroke="'+_P+'" stroke-width="1.5" fill="none"/><polyline points="20,36 24,40 20,44" fill="none" stroke="'+_P+'" stroke-width="1.5" stroke-linejoin="miter"/></symbol>'
+  + '</defs></svg>';
+
+// ── Strategy definitions ───────────────────────────────────────────────────────
+var _STRAT_DEFS = [
+  { key:'momentum', label:'MOMENTUM', status:'paper',
+    generic:'Rank assets by recent price performance, buy top performers, rebalance on a fixed schedule.',
+    template:'Every {rebalance_days} days, rank {universe_size} stocks by their {lookback_months}-month return — skipping the most recent {skip_months} month — buy the top {top_n} at equal weight. Halt if a position exceeds {max_position}, daily loss hits {daily_dd_halt}, or total drawdown reaches {total_dd_halt}.',
+    chain:[
+      {id:'sm-rebal',    pkey:'rebalance_days',  lbl:'rebalance'},
+      {id:'sm-universe', pkey:'universe_size',   lbl:'universe'},
+      {id:'sm-momentum', pkey:'lookback_months', lbl:'momentum'},
+      {id:'sm-filter',   pkey:'top_n',           lbl:'rank & filter'},
+      {id:'sm-size',     pkey:'max_position',    lbl:'equal weight'},
+      {id:'sm-risk',     pkey:'total_dd_halt',   lbl:'risk gate'},
+      {id:'sm-execute',  pkey:'slippage_bps',    lbl:'execute'},
+    ]
+  },
+  { key:'mean_reversion', label:'MEAN REVERSION', status:'research',
+    generic:'Buy assets that have fallen significantly below their historical average, expecting them to snap back.',
+    template:'Screen {universe_size} stocks for those trading more than {zscore_threshold} below their {lookback_days}-day rolling mean. Stop-loss at {stop_loss} per position.',
+    chain:[
+      {id:'sm-universe', pkey:'universe_size',    lbl:'universe'},
+      {id:'sm-wave',     pkey:'zscore_threshold', lbl:'deviation'},
+      {id:'sm-filter',   pkey:'lookback_days',    lbl:'threshold'},
+      {id:'sm-size',     pkey:'max_position',     lbl:'size'},
+      {id:'sm-risk',     pkey:'stop_loss',        lbl:'risk gate'},
+      {id:'sm-execute',  pkey:'slippage_bps',     lbl:'execute'},
+    ]
+  },
+  { key:'trend_following', label:'TREND FOLLOWING', status:'research',
+    generic:'Hold assets trending upward, rotate out when the trend breaks.',
+    template:'Hold ETFs trading above their {ma_period}-day moving average, rank by trend strength, rotate every {rebalance_freq} days. Exit if drawdown hits {total_dd_halt}.',
+    chain:[
+      {id:'sm-longs',    pkey:'universe_size',  lbl:'asset classes'},
+      {id:'sm-trend',    pkey:'ma_period',      lbl:'trend filter'},
+      {id:'sm-universe', pkey:'universe_size',  lbl:'rank'},
+      {id:'sm-rotate',   pkey:'rebalance_freq', lbl:'rotate'},
+      {id:'sm-risk',     pkey:'total_dd_halt',  lbl:'risk gate'},
+      {id:'sm-execute',  pkey:'slippage_bps',   lbl:'execute'},
+    ]
+  },
+  { key:'carry', label:'CARRY', status:'research',
+    generic:'Hold assets offering the highest yield and rotate when yield relationships shift.',
+    template:'Compare yield across {universe_size} assets, rank by yield spread, hold top {top_n}, rotate every {rebalance_freq} days. Exit if drawdown hits {total_dd_halt}.',
+    chain:[
+      {id:'sm-longs',    pkey:'universe_size',  lbl:'asset classes'},
+      {id:'sm-coins',    pkey:'universe_size',  lbl:'measure yield'},
+      {id:'sm-spread',   pkey:'top_n',          lbl:'differential'},
+      {id:'sm-rotate',   pkey:'rebalance_freq', lbl:'rotate'},
+      {id:'sm-risk',     pkey:'total_dd_halt',  lbl:'risk gate'},
+      {id:'sm-execute',  pkey:'slippage_bps',   lbl:'execute'},
+    ]
+  },
+  { key:'quality_low_vol', label:'QUALITY / LOW VOL', status:'research',
+    generic:'Hold high-quality, low-volatility stocks that hold up better when markets get rough.',
+    template:'Screen {universe_size} stocks by quality score, filter to beta under {max_beta}, hold the top {top_n}, rebalance every {rebalance_freq} days. Exit if drawdown hits {total_dd_halt}.',
+    chain:[
+      {id:'sm-universe', pkey:'universe_size',  lbl:'universe'},
+      {id:'sm-pulse',    pkey:'universe_size',  lbl:'quality score'},
+      {id:'sm-beta',     pkey:'max_beta',       lbl:'low beta'},
+      {id:'sm-filter',   pkey:'top_n',          lbl:'filter'},
+      {id:'sm-risk',     pkey:'total_dd_halt',  lbl:'risk gate'},
+      {id:'sm-execute',  pkey:'slippage_bps',   lbl:'execute'},
+    ]
+  },
+  { key:'daytrader', label:'INTRADAY', status:'research',
+    generic:'Trade short-term price breakouts within a single session, flat before the close.',
+    template:'At {market_open}, wait for an opening range breakout confirmed by RVOL over {rvol_threshold} and VWAP alignment. Enter with a {rr_ratio}:1 R:R bracket — stop {stop_pct}, target {target_pct}. Flat by {market_close}.',
+    chain:[
+      {id:'sm-clock-o',  pkey:'market_open',    lbl:'open'},
+      {id:'sm-orb',      pkey:'rvol_threshold', lbl:'breakout'},
+      {id:'sm-rvol',     pkey:'rvol_threshold', lbl:'confirm RVOL'},
+      {id:'sm-vwap',     pkey:'rr_ratio',       lbl:'VWAP align'},
+      {id:'sm-bracket',  pkey:'rr_ratio',       lbl:'bracket'},
+      {id:'sm-clock-c',  pkey:'market_close',   lbl:'flat by close'},
+    ]
+  },
+  { key:'volatility_selling', label:'VOL SELLING', status:'research',
+    generic:'Collect option premium by writing options against existing positions when implied volatility is elevated.',
+    template:'When IV rank exceeds {iv_rank_min}, sell an OTM option at {delta_target} delta with {dte_entry} DTE against existing longs. Close at {profit_target} of max profit or when {dte_close} DTE remains.',
+    chain:[
+      {id:'sm-longs',    pkey:'iv_rank_min',   lbl:'positions'},
+      {id:'sm-bell',     pkey:'iv_rank_min',   lbl:'IV rank'},
+      {id:'sm-strike',   pkey:'delta_target',  lbl:'select strike'},
+      {id:'sm-sell',     pkey:'dte_entry',     lbl:'write option'},
+      {id:'sm-collect',  pkey:'profit_target', lbl:'collect / roll'},
+    ]
+  },
+  { key:'earnings_drift', label:'EARNINGS DRIFT', status:'research',
+    generic:'Buy stocks that beat earnings expectations and hold through the post-announcement drift period.',
+    template:'Enter {entry_delay} day after a positive EPS surprise above {surprise_min}. Hold for {hold_min}–{hold_max} days to capture the drift. Exit if drawdown hits {total_dd_halt}.',
+    chain:[
+      {id:'sm-cal',      pkey:'entry_delay',   lbl:'event date'},
+      {id:'sm-eps',      pkey:'surprise_min',  lbl:'eps surprise'},
+      {id:'sm-entry',    pkey:'entry_delay',   lbl:'entry'},
+      {id:'sm-hold',     pkey:'hold_max',      lbl:'hold'},
+      {id:'sm-risk',     pkey:'total_dd_halt', lbl:'risk gate'},
+      {id:'sm-execute',  pkey:'slippage_bps',  lbl:'execute'},
+    ]
+  },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function _pval(stratKey, paramKey) {
+  var sp = (window._TND && window._TND.STRATEGY_PARAMS) || {};
+  var p = (sp[stratKey] || {})[paramKey];
+  if (!p || p.value === null || p.value === undefined) return '—';
+  return p.value + (p.unit ? ' ' + p.unit : '');
+}
+
+function _fillTemplate(tmpl, stratKey) {
+  return tmpl.replace(/\{([^}]+)\}/g, function(_, key) {
+    var sp = (window._TND && window._TND.STRATEGY_PARAMS) || {};
+    var p = (sp[stratKey] || {})[key];
+    if (!p || p.value === null || p.value === undefined)
+      return '<span style="color:'+_D+'">—</span>';
+    var v = p.value + (p.unit ? ' ' + p.unit : '');
+    return '<span style="color:'+_P+';font-weight:700">' + v + '</span>';
+  });
+}
+
+function _statusBadge(status) {
+  var col = status === 'paper' ? _P : status === 'live' ? '#00ff9d' : _D;
+  return '<span style="font-family:'+_PS2P+';font-size:6px;letter-spacing:.08em;color:'+col+';border:1px solid '+col+';padding:2px 5px;margin-left:8px;vertical-align:middle;opacity:.85">'+status+'</span>';
+}
+
+function _buildRow(def) {
+  var sp = (window._TND && window._TND.STRATEGY_PARAMS) || {};
+  var sparams = sp[def.key] || {};
+
+  var chainHtml = def.chain.map(function(n, i) {
+    var p = sparams[n.pkey];
+    var val = (p && p.value !== null && p.value !== undefined) ? p.value + (p.unit ? ' ' + p.unit : '') : '—';
+    var arrow = i < def.chain.length - 1
+      ? '<div style="padding:0 2px;margin-bottom:22px;flex-shrink:0"><svg width="22" height="14" viewBox="0 0 22 14"><line x1="0" y1="7" x2="14" y2="7" stroke="'+_D+'" stroke-width="1.5"/><polyline points="10,2 18,7 10,12" fill="none" stroke="'+_D+'" stroke-width="1.5" stroke-linejoin="round"/></svg></div>'
+      : '';
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:0 3px">'
+      + '<svg width="42" height="42"><use href="#'+n.id+'"/></svg>'
+      + '<span style="font-family:'+_PS2P+';font-size:6px;color:'+_P+';white-space:nowrap;letter-spacing:.04em">'+val+'</span>'
+      + '<span style="font-family:'+_PS2P+';font-size:5.5px;color:#7070a0;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;text-align:center">'+n.lbl+'</span>'
+      + '</div>' + arrow;
+  }).join('');
+
+  return '<div style="display:flex;align-items:center;gap:0;padding:12px 0;border-bottom:1px solid #18182a">'
+    + '<div class="_strat-name-btn" data-key="'+def.key+'" style="font-family:'+_PS2P+';font-size:6.5px;letter-spacing:.16em;text-transform:uppercase;color:#9090b8;min-width:110px;max-width:110px;flex-shrink:0;cursor:pointer;line-height:1.6;padding-right:12px" onmouseover="this.style.color=\'#ff00cc\'" onmouseout="this.style.color=\'#9090b8\'">'
+    + def.label + _statusBadge(def.status)
+    + '</div>'
+    + '<div style="display:flex;align-items:center;overflow-x:auto;padding:4px 0">'+chainHtml+'</div>'
+    + '</div>';
+}
+
+// ── Open / close ──────────────────────────────────────────────────────────────
+window._openStrategiesModal = function() {
+  var bg   = document.getElementById('strat-modal-bg');
+  var body = document.getElementById('strat-modal-body');
+  if (!bg || !body) return;
+
+  if (!bg._built) {
+    document.body.insertAdjacentHTML('afterbegin', _ICON_DEFS);
+    body.innerHTML = _STRAT_DEFS.map(_buildRow).join('');
+    body.querySelectorAll('._strat-name-btn').forEach(function(el) {
+      el.addEventListener('click', function() {
+        window._openStratDetail(el.getAttribute('data-key'));
+      });
+    });
+    bg._built = true;
+  }
+
+  bg.style.display = 'flex';
+  document.addEventListener('keydown', _smEsc);
+};
+
+window._closeStrategiesModal = function() {
+  var bg = document.getElementById('strat-modal-bg');
+  if (bg) bg.style.display = 'none';
+  document.removeEventListener('keydown', _smEsc);
+};
+
+function _smEsc(e) { if (e.key === 'Escape') window._closeStrategiesModal(); }
+
+(function() {
+  var bg = document.getElementById('strat-modal-bg');
+  if (bg) bg.addEventListener('click', function(e) {
+    if (e.target === this) window._closeStrategiesModal();
+  });
+})();
+
+// ── Detail popup ──────────────────────────────────────────────────────────────
+window._openStratDetail = function(key) {
+  var def = null;
+  for (var i = 0; i < _STRAT_DEFS.length; i++) {
+    if (_STRAT_DEFS[i].key === key) { def = _STRAT_DEFS[i]; break; }
+  }
+  if (!def) return;
+  document.getElementById('sd-name').textContent    = def.label;
+  document.getElementById('sd-generic').textContent = def.generic;
+  document.getElementById('sd-case').innerHTML      = _fillTemplate(def.template, key);
+  var bg = document.getElementById('strat-detail-bg');
+  bg.style.display = 'flex';
+  document.addEventListener('keydown', _sdEsc);
+};
+
+window._closeStratDetail = function() {
+  var bg = document.getElementById('strat-detail-bg');
+  if (bg) bg.style.display = 'none';
+  document.removeEventListener('keydown', _sdEsc);
+};
+
+function _sdEsc(e) { if (e.key === 'Escape') window._closeStratDetail(); }
+
+(function() {
+  var bg = document.getElementById('strat-detail-bg');
+  if (bg) bg.addEventListener('click', function(e) {
+    if (e.target === this) window._closeStratDetail();
+  });
+})();
+
+})();
+

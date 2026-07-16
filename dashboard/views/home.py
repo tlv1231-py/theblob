@@ -1216,6 +1216,22 @@ def _build_daw_html(data: dict) -> str:
     _alpaca_portfolio  = _alpaca.get("portfolio_value",   0.0)
     _alpaca_exposure   = _alpaca.get("long_market_value", 0.0)
     _alpaca_cash       = _alpaca.get("cash",              0.0)
+
+    # ── Strategy params from DB ─────────────────────────────────────────────────
+    _strategy_params: dict[str, dict[str, str | None]] = {}
+    try:
+        with get_session() as _sp_s:
+            _sp_rows = _sp_s.execute(text(
+                "SELECT strategy, param, value, unit, label FROM strategy_params ORDER BY strategy, id"
+            )).fetchall()
+        for _r in _sp_rows:
+            _strategy_params.setdefault(_r.strategy, {})[_r.param] = {
+                "value": _r.value, "unit": _r.unit, "label": _r.label
+            }
+    except Exception:
+        pass
+    import json as _jj2
+    _strategy_params_j = _jj2.dumps(_strategy_params)
     import subprocess as _sp
     try:
         _build_hash = _sp.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
@@ -1246,6 +1262,7 @@ def _build_daw_html(data: dict) -> str:
         f"  QQQ_NORM:        {qqq_norm_j},\n"
         f"  SPY_DATES:       {spy_dates_j},\n"
         f"  SPY_NORM:        {spy_norm_j},\n"
+        f"  STRATEGY_PARAMS: {_strategy_params_j},\n"
         "};\n"
     )
     # Read external JS (home_nav.js lives next to this file's parent dashboard/)
@@ -2923,15 +2940,36 @@ datalist {{ display:none; }}
       </div>
     </div>
   </div>
-  <div class="strat-slot" id="ss-exposure" style="cursor:pointer;position:relative;user-select:none" onclick="window._toggleStratDropdown()">
+  <div class="strat-slot" id="ss-exposure" style="cursor:pointer;position:relative;user-select:none" onclick="window._openStrategiesModal()">
     <div class="ss-icon">◈</div>
     <div class="ss-name">STRATEGIES</div>
     <div class="ss-status" id="ss-exposure-st">—</div>
   </div>
-  <!-- Strategies dropdown -->
-  <div id="strat-dropdown" style="display:none;position:fixed;z-index:9999;background:rgba(4,0,12,.97);border:1px solid rgba(148,0,255,.35);border-radius:2px;min-width:280px;padding:6px 0;font-family:Consolas,monospace;box-shadow:0 8px 32px rgba(0,0,0,.8)">
-    <div style="font-size:7px;letter-spacing:.2em;color:rgba(148,0,255,.5);padding:6px 14px 4px;text-transform:uppercase">active strategies</div>
-    <div id="strat-dropdown-items"></div>
+
+  <!-- ── Strategies full-screen modal ─────────────────────────────────────────── -->
+  <div id="strat-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(3px);z-index:9000;align-items:center;justify-content:center">
+    <div id="strat-modal" style="background:#0b0b10;border:1px solid #2a2a3d;width:min(96vw,1100px);max-height:88vh;overflow-y:auto;position:relative;padding:32px 36px 40px">
+
+      <!-- header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+        <span style="font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:.2em;color:#ff00cc;text-transform:uppercase">Strategy Suite</span>
+        <button onclick="window._closeStrategiesModal()" style="background:none;border:none;cursor:pointer;color:#3a3a52;font-size:14px;font-family:Consolas,monospace;line-height:1" onmouseover="this.style.color='#ff00cc'" onmouseout="this.style.color='#3a3a52'">&#x2715;</button>
+      </div>
+
+      <!-- chain rows injected by JS -->
+      <div id="strat-modal-body" style="display:flex;flex-direction:column;gap:32px"></div>
+    </div>
+  </div>
+
+  <!-- ── Strategy detail popup (nested) ────────────────────────────────────────── -->
+  <div id="strat-detail-bg" style="display:none;position:fixed;inset:0;z-index:9100;align-items:center;justify-content:center">
+    <div id="strat-detail" style="background:#0f0f18;border:1px solid #2a2a3d;padding:28px 32px;max-width:520px;width:90%;position:relative">
+      <button onclick="window._closeStratDetail()" style="position:absolute;top:12px;right:16px;background:none;border:none;cursor:pointer;color:#3a3a52;font-size:14px;font-family:Consolas,monospace" onmouseover="this.style.color='#ff00cc'" onmouseout="this.style.color='#3a3a52'">&#x2715;</button>
+      <div id="sd-name"    style="font-family:'Press Start 2P',monospace;font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:#ff00cc;margin-bottom:18px"></div>
+      <div id="sd-generic" style="font-size:12px;line-height:1.8;color:#7070a0;margin-bottom:22px;border-left:2px solid #2a2a3d;padding-left:14px"></div>
+      <div style="font-family:'Press Start 2P',monospace;font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:#3a3a52;margin-bottom:12px">in our case</div>
+      <div id="sd-case"    style="font-size:12px;line-height:1.9;color:#9090b8;border-left:2px solid #ff00cc;padding-left:14px"></div>
+    </div>
   </div>
   <div class="strat-slot" id="ss-tph">
     <div class="ss-icon">⚡</div>

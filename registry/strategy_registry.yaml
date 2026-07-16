@@ -39,3 +39,76 @@
     added: "2026-05-29"
     author: tyler
 
+  - name: mean_reversion
+    module: models.mean_reversion
+    params_file: config/strategy_params/mean_reversion.yaml
+    status: research
+    description: >
+      Single-stock and pairs mean reversion. Buys dips in fundamentally
+      strong stocks that have over-extended from their rolling mean.
+      Counter-cyclical to momentum — expected to outperform during
+      range-bound, low-trend regimes.
+    added: "2026-07-16"
+    author: tyler
+
+  - name: trend_following
+    module: models.trend_following
+    params_file: config/strategy_params/trend_following.yaml
+    status: research
+    description: >
+      Macro trend following via ETF rotation. Longer timeframe than
+      cross-sectional momentum. Positions in broad asset classes
+      (equities, bonds, commodities, gold) based on trend strength.
+      Designed to capture extended multi-month directional moves.
+    added: "2026-07-16"
+    author: tyler
+
+  - name: carry
+    module: models.carry
+    params_file: config/strategy_params/carry.yaml
+    status: research
+    description: >
+      Yield differential and fixed income rotation. Captures carry
+      across asset classes — dividend yield spreads, bond yield curve
+      positioning. Rotates between equities and fixed income based on
+      relative yield attractiveness and macro regime.
+    added: "2026-07-16"
+    author: tyler
+
+  - name: quality_low_vol
+    module: models.quality_low_vol
+    params_file: config/strategy_params/quality_low_vol.yaml
+    status: research
+    description: >
+      Low-beta defensive factor strategy. Selects high-quality, low-
+      volatility stocks (strong balance sheet, stable earnings, low beta).
+      Counter-cyclical to momentum — expected to outperform during
+      drawdowns and high-volatility regimes.
+    added: "2026-07-16"
+    author: tyler
+
+  - name: volatility_selling
+    module: models.volatility_selling
+    params_file: config/strategy_params/volatility_selling.yaml
+    status: research
+    description: >
+      Systematic options premium collection. Covered calls and cash-
+      secured puts on existing equity positions. Sells implied volatility
+      when IV rank is elevated. Generates yield on top of existing
+      long exposure. Requires options-enabled broker account.
+    added: "2026-07-16"
+    author: tyler
+
+  - name: earnings_drift
+    module: models.earnings_drift
+    params_file: config/strategy_params/earnings_drift.yaml
+    status: research
+    description: >
+      Post-Earnings Announcement Drift (PEAD). Buys (sells) stocks
+      with large positive (negative) earnings surprises and holds
+      for the subsequent drift period. Event-driven, short holding
+      period of 5-20 days. Exploits the market's systematic under-
+      reaction to earnings news.
+    added: "2026-07-16"
+    author: tyler
+

@@ -158,6 +158,20 @@ class NavSnapshot(Base):
     nav: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class StrategyParam(Base):
+    """One tunable parameter per row. Single source of truth for all strategy config."""
+    __tablename__ = "strategy_params"
+    __table_args__ = (UniqueConstraint("strategy", "param", name="uq_strategy_param"),)
+
+    id:          Mapped[int]         = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy:    Mapped[str]         = mapped_column(String(50), nullable=False, index=True)
+    param:       Mapped[str]         = mapped_column(String(60), nullable=False)
+    value:       Mapped[str | None]  = mapped_column(String(100), nullable=True)   # null = unset
+    unit:        Mapped[str]         = mapped_column(String(30), nullable=False, default="")
+    label:       Mapped[str]         = mapped_column(String(100), nullable=False)
+    updated_at:  Mapped[datetime]    = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ExperimentRecord(Base):
     __tablename__ = "experiments"
 
