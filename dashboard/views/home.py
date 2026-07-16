@@ -4536,138 +4536,123 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
     ctx.clearRect(0, 0, W, H);
 
-    // Fixed margins — chart fills the full canvas, overlays sit on top
-    _ML = 8; _MR = 8; _MT = 28; _MB = 32;
+    _ML = 8; _MR = 8; _MT = 28; _MB = 48;
 
     var liveNav = parseFloat(window._lastKnownNav);
     if (!liveNav || isNaN(liveNav)) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
 
-    // Gather DB points
+    // ── Build point list ───────────────────────────────────────────────────
     var now_ms = Date.now();
     var pts = window._navDbPts || [];
     var allPts = [];
     for (var i = 0; i < pts.length; i++) {{
       var ms = new Date(pts[i].t).getTime();
-      allPts.push({{ ms: ms, v: pts[i].v }});
+      if (!isNaN(ms)) allPts.push({{ ms: ms, v: parseFloat(pts[i].v) }});
     }}
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
-    // t0 = earliest data point (so existing history fills the full width).
-    // Cap at user-set window; floor at 2 minutes so a single point doesn't collapse.
-    var winMs = window._navWindowMs || 4 * 3600 * 1000;
-    var dataStart = allPts.length ? allPts[0].ms : now_ms - 2*60000;
-    var t0 = Math.max(dataStart, now_ms - winMs);  // MAX = most recent of the two starts
-    t0 = Math.min(t0, now_ms - 2 * 60000);         // floor: at least 2min window
-    var t1 = now_ms;
+    // ── Time window ────────────────────────────────────────────────────────
+    var winMs    = window._navWindowMs || 4 * 3600 * 1000;
+    var dataStart = allPts.length ? allPts[0].ms : now_ms - 30*60000;
+    var t0 = Math.max(dataStart, now_ms - winMs);
+    t0 = Math.min(t0, now_ms - 30 * 60000);   // minimum 30-min window so flat line is wide
+    // t1 has a 10% right-pad so the dot sits at 90% width, not the far-right edge
+    var span = now_ms - t0;
+    var t1   = now_ms + span * 0.11;
 
-    // Add live point and filter to window
+    // Add live point, filter, dedupe close timestamps
     allPts.push({{ ms: now_ms, v: liveNav }});
-    allPts = allPts.filter(function(p) {{ return p.ms >= t0; }});
+    allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
-    // Chart area in CSS pixels
+    // ── Chart area ─────────────────────────────────────────────────────────
     var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
     var cW = cx1 - cx0, cH = cy1 - cy0;
 
-    // Y range: fit visible data with 8% padding each side
+    // ── Y range ────────────────────────────────────────────────────────────
     var lo = liveNav, hi = liveNav;
     for (var vi = 0; vi < allPts.length; vi++) {{
       if (allPts[vi].v < lo) lo = allPts[vi].v;
       if (allPts[vi].v > hi) hi = allPts[vi].v;
     }}
-    var spread = Math.max(hi - lo, liveNav * 0.002);
-    lo -= spread * 0.12; hi += spread * 0.12;
+    // minimum visible spread: ±0.5% of NAV so flat lines still look like a line
+    var spread = Math.max(hi - lo, liveNav * 0.005);
+    lo -= spread * 0.3; hi += spread * 0.3;
 
     function tx(ms) {{ return cx0 + (ms - t0) / (t1 - t0) * cW; }}
     function ty(v)  {{ return cy1 - (v - lo) / (hi - lo) * cH; }}
 
-    // ── Horizontal grid lines + Y-axis labels ──────────────────────────────
+    // ── Grid lines + Y-axis labels (right-anchored, inside chart) ──────────
     var nTicks = 5;
     ctx.font = '10px Consolas,monospace';
-    ctx.textAlign = 'right';
     for (var ti = 0; ti <= nTicks; ti++) {{
-      var yv  = lo + (hi - lo) * ti / nTicks;
-      var yy  = ty(yv);
-      ctx.strokeStyle = 'rgba(140,60,200,0.25)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 5]);
+      var yv = lo + (hi - lo) * ti / nTicks;
+      var yy = ty(yv);
+      ctx.strokeStyle = 'rgba(140,60,200,0.2)';
+      ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
       ctx.beginPath(); ctx.moveTo(cx0, yy); ctx.lineTo(cx1, yy); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(200,160,255,0.7)';
-      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 - 4, yy + 3.5);
+      ctx.fillStyle = 'rgba(190,140,255,0.55)';
+      ctx.textAlign = 'left';
+      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 + 6, yy - 3);
     }}
 
-    // ── X-axis time labels ─────────────────────────────────────────────────
-    var xTickCount = Math.min(6, Math.max(2, Math.floor(cW / 90)));
+    // ── X-axis labels ──────────────────────────────────────────────────────
+    var xTickCount = Math.min(8, Math.max(3, Math.floor(cW / 120)));
     ctx.textAlign = 'center';
     for (var xi = 0; xi <= xTickCount; xi++) {{
-      var xms  = t0 + (t1 - t0) * xi / xTickCount;
-      var xx   = tx(xms);
-      var xd   = new Date(xms);
-      var hh   = xd.getHours() % 12 || 12;
-      var mm   = ('0' + xd.getMinutes()).slice(-2);
-      var ampm = xd.getHours() < 12 ? 'a' : 'p';
-      ctx.fillStyle = 'rgba(180,130,255,0.6)';
-      ctx.fillText(hh + ':' + mm + ampm, xx, cy1 + 18);
+      var xms = t0 + (t1 - t0) * xi / xTickCount;
+      if (xms > now_ms) continue;  // don't label the right-pad zone
+      var xx  = tx(xms);
+      var xd  = new Date(xms);
+      var hh  = xd.getHours() % 12 || 12;
+      var mm  = ('0' + xd.getMinutes()).slice(-2);
+      var ap  = xd.getHours() < 12 ? 'a' : 'p';
+      ctx.fillStyle = 'rgba(170,120,255,0.55)';
+      ctx.fillText(hh + ':' + mm + ap, xx, cy1 + 18);
     }}
 
-    // ── Vertical "NOW" marker ──────────────────────────────────────────────
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 6]);
-    ctx.beginPath(); ctx.moveTo(cx1, cy0); ctx.lineTo(cx1, cy1); ctx.stroke();
-    ctx.setLineDash([]);
-
-    // ── Milestone dotted horizontals (100k, 105k, etc.) ───────────────────
-    var _ms = [97000,98000,99000,100000,101000,102000,103000,104000,105000];
-    for (var mi2 = 0; mi2 < _ms.length; mi2++) {{
-      var mv = _ms[mi2];
-      if (mv < lo || mv > hi) continue;
-      var my = ty(mv);
-      ctx.strokeStyle = mv === 100000 ? 'rgba(255,0,204,0.3)' : 'rgba(120,0,160,0.18)';
-      ctx.lineWidth = mv === 100000 ? 1 : 1;
-      ctx.setLineDash([3, 8]);
-      ctx.beginPath(); ctx.moveTo(cx0, my); ctx.lineTo(cx1, my); ctx.stroke();
-      ctx.setLineDash([]);
-    }}
-
-    // ── Map data to screen coords ──────────────────────────────────────────
+    // ── Map points ─────────────────────────────────────────────────────────
     var m = allPts.map(function(p) {{ return {{ x: tx(p.ms), y: ty(p.v) }}; }});
     var n = m.length;
 
-    if (n >= 2) {{
-      // Under-fill gradient (vertical: line color → transparent at bottom)
-      var lastDelta = m[n-1].v - m[0].v; // not used but kept
-      var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
-      fillGrad.addColorStop(0,   'rgba(148,0,255,0.18)');
-      fillGrad.addColorStop(0.6, 'rgba(148,0,255,0.05)');
-      fillGrad.addColorStop(1,   'rgba(148,0,255,0)');
-      ctx.beginPath();
-      ctx.moveTo(m[0].x, m[0].y);
-      for (var pi = 1; pi < n; pi++) ctx.lineTo(m[pi].x, m[pi].y);
-      ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
-      ctx.fillStyle = fillGrad; ctx.fill();
-
-      // Glow passes (wide → thin)
-      var passes = [
-        {{ w:14, a:0.10, rgb:'148,0,255' }},
-        {{ w:5,  a:0.35, rgb:'148,0,255' }},
-        {{ w:2,  a:0.75, rgb:'200,60,255' }},
-        {{ w:1,  a:1.00, rgb:'220,120,255' }},
-      ];
-      passes.forEach(function(pass) {{
-        ctx.beginPath();
-        ctx.moveTo(m[0].x, m[0].y);
-        for (var pi2 = 1; pi2 < n; pi2++) ctx.lineTo(m[pi2].x, m[pi2].y);
-        ctx.strokeStyle = 'rgba(' + pass.rgb + ',' + pass.a + ')';
-        ctx.lineWidth = pass.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-        ctx.stroke();
-      }});
+    // Always draw a line — use flat placeholder if < 2 real points
+    if (n < 2) {{
+      var midY = ty(liveNav);
+      m = [{{ x: cx0, y: midY }}, {{ x: tx(now_ms), y: midY }}];
+      n = 2;
     }}
 
-    // ── Orb position for pulse canvas ──────────────────────────────────────
-    var tipX = n ? m[n-1].x : cx0 + cW * 0.5;
-    var tipY = n ? m[n-1].y : cy0 + cH * 0.5;
+    // ── Under-fill gradient ─────────────────────────────────────────────────
+    var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
+    fillGrad.addColorStop(0,   'rgba(148,0,255,0.22)');
+    fillGrad.addColorStop(0.5, 'rgba(148,0,255,0.06)');
+    fillGrad.addColorStop(1,   'rgba(148,0,255,0)');
+    ctx.beginPath();
+    ctx.moveTo(m[0].x, m[0].y);
+    for (var pi = 1; pi < n; pi++) ctx.lineTo(m[pi].x, m[pi].y);
+    ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
+    ctx.fillStyle = fillGrad; ctx.fill();
+
+    // ── Glow passes ────────────────────────────────────────────────────────
+    var passes = [
+      {{ w:12, a:0.12, rgb:'148,0,255' }},
+      {{ w:4,  a:0.45, rgb:'180,40,255' }},
+      {{ w:2,  a:0.85, rgb:'210,80,255' }},
+      {{ w:1.5,a:1.00, rgb:'240,180,255' }},
+      ];
+    passes.forEach(function(pass) {{
+      ctx.beginPath();
+      ctx.moveTo(m[0].x, m[0].y);
+      for (var pi2 = 1; pi2 < n; pi2++) ctx.lineTo(m[pi2].x, m[pi2].y);
+      ctx.strokeStyle = 'rgba(' + pass.rgb + ',' + pass.a + ')';
+      ctx.lineWidth = pass.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.stroke();
+    }});
+
+    // ── Orb tip: last real data point (tx(now_ms) is 90% width due to t1 pad) ──
+    var tipX = m[n-1].x;
+    var tipY = m[n-1].y;
     var ncRect = _nc.getBoundingClientRect();
     var scrX = ncRect.left + tipX * (ncRect.width  / W);
     var scrY = ncRect.top  + tipY * (ncRect.height / H);
@@ -4685,14 +4670,6 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // Core white dot
     ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
-
-    // ── "Building history" label when no trail yet ─────────────────────────
-    if (n < 2) {{
-      ctx.font = '11px Consolas,monospace';
-      ctx.fillStyle = 'rgba(160,80,255,0.45)';
-      ctx.textAlign = 'center';
-      ctx.fillText('building history…', cx0 + cW * 0.5, cy1 - 20);
-    }}
 
     // ── Current value callout ───────────────────────────────────────────────
     var valStr = '$' + liveNav.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
