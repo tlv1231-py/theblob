@@ -4568,15 +4568,17 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
     var cW = cx1 - cx0, cH = cy1 - cy0;
 
-    // ── Y range ────────────────────────────────────────────────────────────
+    // ── Y range — tight fit so small moves are visible ─────────────────────
     var lo = liveNav, hi = liveNav;
     for (var vi = 0; vi < allPts.length; vi++) {{
       if (allPts[vi].v < lo) lo = allPts[vi].v;
       if (allPts[vi].v > hi) hi = allPts[vi].v;
     }}
-    // minimum visible spread: ±0.5% of NAV so flat lines still look like a line
-    var spread = Math.max(hi - lo, liveNav * 0.005);
-    lo -= spread * 0.3; hi += spread * 0.3;
+    var spread = hi - lo;
+    // Minimum spread: $20 so a flat line sits in a visible band
+    if (spread < 20) {{ lo -= (20 - spread) / 2; hi += (20 - spread) / 2; spread = 20; }}
+    // 15% padding each side so line doesn't touch edges
+    lo -= spread * 0.15; hi += spread * 0.15;
 
     function tx(ms) {{ return cx0 + (ms - t0) / (t1 - t0) * cW; }}
     function ty(v)  {{ return cy1 - (v - lo) / (hi - lo) * cH; }}
@@ -5144,7 +5146,12 @@ function _fetchNavDb() {{
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
     if (!Array.isArray(rows)) return;
-    window._navDbPts = rows.map(function(r) {{ return {{ t: r.recorded_at, v: r.nav }}; }});
+    window._navDbPts = rows.map(function(r) {{
+      // Supabase returns naive UTC strings (no tz marker); append Z so JS parses as UTC
+      var t = r.recorded_at || '';
+      if (t && t[t.length-1] !== 'Z' && t.indexOf('+') === -1) t += 'Z';
+      return {{ t: t, v: r.nav }};
+    }});
     _intradayPts = window._navDbPts;
     // Update the Plotly trace every time fresh DB data arrives
     if (window._redrawNavTraces) window._redrawNavTraces();
