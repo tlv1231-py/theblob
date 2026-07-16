@@ -4512,20 +4512,27 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   setTimeout(_resize, 100);
   window.addEventListener('resize', _resize);
 
-  // Scroll wheel zooms time window with smooth easing
+  // Scroll: pan history. Ctrl+scroll: zoom time window.
   window._navWindowMs       = 4 * 3600 * 1000;  // current (lerped)
-  window._navTargetWindowMs = 4 * 3600 * 1000;  // target (set by wheel)
-  var _WIN_MIN = 5  * 60 * 1000;         //  5 minutes
-  var _WIN_MAX = 365 * 86400 * 1000;     //  1 year (full lifetime)
+  window._navTargetWindowMs = 4 * 3600 * 1000;  // target (set by ctrl+wheel)
+  window._navPanOffsetMs    = 0;                  // 0=live, negative=past
+  var _WIN_MIN = 5  * 60 * 1000;
+  var _WIN_MAX = 365 * 86400 * 1000;
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
-      // Faster zoom: 1.6× per tick in either direction
-      var factor = e.deltaY > 0 ? 1.6 : 0.625;
-      window._navTargetWindowMs = Math.max(_WIN_MIN,
-        Math.min(_WIN_MAX, window._navTargetWindowMs * factor));
+      if (e.ctrlKey || e.metaKey) {{
+        // Ctrl+scroll = zoom
+        var factor = e.deltaY > 0 ? 1.6 : 0.625;
+        window._navTargetWindowMs = Math.max(_WIN_MIN,
+          Math.min(_WIN_MAX, window._navTargetWindowMs * factor));
+      }} else {{
+        // Scroll = pan history (scroll down = go further back, up = forward)
+        var panStep = window._navWindowMs * 0.25 * (e.deltaY > 0 ? -1 : 1);
+        window._navPanOffsetMs = Math.min(0, window._navPanOffsetMs + panStep);
+      }}
     }}, {{ passive: false }});
   }})();
 
@@ -4559,14 +4566,18 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var _tgt = window._navTargetWindowMs || window._navWindowMs || 4*3600*1000;
     window._navWindowMs += (_tgt - window._navWindowMs) * 0.10;
 
-    // ── Time window — last DB point is pinned to the horizontal center ────────
-    var winMs     = window._navWindowMs || 4 * 3600 * 1000;
-    var lastPtMs  = allPts.length ? allPts[allPts.length-1].ms : now_ms;
-    var dataStart = allPts.length ? allPts[0].ms : now_ms - 30*60000;
-    // Half-span = how far back we show; minimum 30 min so line has real width
-    var halfSpan  = Math.max(lastPtMs - Math.max(dataStart, lastPtMs - winMs), 30*60000);
-    var t0 = lastPtMs - halfSpan;   // left edge = past
-    var t1 = lastPtMs + halfSpan;   // right edge = future buffer (last point at center)
+    // ── Time window — center shifts with pan offset, last point default ───────
+    var winMs      = window._navWindowMs || 4 * 3600 * 1000;
+    var lastPtMs   = allPts.length ? allPts[allPts.length-1].ms : now_ms;
+    var dataStart  = allPts.length ? allPts[0].ms : now_ms - 30*60000;
+    var panOff     = window._navPanOffsetMs || 0;
+    // Clamp pan so we can't pan before the earliest data
+    panOff = Math.max(dataStart - lastPtMs, Math.min(0, panOff));
+    window._navPanOffsetMs = panOff;
+    var centerMs   = lastPtMs + panOff;
+    var halfSpan   = Math.max(winMs / 2, 30*60000);
+    var t0 = centerMs - halfSpan;
+    var t1 = centerMs + halfSpan;
 
     // Filter to window (no synthetic live point — 100% DB-sourced)
     allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
@@ -4585,17 +4596,20 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
     var cW = cx1 - cx0, cH = cy1 - cy0;
 
-    // ── Y range — tight fit so small moves are visible ─────────────────────
-    var lo = liveNav, hi = liveNav;
+    // ── Y range — symmetric around last point so tip sits at vertical center ──
+    var midV = allPts.length ? allPts[allPts.length-1].v : liveNav;
+    var _lo = midV, _hi = midV;
     for (var vi = 0; vi < allPts.length; vi++) {{
-      if (allPts[vi].v < lo) lo = allPts[vi].v;
-      if (allPts[vi].v > hi) hi = allPts[vi].v;
+      if (allPts[vi].v < _lo) _lo = allPts[vi].v;
+      if (allPts[vi].v > _hi) _hi = allPts[vi].v;
     }}
-    var spread = hi - lo;
-    // Minimum spread: $20 so a flat line sits in a visible band
-    if (spread < 20) {{ lo -= (20 - spread) / 2; hi += (20 - spread) / 2; spread = 20; }}
-    // 15% padding each side so line doesn't touch edges
-    lo -= spread * 0.15; hi += spread * 0.15;
+    var spread = _hi - _lo;
+    if (spread < 20) spread = 20;
+    // Half-range is the greater of: distance from midV to extremes, or half of min spread
+    var halfRange = Math.max(Math.abs(midV - _lo), Math.abs(_hi - midV), spread / 2);
+    halfRange *= 1.20;  // 20% padding so line never touches top/bottom edge
+    var lo = midV - halfRange;
+    var hi = midV + halfRange;
 
     function tx(ms) {{ return cx0 + (ms - t0) / (t1 - t0) * cW; }}
     function ty(v)  {{ return cy1 - (v - lo) / (hi - lo) * cH; }}
@@ -4705,11 +4719,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // ── Orb tip: last real data point (tx(now_ms) is 90% width due to t1 pad) ──
     var tipX = m[n-1].x;
     var tipY = m[n-1].y;
-    var ncRect = _nc.getBoundingClientRect();
-    var scrX = ncRect.left + tipX * (ncRect.width  / W);
-    var scrY = ncRect.top  + tipY * (ncRect.height / H);
-    window._navOrbFracX = Math.max(0.05, Math.min(0.95, scrX / (window.innerWidth  || 1)));
-    window._navOrbFracY = Math.max(0.05, Math.min(0.95, scrY / (window.innerHeight || 1)));
+    // Store canvas-relative fractions (both canvases fill main-area identically)
+    window._navOrbFracX = Math.max(0.05, Math.min(0.95, tipX / W));
+    window._navOrbFracY = Math.max(0.05, Math.min(0.95, tipY / H));
 
     // ── Breathing dot at trail tip ──────────────────────────────────────────
     var pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
