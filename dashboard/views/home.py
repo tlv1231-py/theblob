@@ -1238,7 +1238,7 @@ def _build_daw_html(data: dict) -> str:
         f"  ALPACA_DEFAULT:  {{name:'Paper',key:{_jj.dumps(_alpaca_api_key)},secret:{_jj.dumps(_alpaca_secret_key)},type:'paper'}},\n"
         f"  EQ_CANVAS_TILES: {_eq_canvas_tiles_j},\n"
         f"  EQ_POS:          {_eq_pos_js},\n"
-        f"  NEWEST_EV_TS:    {_newest_ev_ts_js},\n"
+        f"  NEWEST_EV_TS:    {_jj.dumps(_newest_ev_ts_js)},\n"
         f"  QUEUED_ACTIONS:  {_queued_actions_js},\n"
         f"  MARK_TS:         {mark_ts_j},\n"
         f"  MARK_VALS:       {mark_vals_j},\n"
