@@ -4614,10 +4614,18 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // Clamp pan so we can't pan before the earliest data
     panOff = Math.max(dataStart - lastPtMs, Math.min(0, panOff));
     window._navPanOffsetMs = panOff;
-    // Anchor to now_ms so the chart scrolls in real time even with no new data
-    var centerMs   = now_ms + panOff;
-    var t0 = centerMs - winMs * 0.70;  // last point sits at ~70% from left
-    var t1 = centerMs + winMs * 0.30;
+    // Anchor to now_ms — chart scrolls in real time.
+    // Center tip in the visible gap between the two overlay panels.
+    var _feedEl = document.getElementById('feed-overlay');
+    var _posEl  = document.getElementById('pos-overlay');
+    var _feedW  = (_feedEl ? _feedEl.offsetWidth : 0);
+    var _posW   = (_posEl  ? _posEl.offsetWidth  : 0);
+    // Fraction of canvas width where the visible center sits
+    var _visCtr = W > 0 ? (_feedW + (W - _feedW - _posW) / 2) / W : 0.50;
+    _visCtr = Math.max(0.20, Math.min(0.80, _visCtr));
+    var centerMs = now_ms + panOff;
+    var t0 = centerMs - _visCtr * winMs;
+    var t1 = centerMs + (1 - _visCtr) * winMs;
 
     // Filter to window (no synthetic live point — 100% DB-sourced)
     allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
@@ -4768,10 +4776,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
                        .toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
     ctx.font = 'bold 13px Consolas,monospace';
     var tw = ctx.measureText(valStr).width;
-    var outerR = 10 + pulse * 8;  // matches outer glow radius
-    var lx = tipX - tw / 2;       // centered under dot
+    var lx = tipX - tw / 2;  // centered under dot
     lx = Math.max(cx0 + 4, Math.min(cx1 - tw - 4, lx));
-    var ly = tipY + outerR + 18;  // below outer ring
+    var ly = tipY + 58;      // below outer ring + orbital dots
     ly = Math.min(cy1 - 4, ly);
     // No background — transparent
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
