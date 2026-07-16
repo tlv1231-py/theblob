@@ -2840,7 +2840,8 @@ datalist {{ display:none; }}
 <!-- flex child 2: chart + floating overlays -->
 <div id="main-area">
   <div id="chart"></div>
-  <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12"></canvas>
+  <canvas id="nav-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:12;opacity:0.55"></canvas>
+  <div id="nav-hover-layer" style="position:absolute;inset:0;pointer-events:auto;z-index:13;cursor:crosshair"></div>
   <canvas id="ambient-canvas"></canvas>
   <canvas id="pulse-canvas"></canvas>
   <div id="orb-batch-popup"></div>
@@ -4513,7 +4514,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll = zoom. Shift+scroll = pan. After 3s idle, gently return to default.
-  var _NAV_DEFAULT_WIN = 4 * 3600 * 1000;
+  var _NAV_DEFAULT_WIN = 20 * 60 * 1000;  // 20 minutes default (zoomed in)
   window._navWindowMs       = _NAV_DEFAULT_WIN;
   window._navTargetWindowMs = _NAV_DEFAULT_WIN;
   window._navPanOffsetMs    = 0;
@@ -4535,6 +4536,34 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
         var factor = e.deltaY > 0 ? 1.6 : 0.625;
         window._navTargetWindowMs = Math.max(_WIN_MIN,
           Math.min(_WIN_MAX, window._navTargetWindowMs * factor));
+      }}
+    }}, {{ passive: false }});
+  }})();
+
+  // ── Hover tooltip on nav-hover-layer ────────────────────────────────────────
+  (function() {{
+    var hl = document.getElementById('nav-hover-layer');
+    var nc = document.getElementById('nav-canvas');
+    if (!hl || !nc) return;
+    window._navHoverX = null;
+    hl.addEventListener('mousemove', function(e) {{
+      var r = hl.getBoundingClientRect();
+      window._navHoverX = (e.clientX - r.left) / r.width;  // 0-1 fraction
+    }});
+    hl.addEventListener('mouseleave', function() {{
+      window._navHoverX = null;
+    }});
+    // Forward wheel events from hover layer to main-area so zoom/pan still works
+    hl.addEventListener('wheel', function(e) {{
+      e.preventDefault();
+      window._navLastInteractMs = Date.now();
+      if (e.shiftKey) {{
+        var panStep = window._navWindowMs * 0.20 * (e.deltaY > 0 ? -1 : 1);
+        window._navPanOffsetMs = Math.min(0, window._navPanOffsetMs + panStep);
+      }} else {{
+        var factor = e.deltaY > 0 ? 1.6 : 0.625;
+        window._navTargetWindowMs = Math.max(5*60*1000,
+          Math.min(365*86400*1000, window._navTargetWindowMs * factor));
       }}
     }}, {{ passive: false }});
   }})();
@@ -4586,9 +4615,9 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     panOff = Math.max(dataStart - lastPtMs, Math.min(0, panOff));
     window._navPanOffsetMs = panOff;
     var centerMs   = lastPtMs + panOff;
-    var halfSpan   = Math.max(winMs / 2, 30*60000);
-    var t0 = centerMs - halfSpan;
-    var t1 = centerMs + halfSpan;
+    // Pin tip at 70% from left — data scrolls in from the right like a live feed
+    var t0 = centerMs - winMs * 0.70;
+    var t1 = centerMs + winMs * 0.30;
 
     // Filter to window (no synthetic live point — 100% DB-sourced)
     allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
@@ -4687,45 +4716,42 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       }}
     }}
 
-    // ── Pulsing under-fill ────────────────────────────────────────────────────
+    // ── Vaporwave under-fill ──────────────────────────────────────────────────
     var breathe = 0.5 + 0.5 * Math.sin(Date.now() / 1800);
     var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
-    fillGrad.addColorStop(0,   'rgba(148,0,255,' + (0.14 + breathe * 0.10) + ')');
-    fillGrad.addColorStop(0.5, 'rgba(100,0,200,' + (0.04 + breathe * 0.04) + ')');
-    fillGrad.addColorStop(1,   'rgba(148,0,255,0)');
+    fillGrad.addColorStop(0,   'rgba(255,0,200,' + (0.18 + breathe * 0.10) + ')');
+    fillGrad.addColorStop(0.4, 'rgba(120,0,255,' + (0.08 + breathe * 0.06) + ')');
+    fillGrad.addColorStop(1,   'rgba(0,240,255,0)');
     _crPath(m);
     ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
     ctx.fillStyle = fillGrad; ctx.fill();
 
-    // ── Glow passes (Catmull-Rom) ─────────────────────────────────────────────
+    // ── Vaporwave glow passes — fat, 8-bit pixelized edges ───────────────────
+    // Quantize Y to 3px grid for the 8-bit feel
+    var mPx = m.map(function(p) {{ return {{ x: Math.round(p.x), y: Math.round(p.y / 3) * 3 }}; }});
     var passes = [
-      {{ w:14, a:0.09, rgb:'120,0,255' }},
-      {{ w:5,  a:0.40, rgb:'180,40,255' }},
-      {{ w:2,  a:0.80, rgb:'210,80,255' }},
-      {{ w:1.5,a:1.00, rgb:'245,190,255' }},
+      {{ pts: mPx, w: 22, a: 0.07, rgb: '0,240,255'   }},  // cyan outer halo
+      {{ pts: mPx, w: 14, a: 0.12, rgb: '255,0,200'   }},  // hot-pink mid halo
+      {{ pts: m,   w: 8,  a: 0.22, rgb: '180,0,255'   }},  // purple bloom
+      {{ pts: mPx, w: 4,  a: 0.85, rgb: '255,60,220'  }},  // hot-pink core
+      {{ pts: mPx, w: 2,  a: 1.00, rgb: '0,255,255'   }},  // cyan bright edge
     ];
     passes.forEach(function(pass) {{
-      _crPath(m);
+      _crPath(pass.pts);
       ctx.strokeStyle = 'rgba(' + pass.rgb + ',' + pass.a + ')';
-      ctx.lineWidth = pass.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.lineWidth = pass.w; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
       ctx.stroke();
     }});
 
-    // ── Animated data-packet bead traveling the line ──────────────────────────
-    var _packetT = (Date.now() % 4000) / 4000;  // 0→1 every 4 seconds
-    var _pidx    = Math.floor(_packetT * (n - 1));
-    var _pfrac   = (_packetT * (n - 1)) - _pidx;
-    var _pa      = m[Math.min(_pidx,     n-1)];
-    var _pb      = m[Math.min(_pidx + 1, n-1)];
-    var _px      = _pa.x + (_pb.x - _pa.x) * _pfrac;
-    var _py      = _pa.y + (_pb.y - _pa.y) * _pfrac;
-    var _pglow   = 0.5 + 0.5 * Math.sin(Date.now() / 120);
-    ctx.beginPath(); ctx.arc(_px, _py, 7 + _pglow * 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(200,100,255,' + (0.08 + _pglow * 0.10) + ')'; ctx.fill();
-    ctx.beginPath(); ctx.arc(_px, _py, 3 + _pglow, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(230,160,255,' + (0.55 + _pglow * 0.30) + ')'; ctx.fill();
-    ctx.beginPath(); ctx.arc(_px, _py, 1.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
+    // ── Scanline sidescroll shimmer — horizontal light bar drifting right ──────
+    var _scanPhase = (Date.now() % 3000) / 3000;
+    var _scanX = cx0 + _scanPhase * cW;
+    var _scanGrad = ctx.createLinearGradient(_scanX - 40, 0, _scanX + 40, 0);
+    _scanGrad.addColorStop(0,   'rgba(255,255,255,0)');
+    _scanGrad.addColorStop(0.5, 'rgba(255,200,255,0.18)');
+    _scanGrad.addColorStop(1,   'rgba(255,255,255,0)');
+    ctx.fillStyle = _scanGrad;
+    ctx.fillRect(_scanX - 40, cy0, 80, cH);
 
     // ── Orb tip: last real data point (tx(now_ms) is 90% width due to t1 pad) ──
     var tipX = m[n-1].x;
@@ -4762,6 +4788,51 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.fillStyle = '#e0c8ff';
     ctx.textAlign = 'left';
     ctx.fillText(valStr, lx, ly);
+
+    // ── Hover crosshair + tooltip ───────────────────────────────────────────
+    if (window._navHoverX !== null && allPts.length > 0) {{
+      var hoverMs = t0 + window._navHoverX * (t1 - t0);
+      // Binary search for closest point
+      var hBest = allPts[0], hDist = Math.abs(allPts[0].ms - hoverMs);
+      for (var hi2 = 1; hi2 < allPts.length; hi2++) {{
+        var d2 = Math.abs(allPts[hi2].ms - hoverMs);
+        if (d2 < hDist) {{ hDist = d2; hBest = allPts[hi2]; }}
+      }}
+      var hx = tx(hBest.ms), hy = ty(hBest.v);
+      // Vertical crosshair line
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(0,255,255,0.4)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx, cy0); ctx.lineTo(hx, cy1); ctx.stroke();
+      ctx.setLineDash([]);
+      // Dot on line
+      ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,255,255,0.9)'; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+      // Tooltip box
+      var hDate = new Date(hBest.ms);
+      var hDateStr = hDate.toLocaleDateString('en-US', {{month:'short',day:'numeric',year:'numeric'}});
+      var hTimeStr = hDate.toLocaleTimeString('en-US', {{hour:'2-digit',minute:'2-digit',second:'2-digit'}});
+      var hValStr  = '$' + hBest.v.toLocaleString('en-US', {{minimumFractionDigits:2,maximumFractionDigits:2}});
+      ctx.font = 'bold 12px Consolas,monospace';
+      var tw1 = ctx.measureText(hDateStr + ' ' + hTimeStr).width;
+      var tw2 = ctx.measureText(hValStr).width;
+      var ttW = Math.max(tw1, tw2) + 16;
+      var ttH = 40;
+      var ttX = hx + 12; if (ttX + ttW > cx1) ttX = hx - ttW - 12;
+      var ttY = hy - ttH / 2; ttY = Math.max(cy0 + 4, Math.min(cy1 - ttH - 4, ttY));
+      ctx.fillStyle = 'rgba(4,0,20,0.92)';
+      ctx.strokeStyle = 'rgba(0,255,255,0.5)'; ctx.lineWidth = 1;
+      ctx.fillRect(ttX, ttY, ttW, ttH);
+      ctx.strokeRect(ttX, ttY, ttW, ttH);
+      ctx.fillStyle = 'rgba(0,255,255,0.85)';
+      ctx.textAlign = 'left';
+      ctx.fillText(hDateStr + ' ' + hTimeStr, ttX + 8, ttY + 14);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Consolas,monospace';
+      ctx.fillText(hValStr, ttX + 8, ttY + 31);
+      ctx.restore();
+    }}
 
     // ── ENTER / EXIT trade markers ──────────────────────────────────────────
     var _tradeMarkers = window._navTradeMarkers || [];
