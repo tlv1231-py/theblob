@@ -5853,8 +5853,12 @@ setTimeout(function() {
       }
 
       // ── ALPACA WALLET slot ────────────────────────────────────
-      var _alpacaWallets   = JSON.parse(localStorage.getItem('_alpacaWallets') || '[]');
-      var _alpacaActiveIdx = parseInt(localStorage.getItem('_alpacaActiveIdx') || '0', 10);
+      var _ls = (function() {
+        try { localStorage.setItem('_t','1'); localStorage.removeItem('_t'); return localStorage; }
+        catch(e) { return { getItem: function(){return null;}, setItem: function(){}, removeItem: function(){} }; }
+      })();
+      var _alpacaWallets   = JSON.parse(_ls.getItem('_alpacaWallets') || '[]');
+      var _alpacaActiveIdx = parseInt(_ls.getItem('_alpacaActiveIdx') || '0', 10);
       var _alpacaSyncSecs  = 0;
       var _alpacaDropOpen  = false;
 
@@ -5893,7 +5897,7 @@ setTimeout(function() {
           row.innerHTML = '<span style="font-size:10px;color:' + (i===_alpacaActiveIdx?'#c090ff':'#6a4a8a') + '">' +
             (i===_alpacaActiveIdx?'▶ ':'  ') + w.name + ' <span style="font-size:8px;color:rgba(148,0,255,.4)">[' + w.type + ']</span></span>' +
             '<span style="font-size:8px;color:#ff3366;cursor:pointer" onclick="window._removeAlpacaWallet(' + i + ');event.stopPropagation()">✕</span>';
-          row.onclick = function() { _alpacaActiveIdx = i; localStorage.setItem('_alpacaActiveIdx', i); _renderAlpacaList(); _fetchAlpacaBalance(); };
+          row.onclick = function() { _alpacaActiveIdx = i; _ls.setItem('_alpacaActiveIdx', i); _renderAlpacaList(); _fetchAlpacaBalance(); };
           list.appendChild(row);
         });
       }
@@ -5905,9 +5909,9 @@ setTimeout(function() {
         var type   = (document.getElementById('alp-type')   || {}).value || 'paper';
         if (!name || !key || !secret) return;
         _alpacaWallets.push({ name:name, key:key, secret:secret, type:type });
-        localStorage.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
+        _ls.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
         _alpacaActiveIdx = _alpacaWallets.length - 1;
-        localStorage.setItem('_alpacaActiveIdx', _alpacaActiveIdx);
+        _ls.setItem('_alpacaActiveIdx', _alpacaActiveIdx);
         ['alp-name','alp-key','alp-secret'].forEach(function(id) { var el=document.getElementById(id); if(el) el.value=''; });
         _renderAlpacaList();
         _fetchAlpacaBalance();
@@ -5915,9 +5919,9 @@ setTimeout(function() {
 
       window._removeAlpacaWallet = function(i) {
         _alpacaWallets.splice(i, 1);
-        localStorage.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
+        _ls.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
         if (_alpacaActiveIdx >= _alpacaWallets.length) _alpacaActiveIdx = Math.max(0, _alpacaWallets.length - 1);
-        localStorage.setItem('_alpacaActiveIdx', _alpacaActiveIdx);
+        _ls.setItem('_alpacaActiveIdx', _alpacaActiveIdx);
         _renderAlpacaList();
         _fetchAlpacaBalance();
       };
