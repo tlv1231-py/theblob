@@ -1168,8 +1168,9 @@ def _build_daw_html(data: dict) -> str:
     nav_snap_pts_j = json.dumps(data.get("nav_snap_pts", []))
 
     import os as _os
-    _alpaca_api_key    = (settings.alpaca_api_key    or _os.environ.get("ALPACA_API_KEY",    "")).strip()
-    _alpaca_secret_key = (settings.alpaca_secret_key or _os.environ.get("ALPACA_SECRET_KEY", "")).strip()
+    from config.settings import settings as _settings
+    _alpaca_api_key    = (_settings.alpaca_api_key    or _os.environ.get("ALPACA_API_KEY",    "")).strip()
+    _alpaca_secret_key = (_settings.alpaca_secret_key or _os.environ.get("ALPACA_SECRET_KEY", "")).strip()
 
     return f"""<!DOCTYPE html>
 <html>
@@ -5015,7 +5016,25 @@ function _spawnTradeChip(isoTs, sym, isEntry, price) {{
   }}); }});
   setTimeout(function() {{ dot.remove(); }}, 650);
 
-  // 3. Floating label chip — zooms in then drifts and fades
+  // 3. Floating label chip — beat-em-up damage numbers
+  // Stack chips loosely so rapid-fire events don't overlap
+  if (!window._activeChips) window._activeChips = [];
+  // Clean expired chips from the tracking list
+  window._activeChips = window._activeChips.filter(function(c) {{ return c.el.isConnected; }});
+  // Jitter spawn position: small random offset so chips scatter loosely near the orb
+  var _jx = (Math.random() - 0.5) * 40;
+  var _jy = (Math.random() - 0.5) * 30;
+  // Push away from existing chips to avoid direct overlap
+  window._activeChips.forEach(function(c) {{
+    var dx = (px + 14 + _jx) - c.x, dy = (py - 12 + _jy) - c.y;
+    var dist2 = Math.sqrt(dx*dx + dy*dy);
+    if (dist2 < 28 && dist2 > 0) {{
+      _jx += (dx / dist2) * (28 - dist2) * 0.6;
+      _jy += (dy / dist2) * (28 - dist2) * 0.6;
+    }}
+  }});
+  var spawnX = px + 14 + _jx, spawnY = py - 12 + _jy;
+
   var label = (isEntry ? '▲ ENTER ' : '&#9660; EXIT ') + sym.replace('/USD','') +
               (price ? '  $' + parseFloat(price||0).toFixed(sym.indexOf('USD')!==-1?4:2) : '');
   var chip = document.createElement('div');
@@ -5027,18 +5046,24 @@ function _spawnTradeChip(isoTs, sym, isEntry, price) {{
     'color:' + rgb + ';background:' + rgba(.07) + ';' +
     'border:1px solid ' + rgba(.45) + ';' +
     'box-shadow:0 0 20px ' + rgba(.35) + ',0 0 50px ' + rgba(.1) + ';' +
-    'left:' + (px + 14) + 'px;top:' + (py - 12) + 'px;' +
-    'opacity:0;transform:scale(.5) translateY(' + (isEntry ? 10 : -10) + 'px);' +
+    'left:' + spawnX + 'px;top:' + spawnY + 'px;' +
+    'opacity:0;transform:scale(.5) translate(0,0);' +
     'transition:opacity .18s ease, transform .42s cubic-bezier(.22,1,.36,1)';
   document.body.appendChild(chip);
+  window._activeChips.push({{ el: chip, x: spawnX, y: spawnY }});
+
   requestAnimationFrame(function() {{ requestAnimationFrame(function() {{
     chip.style.opacity = '1';
-    chip.style.transform = 'scale(1) translateY(0)';
+    chip.style.transform = 'scale(1) translate(0,0)';
   }}); }});
+
+  // Drift: gains float up-left, losses float down-left — arcade damage number feel
+  var _driftX = -(55 + Math.random() * 30);  // always left
+  var _driftY = isEntry ? -(45 + Math.random() * 20) : (45 + Math.random() * 20);  // up for gains, down for losses
   setTimeout(function() {{
     chip.style.transition = 'opacity 1.1s ease, transform 3.5s ease';
     chip.style.opacity = '0';
-    chip.style.transform = 'scale(.95) translateY(' + (isEntry ? -52 : 52) + 'px)';
+    chip.style.transform = 'scale(.9) translate(' + _driftX + 'px,' + _driftY + 'px)';
     setTimeout(function() {{ chip.remove(); }}, 1200);
   }}, 2600);
 
