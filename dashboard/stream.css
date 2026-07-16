@@ -72,7 +72,7 @@ html, body {
 #ambient {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 70% 34% at 50% 30%, rgba(255,0,204,0.13), transparent 70%),
+    radial-gradient(ellipse 70% 30% at 50% 28%, rgba(255,0,204,0.13), transparent 70%),
     radial-gradient(ellipse 90% 30% at 50% 88%, rgba(148,0,255,0.10), transparent 70%),
     var(--bg);
 }
@@ -100,24 +100,24 @@ html, body {
   flex-direction: column;
 }
 
-/* 56 + 300 + 170 + 260 + 374 = 1160. Each band is fixed so the stack can
-   never reflow into the reserved zones. Holdings takes the largest share after
-   the Blob: the tiles are the gamified centrepiece, and 5 rows at 68px only
-   read as arcade cabinet if they get the height. */
+/* 48 + 260 + 150 + 200 + 502 = 1160. Each band is fixed so the stack can
+   never reflow into the reserved zones. HOLDINGS now takes the largest share:
+   the book runs 9 crypto + 5 equity = 14 tiles, and they are the gamified
+   centrepiece. The Blob and chart gave up height to pay for it. */
 
-/* ── Status strip · 56 ────────────────────────────────────────────────── */
+/* ── Status strip · 48 ────────────────────────────────────────────────── */
 #s-status {
-  height: 56px; flex: none;
-  display: flex; align-items: center; gap: 12px;
+  height: 48px; flex: none;
+  display: flex; align-items: center; gap: 11px;
   border-bottom: 1px solid var(--border);
 }
 .st-live {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 17px; font-weight: 700; letter-spacing: 0.22em;
+  display: flex; align-items: center; gap: 7px;
+  font-size: 15px; font-weight: 700; letter-spacing: 0.22em;
   color: var(--accent);
 }
 .st-live .dot {
-  width: 9px; height: 9px; border-radius: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 12px var(--accent);
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
@@ -126,8 +126,8 @@ html, body {
   50%      { opacity: 0.25; box-shadow: 0 0 4px rgba(255,0,204,0.2); }
 }
 .st-chip {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.16em;
-  padding: 5px 10px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+  padding: 4px 9px;
   border: 1px solid var(--accent);
   color: var(--accent);
   background: rgba(255,0,204,0.07);
@@ -135,60 +135,59 @@ html, body {
 .st-dim { border-color: var(--border2); color: var(--text-mid); background: none; }
 .st-spacer { flex: 1; }
 .st-sess {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.18em;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.18em;
   color: var(--text-dim);
 }
 .st-sess.open { color: var(--ok); }
 .st-clock {
-  font-size: 16px; font-weight: 700; letter-spacing: 0.08em;
+  font-size: 15px; font-weight: 700; letter-spacing: 0.08em;
   color: var(--text-mid); font-variant-numeric: tabular-nums;
 }
 
-/* ── Blob · 350 ───────────────────────────────────────────────────────── */
-/* He is the reason anyone watches, so he gets the single biggest block in the
-   box and sits above centre where nothing competes. */
+/* ── Blob · 260 ───────────────────────────────────────────────────────── */
 #s-blob {
-  height: 300px; flex: none;
+  height: 260px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
 .blob-bloom {
   position: absolute; top: 50%; left: 50%;
-  width: 380px; height: 380px;
+  width: 320px; height: 320px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255,0,204,0.30), transparent 68%);
-  filter: blur(26px);
+  filter: blur(24px);
   transition: background 0.45s linear;
 }
 #blobCanvas {
   position: relative;
-  width: 288px; height: 288px;   /* 48 x 6 — integer scale, no resample */
+  width: 240px; height: 240px;   /* 48 x 5 — integer scale, no resample */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 .blob-mood {
-  position: absolute; bottom: 6px; left: 50%;
+  position: absolute; bottom: 2px; left: 50%;
   transform: translateX(-50%);
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 9px; letter-spacing: 0.16em;
+  font-size: 8px; letter-spacing: 0.16em;
   color: var(--text-dim);
 }
 
 /* Names the trade he just reacted to. Steps rather than eases — a smooth
    fade reads as a web toast; this should read as a cabinet callout. */
 .trade-flash {
-  position: absolute; top: 14px; left: 50%;
+  position: absolute; top: 6px; left: 50%;
   transform: translateX(-50%);
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 11px; letter-spacing: 0.08em;
+  font-size: 10px; letter-spacing: 0.08em;
   white-space: nowrap;
-  padding: 7px 12px;
+  padding: 6px 11px;
   border: 1px solid currentColor;
   background: rgba(6,0,8,0.9);
   opacity: 0;
   transition: opacity 0.25s steps(3, end);
   pointer-events: none;
+  z-index: 5;
 }
 .trade-flash.show  { opacity: 1; animation: flash-pop 0.18s steps(2, end); }
 .trade-flash.enter { color: var(--accent2); box-shadow: 0 0 20px -4px var(--accent2); }
@@ -199,39 +198,39 @@ html, body {
   to   { transform: translateX(-50%) scale(1); }
 }
 
-/* ── NAV · 190 ────────────────────────────────────────────────────────── */
+/* ── NAV · 150 ────────────────────────────────────────────────────────── */
 #s-nav {
-  height: 170px; flex: none;
+  height: 150px; flex: none;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 4px;
+  justify-content: center; gap: 3px;
 }
 .nav-label {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.28em;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
   color: var(--text-dim);
 }
 .nav-big {
-  font-size: 96px; font-weight: 700; line-height: 1;
+  font-size: 78px; font-weight: 700; line-height: 1;
   letter-spacing: -0.04em; color: var(--text-hi);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 40px rgba(240,224,255,0.25);
 }
 .nav-day {
-  font-size: 34px; font-weight: 700; line-height: 1.1;
+  font-size: 28px; font-weight: 700; line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 .nav-day.up   { color: var(--ok);      text-shadow: 0 0 24px rgba(0,255,157,0.4); }
 .nav-day.down { color: var(--danger);  text-shadow: 0 0 24px rgba(255,51,102,0.4); }
 .nav-day.flat { color: var(--text-mid); }
 .nav-sub {
-  font-size: 14px; font-weight: 700; letter-spacing: 0.14em;
-  color: var(--text-mid); margin-top: 2px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--text-mid); margin-top: 1px;
 }
 .nav-sub.up   { color: var(--ok); }
 .nav-sub.down { color: var(--danger); }
 
-/* ── Chart · 330 ──────────────────────────────────────────────────────── */
+/* ── Chart · 200 ──────────────────────────────────────────────────────── */
 #s-chart {
-  height: 260px; flex: none;
+  height: 200px; flex: none;
   position: relative;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -239,21 +238,19 @@ html, body {
 /* min-height:0 is load-bearing. A canvas is a replaced element, so the flex
    default of min-height:auto resolves to its intrinsic (attribute) height —
    and JS sets that attribute from the measured box. Without this the canvas
-   ratchets itself larger every resize and spills into POSITIONS. */
+   ratchets itself larger every resize and spills into HOLDINGS. */
 #navCanvas { width: 100%; height: 100%; min-height: 0; display: block; }
 .chart-meta {
-  position: absolute; top: 8px; right: 4px;
-  font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  position: absolute; top: 6px; right: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   HOLDINGS — arcade tiles · 374
-   Replicates the Command Center's canvas tile engine (home_nav.js _etPaintTile)
-   but rebuilt in DOM at ~5x the size, because here they are the centrepiece
-   rather than a dense sidebar. Kept off canvas deliberately: 5 tiles do not
-   need a 30fps repaint loop, and this page already runs two canvases for hours
-   unattended. CSS carries the arcade look at zero per-frame cost.
+   HOLDINGS — arcade tiles · 502
+   One board for the whole book: crypto (crypto_positions) and equity
+   (positions_data) as identical cabinet slots, distinguished by badge and
+   colour rather than by living in separate widgets.
 
    The 8-bit read comes from three things, same as the Blob:
      1. NO border-radius, NO gradients on structure — hard pixel edges only.
@@ -264,7 +261,7 @@ html, body {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-pos {
-  height: 374px; flex: none;
+  height: 502px; flex: none;
   display: flex; flex-direction: column;
 }
 .pos-hdr {
@@ -279,38 +276,45 @@ html, body {
 }
 .pos-meta {
   font-family: VT323, Consolas, monospace;
-  font-size: 19px; color: var(--text-mid);
+  font-size: 18px; color: var(--text-mid);
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
 }
+
+/* Column-major: the board fills top-to-bottom then wraps to column 2, so a
+   new position lands in a stable slot instead of reshuffling the whole grid. */
 #pos-list {
-  flex: 1;
-  display: flex; flex-direction: column; gap: 5px;
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  gap: 4px 8px;
   overflow: hidden;
 }
 
 /* ── The tile ─────────────────────────────────────────────────────────── */
 .tile {
   position: relative;
-  height: 63px; flex: none;
-  display: flex; align-items: center;
-  padding: 0 14px 0 0;
+  min-height: 0;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 9px 0 14px;
   background: linear-gradient(90deg, rgba(20,0,28,0.96), rgba(10,0,16,0.9));
   /* Stepped bevel — hard offsets only. --tc is the P&L tint, set inline. */
   box-shadow:
     inset 2px 2px 0 rgba(255,255,255,0.07),
     inset -2px -2px 0 rgba(0,0,0,0.65),
     0 0 0 1px rgba(42,0,61,0.9),
-    0 0 18px -4px var(--tc, transparent);
+    0 0 14px -4px var(--tc, transparent);
   overflow: hidden;
 }
-/* Left accent slab — the tile's P&L identity, 8px of pure colour. */
+/* Left accent slab — the tile's P&L identity, 6px of pure colour. */
 .tile::before {
   content: '';
   position: absolute; left: 0; top: 0; bottom: 0;
-  width: 8px;
+  width: 6px;
   background: var(--tc, #8060a0);
-  box-shadow: 0 0 14px var(--tc, transparent);
+  box-shadow: 0 0 12px var(--tc, transparent);
 }
 /* Scanlines, per-tile so they ride the bevel. */
 .tile::after {
@@ -318,51 +322,54 @@ html, body {
   position: absolute; inset: 0;
   pointer-events: none;
   background: repeating-linear-gradient(
-    0deg, transparent 0 2px, rgba(0,0,0,0.28) 2px 3px);
+    0deg, transparent 0 2px, rgba(0,0,0,0.26) 2px 3px);
 }
 
-.t-rank {
-  width: 54px; flex: none;
-  margin-left: 14px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 10px;
-  color: var(--tc, #8060a0);
-  text-shadow: 0 0 10px var(--tc, transparent);
+.t-top, .t-bot {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; position: relative; z-index: 1;
 }
+.t-top { margin-bottom: 3px; }
+
+.t-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .t-badge {
-  width: 26px; flex: none;
-  font-size: 15px; line-height: 1;
+  font-size: 11px; line-height: 1; flex: none;
   color: var(--accent2);
   text-shadow: 0 0 8px currentColor;
-  opacity: 0.9;
 }
+.t-badge.crypto { color: var(--accent3); }
 .t-sym {
-  width: 128px; flex: none;
   font-family: 'Press Start 2P', monospace;
-  font-size: 16px;
+  font-size: 11px;
   color: var(--text-hi);
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 12px var(--tc, transparent);
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.9), 0 0 10px var(--tc, transparent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-
-.t-mid { flex: 1; min-width: 0; padding: 0 12px; }
-.t-line {
-  display: flex; justify-content: space-between; align-items: baseline;
+.t-pct {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px; flex: none;
+  color: var(--tc);
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.9), 0 0 14px var(--tc);
+}
+.t-entry, .t-abs {
   font-family: VT323, monospace;
-  font-size: 17px; line-height: 1;
+  font-size: 15px; line-height: 1;
   color: var(--text-mid);
-  letter-spacing: 0.04em;
-  margin-bottom: 5px;
+  letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.t-line .t-hold { color: var(--text-dim); }
+.t-entry { overflow: hidden; text-overflow: ellipsis; }
+.t-abs { flex: none; color: var(--tc); opacity: 0.85; }
 
 /* ── Segmented meter ──────────────────────────────────────────────────── */
-/* Discrete LED blocks. The tick marks the entry (dead centre): left of it is
-   travel toward the -5% stop, right is toward the +10% target — the same band
-   risk_limits defines. This is the bar's whole job: how close to the stop. */
+/* Discrete LED blocks. The entry tick sits dead centre: left is travel toward
+   the stop, right toward the target — the band risk_limits defines. This is
+   the bar's whole job: how close to the stop. */
 .t-meter {
-  display: flex; gap: 2px; height: 10px;
-  position: relative;
+  display: flex; gap: 2px; height: 6px;
+  margin-top: 4px;
+  position: relative; z-index: 1;
 }
 .t-seg {
   flex: 1;
@@ -371,49 +378,40 @@ html, body {
 }
 .t-seg.on {
   background: var(--tc);
-  box-shadow: 0 0 8px var(--tc), inset 1px 1px 0 rgba(255,255,255,0.35);
+  box-shadow: 0 0 6px var(--tc), inset 1px 1px 0 rgba(255,255,255,0.35);
 }
 /* Leading segment pulses — the cabinet tell that this is live, not a still. */
 .t-seg.tip { animation: seg-tip 0.75s steps(2, end) infinite; }
 @keyframes seg-tip { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .t-seg.entry {
-  background: rgba(255,255,255,0.5);
-  box-shadow: 0 0 6px rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.45);
+  box-shadow: 0 0 5px rgba(255,255,255,0.55);
 }
 
-.t-val {
-  width: 168px; flex: none;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.t-pct {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 15px; line-height: 1.25;
-  color: var(--tc);
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 16px var(--tc);
-}
-.t-abs {
-  font-family: VT323, monospace;
-  font-size: 17px; line-height: 1;
-  color: var(--text-mid);
-  margin-top: 4px;
+/* A fill just landed on this symbol — the slot itself acknowledges it. */
+.tile.hit { animation: tile-hit 0.42s steps(3, end); }
+@keyframes tile-hit {
+  0%   { box-shadow: inset 0 0 0 2px var(--tc), 0 0 30px -2px var(--tc); }
+  100% { box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
+    0 0 0 1px rgba(42,0,61,0.9), 0 0 14px -4px var(--tc); }
 }
 
-/* Breach of the -5% stop: the cabinet alarms. Reserved for a real risk state,
+/* Breach of the stop: the cabinet alarms. Reserved for a real risk state,
    never decoration — it must mean something every time it fires. */
 .tile.danger { animation: tile-alarm 0.9s steps(2, end) infinite; }
 @keyframes tile-alarm {
   0%, 100% { box-shadow:
     inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
-    0 0 0 1px rgba(255,51,102,0.9), 0 0 26px -2px #ff3366; }
+    0 0 0 1px rgba(255,51,102,0.9), 0 0 22px -2px #ff3366; }
   50%      { box-shadow:
     inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
-    0 0 0 1px rgba(42,0,61,0.9), 0 0 10px -4px #ff3366; }
+    0 0 0 1px rgba(42,0,61,0.9), 0 0 8px -4px #ff3366; }
 }
 
 .pos-empty {
+  grid-column: 1 / -1; grid-row: 1 / -1;
   display: flex; align-items: center; justify-content: center;
-  height: 100%;
   font-family: 'Press Start 2P', monospace;
   font-size: 11px; letter-spacing: 0.12em; color: var(--text-dim);
 }

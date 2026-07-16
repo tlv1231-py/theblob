@@ -302,32 +302,135 @@
     $('chart-meta').textContent = win.length + ' PTS · ' + hhmm(x0) + '–' + hhmm(x1) + ' ET';
   }
 
-  // ── Holdings — arcade tiles ──────────────────────────────────────────────
-  // DOM port of the Command Center's canvas tile (home_nav.js _etPaintTile):
-  // same anatomy — rank, strategy badge, sym, entry, hold timer, meter, P&L —
-  // at ~5x scale because here they are the centrepiece, not a sidebar.
+  // ═══════════════════════════════════════════════════════════════════════
+  // ARCADE SOUNDS
+  // Square-wave WebAudio, ported from home_nav.js so both surfaces share one
+  // sonic language. Synthesised rather than sampled: no asset to inline, and
+  // a square wave IS the 8-bit sound.
+  //
+  //   acquisition -> neutral blip      (330->440, flat, no verdict)
+  //   gain        -> ascending arp     (E5 G5 B5, bright)
+  //   loss        -> descending bloop  (G4 Eb4 Bb3, lowpassed, muted)
+  //
+  // AUTOPLAY: browsers suspend AudioContext until a user gesture. An OBS
+  // browser source generally autoplays, but a plain tab stays silent until
+  // clicked — hence the gesture unlock below. Never assume sound is audible.
+  // ═══════════════════════════════════════════════════════════════════════
+  var SFX = (function() {
+    var ctx = null, ready = false;
+    function init() {
+      if (ctx) return;
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        ctx.resume().then(function() { ready = true; }).catch(function() {});
+      } catch (e) {}
+    }
+    // Any gesture unlocks. Harmless if it never comes (OBS won't need it).
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function(ev) {
+      window.addEventListener(ev, function once() {
+        init();
+        if (ctx && ctx.state === 'suspended') ctx.resume();
+        ready = true;
+      }, { once: true });
+    });
+    init();
 
-  var SEGS = 24;   // meter resolution. Low on purpose: chunky reads as 8-bit.
+    function play(notes, vol, lowpass) {
+      if (!ctx) return;
+      if (ctx.state === 'suspended') { ctx.resume(); return; }
+      try {
+        notes.forEach(function(n) {
+          var osc = ctx.createOscillator(), g = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = n[0];
+          var t = ctx.currentTime + n[1];
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(vol, t + 0.006);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+          if (lowpass) {
+            var lp = ctx.createBiquadFilter();
+            lp.type = 'lowpass'; lp.frequency.value = 700;
+            osc.connect(lp); lp.connect(g);
+          } else {
+            osc.connect(g);
+          }
+          g.connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.13);
+        });
+      } catch (e) {}
+    }
+    return {
+      entry: function() { play([[330, 0], [440, 0.055]], 0.055, false); },
+      win:   function() { play([[659, 0], [784, 0.07], [988, 0.14]], 0.07, false); },
+      loss:  function() { play([[392, 0], [311, 0.07], [233, 0.14]], 0.055, true); },
+      isReady: function() { return ready && ctx && ctx.state === 'running'; }
+    };
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HOLDINGS — one board for the whole book
+  // Crypto (crypto_positions, server-written) and equity (positions_data)
+  // become identical cabinet slots. They differ by badge and by where their
+  // live price comes from, not by living in separate widgets.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  var SEGS = 16;   // meter resolution. Low on purpose: chunky reads as 8-bit.
 
   // Matches _TILE_BADGES in home_nav.js so a symbol carries the same glyph on
   // both surfaces. A viewer should never have to relearn the iconography.
   var BADGES = {
-    momentum: '▲▲', crypto: '◈', user: '◎', daytrader: '⊕',
-    reversion: '⇌', sentiment: '◉', volatility: '⚡', factor: '✦'
+    momentum: '▲▲', crypto: '◈', crypto_momentum: '◈', user: '◎',
+    daytrader: '⊕', reversion: '⇌', sentiment: '◉', volatility: '⚡', factor: '✦'
   };
 
-  function holdStr(days) {
-    var d = Number(days || 0);
-    if (d <= 0)  return 'NEW';
-    if (d === 1) return '1 DAY';
-    return d + ' DAYS';
+  // CoinGecko ids — free, no auth, no key. Same map home_nav.js uses.
+  var CG_MAP = {
+    'BTC/USD': 'bitcoin', 'ETH/USD': 'ethereum', 'SOL/USD': 'solana',
+    'AVAX/USD': 'avalanche-2', 'LINK/USD': 'chainlink', 'DOGE/USD': 'dogecoin',
+    'BCH/USD': 'bitcoin-cash', 'XTZ/USD': 'tezos', 'CRV/USD': 'curve-dao-token',
+    'UNI/USD': 'uniswap', 'ADA/USD': 'cardano', 'MATIC/USD': 'matic-network',
+    'DOT/USD': 'polkadot'
+  };
+  var cgPrice = {};   // sym -> live USD price
+
+  // Merge both books into one uniform shape. Everything downstream reads this
+  // and never needs to know which table a row came from.
+  function book() {
+    var out = [];
+    (S.positions || []).forEach(function(p) {
+      out.push({
+        sym: p.sym, qty: p.qty, entry: p.entry_price, price: p.price,
+        stop: p.stop_price, target: p.target_price,
+        strategy: p.strategy || 'momentum', isCrypto: false
+      });
+    });
+    (S.crypto || []).forEach(function(c) {
+      out.push({
+        sym: c.sym, qty: c.qty, entry: c.entry_price,
+        price: cgPrice[c.sym] || 0,       // live, or 0 until CoinGecko answers
+        stop: c.stop_price, target: c.target_price,
+        strategy: c.strategy || 'crypto', isCrypto: true
+      });
+    });
+    return out;
+  }
+
+  function qtyStr(q) {
+    var n = Number(q || 0);
+    if (n >= 1000) return Math.round(n).toLocaleString('en-US');
+    if (n >= 1)    return n.toFixed(2);
+    return n.toFixed(4);
+  }
+  function priceStr(v) {
+    var n = Number(v || 0);
+    if (n >= 1000) return '$' + Math.round(n).toLocaleString('en-US');
+    if (n >= 1)    return '$' + n.toFixed(2);
+    return '$' + n.toFixed(4);
   }
 
   function renderPositions() {
     var list = $('pos-list');
-    var ps = (S.positions || []).slice()
-      .sort(function(a, b) { return (b.value || 0) - (a.value || 0); })
-      .slice(0, 5);   // top-5 config — the box has room for exactly this
+    var ps = book().slice(0, 14);   // 2 cols x 7 rows — the board's exact size
 
     if (!ps.length) {
       list.innerHTML = '<div class="pos-empty">NO OPEN POSITIONS</div>';
@@ -335,54 +438,122 @@
       return;
     }
 
-    var gross = ps.reduce(function(s, p) { return s + (p.value || 0); }, 0);
-    var wins  = ps.filter(function(p) { return Number(p.entry_pnl_pct || 0) > 0; }).length;
-    $('pos-meta').textContent = wins + '/' + ps.length + ' UP  ·  ' + usd(gross) + ' GROSS';
-
-    var stopPct   = S.limits.stop_loss * 100;   // -5% wall
-    var targetPct = stopPct * 2;                // +10% target — the band's right edge
+    var known = 0, wins = 0, gross = 0;
+    ps.forEach(function(p) {
+      gross += (p.price || p.entry || 0) * (p.qty || 0);
+      if (p.price > 0 && p.entry > 0) { known++; if (p.price > p.entry) wins++; }
+    });
+    $('pos-meta').textContent = wins + '/' + known + ' UP  ·  ' +
+                                ps.length + ' OPEN  ·  ' + usd(gross) + ' GROSS';
 
     list.innerHTML = ps.map(function(p) {
-      var pc  = Number(p.entry_pnl_pct || 0);
-      var col = pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
+      var live = p.price > 0 && p.entry > 0;
+      var pc   = live ? (p.price - p.entry) / p.entry * 100 : 0;
+      var abs  = live ? (p.price - p.entry) * (p.qty || 0) : 0;
+      var col  = !live ? '#8060a0'
+               : (pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0'));
 
-      // Entry sits dead centre. Left of it is travel toward the stop, right is
-      // toward the target — the same band risk_limits defines.
-      var frac = pc >= 0 ? Math.min(1, pc / targetPct) : Math.max(-1, pc / stopPct);
-      var mid  = SEGS / 2;
-      var lit  = Math.round(Math.abs(frac) * mid);
+      // Normalise against THIS position's real stop/target band rather than a
+      // fixed percentage. Crypto runs a ~0.3% stop and equity 5% — one shared
+      // percentage scale would peg every crypto tile at full deflection.
+      var frac = 0;
+      if (live && p.stop > 0 && p.target > 0) {
+        frac = p.price >= p.entry
+          ? Math.min(1, (p.price - p.entry) / Math.max(1e-9, p.target - p.entry))
+          : Math.max(-1, -(p.entry - p.price) / Math.max(1e-9, p.entry - p.stop));
+      }
+      var mid = SEGS / 2;
+      var lit = Math.round(Math.abs(frac) * mid);
 
       var segs = '';
       for (var i = 0; i < SEGS; i++) {
         var on, tip = false;
         if (frac >= 0) { on = i >= mid && i < mid + lit;  tip = on && i === mid + lit - 1; }
         else           { on = i < mid  && i >= mid - lit; tip = on && i === mid - lit; }
-        var cls = 't-seg' + (on ? ' on' : '') + (tip ? ' tip' : '') +
-                  (i === mid ? ' entry' : '');
-        segs += '<span class="' + cls + '"></span>';
+        segs += '<span class="t-seg' + (on ? ' on' : '') + (tip ? ' tip' : '') +
+                (i === mid ? ' entry' : '') + '"></span>';
       }
 
-      // Only alarm on a genuine stop breach — see .tile.danger in stream.css.
-      var breached = pc <= -stopPct;
+      // Alarm only on a genuine stop breach — see .tile.danger in stream.css.
+      var breached = live && p.stop > 0 && p.price <= p.stop;
 
       return '' +
-        '<div class="tile' + (breached ? ' danger' : '') + '" style="--tc:' + col + '">' +
-          '<div class="t-rank">' + (p.rank ? 'P' + p.rank : '--') + '</div>' +
-          '<div class="t-badge">' + (BADGES[p.strategy] || BADGES.momentum) + '</div>' +
-          '<div class="t-sym">' + p.sym + '</div>' +
-          '<div class="t-mid">' +
-            '<div class="t-line">' +
-              '<span>' + (p.qty || 0) + ' @ ' + usd(p.entry_price, 2) + '</span>' +
-              '<span class="t-hold">' + holdStr(p.days_held) + '</span>' +
-            '</div>' +
-            '<div class="t-meter">' + segs + '</div>' +
+        '<div class="tile' + (breached ? ' danger' : '') + '" data-sym="' + p.sym +
+             '" style="--tc:' + col + '">' +
+          '<div class="t-top">' +
+            '<span class="t-name">' +
+              '<span class="t-badge' + (p.isCrypto ? ' crypto' : '') + '">' +
+                (BADGES[p.strategy] || BADGES.momentum) + '</span>' +
+              '<span class="t-sym">' + p.sym.replace('/USD', '') + '</span>' +
+            '</span>' +
+            '<span class="t-pct">' + (live ? pct(pc, 1) : '· ·') + '</span>' +
           '</div>' +
-          '<div class="t-val">' +
-            '<div class="t-pct">' + pct(pc, 1) + '</div>' +
-            '<div class="t-abs">' + signed(p.entry_pnl) + '</div>' +
+          '<div class="t-bot">' +
+            '<span class="t-entry">' + qtyStr(p.qty) + ' @ ' + priceStr(p.entry) + '</span>' +
+            '<span class="t-abs">' + (live ? signed(abs, 2) : '—') + '</span>' +
           '</div>' +
+          '<div class="t-meter">' + segs + '</div>' +
         '</div>';
     }).join('');
+  }
+
+  // Live crypto marks. CoinGecko is free and unauthenticated but rate-limits
+  // hard, so this stays at 15s — the tiles are a P&L read, not a tape.
+  function pollCryptoPrices() {
+    var syms = (S.crypto || []).map(function(c) { return c.sym; })
+                 .filter(function(s) { return CG_MAP[s]; });
+    if (!syms.length) return;
+    var ids = syms.map(function(s) { return CG_MAP[s]; }).join(',');
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=' + ids + '&vs_currencies=usd')
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (!j || typeof j !== 'object') return;
+        var got = 0;
+        syms.forEach(function(s) {
+          var v = j[CG_MAP[s]] && j[CG_MAP[s]].usd;
+          if (v) { cgPrice[s] = Number(v); got++; }
+        });
+        if (got) renderPositions();
+      })
+      .catch(function() { /* tiles fall back to '· ·' until a poll lands */ });
+  }
+
+  // The book turns over ~9x/min, so the seeded crypto list goes stale within
+  // seconds. Re-read the live table whenever a trade lands rather than on a
+  // timer — the event IS the invalidation signal.
+  var _refreshT = 0;
+  function refreshCrypto() {
+    if (Date.now() - _refreshT < 2000) return;   // coalesce trade bursts
+    _refreshT = Date.now();
+    fetch(S.supa.url + '/rest/v1/crypto_positions?select=symbol,qty,entry_price,' +
+          'stop_price,target_price,entered_at,strategy',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) return;
+        S.crypto = rows.map(function(r) {
+          return {
+            sym: r.symbol, qty: Number(r.qty || 0),
+            entry_price: Number(r.entry_price || 0),
+            stop_price: Number(r.stop_price || 0),
+            target_price: Number(r.target_price || 0),
+            entered_at: r.entered_at, strategy: r.strategy || 'crypto',
+            is_crypto: true
+          };
+        });
+        renderPositions();
+      })
+      .catch(function() {});
+  }
+
+  // The slot that just traded acknowledges it, so a fill is legible on the
+  // board and not only on the Blob.
+  function hitTile(sym) {
+    var el = document.querySelector('.tile[data-sym="' + sym + '"]');
+    if (!el) return;
+    el.classList.remove('hit');
+    void el.offsetWidth;          // reflow so the animation can retrigger
+    el.classList.add('hit');
   }
 
   // The feed and footer ticker are gone — they sat in the bottom 380, which
@@ -508,7 +679,20 @@
         else if (best.rank === 2) blob.setMood('ALERT', 18);
         else                      blob.setMood('ALERT', 12);
         flashTrade(best.dir, best.sym, best.pnl);
+        hitTile(best.sym);
         $('blob-mood').textContent = blob.getMood();
+
+        // Sound follows the verdict, not the event: acquisitions are neutral
+        // because buying is not yet good or bad news.
+        if (best.dir === 'ENTER')    SFX.entry();
+        else if (best.pnl > 0)       SFX.win();
+        else                         SFX.loss();
+
+        // The book turns over ~9x/min. Re-render so a closed position leaves
+        // the board and a new one takes its slot.
+        if (fresh.some(function(r) { return r.event_type === 'TRADE'; })) {
+          refreshCrypto();
+        }
       })
       .catch(function() {});
   }
@@ -526,6 +710,10 @@
   // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
   // almost every one while still costing ~15 tiny requests/min.
   setInterval(pollEvents, 4000);
+  // CoinGecko is free/unauthenticated and rate-limits hard — 15s is the floor
+  // that stays safely under it. Tiles are a P&L read, not a tape.
+  setInterval(pollCryptoPrices, 15000);
   window.addEventListener('resize', drawChart);
   pollEvents();
+  pollCryptoPrices();
 })();
