@@ -4559,16 +4559,16 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var _tgt = window._navTargetWindowMs || window._navWindowMs || 4*3600*1000;
     window._navWindowMs += (_tgt - window._navWindowMs) * 0.10;
 
-    // ── Time window — "now" is always pinned to the horizontal center ─────────
+    // ── Time window — last DB point is pinned to the horizontal center ────────
     var winMs     = window._navWindowMs || 4 * 3600 * 1000;
+    var lastPtMs  = allPts.length ? allPts[allPts.length-1].ms : now_ms;
     var dataStart = allPts.length ? allPts[0].ms : now_ms - 30*60000;
     // Half-span = how far back we show; minimum 30 min so line has real width
-    var halfSpan  = Math.max(now_ms - Math.max(dataStart, now_ms - winMs), 30*60000);
-    var t0 = now_ms - halfSpan;   // left edge = past
-    var t1 = now_ms + halfSpan;   // right edge = future buffer (now is at center)
+    var halfSpan  = Math.max(lastPtMs - Math.max(dataStart, lastPtMs - winMs), 30*60000);
+    var t0 = lastPtMs - halfSpan;   // left edge = past
+    var t1 = lastPtMs + halfSpan;   // right edge = future buffer (last point at center)
 
-    // Add live point, filter
-    allPts.push({{ ms: now_ms, v: liveNav }});
+    // Filter to window (no synthetic live point — 100% DB-sourced)
     allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
@@ -4628,7 +4628,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     // Always draw a line — use flat placeholder if < 2 real points
     if (n < 2) {{
       var midY = ty(liveNav);
-      m = [{{ x: cx0, y: midY }}, {{ x: tx(now_ms), y: midY }}];
+      m = [{{ x: cx0, y: midY }}, {{ x: tx(lastPtMs), y: midY }}];
       n = 2;
     }}
 
@@ -5172,10 +5172,16 @@ setInterval(_fetchIntradayMarks, 15000);
 // Each poller writes its slice; both read the combined total so NAV doesn't alternate.
 window._livePnlBySource = {{ equity: 0, crypto: 0 }};
 
-// ── Nav chart DB poll — fetches nav_snapshots every 30s, replaces chart data ──
-// The chart is purely DB-driven. No session accumulation, no seed complexity.
-// _navDbPts already seeded from Python at render time; poll merges new points in
-var _intradayPts = window._navDbPts;
+// ── Nav chart — 100% DB-sourced, consistent across all machines ──────────────
+// _navDbPts seeded from Python at render; refreshed from Supabase every 10s.
+// No client-side live point is injected into the draw loop.
+// _pushIntradayPoint writes to DB every 10s; the next poll picks it up.
+
+function _fixTs(t) {{
+  // Supabase returns naive UTC strings; append Z so JS parses as UTC
+  if (t && t[t.length-1] !== 'Z' && t.indexOf('+') === -1) return t + 'Z';
+  return t;
+}}
 
 function _fetchNavDb() {{
   var since = new Date(Date.now() - 24*3600000).toISOString();
@@ -5184,66 +5190,41 @@ function _fetchNavDb() {{
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
     if (!Array.isArray(rows)) return;
-    window._navDbPts = rows.map(function(r) {{
-      // Supabase returns naive UTC strings (no tz marker); append Z so JS parses as UTC
-      var t = r.recorded_at || '';
-      if (t && t[t.length-1] !== 'Z' && t.indexOf('+') === -1) t += 'Z';
-      return {{ t: t, v: r.nav }};
-    }});
-    _intradayPts = window._navDbPts;
-    // Update the Plotly trace every time fresh DB data arrives
+    window._navDbPts = rows.map(function(r) {{ return {{ t: _fixTs(r.recorded_at), v: r.nav }}; }});
     if (window._redrawNavTraces) window._redrawNavTraces();
   }}).catch(function() {{}});
 }}
 _fetchNavDb();
-setInterval(_fetchNavDb, 30000);
+setInterval(_fetchNavDb, 10000);  // refresh every 10s
 
-// Force-push a nav snapshot immediately (bypasses 30s dedup) — call on trade events
 window._forceNavSnapshot = function() {{
   var nav = window._lastKnownNav;
   if (!nav) return;
   var isoTs = new Date().toISOString();
-  _intradayPts.push({{ t: isoTs, v: nav }});
-  window._intradayPts = _intradayPts;
   fetch(SUPA_URL + '/rest/v1/nav_snapshots', {{
     method: 'POST',
     headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
                 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }},
     body: JSON.stringify({{ recorded_at: isoTs, nav: nav }})
-  }}).catch(function(e) {{ console.warn('[nav] force snapshot failed', e); }});
+  }}).catch(function() {{}});
 }};
 
+var _lastNavWriteMs = 0;
 window._pushIntradayPoint = function(isoTs, val) {{
   var now = Date.now();
-  var cutoff = now - 24 * 3600000;  // keep 24h of points
-  _intradayPts = _intradayPts.filter(function(p) {{ return new Date(p.t).getTime() > cutoff; }});
-  // Overwrite last point if less than 30s old (smooth, not spiky); otherwise push new + persist
-  var isNew = false;
-  if (_intradayPts.length) {{
-    var last = _intradayPts[_intradayPts.length - 1];
-    if (now - new Date(last.t).getTime() < 30000) {{
-      last.t = isoTs; last.v = val;
-    }} else {{
-      _intradayPts.push({{ t: isoTs, v: val }});
-      isNew = true;
-    }}
-  }} else {{
-    _intradayPts.push({{ t: isoTs, v: val }});
-    isNew = true;
-  }}
-  // Persist new points to DB so the chart survives page reloads and overnight
-  if (isNew) {{
-    fetch(SUPA_URL + '/rest/v1/nav_snapshots', {{
-      method: 'POST',
-      headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
-                  'Content-Type': 'application/json', 'Prefer': 'return=minimal' }},
-      body: JSON.stringify({{ recorded_at: isoTs, nav: val }})
-    }}).catch(function(e) {{ console.warn('[nav] snapshot write failed', e); }});
-  }}
-  // Mark this as authoritative live source — gates pipeline-stamp overrides below
+  // Always update live nav state for display
   window._lastLivePriceMs = now;
   window._lastKnownNav = val;
   window._lastKnownTs  = isoTs;
+  // Write to DB at most every 10s — chart reads from DB, not local array
+  if (now - _lastNavWriteMs < 10000) return;
+  _lastNavWriteMs = now;
+  fetch(SUPA_URL + '/rest/v1/nav_snapshots', {{
+    method: 'POST',
+    headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+                'Content-Type': 'application/json', 'Prefer': 'return=minimal' }},
+    body: JSON.stringify({{ recorded_at: isoTs, nav: val }})
+  }}).catch(function(e) {{ console.warn('[nav] snapshot write failed', e); }});
   if (window._navPush) window._navPush(val, isoTs);
   if (gd && gd.data && gd.data.length >= 7) {{
     Plotly.restyle(gd, {{
