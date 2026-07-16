@@ -4771,94 +4771,110 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
 
-    // ── Current value — centered below outer orb, transparent background ──────
-    var valStr = '$' + (allPts.length ? allPts[allPts.length-1].v : liveNav)
-                       .toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
-    ctx.font = 'bold 13px Consolas,monospace';
+    // ── Animated portfolio counter — lerps to real value each frame ───────────
+    var _rawNav = allPts.length ? allPts[allPts.length-1].v : liveNav;
+    if (!window._navDispVal || Math.abs(window._navDispVal - _rawNav) > 5000) {{
+      window._navDispVal = _rawNav;  // hard-set on first draw or big jump
+    }} else {{
+      window._navDispVal += (_rawNav - window._navDispVal) * 0.07;  // ease toward target
+    }}
+    var valStr = '$' + window._navDispVal.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+    ctx.font = 'bold 14px Consolas,monospace';
     var tw = ctx.measureText(valStr).width;
-    var lx = tipX - tw / 2;  // centered under dot
+    var lx = tipX - tw / 2;
     lx = Math.max(cx0 + 4, Math.min(cx1 - tw - 4, lx));
-    var ly = tipY + 58;      // below outer ring + orbital dots
+    var ly = tipY + 75;  // below outer ring + orbital dots
     ly = Math.min(cy1 - 4, ly);
-    // No background — transparent
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.textAlign = 'left';
     ctx.fillText(valStr, lx, ly);
 
-    // ── Hover crosshair + tooltip ───────────────────────────────────────────
+    // ── Hover crosshair + tooltip (black & white, Consolas) ──────────────────
     if (window._navHoverX !== null && allPts.length > 0) {{
       var hoverMs = t0 + window._navHoverX * (t1 - t0);
-      // Binary search for closest point
       var hBest = allPts[0], hDist = Math.abs(allPts[0].ms - hoverMs);
       for (var hi2 = 1; hi2 < allPts.length; hi2++) {{
         var d2 = Math.abs(allPts[hi2].ms - hoverMs);
         if (d2 < hDist) {{ hDist = d2; hBest = allPts[hi2]; }}
       }}
       var hx = tx(hBest.ms), hy = ty(hBest.v);
-      // Vertical crosshair line
+      // Check if a trade marker is near the hover point
+      var _hoverTrade = null;
+      var _tradeMarkersH = window._navTradeMarkers || [];
+      for (var hti = 0; hti < _tradeMarkersH.length; hti++) {{
+        var htm = _tradeMarkersH[hti];
+        var htms = new Date(_fixTs(htm.ts)).getTime();
+        if (Math.abs(htms - hoverMs) < winMs * 0.015) {{ _hoverTrade = htm; break; }}
+      }}
       ctx.save();
-      ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = 'rgba(0,255,255,0.4)'; ctx.lineWidth = 1;
+      // Crosshair
+      ctx.setLineDash([3, 5]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(hx, cy0); ctx.lineTo(hx, cy1); ctx.stroke();
       ctx.setLineDash([]);
       // Dot on line
-      ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,255,255,0.9)'; ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
-      // Tooltip box
+      ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      // Build tooltip lines
       var hDate = new Date(hBest.ms);
-      var hDateStr = hDate.toLocaleDateString('en-US', {{month:'short',day:'numeric',year:'numeric'}});
-      var hTimeStr = hDate.toLocaleTimeString('en-US', {{hour:'2-digit',minute:'2-digit',second:'2-digit'}});
-      var hValStr  = '$' + hBest.v.toLocaleString('en-US', {{minimumFractionDigits:2,maximumFractionDigits:2}});
-      ctx.font = 'bold 12px Consolas,monospace';
-      var tw1 = ctx.measureText(hDateStr + ' ' + hTimeStr).width;
-      var tw2 = ctx.measureText(hValStr).width;
-      var ttW = Math.max(tw1, tw2) + 16;
-      var ttH = 40;
-      var ttX = hx + 12; if (ttX + ttW > cx1) ttX = hx - ttW - 12;
+      var hLine1 = hDate.toLocaleDateString('en-US',{{month:'short',day:'numeric',year:'numeric'}})
+                   + '  ' + hDate.toLocaleTimeString('en-US',{{hour:'2-digit',minute:'2-digit',second:'2-digit'}});
+      var hLine2 = '$' + hBest.v.toLocaleString('en-US',{{minimumFractionDigits:2,maximumFractionDigits:2}});
+      var ttLines = [hLine1, hLine2];
+      if (_hoverTrade) {{
+        ttLines.push((_hoverTrade.side === 'ENTER' ? '▲ BUY' : '▼ SELL') + '  ' + (_hoverTrade.sym||'') + (_hoverTrade.price ? '  $' + _hoverTrade.price : ''));
+      }}
+      ctx.font = '11px Consolas,monospace';
+      var ttW = 0;
+      ttLines.forEach(function(l) {{ ttW = Math.max(ttW, ctx.measureText(l).width); }});
+      ttW += 20;
+      var ttLineH = 16, ttH = ttLines.length * ttLineH + 10;
+      var ttX = hx + 14; if (ttX + ttW > cx1) ttX = hx - ttW - 14;
       var ttY = hy - ttH / 2; ttY = Math.max(cy0 + 4, Math.min(cy1 - ttH - 4, ttY));
-      ctx.fillStyle = 'rgba(4,0,20,0.92)';
-      ctx.strokeStyle = 'rgba(0,255,255,0.5)'; ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(0,0,0,0.88)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
       ctx.fillRect(ttX, ttY, ttW, ttH);
       ctx.strokeRect(ttX, ttY, ttW, ttH);
-      ctx.fillStyle = 'rgba(0,255,255,0.85)';
-      ctx.textAlign = 'left';
-      ctx.fillText(hDateStr + ' ' + hTimeStr, ttX + 8, ttY + 14);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 14px Consolas,monospace';
-      ctx.fillText(hValStr, ttX + 8, ttY + 31);
+      ttLines.forEach(function(line, li) {{
+        var isVal = li === 1;
+        var isTrade = li === 2;
+        ctx.font = (isVal ? 'bold 13px' : '11px') + ' Consolas,monospace';
+        ctx.fillStyle = isTrade ? (_hoverTrade && _hoverTrade.side==='ENTER' ? '#00ff9d' : '#ff3366') : '#fff';
+        ctx.textAlign = 'left';
+        ctx.fillText(line, ttX + 10, ttY + 14 + li * ttLineH);
+      }});
       ctx.restore();
     }}
 
-    // ── ENTER / EXIT trade markers ──────────────────────────────────────────
+    // ── Trade event orbs — animated pulsing indicators on the line ───────────
     var _tradeMarkers = window._navTradeMarkers || [];
     for (var tmi = 0; tmi < _tradeMarkers.length; tmi++) {{
       var tm = _tradeMarkers[tmi];
-      var tmMs = new Date(tm.ts).getTime();
+      var tmMs = new Date(_fixTs(tm.ts)).getTime();
       if (tmMs < t0 || tmMs > t1) continue;
       var tmx = tx(tmMs);
-      var tmy = tm.nav ? ty(tm.nav) : (tm.side === 'ENTER' ? cy0 + 20 : cy1 - 20);
+      var tmy = tm.nav ? ty(tm.nav) : cy1 / 2;
       var isEnter = tm.side === 'ENTER';
-      var tmCol = isEnter ? '#00ff9d' : '#ff3366';
-      // Vertical drop line
-      ctx.strokeStyle = isEnter ? 'rgba(0,255,157,0.2)' : 'rgba(255,51,102,0.2)';
-      ctx.lineWidth = 1; ctx.setLineDash([2,4]);
-      ctx.beginPath(); ctx.moveTo(tmx, cy0); ctx.lineTo(tmx, cy1); ctx.stroke();
-      ctx.setLineDash([]);
-      // Triangle marker
-      ctx.fillStyle = tmCol;
-      ctx.beginPath();
-      if (isEnter) {{
-        ctx.moveTo(tmx, tmy - 12); ctx.lineTo(tmx - 6, tmy - 2); ctx.lineTo(tmx + 6, tmy - 2);
-      }} else {{
-        ctx.moveTo(tmx, tmy + 12); ctx.lineTo(tmx - 6, tmy + 2); ctx.lineTo(tmx + 6, tmy + 2);
-      }}
-      ctx.closePath(); ctx.fill();
-      // Symbol label
-      ctx.font = '9px Consolas,monospace';
-      ctx.fillStyle = tmCol;
-      ctx.textAlign = 'center';
-      ctx.fillText(tm.sym || '', tmx, isEnter ? tmy - 15 : tmy + 23);
+      // Stagger pulse phase per marker so they don't all throb in sync
+      var _tmPhase = (now_ms / 1200 + tmi * 1.3) % (Math.PI * 2);
+      var _tmPulse = 0.5 + 0.5 * Math.sin(_tmPhase);
+      var _tmR     = 3.5 + _tmPulse * 2;
+      var _tmRing  = _tmR + 4 + _tmPulse * 5;
+      var _enterC  = [0, 255, 140];
+      var _exitC   = [255, 50, 100];
+      var _rgb     = isEnter ? _enterC : _exitC;
+      var _rgbStr  = _rgb[0]+','+_rgb[1]+','+_rgb[2];
+      // Outer ripple
+      ctx.beginPath(); ctx.arc(tmx, tmy, _tmRing, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(' + _rgbStr + ',' + (0.12 + _tmPulse * 0.12) + ')';
+      ctx.lineWidth = 1; ctx.stroke();
+      // Core dot
+      ctx.beginPath(); ctx.arc(tmx, tmy, _tmR, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + _rgbStr + ',' + (0.7 + _tmPulse * 0.25) + ')';
+      ctx.fill();
+      // White center pinpoint
+      ctx.beginPath(); ctx.arc(tmx, tmy, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
     }}
 
     }} catch(e) {{
