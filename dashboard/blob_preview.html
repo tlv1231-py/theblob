@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     THE BLOB — standalone preview harness
+
+     Look at him without booting Streamlit or hitting the DB. Serve this dir:
+         python -m http.server 8765 --directory dashboard
+         → http://localhost:8765/blob_preview.html
+
+     Sliders here fake the state that home_nav.js will feed him for real.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<html><head><meta charset="utf-8"><title>THE BLOB — preview</title>
+<style>
+  body { margin:0; background:#060008; color:#f0e0ff;
+         font-family:ui-monospace,Menlo,Consolas,monospace; display:flex;
+         flex-direction:column; align-items:center; gap:16px; padding:28px; }
+  .stage { position:relative; width:384px; height:384px; }
+  canvas { width:384px; height:384px; image-rendering:pixelated;
+           image-rendering:crisp-edges; display:block; position:relative; z-index:1; }
+  .scan { position:absolute; inset:0; pointer-events:none; z-index:2;
+          background:repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0px,
+            rgba(0,0,0,.22) 1px, transparent 1px, transparent 3px); }
+  .glow { position:absolute; inset:-40px; pointer-events:none; z-index:0;
+          filter:blur(34px); opacity:.55; }
+  .hud { font-size:11px; letter-spacing:.12em; color:#9080a8; text-transform:uppercase; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:520px; }
+  button { background:#180022; color:#ff00cc; border:1px solid #3a1a5a;
+           padding:6px 11px; font:inherit; font-size:11px; letter-spacing:.1em;
+           cursor:pointer; text-transform:uppercase; border-radius:3px; }
+  button:hover { border-color:#ff00cc; background:#26002f; }
+  button.on { background:#ff00cc; color:#060008; border-color:#ff00cc; }
+  input[type=range] { width:300px; accent-color:#ff00cc; }
+  .lbl { font-size:11px; color:#9080a8; letter-spacing:.1em; }
+</style></head><body>
+
+<div class="stage">
+  <div class="glow" id="glow"></div>
+  <canvas id="cv"></canvas>
+  <div class="scan"></div>
+</div>
+
+<div class="hud" id="hud">MOOD: IDLE · 10 FPS · 48×48 · 0 ASSETS</div>
+<div class="row" id="moods"></div>
+<div class="lbl">LIVE PNL <span id="pnlv" style="color:#00ff9d">+0.00%</span></div>
+<input type="range" id="pnl" min="-400" max="400" value="0">
+<div class="row">
+  <button id="visor">VISOR</button>
+</div>
+
+<script src="blob.js"></script>
+<script>
+var glow = document.getElementById('glow');
+var blob = TNDBlob.create(document.getElementById('cv'), {
+  onAccent: function(c) {
+    glow.style.background = 'radial-gradient(circle, rgb(' + c.join(',') + ') 0%, transparent 70%)';
+  }
+});
+blob.start();
+
+var mr = document.getElementById('moods');
+TNDBlob.MOODS.forEach(function(m) {
+  var b = document.createElement('button');
+  b.textContent = m;
+  b.onclick = function() {
+    blob.setMood(m, m === 'ALERT' ? 12 : 0);
+    document.getElementById('hud').textContent = 'MOOD: ' + m + ' · 10 FPS · 48×48 · 0 ASSETS';
+  };
+  mr.appendChild(b);
+});
+
+document.getElementById('pnl').oninput = function(e) {
+  var v = +e.target.value / 100;
+  blob.setPnl(v);
+  var el = document.getElementById('pnlv');
+  el.textContent = (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+  el.style.color = v >= 0 ? '#00ff9d' : '#ff3366';
+};
+
+var visorOn = false;
+document.getElementById('visor').onclick = function() {
+  visorOn = !visorOn; blob.setVisor(visorOn); this.classList.toggle('on', visorOn);
+};
+</script></body></html>
