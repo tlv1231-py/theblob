@@ -95,9 +95,16 @@ def _check_heartbeat(component: str) -> dict:
 _DOT = {"ok": "🟢", "degraded": "🟡", "down": "🔴", "absent": "⚫", "unknown": "⚪"}
 
 
+@st.fragment(run_every="3s")
 def _render_health() -> None:
     """Compact by design — this page lives in a narrow column beside the stream
-    itself, so health is a strip you glance at, not a section you read."""
+    itself, so health is a strip you glance at, not a section you read.
+
+    A FRAGMENT because this console runs beside a 24/7 stream: a health strip
+    you have to refresh by hand is a health strip that is always stale, and the
+    whole reason it exists is to tell you the moment something dies. Fragments
+    rerun only this function, so the rest of the page — including whatever you
+    are typing into the simulator — is untouched."""
     checks = [
         ("DB",      _check_db(),                     "Supabase — the channel everything rides on"),
         ("ENGINE",  _check_engine(),                 "pipeline_events still flowing"),
@@ -342,7 +349,11 @@ def _load_events(limit: int = 40) -> pd.DataFrame:
     return pd.DataFrame([dict(r._mapping) for r in rows])
 
 
+@st.fragment(run_every="1s")
 def _render_bus() -> None:
+    """1s because this is where countdowns live. A T-minus clock that only moves
+    when you press a button is not a countdown, it is a screenshot of one —
+    and the cancel window is the entire point of the hold."""
     df = _load_events()
     if df.empty:
         st.info("No events yet — fire one from Simulate.")
@@ -383,8 +394,7 @@ def _render_bus() -> None:
                 _release_now(int(r["id"])); st.rerun()
             if b2.button("Kill", key=f"can{r['id']}", use_container_width=True):
                 _set_status(int(r["id"]), "cancelled"); st.rerun()
-        st.caption("Countdowns tick in the DB — these fire whether or not HQ is open. "
-                   "Refresh to update the clock.")
+        st.caption("Countdowns tick in the DB — these fire whether or not HQ is open.")
         st.divider()
 
     # Past T-0, eligible, and still unaired. Give it a few seconds of slack for
@@ -489,7 +499,9 @@ def render() -> None:
         _set_policy("yt_overlay", "0" if yt_on else "1", "Temp YouTube safe-zone filter")
         st.rerun()
 
-    if c3.button("↻", use_container_width=True, help="Refresh health, bus, and countdowns"):
+    # Health and the bus refresh themselves (fragments, 3s / 1s). This is only
+    # for the parts that don't — the plan text and the policy row.
+    if c3.button("↻", use_container_width=True, help="Force a full reload"):
         st.rerun()
 
     if yt_on:

@@ -149,9 +149,80 @@
     lastEventMs: 0     // heartbeat — drives isSystemLive(), see syncBlobMood
   };
 
+  // ── The number ───────────────────────────────────────────────────────────
+  // Ported from the Command Center's wallet slot (home_nav.js _animateWallet /
+  // _updateWalletSlot). Two behaviours, both load-bearing:
+  //
+  //   ROLL. The value never jumps — it eases from whatever is on screen to the
+  //   new figure over 700ms. On a 24/7 stream this is the difference between a
+  //   number that looks live and one that looks like a screenshot that
+  //   occasionally changes.
+  //
+  //   FLASH SCALED TO SIGNIFICANCE. Colour intensity is measured against the
+  //   MEDIAN of the last 30 moves, not a fixed threshold — so a routine tick
+  //   glows faintly and a genuinely big move blazes. A fixed threshold would
+  //   either flash constantly (meaningless) or almost never (invisible).
+  var _navTimer = null, _navShown = null, _navPrev = null;
+  var _navMags = [], _navFlashT = null;
+
+  // setInterval, NOT requestAnimationFrame — even though the Command Center's
+  // version uses rAF. Measured: rAF never fires inside this component iframe at
+  // all, so the ported code left the number frozen at "$—" while every
+  // textContent-driven element rendered fine. rAF is throttled or suspended
+  // whenever the page isn't considered visible, which is exactly what a
+  // headless Chromium on a virtual display looks like — so this would have been
+  // dead on the actual capture even if it had worked here. This is the same
+  // reasoning BLOB.md gives for the Blob's 10fps setInterval; timers survive
+  // conditions rAF does not, and this page's whole job is to run unwatched.
+  function animateNav(toVal) {
+    var el = $('hero-nav');
+    if (!el) return;
+    var from = _navShown !== null ? _navShown : toVal;
+    clearInterval(_navTimer);
+    var t0 = Date.now(), DUR = 700, STEP = 33;   // ~30fps: one textContent write
+    _navTimer = setInterval(function() {
+      var t = Math.min((Date.now() - t0) / DUR, 1);
+      t = 1 - Math.pow(1 - t, 3);                 // ease-out cubic
+      var cur = from + (toVal - from) * t;
+      _navShown = cur;
+      el.textContent = '$' + cur.toLocaleString('en-US',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (t >= 1) { _navShown = toVal; clearInterval(_navTimer); _navTimer = null; }
+    }, STEP);
+  }
+
+  function updateNav(nav) {
+    if (!nav) return;
+    var el = $('hero-nav');
+    if (el && _navPrev !== null && nav !== _navPrev) {
+      var delta = nav - _navPrev, mag = Math.abs(delta);
+      if (mag > 0.01) {
+        _navMags.push(mag);
+        if (_navMags.length > 30) _navMags.shift();
+        // Floor at 0.15 so even a tiny tick registers; 1.0 at a median-or-bigger move.
+        var intensity = 0.15;
+        if (_navMags.length >= 3) {
+          var sorted = _navMags.slice().sort(function(a, b) { return a - b; });
+          var median = sorted[Math.floor(sorted.length / 2)];
+          if (median > 0) intensity = Math.min(1, 0.15 + (mag / median) * 0.85);
+        }
+        var rgb = delta > 0 ? '0,255,157' : '255,51,102';
+        var glow = 'rgba(' + rgb + ',' + (intensity * 0.7) + ')';
+        el.style.color = 'rgba(' + rgb + ',' + intensity + ')';
+        el.style.textShadow = '0 0 24px ' + glow + ', 0 0 8px ' + glow;
+        clearTimeout(_navFlashT);
+        _navFlashT = setTimeout(function() {
+          el.style.color = ''; el.style.textShadow = '';   // back to the CSS stack
+        }, 750);                                            // matches the roll
+      }
+    }
+    _navPrev = nav;
+    animateNav(nav);
+  }
+
   // ── NAV block ────────────────────────────────────────────────────────────
   function renderHero() {
-    $('hero-nav').textContent = usd(state.nav);
+    updateNav(state.nav);
     var d = $('hero-day');
     d.textContent = signed(state.dayPnl) + '  ' + pct(state.dayPnlPct);
     d.className = 'nav-day ' + dirClass(state.dayPnlPct);

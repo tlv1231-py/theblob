@@ -375,11 +375,48 @@ html, body {
   font-size: 11px; font-weight: 700; letter-spacing: 0.28em;
   color: var(--text-dim);
 }
+/* Lifted verbatim from .ss-wallet-val on the Command Center (home.py ~1615)
+   and scaled up. The arcade-score read is the FOUR-LAYER STACKED HARD SHADOW —
+   1/2/3/4px offsets of pure black, no blur — which is how a cabinet fakes
+   extruded type. Scaled 2.6x here, so the offsets scale with it. A single soft
+   shadow in its place instantly reads as a web heading.
+   Gain/loss restain the whole stack, not just the fill. */
 .nav-big {
-  font-size: 60px; font-weight: 700; line-height: 1;
-  letter-spacing: -0.04em; color: var(--text-hi);
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 34px; font-weight: 400; line-height: 1;
+  letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 40px rgba(240,224,255,0.25);
+  white-space: nowrap;
+  color: #ffffff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.5);
+  text-shadow:
+    2px 2px 0 #222,
+    4px 4px 0 #111,
+    6px 6px 0 rgba(0,0,0,0.8),
+    8px 8px 0 rgba(0,0,0,0.5);
+  transition: color 0.4s ease, text-shadow 0.4s ease;
+}
+.nav-big.gain {
+  color: #b6ffdd;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+  text-shadow:
+    2px 2px 0 #006633,
+    4px 4px 0 #004d26,
+    6px 6px 0 #003319,
+    8px 8px 0 rgba(0,0,0,0.7),
+    0 0 30px rgba(0,255,157,0.7),
+    0 0 12px rgba(0,255,157,0.4);
+}
+.nav-big.loss {
+  color: #ffb3c6;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+  text-shadow:
+    2px 2px 0 #880022,
+    4px 4px 0 #660019,
+    6px 6px 0 #440011,
+    8px 8px 0 rgba(0,0,0,0.7),
+    0 0 30px rgba(255,51,102,0.7),
+    0 0 12px rgba(255,51,102,0.4);
 }
 .nav-day {
   font-size: 24px; font-weight: 700; line-height: 1.1;
