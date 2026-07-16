@@ -1693,10 +1693,21 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     window._navWindowMs += (_tgt - window._navWindowMs) * 0.10;
 
     // ── Time window ───────────────────────────────────────────────────────
-    var winMs     = window._navWindowMs || 4 * 3600 * 1000;
     var lastPtMs  = allPts.length ? allPts[allPts.length-1].ms : now_ms;
     var dataStart = allPts.length ? allPts[0].ms : now_ms - 30*60000;
-    var panOff    = window._navPanOffsetMs || 0;
+
+    // On first draw with data, auto-fit window to span all available points
+    if (allPts.length && !window._navAutoFitted) {
+      window._navAutoFitted = true;
+      var span = lastPtMs - dataStart;
+      if (span > 0) {
+        window._navWindowMs       = Math.max(_NAV_DEFAULT_WIN, span * 1.15);
+        window._navTargetWindowMs = window._navWindowMs;
+      }
+    }
+
+    var winMs  = window._navWindowMs || 4 * 3600 * 1000;
+    var panOff = window._navPanOffsetMs || 0;
     panOff = Math.max(dataStart - lastPtMs, Math.min(0, panOff));
     window._navPanOffsetMs = panOff;
     var _feedEl = document.getElementById('feed-overlay');
@@ -1705,7 +1716,9 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     var _posW   = (_posEl  ? _posEl.offsetWidth  : 0);
     var _visCtr = W > 0 ? (_feedW + (W - _feedW - _posW) / 2) / W : 0.50;
     _visCtr = Math.max(0.20, Math.min(0.80, _visCtr));
-    var centerMs = now_ms + panOff;
+    // Anchor on last data point (not now) so stale data is always visible
+    var _anchor  = allPts.length ? lastPtMs : now_ms;
+    var centerMs = _anchor + panOff;
     var t0 = centerMs - _visCtr * winMs;
     var t1 = centerMs + (1 - _visCtr) * winMs;
 
@@ -3228,29 +3241,55 @@ setTimeout(function() {
     el.style.color = col || 'rgba(210,210,210,0.35)';
   }
 
-  // ── Ticker wildcard loop ────────────────────────────────────────────────────
-  var _bcLoopTickers = ['BTC/USD','AAPL','NVDA','ETH/USD','AMZN','GOOGL','SOL/USD','MSFT','META','TSLA'];
-  var _bcLoopIdx = 0, _bcLoopTimerId = null;
+  // ── Ticker wildcard loop — motion blur + occasional stop ───────────────────
+  var _bcLoopTickers = ['BTC/USD','AAPL','NVDA','ETH/USD','AMZN','GOOGL','SOL/USD','MSFT','META','TSLA','SPY','DOGE/USD'];
+  var _bcLoopIdx = 0, _bcLoopTimerId = null, _bcBlurTimerId = null, _bcBlurIntId = null;
   var _bcSelectedSym = '';
+  var _bcPhase = 'spin'; // 'spin' | 'stop'
+  var _bcStopTimer = null;
+
+  function _bcApplyBlur() {
+    var el = document.getElementById('bc-ticker-loop');
+    if (!el || _bcSelectedSym) return;
+    if (_bcPhase === 'stop') {
+      el.style.filter      = 'blur(0px)';
+      el.style.opacity     = '1';
+      el.style.color       = 'rgba(120,220,255,1.0)';
+      el.style.textShadow  = '0 0 10px rgba(0,210,255,0.95), 0 0 28px rgba(0,160,255,0.55)';
+      el.style.letterSpacing = '0.12em';
+    } else {
+      var blurPx = 5 + Math.sin(Date.now() / 180) * 3; // oscillates 2–8px
+      el.style.filter      = 'blur(' + blurPx.toFixed(1) + 'px)';
+      el.style.opacity     = '0.52';
+      el.style.color       = 'rgba(80,170,255,0.75)';
+      el.style.textShadow  = '0 0 6px rgba(0,140,255,0.4)';
+      el.style.letterSpacing = '0.06em';
+    }
+  }
+
   function _bcLoopStep() {
     var el = document.getElementById('bc-ticker-loop');
     if (!el || _bcSelectedSym) return;
-    el.style.opacity = '0';
-    setTimeout(function() {
-      if (_bcSelectedSym) return;
-      _bcLoopIdx = (_bcLoopIdx + 1) % _bcLoopTickers.length;
-      var e2 = document.getElementById('bc-ticker-loop');
-      if (e2) { e2.textContent = _bcLoopTickers[_bcLoopIdx]; e2.style.opacity = '1'; }
-    }, 140);
+    _bcLoopIdx = (_bcLoopIdx + 1) % _bcLoopTickers.length;
+    el.textContent = _bcLoopTickers[_bcLoopIdx];
+    // 18% chance to "stop" on this ticker
+    if (_bcPhase === 'spin' && Math.random() < 0.18) {
+      _bcPhase = 'stop';
+      clearTimeout(_bcStopTimer);
+      _bcStopTimer = setTimeout(function() { _bcPhase = 'spin'; }, 900 + Math.random() * 1100);
+    }
   }
+
   function _bcStartLoop() {
     if (_bcLoopTimerId) return;
     var el = document.getElementById('bc-ticker-loop');
-    if (el) { el.style.transition = 'opacity 0.12s'; el.textContent = _bcLoopTickers[0]; el.style.opacity = '1'; }
-    _bcLoopTimerId = setInterval(_bcLoopStep, 1400);
+    if (el) { el.textContent = _bcLoopTickers[0]; }
+    _bcLoopTimerId = setInterval(_bcLoopStep, 480);
+    _bcBlurIntId   = setInterval(_bcApplyBlur,  40);
   }
   function _bcStopLoop() {
     if (_bcLoopTimerId) { clearInterval(_bcLoopTimerId); _bcLoopTimerId = null; }
+    if (_bcBlurIntId)   { clearInterval(_bcBlurIntId);   _bcBlurIntId   = null; }
   }
   setTimeout(_bcStartLoop, 600);
 
@@ -5895,6 +5934,12 @@ setTimeout(function() {
       })();
       var _alpacaWallets   = JSON.parse(_ls.getItem('_alpacaWallets') || '[]');
       var _alpacaActiveIdx = parseInt(_ls.getItem('_alpacaActiveIdx') || '0', 10);
+      // Auto-seed from server-injected default if no wallet saved (works on cloud)
+      if (!_alpacaWallets.length && window._TND.ALPACA_DEFAULT && window._TND.ALPACA_DEFAULT.key) {
+        _alpacaWallets.push(window._TND.ALPACA_DEFAULT);
+        _ls.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
+        _ls.setItem('_alpacaActiveIdx', '0');
+      }
       var _alpacaSyncSecs  = 0;
       var _alpacaDropOpen  = false;
 
