@@ -93,13 +93,41 @@
     var m = blob.getMood();
     if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED') return;
 
-    if (!isMarketOpen()) { blob.setMood('SLEEP'); return; }
+    // He sleeps when THE SYSTEM is idle, not when NYSE is shut. The crypto
+    // strategy trades ~9x/min around the clock; gating on market hours had him
+    // asleep through 1,056 trades in two hours, which is the opposite of the
+    // point. Equity hours are shown in the status strip, not in his eyelids.
+    if (!isSystemLive()) { blob.setMood('SLEEP'); return; }
 
     // Drawdown against the real configured limit, not a magic number.
+    // SCARED is reserved for genuine risk: the crypto book closes nearly every
+    // position at a small timeout loss, so reacting to any loss would leave him
+    // permanently terrified and the state would stop meaning anything.
     var ddLimit = S.limits.daily_dd * 100;
     if (state.dayPnlPct <= -ddLimit * 0.75) { blob.setMood('SCARED'); return; }
     if (state.dayPnlPct >= 1.0)             { blob.setMood('SMUG');   return; }
     blob.setMood('IDLE');
+  }
+
+  // Alive = the pipeline emitted anything recently. UPDATE ("scan complete")
+  // lands every ~10s while the engine runs, so a 90s window is a generous
+  // heartbeat that still notices a genuinely stopped pipeline.
+  function isSystemLive() {
+    return state.lastEventMs > 0 && (Date.now() - state.lastEventMs) < 90000;
+  }
+
+  // Show what he just reacted to. Without this a mood change is ambiguous —
+  // the viewer sees him twitch and cannot tell why, which reads as random
+  // rather than responsive.
+  function flashTrade(dir, sym, pnl) {
+    var el = $('trade-flash');
+    if (!el) return;
+    var win = pnl != null && pnl > 0;
+    el.textContent = (dir === 'ENTER' ? '▲ ENTER ' : '✗ EXIT ') + sym +
+                     (pnl != null ? '  ' + (win ? '+' : '−') + '$' + Math.abs(pnl).toFixed(2) : '');
+    el.className = 'trade-flash show ' + (dir === 'ENTER' ? 'enter' : (win ? 'win' : 'loss'));
+    clearTimeout(el._t);
+    el._t = setTimeout(function() { el.className = 'trade-flash'; }, 2600);
   }
 
   // ── State ────────────────────────────────────────────────────────────────
@@ -110,7 +138,8 @@
     pts:        (S.nav_pts || []).map(function(p) {
                   return { t: new Date(p.t).getTime(), v: Number(p.v) };
                 }).filter(function(p) { return !isNaN(p.t) && !isNaN(p.v); }),
-    seenEvTs:   null
+    seenEvTs:    null,
+    lastEventMs: 0     // heartbeat — drives isSystemLive(), see syncBlobMood
   };
 
   // ── NAV block ────────────────────────────────────────────────────────────
@@ -403,24 +432,82 @@
     return f.format(new Date(a)) === f.format(new Date(b));
   }
 
-  // New fills wake the Blob up. This is the ALERT hook from BLOB.md.
+  // ── Trade reactions — the whole point of the page ────────────────────────
+  // pipeline_events only ever carries two types: TRADE and UPDATE. The engine
+  // fires ~9 trades/min around the clock, and UPDATE ("scan complete") lands
+  // every ~10s.
+  //
+  // The bug this replaces: it read ONLY rows[0]. An UPDATE is almost always the
+  // newest row, so the type check saw 'UPDATE', never matched, and the Blob
+  // reacted to essentially none of 1,056 trades in two hours. Every new row
+  // must be scanned, not just the top one.
+  //
+  // Message shapes (parsed below):
+  //   ▲ ENTER LONG BCH/USD @ $222.4728 · stop $221.8053
+  //   ✗ EXIT LONG LINK/USD @ $8.3882 · pnl -0.5926 · timeout   [detail: daily_pnl=-1.67]
+  //   ▸ scan complete · NAV $22,202.35 · 9 open                [detail: positions=9]
+
+  function parseTrade(msg) {
+    if (!msg) return null;
+    if (msg.indexOf('ENTER') >= 0) return { dir: 'ENTER', pnl: null };
+    if (msg.indexOf('EXIT') >= 0) {
+      var m = msg.match(/pnl\s+(-?[\d.]+)/);
+      return { dir: 'EXIT', pnl: m ? parseFloat(m[1]) : null };
+    }
+    return null;
+  }
+
   function pollEvents() {
-    var since = new Date(Date.now() - 3 * 3600000).toISOString();
+    var since = new Date(Date.now() - 10 * 60000).toISOString();
     fetch(S.supa.url + '/rest/v1/pipeline_events?select=event_type,symbol,message,detail,recorded_at' +
-          '&recorded_at=gte.' + since + '&order=recorded_at.desc&limit=20',
+          '&recorded_at=gte.' + since + '&order=recorded_at.desc&limit=60',
           { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
       .then(function(r) { return r.json(); })
       .then(function(rows) {
         if (!Array.isArray(rows) || !rows.length) return;
+
+        state.lastEventMs = Date.now();   // heartbeat regardless of type
+
         var newest = rows[0].recorded_at;
-        if (state.seenEvTs && newest === state.seenEvTs) return;
         var firstRun = !state.seenEvTs;
+        if (!firstRun && newest === state.seenEvTs) return;
+
+        // Everything newer than the last poll, oldest→newest.
+        var fresh = (firstRun ? [] : rows.filter(function(r) {
+          return r.recorded_at > state.seenEvTs;
+        })).reverse();
         state.seenEvTs = newest;
 
-        // Don't fire a mood on the first hydration — that history is old.
-        if (!firstRun && ['ENTRY', 'EXIT', 'TRADE'].indexOf(rows[0].event_type) >= 0) {
-          blob.setMood('ALERT', 12);
+        // daily_pnl rides on every EXIT detail — a far fresher continuous
+        // signal than the 10s nav_snapshots poll, so feed it to his shape.
+        for (var i = rows.length - 1; i >= 0; i--) {
+          var dm = (rows[i].detail || '').match(/daily_pnl=(-?[\d.]+)/);
+          if (dm) { blob.setPnl(parseFloat(dm[1])); break; }
         }
+
+        if (firstRun) return;   // hydration history is old — don't react to it
+
+        // React to the most significant thing that happened, not the last.
+        // Priority: a real win > an entry > an exit. Losses do NOT scare him
+        // here: the book times out at ~-$0.50 constantly, and a permanently
+        // terrified Blob is a broken signal. Real risk reaches him through
+        // syncBlobMood's drawdown check instead.
+        var best = null;
+        fresh.forEach(function(r) {
+          if (r.event_type !== 'TRADE') return;
+          var t = parseTrade(r.message);
+          if (!t) return;
+          t.sym = r.symbol || '';
+          var rank = (t.dir === 'EXIT' && t.pnl > 0) ? 3 : (t.dir === 'ENTER' ? 2 : 1);
+          if (!best || rank >= best.rank) { t.rank = rank; best = t; }
+        });
+        if (!best) return;
+
+        if (best.rank === 3)      blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
+        else if (best.rank === 2) blob.setMood('ALERT', 18);
+        else                      blob.setMood('ALERT', 12);
+        flashTrade(best.dir, best.sym, best.pnl);
+        $('blob-mood').textContent = blob.getMood();
       })
       .catch(function() {});
   }
@@ -435,7 +522,9 @@
   setInterval(drawChart, 50);
   setInterval(syncBlobMood, 1000);
   setInterval(pollNav, 10000);
-  setInterval(pollEvents, 10000);
+  // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
+  // almost every one while still costing ~15 tiny requests/min.
+  setInterval(pollEvents, 4000);
   window.addEventListener('resize', drawChart);
   pollNav();
   pollEvents();

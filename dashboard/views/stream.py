@@ -135,6 +135,7 @@ _STAGE_HTML = """
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
         <canvas id="blobCanvas"></canvas>
+        <div class="trade-flash" id="trade-flash"></div>
         <div class="blob-mood" id="blob-mood">IDLE</div>
       </div>
 

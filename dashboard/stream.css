@@ -170,8 +170,33 @@ html, body {
 .blob-mood {
   position: absolute; bottom: 6px; left: 50%;
   transform: translateX(-50%);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.24em;
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 9px; letter-spacing: 0.16em;
   color: var(--text-dim);
+}
+
+/* Names the trade he just reacted to. Steps rather than eases — a smooth
+   fade reads as a web toast; this should read as a cabinet callout. */
+.trade-flash {
+  position: absolute; top: 14px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 11px; letter-spacing: 0.08em;
+  white-space: nowrap;
+  padding: 7px 12px;
+  border: 1px solid currentColor;
+  background: rgba(6,0,8,0.9);
+  opacity: 0;
+  transition: opacity 0.25s steps(3, end);
+  pointer-events: none;
+}
+.trade-flash.show  { opacity: 1; animation: flash-pop 0.18s steps(2, end); }
+.trade-flash.enter { color: var(--accent2); box-shadow: 0 0 20px -4px var(--accent2); }
+.trade-flash.win   { color: var(--ok);      box-shadow: 0 0 20px -4px var(--ok); }
+.trade-flash.loss  { color: var(--danger);  box-shadow: 0 0 20px -4px var(--danger); }
+@keyframes flash-pop {
+  from { transform: translateX(-50%) scale(0.82); }
+  to   { transform: translateX(-50%) scale(1); }
 }
 
 /* ── NAV · 190 ────────────────────────────────────────────────────────── */
