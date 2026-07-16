@@ -174,6 +174,7 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
     }
 
     blob_js   = (_DASHBOARD / "blob.js").read_text("utf-8")
+    bg_js     = (_DASHBOARD / "stream_bg.js").read_text("utf-8")
     stream_js = (_DASHBOARD / "stream.js").read_text("utf-8")
     css       = (_DASHBOARD / "stream.css").read_text("utf-8")
 
@@ -191,6 +192,7 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
         + json.dumps(payload, default=str)
         + ";</script>"
         + "<script>" + blob_js + "</script>"
+        + "<script>" + bg_js + "</script>"
         + "<script>" + stream_js + "</script>"
         + ("<script>" + yt_js + "</script>" if yt_js else "")
     )
@@ -204,7 +206,12 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
 _STAGE_HTML = """
 <div id="stage-wrap">
   <div id="stage">
+    <!-- Atmosphere. Fills the whole stage including the bands YouTube covers —
+         everything here is decoration, so losing it to chrome costs nothing. -->
     <div id="ambient"></div>
+    <canvas id="bgCanvas"></canvas>
+    <div id="term-top" class="term-strip"></div>
+    <div id="term-bot" class="term-strip"></div>
     <div id="scanlines"></div>
     <div id="vignette"></div>
 
@@ -246,11 +253,6 @@ _STAGE_HTML = """
         <div class="nav-big" id="hero-nav">$&mdash;</div>
         <div class="nav-day" id="hero-day">&mdash;</div>
         <div class="nav-sub" id="chip-total">&mdash;</div>
-      </div>
-
-      <div id="s-chart">
-        <canvas id="navCanvas"></canvas>
-        <div class="chart-meta" id="chart-meta">&mdash;</div>
       </div>
 
       <div id="s-pos">

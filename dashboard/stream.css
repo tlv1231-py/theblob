@@ -66,16 +66,78 @@ html, body {
   transform: scale(var(--s, 0.5));
 }
 
-/* ── Ambient ──────────────────────────────────────────────────────────── */
-/* Deliberately spills into the reserved bands. It is atmosphere, never
-   information — losing it under YouTube's chrome costs nothing. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   ATMOSPHERE — everything below fills the whole stage, reserved bands included.
+   The rule: you could crop this layer to the safe box and lose zero meaning.
+   It exists so the scene never reads as dead, and it is the first thing
+   YouTube's chrome is allowed to destroy.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 #ambient {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 70% 30% at 50% 28%, rgba(255,0,204,0.13), transparent 70%),
-    radial-gradient(ellipse 90% 30% at 50% 88%, rgba(148,0,255,0.10), transparent 70%),
+    radial-gradient(ellipse 70% 30% at 50% 28%, rgba(255,0,204,0.10), transparent 70%),
+    radial-gradient(ellipse 90% 30% at 50% 88%, rgba(148,0,255,0.08), transparent 70%),
     var(--bg);
 }
+
+/* Backing store is 540x960 upscaled 2x — 4x cheaper to fill for a page that
+   runs unattended for hours, and every star lands on a chunky 2px grid, which
+   is what makes it read 8-bit rather than like a screensaver. */
+#bgCanvas {
+  position: absolute; inset: 0;
+  width: 1080px; height: 1920px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  z-index: 1;
+}
+
+/* ── Terminal strips ──────────────────────────────────────────────────────
+   A clone of the Command Center's feed, living in the reserved bands. It is a
+   DETAIL, not a readout: dim, masked at both edges, and deliberately parked
+   where YouTube will cover half of it. If a viewer reads it, good; if the
+   chrome eats it, nothing was lost. Fed from the same pipeline_events poll the
+   Blob already runs, so it costs no extra queries. */
+.term-strip {
+  position: absolute;
+  left: 0; right: 0;
+  z-index: 2;
+  overflow: hidden;
+  font-family: VT323, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.45;
+  padding: 0 96px;
+  pointer-events: none;
+  opacity: 0.5;
+}
+#term-top { top: 0; height: 380px; }
+#term-bot { bottom: 0; height: 380px; }
+/* Dissolve toward the safe box so the strips never compete with it, and toward
+   the stage edge so they don't end in a hard cut. */
+#term-top {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 62%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 62%, transparent 100%);
+}
+#term-bot {
+  -webkit-mask-image: linear-gradient(0deg, transparent 4%, #000 34%, #000 70%, transparent 100%);
+          mask-image: linear-gradient(0deg, transparent 4%, #000 34%, #000 70%, transparent 100%);
+}
+.term-line {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text-dim);
+  animation: term-in 0.4s steps(3, end) both;
+}
+.term-line .tl-t   { color: #2a1048; margin-right: 8px; }
+.term-line .tl-tag { margin-right: 8px; letter-spacing: 0.1em; font-size: 12px; }
+.term-line .tl-sym { color: var(--text-mid); margin-right: 8px; }
+@keyframes term-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+.tl-enter { color: var(--accent2); }
+.tl-win   { color: var(--ok); }
+.tl-loss  { color: var(--danger); }
+.tl-sys   { color: var(--accent3); }
 
 #scanlines {
   position: absolute; inset: 0; z-index: 90; pointer-events: none;
@@ -100,10 +162,14 @@ html, body {
   flex-direction: column;
 }
 
-/* 48 + 96 + 260 + 140 + 160 + 456 = 1160. Each band is fixed so the stack can
-   never reflow into the reserved zones. The chart pays for the event box: at
-   this size it was never a chart anyway, it's a direction cue, and a stream
-   event ("MIKE88 SUBSCRIBED!") is worth more screen than a sixth axis label. */
+/* 48 + 88 + 672 + 120 + 232 = 1160. Each band is fixed so the stack can never
+   reflow into the reserved zones.
+   THE BLOB IS THE STREAMER. He takes 672px — 58% of the safe box and ~35% of
+   the whole canvas, 2.8x his previous size. The NAV chart is deleted outright
+   to pay for it: nobody tunes in to watch a sparkline, and at 160px it was
+   never a chart anyway. Holdings compress to a 3-column board to fit the rest.
+   Deleting the chart also retires a 20fps canvas repaint, which buys back the
+   budget the animated background spends. */
 
 /* ── Status strip · 48 ────────────────────────────────────────────────── */
 #s-status {
@@ -160,9 +226,9 @@ html, body {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-events {
-  height: 96px; flex: none;
+  height: 88px; flex: none;
   display: flex; align-items: center;
-  padding: 6px 0 10px;
+  padding: 4px 0 8px;
 }
 
 .ev-lcd {
@@ -240,24 +306,27 @@ html, body {
                      0 0 22px -6px var(--ev-c); }
 }
 
-/* ── Blob · 260 ───────────────────────────────────────────────────────── */
+/* ── Blob · 672 — THE STREAMER ────────────────────────────────────────── */
 #s-blob {
-  height: 260px; flex: none;
+  height: 672px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
 .blob-bloom {
   position: absolute; top: 50%; left: 50%;
-  width: 320px; height: 320px;
+  width: 760px; height: 760px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,0,204,0.30), transparent 68%);
-  filter: blur(24px);
+  background: radial-gradient(circle, rgba(255,0,204,0.26), transparent 66%);
+  filter: blur(52px);
   transition: background 0.45s linear;
 }
 #blobCanvas {
   position: relative;
-  width: 240px; height: 240px;   /* 48 x 5 — integer scale, no resample */
+  width: 672px; height: 672px;   /* 48 x 14 — integer scale, no resample.
+                                    Any resize MUST stay on a 48px multiple or
+                                    his pixels get resampled and the whole
+                                    8-bit read collapses. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -294,53 +363,42 @@ html, body {
   to   { transform: translateX(-50%) scale(1); }
 }
 
-/* ── NAV · 150 ────────────────────────────────────────────────────────── */
+/* ── NAV · 120 ────────────────────────────────────────────────────────── */
+/* One line now: the number and the day, on the same row. The Blob took the
+   height and the number is still the second thing you read. */
 #s-nav {
-  height: 140px; flex: none;
+  height: 120px; flex: none;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 3px;
+  justify-content: center; gap: 2px;
 }
 .nav-label {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.28em;
   color: var(--text-dim);
 }
 .nav-big {
-  font-size: 78px; font-weight: 700; line-height: 1;
+  font-size: 60px; font-weight: 700; line-height: 1;
   letter-spacing: -0.04em; color: var(--text-hi);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 40px rgba(240,224,255,0.25);
 }
 .nav-day {
-  font-size: 28px; font-weight: 700; line-height: 1.1;
+  font-size: 24px; font-weight: 700; line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 .nav-day.up   { color: var(--ok);      text-shadow: 0 0 24px rgba(0,255,157,0.4); }
 .nav-day.down { color: var(--danger);  text-shadow: 0 0 24px rgba(255,51,102,0.4); }
 .nav-day.flat { color: var(--text-mid); }
 .nav-sub {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.14em;
-  color: var(--text-mid); margin-top: 1px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--text-mid);
 }
 .nav-sub.up   { color: var(--ok); }
 .nav-sub.down { color: var(--danger); }
 
-/* ── Chart · 200 ──────────────────────────────────────────────────────── */
-#s-chart {
-  height: 160px; flex: none;
-  position: relative;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-/* min-height:0 is load-bearing. A canvas is a replaced element, so the flex
-   default of min-height:auto resolves to its intrinsic (attribute) height —
-   and JS sets that attribute from the measured box. Without this the canvas
-   ratchets itself larger every resize and spills into HOLDINGS. */
-#navCanvas { width: 100%; height: 100%; min-height: 0; display: block; }
-.chart-meta {
-  position: absolute; top: 6px; right: 4px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
-  color: var(--text-dim); font-variant-numeric: tabular-nums;
-}
+/* The NAV chart is deliberately GONE. "He's the streamer, not the charts."
+   At 160px it was a direction cue, not a chart, and it cost a 20fps canvas
+   repaint that the animated background now spends better. The long-horizon
+   numbers live on the Command Center, where someone is actually reading. */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HOLDINGS — arcade tiles · 502
@@ -357,11 +415,11 @@ html, body {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-pos {
-  height: 456px; flex: none;
+  height: 232px; flex: none;
   display: flex; flex-direction: column;
 }
 .pos-hdr {
-  height: 34px; flex: none;
+  height: 26px; flex: none;
   display: flex; align-items: baseline; justify-content: space-between;
 }
 .pos-name {
@@ -377,15 +435,17 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Column-major: the board fills top-to-bottom then wraps to column 2, so a
-   new position lands in a stable slot instead of reshuffling the whole grid. */
+/* 3 x 5 = 15 slots for a 14-position book. Column-major so a new position
+   lands in a stable slot instead of reshuffling the whole grid. Three columns
+   rather than two because the Blob took the height — the board went wide to
+   stay legible instead of tall. */
 #pos-list {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(7, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(5, 1fr);
   grid-auto-flow: column;
-  gap: 4px 8px;
+  gap: 3px 6px;
   overflow: hidden;
 }
 
@@ -394,7 +454,7 @@ html, body {
   position: relative;
   min-height: 0;
   display: flex; flex-direction: column; justify-content: center;
-  padding: 0 9px 0 14px;
+  padding: 0 6px 0 11px;
   background: linear-gradient(90deg, rgba(20,0,28,0.96), rgba(10,0,16,0.9));
   /* Stepped bevel — hard offsets only. --tc is the P&L tint, set inline. */
   box-shadow:
@@ -423,33 +483,33 @@ html, body {
 
 .t-top, .t-bot {
   display: flex; align-items: baseline; justify-content: space-between;
-  gap: 8px; position: relative; z-index: 1;
+  gap: 5px; position: relative; z-index: 1;
 }
-.t-top { margin-bottom: 3px; }
+.t-top { margin-bottom: 2px; }
 
-.t-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.t-name { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .t-badge {
-  font-size: 11px; line-height: 1; flex: none;
+  font-size: 9px; line-height: 1; flex: none;
   color: var(--accent2);
   text-shadow: 0 0 8px currentColor;
 }
 .t-badge.crypto { color: var(--accent3); }
 .t-sym {
   font-family: 'Press Start 2P', monospace;
-  font-size: 11px;
+  font-size: 9px;
   color: var(--text-hi);
   text-shadow: 1px 1px 0 rgba(0,0,0,0.9), 0 0 10px var(--tc, transparent);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .t-pct {
   font-family: 'Press Start 2P', monospace;
-  font-size: 12px; flex: none;
+  font-size: 10px; flex: none;
   color: var(--tc);
   text-shadow: 1px 1px 0 rgba(0,0,0,0.9), 0 0 14px var(--tc);
 }
 .t-entry, .t-abs {
   font-family: VT323, monospace;
-  font-size: 15px; line-height: 1;
+  font-size: 13px; line-height: 1;
   color: var(--text-mid);
   letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums;
@@ -463,8 +523,8 @@ html, body {
    the stop, right toward the target — the band risk_limits defines. This is
    the bar's whole job: how close to the stop. */
 .t-meter {
-  display: flex; gap: 2px; height: 6px;
-  margin-top: 4px;
+  display: flex; gap: 1px; height: 5px;
+  margin-top: 3px;
   position: relative; z-index: 1;
 }
 .t-seg {

@@ -88,6 +88,13 @@
   });
   blob.start();
 
+  // ── Background — the room he broadcasts from ─────────────────────────────
+  // Atmosphere only: it fills the reserved bands and could be cropped to the
+  // safe box with zero loss of meaning. It reacts to the same feed the Blob
+  // does, so the scene is watching the same trades the viewer is.
+  var bg = TNDBg.create($('bgCanvas'), { fps: 24 });
+  bg.start();
+
   function syncBlobMood() {
     // Transient moods own the character until they decay; don't stomp them.
     var m = blob.getMood();
@@ -167,140 +174,10 @@
     $('blob-mood').textContent = blob.getMood();
   }
 
-  // ── NAV chart ────────────────────────────────────────────────────────────
-  // Portrait rewrites the chart's job. The wide version can afford 30 days of
-  // x-axis; inside an 870-wide safe box that's an unreadable smear, so this
-  // shows the live session only.
-  var cv = $('navCanvas'), cx = cv.getContext('2d');
-  var WIN_MS = 8 * 3600 * 1000;   // trailing 8h — covers a full session
-
-  // Assigning canvas.width/height reallocates the backing store and clears it,
-  // so this only touches them when the size genuinely changed. Called every
-  // frame; this page runs for hours unattended and must stay cheap.
-  var _cvDim = { w: 0, h: 0 };
-  function sizeCanvas() {
-    var r = cv.getBoundingClientRect();
-    var dpr = window.devicePixelRatio || 1;
-    // getBoundingClientRect is post-transform; undo the stage scale so the
-    // backing store matches stage pixels rather than screen pixels.
-    var s = parseFloat(getComputedStyle($('stage')).getPropertyValue('--s')) || 1;
-    var w = Math.round(r.width / s), h = Math.round(r.height / s);
-    if (w !== _cvDim.w || h !== _cvDim.h) {
-      _cvDim = { w: w, h: h };
-      cv.width  = w * dpr;
-      cv.height = h * dpr;
-      cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    return _cvDim;
-  }
-
-  function drawChart() {
-    var dim = sizeCanvas(), W = dim.w, H = dim.h;
-    if (!W || !H) return;
-    var ML = 0, MR = 112, MT = 26, MB = 24;   // MR holds the live value tag
-    cx.clearRect(0, 0, W, H);
-
-    var pts = state.pts;
-    if (pts.length < 2) {
-      cx.fillStyle = '#3a1a4a';
-      cx.font = '700 15px Consolas, monospace';
-      cx.textAlign = 'center';
-      cx.fillText('AWAITING NAV SNAPSHOTS', W / 2, H / 2);
-      return;
-    }
-
-    var now = pts[pts.length - 1].t;
-    var t0 = now - WIN_MS;
-    var win = pts.filter(function(p) { return p.t >= t0; });
-    if (win.length < 2) win = pts.slice(-2);
-
-    var vs = win.map(function(p) { return p.v; });
-    var lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs);
-    var base = S.starting_capital;
-    // Keep the baseline on screen when it's close — it's the reference the
-    // whole number means anything against.
-    if (base > lo * 0.985 && base < hi * 1.015) { lo = Math.min(lo, base); hi = Math.max(hi, base); }
-    var pad = (hi - lo) * 0.22 || Math.max(hi * 0.002, 1);
-    lo -= pad; hi += pad;
-
-    var x0 = win[0].t, x1 = win[win.length - 1].t;
-    var X = function(t) { return ML + (t - x0) / Math.max(1, x1 - x0) * (W - ML - MR); };
-    var Y = function(v) { return MT + (hi - v) / Math.max(1e-9, hi - lo) * (H - MT - MB); };
-
-    // Grid
-    cx.strokeStyle = 'rgba(42,0,61,0.7)';
-    cx.lineWidth = 1;
-    for (var i = 0; i <= 3; i++) {
-      var gy = MT + (H - MT - MB) * i / 3;
-      cx.beginPath(); cx.moveTo(ML, gy); cx.lineTo(W - MR, gy); cx.stroke();
-    }
-
-    // Baseline
-    if (base >= lo && base <= hi) {
-      cx.strokeStyle = 'rgba(148,0,255,0.55)';
-      cx.setLineDash([5, 5]);
-      cx.beginPath(); cx.moveTo(ML, Y(base)); cx.lineTo(W - MR, Y(base)); cx.stroke();
-      cx.setLineDash([]);
-      cx.fillStyle = 'rgba(148,0,255,0.8)';
-      cx.font = '700 11px Consolas, monospace';
-      cx.textAlign = 'left';
-      cx.fillText('START', W - MR + 8, Y(base) + 4);
-    }
-
-    var up = state.dayPnlPct >= 0;
-    var col = up ? '#00ff9d' : '#ff3366';
-    var rgb = up ? '0,255,157' : '255,51,102';
-
-    // Area
-    var grad = cx.createLinearGradient(0, MT, 0, H - MB);
-    grad.addColorStop(0, 'rgba(' + rgb + ',0.26)');
-    grad.addColorStop(1, 'rgba(' + rgb + ',0)');
-    cx.beginPath();
-    cx.moveTo(X(win[0].t), H - MB);
-    win.forEach(function(p) { cx.lineTo(X(p.t), Y(p.v)); });
-    cx.lineTo(X(win[win.length - 1].t), H - MB);
-    cx.closePath();
-    cx.fillStyle = grad; cx.fill();
-
-    // Line + glow
-    cx.beginPath();
-    win.forEach(function(p, i) { i ? cx.lineTo(X(p.t), Y(p.v)) : cx.moveTo(X(p.t), Y(p.v)); });
-    cx.strokeStyle = col;
-    cx.lineWidth = 2.5;
-    cx.lineJoin = cx.lineCap = 'round';
-    cx.shadowColor = col; cx.shadowBlur = 16;
-    cx.stroke();
-    cx.shadowBlur = 0;
-
-    // Live head
-    var last = win[win.length - 1];
-    var hx = X(last.t), hy = Y(last.v);
-    var pulse = 0.5 + 0.5 * Math.sin(Date.now() / 380);
-    cx.beginPath(); cx.arc(hx, hy, 4 + pulse * 3, 0, 7);
-    cx.fillStyle = 'rgba(' + rgb + ',' + (0.28 - pulse * 0.13) + ')'; cx.fill();
-    cx.beginPath(); cx.arc(hx, hy, 3.5, 0, 7);
-    cx.fillStyle = col; cx.shadowColor = col; cx.shadowBlur = 12; cx.fill();
-    cx.shadowBlur = 0;
-
-    // Value tag
-    cx.fillStyle = col;
-    cx.font = '700 17px Consolas, monospace';
-    cx.textAlign = 'left';
-    cx.fillText(usd(last.v), W - MR + 8, hy + 6);
-
-    // Time axis — two labels. More is noise at this width.
-    cx.fillStyle = '#3a1a4a';
-    cx.font = '700 11px Consolas, monospace';
-    var hhmm = function(ms) {
-      return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York', hour12: false,
-        hour: '2-digit', minute: '2-digit' }).format(new Date(ms));
-    };
-    cx.textAlign = 'left';  cx.fillText(hhmm(x0), ML, H - 10);
-    cx.textAlign = 'right'; cx.fillText(hhmm(x1), W - MR, H - 10);
-
-    $('chart-meta').textContent = win.length + ' PTS · ' + hhmm(x0) + '–' + hhmm(x1) + ' ET';
-  }
+  // The NAV chart is GONE — "he's the streamer, not the charts". It also
+  // freed a 20fps canvas repaint, which is the budget the animated
+  // background now spends. state.pts is still maintained: the NAV number and
+  // day P&L are derived from it, they just aren't plotted any more.
 
   // ═══════════════════════════════════════════════════════════════════════
   // ARCADE SOUNDS
@@ -729,6 +606,9 @@
 
     if (mood) blob.setMood(mood, mood === 'HAPPY' ? 26 : 18);
     if (sfx && SFX[sfx]) SFX[sfx]();
+    // Money gets a bigger, brighter wave than a trade — a viewer paying is the
+    // loudest thing that happens on this stream.
+    bg.pulse(cfg.c === '#00ff9d' ? 'money' : (sfx === 'loss' ? 'loss' : 'enter'), 0.30);
 
     // Trades speak through the flash under his chin; stream events get the
     // announcer over his head. Keeping the two channels separate is what lets
@@ -830,6 +710,63 @@
     el.classList.remove('hit');
     void el.offsetWidth;          // reflow so the animation can retrigger
     el.classList.add('hit');
+  }
+
+  // ── Terminal strips ──────────────────────────────────────────────────────
+  // A clone of the Command Center's feed, parked in the reserved bands where
+  // YouTube will cover half of it. That is fine and intended: this is texture,
+  // not a readout. It is fed from the pipeline_events poll that already runs
+  // for the Blob's moods, so it adds zero queries.
+  var termSeen = null, termLines = [];
+  var TERM_MAX = 9;
+
+  function termClass(msg, type) {
+    if (type !== 'TRADE') return 'tl-sys';
+    if ((msg || '').indexOf('ENTER') >= 0) return 'tl-enter';
+    var m = (msg || '').match(/pnl\s+([+-]?[\d.]+)/);
+    return (m && parseFloat(m[1]) > 0) ? 'tl-win' : 'tl-loss';
+  }
+
+  // Strip the engine's own glyphs and padding — at this size and opacity the
+  // line has to survive being read in peripheral vision.
+  function termText(r) {
+    var m = (r.message || '').replace(/^[▲✗✓▸]\s*/, '');
+    return m.length > 62 ? m.slice(0, 62) + '…' : m;
+  }
+
+  function pushTerm(rows) {
+    rows.forEach(function(r) {
+      termLines.unshift({
+        t: new Date(r.recorded_at + (r.recorded_at.slice(-1) === 'Z' ? '' : 'Z')),
+        cls: termClass(r.message, r.event_type),
+        tag: r.event_type === 'TRADE' ? 'TRD' : 'SYS',
+        sym: r.symbol || '',
+        msg: termText(r)
+      });
+    });
+    if (termLines.length > TERM_MAX * 2) termLines.length = TERM_MAX * 2;
+    renderTerm();
+  }
+
+  function renderTerm() {
+    var hhmm = function(d) {
+      return isNaN(d.getTime()) ? '--:--:--' : new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour12: false,
+        hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(d);
+    };
+    var html = function(list) {
+      return list.map(function(l) {
+        return '<div class="term-line"><span class="tl-t">' + hhmm(l.t) + '</span>' +
+               '<span class="tl-tag ' + l.cls + '">' + l.tag + '</span>' +
+               (l.sym ? '<span class="tl-sym">' + l.sym + '</span>' : '') +
+               '<span class="' + l.cls + '">' + l.msg + '</span></div>';
+      }).join('');
+    };
+    // Two strips, different slices — top and bottom are never the same text,
+    // so a viewer who notices both sees a feed, not a mirror.
+    var top = $('term-top'), bot = $('term-bot');
+    if (top) top.innerHTML = html(termLines.slice(0, TERM_MAX));
+    if (bot) bot.innerHTML = html(termLines.slice(TERM_MAX, TERM_MAX * 2));
   }
 
   // ── Agency ───────────────────────────────────────────────────────────────
@@ -980,6 +917,11 @@
         })).reverse();
         state.seenEvTs = newest;
 
+        // Terminal strips take everything, trades and scans alike — they are
+        // the room's ambient chatter, not a curated highlight reel.
+        if (firstRun) pushTerm(rows.slice(0, TERM_MAX * 2).reverse());
+        else if (fresh.length) pushTerm(fresh);
+
         // daily_pnl rides on every EXIT detail — a far fresher continuous
         // signal than the 10s nav_snapshots poll, so feed it to his shape.
         for (var i = rows.length - 1; i >= 0; i--) {
@@ -1016,9 +958,12 @@
 
         // Sound follows the verdict, not the event: acquisitions are neutral
         // because buying is not yet good or bad news.
-        if (best.dir === 'ENTER')    SFX.entry();
-        else if (best.pnl > 0)       SFX.win();
+        var verdict = best.dir === 'ENTER' ? 'enter' : (best.pnl > 0 ? 'win' : 'loss');
+        if (verdict === 'enter')     SFX.entry();
+        else if (verdict === 'win')  SFX.win();
         else                         SFX.loss();
+        // The room answers too — a shockwave from behind him, same verdict.
+        bg.pulse(verdict, 0.42);
 
         // ── ...and the board answers ─────────────────────────────────────
         // 220ms is the whole illusion. Fire this on the same frame and the eye
@@ -1038,7 +983,6 @@
   // ── Boot ─────────────────────────────────────────────────────────────────
   renderHero();
   renderPositions();
-  drawChart();
   annNext();   // settles the panel into its idle state
   // Seed the roster WITHOUT animating: on first paint the book already exists,
   // and flying 14 tiles in at once would claim he just placed them all.
@@ -1046,9 +990,6 @@
     seenSyms[el.getAttribute('data-sym')] = true;
   });
 
-  // The chart head pulses, so it needs its own repaint clock. 20fps is plenty
-  // for a glow and keeps an unattended stream from cooking a CPU for hours.
-  setInterval(drawChart, 50);
   setInterval(syncBlobMood, 1000);
   // One poll now carries both NAV and trade reactions — same rows, one request.
   // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
@@ -1063,7 +1004,6 @@
   // Beat faster than Stream HQ's 60s staleness window so one dropped request
   // is never mistaken for a frozen page.
   setInterval(beat, 15000);
-  window.addEventListener('resize', drawChart);
   pollEvents();
   pollCryptoPrices();
   pollStreamEvents();
