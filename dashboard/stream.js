@@ -400,64 +400,107 @@
 
   // The roster the board is currently showing. Rebuilding the DOM is reserved
   // for when this actually changes — see renderPositions.
-  var _lastRoster = null;
+  var _lastRoster = null;   // last built order — diagnostic only
 
-  function renderPositions() {
+  function tintOf(p) {
+    var live = p.price > 0 && p.entry > 0;
+    if (!live) return '#8060a0';
+    var pc = (p.price - p.entry) / p.entry * 100;
+    return pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
+  }
+
+  function makeTile(sym, tint) {
+    var el = document.createElement('div');
+    el.className = 'tile';
+    el.setAttribute('data-sym', sym);
+    el.style.setProperty('--tc', tint || '#8060a0');
+    var sp = document.createElement('span');
+    sp.className = 't-sym';
+    sp.textContent = sym.replace('/USD', '');
+    el.appendChild(sp);
+    return el;
+  }
+
+  // ── The board is EVENT-OWNED after boot ──────────────────────────────────
+  // Only a trade beat may add, remove or reorder a slot. This is the fix for
+  // tiles appearing ahead of their own sound: refreshCrypto() -> renderPositions
+  // -> spawnNewTiles used to introduce tiles the moment a FETCH landed, so a
+  // batch of four fills put all four slots on the board at once and only then
+  // played their sounds 1s apart. The board was being driven by the network
+  // instead of by the beat.
+  //
+  // Polls may now do exactly one thing: re-tint what already exists.
+  var _booted = false;
+
+  function renderPositions(force) {
     var list = $('pos-list');
     var ps = book().slice(0, 14);   // 7 cols x 2 rows — the board's exact size
 
     if (!ps.length) {
-      list.innerHTML = '<div class="pos-empty">NO OPEN POSITIONS</div>';
-      _lastRoster = '';
+      if (!_booted || force) list.innerHTML = '<div class="pos-empty">NO OPEN POSITIONS</div>';
       return;
     }
 
-    // The UP / OPEN / GROSS meta went with the header — it was a stat line on a
-    // board whose whole job is to be glanced at.
-
-    function tintOf(p) {
-      var live = p.price > 0 && p.entry > 0;
-      if (!live) return '#8060a0';
-      var pc = (p.price - p.entry) / p.entry * 100;
-      return pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
-    }
-
-    // Rebuild ONLY when the roster changes. This is load-bearing, not an
-    // optimisation: innerHTML replaces every tile, and a replaced element
-    // takes its running animation with it. hitTile() would start the arcade
-    // frames on a span that refreshCrypto() then destroyed two lines later —
-    // the hit fired frame 0 and died, every time. Prices tick constantly and
-    // the roster changes only on a fill, so this also stops rebuilding 14
-    // nodes several times a minute for nothing.
-    var roster = ps.map(function(p) { return p.sym; }).join(',');
-    if (roster === _lastRoster) {
+    // Tint-only pass. Never re-tint a slot printing its leavebehind — boardExit
+    // owns --tc until that expires.
+    if (_booted && !force) {
       ps.forEach(function(p) {
         var el = list.querySelector('.tile[data-sym="' + p.sym + '"]');
-        // Never re-tint a slot that is printing its exit P&L — boardExit owns
-        // --tc until the ghost expires.
         if (el && !ghostT[p.sym]) el.style.setProperty('--tc', tintOf(p));
       });
       return;
     }
 
-    // A ghost is a slot still showing what it earned. Rebuilding would delete
-    // it mid-sentence, so defer — the ghost's own timer forces the rebuild the
-    // moment it expires. Without this, any background poll landing inside the
-    // 1600ms window silently eats the result.
+    // Full build — boot, or a settle (see scheduleSettle). Never while a
+    // leavebehind is on screen: rebuilding would delete the slot mid-sentence
+    // and the result would silently vanish.
     if (Object.keys(ghostT).length) return;
 
-    _lastRoster = roster;
+    // REORDER BY MOVING, NOT REBUILDING. appendChild on an element already in
+    // the list relocates it; it does not recreate it. The wipe-and-rebuild this
+    // replaces destroyed and re-added all 14 slots just to move a few — every
+    // tile blinked, and any slot still mid-animation lost it. Reuse the node,
+    // reorder in place, and only build what is genuinely new.
+    var have = {};
+    list.querySelectorAll('.tile').forEach(function(el) {
+      have[el.getAttribute('data-sym')] = el;
+    });
+    ps.forEach(function(p) {
+      var el = have[p.sym];
+      if (el) { el.style.setProperty('--tc', tintOf(p)); delete have[p.sym]; }
+      else    { el = makeTile(p.sym, tintOf(p)); }
+      list.appendChild(el);          // moves if present, inserts if new
+    });
+    // Whatever is left never made it into the book — drop it.
+    Object.keys(have).forEach(function(sym) { have[sym].remove(); });
 
-    list.innerHTML = ps.map(function(p) {
-      // Just the ticker. Transparent slot, white name, nothing else.
-      // --tc and data-sym stay even though nothing paints them yet: the P&L
-      // tint and the per-symbol hooks that spawnNewTiles / hitTile / glanceAt
-      // target are still wired, so whatever goes back in inherits them free.
-      return '' +
-        '<div class="tile" data-sym="' + p.sym + '" style="--tc:' + tintOf(p) + '">' +
-          '<span class="t-sym">' + p.sym.replace('/USD', '') + '</span>' +
-        '</div>';
-    }).join('');
+    _lastRoster = ps.map(function(p) { return p.sym; }).join(',');
+  }
+
+  // ── Reordering waits ─────────────────────────────────────────────────────
+  // The canonical order comes from crypto_positions (newest first), so every
+  // entry reshuffles the whole board. Doing that on the beat yanks the slots
+  // out from under the animation that is still playing on them. Instead the new
+  // tile lands wherever there is room, and the board settles into its real order
+  // 3s after the LAST trade — debounced, so a burst settles once at the end
+  // rather than thrashing on every fill.
+  //
+  // The settle is also the RECONCILE. Since only trade beats touch the board,
+  // local state would drift from the DB forever on a missed event — so this is
+  // the one place that re-reads crypto_positions and rebuilds from truth. It
+  // fires 3s after the last trade, when nothing is mid-animation.
+  var _settleT = null;
+  var SETTLE_DELAY = 3000;
+
+  function scheduleSettle() {
+    clearTimeout(_settleT);
+    _settleT = setTimeout(function() {
+      _settleT = null;
+      // Never settle over a leavebehind — it would delete the number
+      // mid-sentence. Re-arm and wait for it to finish.
+      if (Object.keys(ghostT).length) { scheduleSettle(); return; }
+      refreshCrypto();      // re-reads the DB, then rebuilds in canonical order
+    }, SETTLE_DELAY);
   }
 
   // Live crypto marks. CoinGecko is free and unauthenticated but rate-limits
@@ -484,10 +527,13 @@
   // The book turns over ~9x/min, so the seeded crypto list goes stale within
   // seconds. Re-read the live table whenever a trade lands rather than on a
   // timer — the event IS the invalidation signal.
-  var _refreshT = 0;
+  // Called ONLY from the settle, 3s after the last trade. It used to run on
+  // every trade and immediately renderPositions() + spawnNewTiles(), which put
+  // slots on the board the instant a fetch returned — ahead of the beat that
+  // was supposed to announce them. Adds and removes now belong exclusively to
+  // boardEnter/boardExit; this re-reads truth and rebuilds in canonical order
+  // once the dust has settled.
   function refreshCrypto() {
-    if (Date.now() - _refreshT < 2000) return;   // coalesce trade bursts
-    _refreshT = Date.now();
     fetch(S.supa.url + '/rest/v1/crypto_positions?select=symbol,qty,entry_price,' +
           'stop_price,target_price,entered_at,strategy',
           { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
@@ -504,8 +550,8 @@
             is_crypto: true
           };
         });
-        renderPositions();
-        spawnNewTiles();   // any slot that just arrived flies in from him
+        if (Object.keys(ghostT).length) return;   // a leavebehind is still speaking
+        renderPositions(true);                    // reorder, now that it's safe
       })
       .catch(function() {});
   }
@@ -965,7 +1011,8 @@
   // later. Same events, same data — but cause then effect, instead of two
   // symptoms firing at once with the cause invisible.
 
-  var seenSyms = {};   // symbol -> true, so a re-render can tell new from old
+  // seenSyms is gone with spawnNewTiles — nothing needs to infer which slots are
+  // new any more, because the beat says so explicitly.
 
   function blobCenter() {
     var c = $('blobCanvas');
@@ -1004,24 +1051,11 @@
     }, 40);
   }
 
-  function spawnNewTiles() {
-    var origin = blobCenter();
-    if (!origin) return;
-    document.querySelectorAll('.tile').forEach(function(el) {
-      var sym = el.getAttribute('data-sym');
-      if (!sym || seenSyms[sym]) return;
-      seenSyms[sym] = true;
-      var r = el.getBoundingClientRect();
-      flyIn(el, origin.x - (r.left + r.width / 2), origin.y - (r.top + r.height / 2));
-    });
-    // Forget symbols that left, so a re-entry flies in again rather than
-    // silently appearing.
-    var live = {};
-    document.querySelectorAll('.tile').forEach(function(el) {
-      live[el.getAttribute('data-sym')] = true;
-    });
-    Object.keys(seenSyms).forEach(function(s) { if (!live[s]) delete seenSyms[s]; });
-  }
+  // spawnNewTiles() is gone. It scanned the DOM for tiles it hadn't seen and
+  // flew them in — which meant the fly-in fired whenever a tile APPEARED, and
+  // tiles appeared whenever a fetch landed. That is exactly how the animation
+  // got ahead of its own sound. boardEnter now calls flyIn directly on the beat,
+  // so nothing has to guess when a slot is new.
 
   // Glance toward a symbol's slot. -1 hard left .. +1 hard right, measured
   // against his own centre so it works whatever the grid does.
@@ -1125,15 +1159,20 @@
     setTimeout(tradeNext, TRADE_COOLDOWN);
   }
 
+  // ONE MOMENT. Sound, text and entry animation all land on the same frame.
+  //
+  // The board used to answer 220ms late, to sell the Blob as the cause. That
+  // delay is gone: the trade is a single impact, and splitting it across two
+  // frames made the sound and the slot read as two loosely-related things.
+  // He still leads — his glance and mood are set before the slot moves within
+  // this same synchronous block, which is enough.
   function applyTrade(t) {
     var verdict = t.dir === 'ENTER' ? 'enter' : (t.pnl > 0 ? 'win' : 'loss');
 
-    // ── He acts FIRST ──────────────────────────────────────────────────
-    // Everything here is the cause; the board is not touched yet.
-    if (verdict === 'win')       blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
+    if (verdict === 'win')        blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
     else if (verdict === 'enter') blob.setMood('ALERT', 18);
     else                          blob.setMood('ALERT', 12);
-    glanceAt(t.sym);                       // looks at the slot he's about to work
+    glanceAt(t.sym);
     flashTrade(t.dir, t.sym, t.pnl);
     $('blob-mood').textContent = blob.getMood();
 
@@ -1142,31 +1181,23 @@
     if (verdict === 'enter')     SFX.entry();
     else if (verdict === 'win')  SFX.win();
     else                         SFX.loss();
-    bg.pulse(verdict, 0.42);               // the room answers too
+    bg.pulse(verdict, 0.42);
 
     // THE SCORE MOVES ON THE TRADE. A realised exit changes NAV, so the number
-    // reacts now rather than waiting up to 10s for the next engine UPDATE to
-    // tell it. The UPDATE still lands and corrects — this is a prediction the
-    // authoritative feed immediately confirms, not a second source of truth.
+    // reacts now rather than waiting up to 10s for the next engine UPDATE. The
+    // UPDATE still lands and corrects — a prediction the authoritative feed
+    // confirms, not a second source of truth.
     if (t.dir === 'EXIT' && t.pnl != null) {
       state.nav += t.pnl;
       updateNav(state.nav);
     }
 
-    // ── ...and the board answers ───────────────────────────────────────
-    // 220ms is the whole illusion. Fire on the same frame and the eye reads two
-    // simultaneous symptoms of an unseen cause; delay it and the Blob becomes
-    // the cause.
-    //
-    // This runs off the EVENT, not off a refetch. refreshCrypto() is a network
-    // round trip — hanging the animation on it meant the slot moved whenever
-    // the fetch happened to land, which is not the beat. The message already
-    // carries the symbol, price, qty and pnl, so the board can answer exactly
-    // on time and let the DB poll reconcile behind it.
-    setTimeout(function() {
-      if (t.dir === 'ENTER') boardEnter(t);
-      else                   boardExit(t);
-    }, 220);
+    // Same frame as the sound.
+    if (t.dir === 'ENTER') boardEnter(t);
+    else                   boardExit(t);
+
+    // Any reordering waits — see scheduleSettle.
+    scheduleSettle();
   }
 
   // ── The board reacts ─────────────────────────────────────────────────────
@@ -1176,15 +1207,15 @@
 
   function boardEnter(t) {
     // The same symbol usually re-enters seconds after it exits, so its slot is
-    // often still on screen showing the ghosted P&L. Reclaim it rather than
-    // waiting for a rebuild.
+    // often still on screen holding the leavebehind. Reclaim it.
     clearTimeout(ghostT[t.sym]);
     delete ghostT[t.sym];
 
     var el = tileEl(t.sym);
     if (!el) {
-      // Genuinely new symbol — build it from the event so the slot exists NOW.
-      // The poll will confirm it moments later with identical values.
+      // Build the slot from the EVENT — no fetch, no rebuild, no reorder. It
+      // exists on this frame, alongside its sound. The poll confirms it moments
+      // later with identical values, and the settle puts it in its real place.
       var exists = (S.crypto || []).some(function(c) { return c.sym === t.sym; });
       if (!exists) {
         S.crypto = (S.crypto || []).concat([{
@@ -1193,50 +1224,54 @@
           entered_at: new Date().toISOString(), strategy: 'crypto', is_crypto: true
         }]);
       }
-      _lastRoster = null;        // force the rebuild
-      renderPositions();
-      spawnNewTiles();           // flies it in from him, on the beat
-      el = tileEl(t.sym);
+      el = makeTile(t.sym, '#8060a0');
+      $('pos-list').appendChild(el);       // wherever there's room; settle sorts it
     } else {
-      // Reclaiming a ghosted slot. It still flies in: the slot never left the
-      // screen, but the POSITION is new, and the viewer should see him place it
-      // exactly as they would any other entry.
       var sp = el.querySelector('.t-sym');
       sp.textContent = t.sym.replace('/USD', '');
       sp.className = 't-sym';
       el.style.removeProperty('--tc');
-      var o = blobCenter(), r = el.getBoundingClientRect();
-      if (o) flyIn(el, o.x - (r.left + r.width / 2), o.y - (r.top + r.height / 2));
     }
+
+    // Fly-in and hit fire NOW, on the same frame as the sound — whether the slot
+    // is brand new or reclaimed. The position is new either way and the viewer
+    // should see him place it.
+    var o = blobCenter(), r = el.getBoundingClientRect();
+    if (o) flyIn(el, o.x - (r.left + r.width / 2), o.y - (r.top + r.height / 2));
     hitTile(t.sym);
-    refreshCrypto();             // reconcile quietly behind the animation
   }
+
+  // ── The leavebehind ──────────────────────────────────────────────────────
+  // On a sell the slot does not simply vanish — it LEAVES BEHIND what the
+  // position earned, in the ticker's own face and size: green profit, red loss.
+  // A tile that disappears tells you a position closed. A leavebehind tells you
+  // whether it was worth having, which is the only part a viewer cares about.
+  var LEAVEBEHIND_MS = 2600;
 
   function boardExit(t) {
     var el = tileEl(t.sym);
-    if (!el) { _lastRoster = null; refreshCrypto(); return; }
+    if (!el) return;
 
-    // THE RESULT REPLACES THE NAME. The slot's whole reason for existing was
-    // this number, so it says it — same face, same size, green won / red lost.
-    // A tile that just vanishes tells you a position closed; a tile that prints
-    // its P&L tells you whether it was worth having.
     var sp = el.querySelector('.t-sym');
     var v = Number(t.pnl || 0);
     sp.textContent = (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2);
     sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
     el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
-    hitTile(t.sym);              // the result lands with the same arcade punch
+    hitTile(t.sym);              // the number lands with the same arcade punch
 
-    // Hold the ghost, then let the board reconcile it away. 1600ms is long
-    // enough to read and short enough that a re-entry (which typically follows
-    // within ~2s) reclaims the slot instead of fighting it — boardEnter cancels
-    // this timer, so the two never race.
+    // Drop the position from local state now so the settle doesn't resurrect
+    // the slot — but leave the ELEMENT on screen holding its number.
+    S.crypto = (S.crypto || []).filter(function(c) { return c.sym !== t.sym; });
+
+    // Hold, then remove. boardEnter cancels this if the symbol re-enters first,
+    // so a re-entry reclaims the slot instead of racing a pending removal.
     clearTimeout(ghostT[t.sym]);
     ghostT[t.sym] = setTimeout(function() {
       delete ghostT[t.sym];
-      _lastRoster = null;
-      refreshCrypto();
-    }, 1600);
+      var live = tileEl(t.sym);
+      if (live && live.querySelector('.t-sym.pnl-win, .t-sym.pnl-loss')) live.remove();
+      scheduleSettle();
+    }, LEAVEBEHIND_MS);
   }
 
   function pollEvents() {
@@ -1318,13 +1353,12 @@
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   renderHero();
-  renderPositions();
-  annNext();   // settles the panel into its idle state
-  // Seed the roster WITHOUT animating: on first paint the book already exists,
-  // and flying 14 tiles in at once would claim he just placed them all.
-  document.querySelectorAll('.tile').forEach(function(el) {
-    seenSyms[el.getAttribute('data-sym')] = true;
-  });
+  // The one full build that isn't a settle. Nothing animates: on first paint
+  // the book already exists, and flying 14 tiles in at once would claim he had
+  // just placed the entire portfolio.
+  renderPositions(true);
+  annNext();                      // settles the panel into its idle state
+  _booted = true;                 // from here, only a trade beat may change the board
 
   setInterval(syncBlobMood, 1000);
   // One poll now carries both NAV and trade reactions — same rows, one request.
