@@ -4624,32 +4624,62 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       n = 2;
     }}
 
-    // ── Under-fill gradient ─────────────────────────────────────────────────
+    // ── Catmull-Rom path builder (smooth curve through all points) ────────────
+    function _crPath(pts2) {{
+      ctx.beginPath();
+      ctx.moveTo(pts2[0].x, pts2[0].y);
+      for (var ci = 0; ci < pts2.length - 1; ci++) {{
+        var p0 = pts2[Math.max(ci-1,0)];
+        var p1 = pts2[ci];
+        var p2 = pts2[ci+1];
+        var p3 = pts2[Math.min(ci+2, pts2.length-1)];
+        var cp1x = p1.x + (p2.x - p0.x) / 6;
+        var cp1y = p1.y + (p2.y - p0.y) / 6;
+        var cp2x = p2.x - (p3.x - p1.x) / 6;
+        var cp2y = p2.y - (p3.y - p1.y) / 6;
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+      }}
+    }}
+
+    // ── Pulsing under-fill ────────────────────────────────────────────────────
+    var breathe = 0.5 + 0.5 * Math.sin(Date.now() / 1800);
     var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
-    fillGrad.addColorStop(0,   'rgba(148,0,255,0.22)');
-    fillGrad.addColorStop(0.5, 'rgba(148,0,255,0.06)');
+    fillGrad.addColorStop(0,   'rgba(148,0,255,' + (0.14 + breathe * 0.10) + ')');
+    fillGrad.addColorStop(0.5, 'rgba(100,0,200,' + (0.04 + breathe * 0.04) + ')');
     fillGrad.addColorStop(1,   'rgba(148,0,255,0)');
-    ctx.beginPath();
-    ctx.moveTo(m[0].x, m[0].y);
-    for (var pi = 1; pi < n; pi++) ctx.lineTo(m[pi].x, m[pi].y);
+    _crPath(m);
     ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
     ctx.fillStyle = fillGrad; ctx.fill();
 
-    // ── Glow passes ────────────────────────────────────────────────────────
+    // ── Glow passes (Catmull-Rom) ─────────────────────────────────────────────
     var passes = [
-      {{ w:12, a:0.12, rgb:'148,0,255' }},
-      {{ w:4,  a:0.45, rgb:'180,40,255' }},
-      {{ w:2,  a:0.85, rgb:'210,80,255' }},
-      {{ w:1.5,a:1.00, rgb:'240,180,255' }},
-      ];
+      {{ w:14, a:0.09, rgb:'120,0,255' }},
+      {{ w:5,  a:0.40, rgb:'180,40,255' }},
+      {{ w:2,  a:0.80, rgb:'210,80,255' }},
+      {{ w:1.5,a:1.00, rgb:'245,190,255' }},
+    ];
     passes.forEach(function(pass) {{
-      ctx.beginPath();
-      ctx.moveTo(m[0].x, m[0].y);
-      for (var pi2 = 1; pi2 < n; pi2++) ctx.lineTo(m[pi2].x, m[pi2].y);
+      _crPath(m);
       ctx.strokeStyle = 'rgba(' + pass.rgb + ',' + pass.a + ')';
       ctx.lineWidth = pass.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.stroke();
     }});
+
+    // ── Animated data-packet bead traveling the line ──────────────────────────
+    var _packetT = (Date.now() % 4000) / 4000;  // 0→1 every 4 seconds
+    var _pidx    = Math.floor(_packetT * (n - 1));
+    var _pfrac   = (_packetT * (n - 1)) - _pidx;
+    var _pa      = m[Math.min(_pidx,     n-1)];
+    var _pb      = m[Math.min(_pidx + 1, n-1)];
+    var _px      = _pa.x + (_pb.x - _pa.x) * _pfrac;
+    var _py      = _pa.y + (_pb.y - _pa.y) * _pfrac;
+    var _pglow   = 0.5 + 0.5 * Math.sin(Date.now() / 120);
+    ctx.beginPath(); ctx.arc(_px, _py, 7 + _pglow * 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(200,100,255,' + (0.08 + _pglow * 0.10) + ')'; ctx.fill();
+    ctx.beginPath(); ctx.arc(_px, _py, 3 + _pglow, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(230,160,255,' + (0.55 + _pglow * 0.30) + ')'; ctx.fill();
+    ctx.beginPath(); ctx.arc(_px, _py, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
 
     // ── Orb tip: last real data point (tx(now_ms) is 90% width due to t1 pad) ──
     var tipX = m[n-1].x;
