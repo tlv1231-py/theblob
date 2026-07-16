@@ -210,17 +210,30 @@ def _load_chart_data() -> dict:
         qqq_dates  = [r.d    for r in bench_rows if r.symbol == "QQQ"]
         qqq_prices = [float(r.close) for r in bench_rows if r.symbol == "QQQ"]
 
-        # Nav snapshots — last 6h, seeded into JS so chart renders immediately on load
+        # Nav snapshots — last 30 days from nav_snapshots (intraday, written while dashboard is open)
         nav_snap_rows = s.execute(text("""
             SELECT recorded_at, nav FROM nav_snapshots
-            WHERE recorded_at >= NOW() - INTERVAL '6 hours'
+            WHERE recorded_at >= NOW() - INTERVAL '30 days'
             ORDER BY recorded_at ASC
-            LIMIT 2000
+            LIMIT 5000
         """)).fetchall()
         nav_snap_pts = [
             {"t": r.recorded_at.isoformat() + "Z", "v": float(r.nav)}
             for r in nav_snap_rows
         ]
+        # Backfill from portfolio_snapshots (daily pipeline runs) — fills gaps when dashboard is closed
+        port_snap_rows = s.execute(text("""
+            SELECT recorded_at, total_value FROM portfolio_snapshots
+            WHERE recorded_at >= NOW() - INTERVAL '30 days'
+            ORDER BY recorded_at ASC
+            LIMIT 500
+        """)).fetchall()
+        existing_ts = {p["t"] for p in nav_snap_pts}
+        for r in port_snap_rows:
+            ts = r.recorded_at.isoformat() + "Z"
+            if ts not in existing_ts:
+                nav_snap_pts.append({"t": ts, "v": float(r.total_value)})
+        nav_snap_pts.sort(key=lambda p: p["t"])
 
         # Status scalars
         mon_days = s.execute(text(
@@ -4557,7 +4570,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   window.addEventListener('resize', _resize);
 
   // Scroll = zoom. Shift+scroll = pan. After 3s idle, gently return to default.
-  var _NAV_DEFAULT_WIN = 20 * 60 * 1000;  // 20 minutes default (zoomed in)
+  var _NAV_DEFAULT_WIN = 5 * 60 * 1000;  // 5 minutes default — zoomed in tight
   window._navWindowMs       = _NAV_DEFAULT_WIN;
   window._navTargetWindowMs = _NAV_DEFAULT_WIN;
   window._navPanOffsetMs    = 0;
@@ -5363,8 +5376,8 @@ function _fixTs(t) {{
 }}
 
 function _fetchNavDb() {{
-  var since = new Date(Date.now() - 24*3600000).toISOString();
-  fetch(SUPA_URL + '/rest/v1/nav_snapshots?select=recorded_at,nav&recorded_at=gte.' + since + '&order=recorded_at.asc&limit=2000',
+  var since = new Date(Date.now() - 30*24*3600000).toISOString();  // 30 days
+  fetch(SUPA_URL + '/rest/v1/nav_snapshots?select=recorded_at,nav&recorded_at=gte.' + since + '&order=recorded_at.asc&limit=5000',
     {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
   .then(function(r) {{ return r.json(); }})
   .then(function(rows) {{
