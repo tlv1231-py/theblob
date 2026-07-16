@@ -31,7 +31,7 @@ _MONITOR_TARGET   = 20
 
 def _fetch_alpaca_account() -> dict:
     """Fetch portfolio_value and long_market_value from Alpaca. Returns {} on any failure."""
-    import os
+    import os, concurrent.futures
     from config.settings import settings
     api_key    = settings.alpaca_api_key    or os.environ.get("ALPACA_API_KEY", "")
     secret_key = settings.alpaca_secret_key or os.environ.get("ALPACA_SECRET_KEY", "")
@@ -39,7 +39,8 @@ def _fetch_alpaca_account() -> dict:
                                                                "https://paper-api.alpaca.markets")
     if not api_key or not secret_key:
         return {}
-    try:
+
+    def _call():
         from alpaca.trading.client import TradingClient
         client = TradingClient(api_key=api_key, secret_key=secret_key,
                                paper="paper-api" in base_url)
@@ -50,6 +51,10 @@ def _fetch_alpaca_account() -> dict:
             "buying_power":       float(getattr(acct, "buying_power",       0) or 0),
             "cash":               float(getattr(acct, "cash",               0) or 0),
         }
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            return ex.submit(_call).result(timeout=4)
     except Exception:
         return {}
 
