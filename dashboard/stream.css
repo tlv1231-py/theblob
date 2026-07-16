@@ -227,13 +227,14 @@ html, body {
 
 #s-events {
   height: 88px; flex: none;
-  display: flex; align-items: center;
-  padding: 4px 0 8px;
+  position: relative;
+  z-index: 20;                 /* the box expands over his head — it must win */
 }
 
 .ev-lcd {
-  position: relative;
-  width: 100%; height: 100%;
+  position: absolute;
+  top: 4px; left: 0; right: 0;
+  height: 80px;
   padding: 11px 14px;
   background: linear-gradient(180deg, #10001a, #06000c);
   /* Stepped bezel — outer frame, inner rule, hard shadow. No soft edges. */
@@ -242,8 +243,42 @@ html, body {
     inset 0 0 0 2px #06000c,
     inset 0 0 0 3px rgba(255,255,255,0.06),
     0 0 22px -6px var(--ev-c, transparent);
-  transition: border-color 0.25s steps(2, end), box-shadow 0.25s steps(2, end);
+  /* NOTE: height is deliberately NOT transitioned. CSS transitions and
+     animations run on the same animation clock as requestAnimationFrame, and
+     that clock does not advance in this component iframe — measured: a 160ms
+     height transition still reported playState "running" with the start value
+     after 700ms, so the box never opened at all. A headless Chromium on a
+     virtual display is the same situation, so this would have been dead on the
+     real capture too.
+     The box now snaps open on the class alone. Since the intended motion was
+     steps() anyway — a menu snap, not an ease — we lose nothing. Colour
+     transitions stay: if the clock ever does run they are a bonus, and if it
+     never runs they simply apply instantly, which is also correct. Anything
+     that MUST move is driven by setInterval, never by CSS. */
+  transition: border-color 0.25s steps(2, end),
+              box-shadow 0.25s steps(2, end);
   overflow: hidden;
+}
+/* Open — a viewer event. Grows down over the Blob's head, exactly the way a
+   Gameboy text box covers the world it interrupts. */
+.ev-lcd.open { height: 232px; }
+
+/* THE POKEMON TELL. A Gen-1 text box has NOTCHED corners — the frame steps in
+   by one pixel block at each corner rather than mitring or rounding. This one
+   detail does more than the palette, the font, and the typewriter combined:
+   square corners read as a generic terminal, rounded ones as a web card.
+   The clip cuts 10px blocks out of all four corners. */
+.ev-lcd, .ev-corners {
+  clip-path: polygon(
+    0 10px, 5px 10px, 5px 5px, 10px 5px, 10px 0,
+    calc(100% - 10px) 0, calc(100% - 10px) 5px, calc(100% - 5px) 5px,
+    calc(100% - 5px) 10px, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 5px) calc(100% - 10px),
+    calc(100% - 5px) calc(100% - 5px), calc(100% - 10px) calc(100% - 5px),
+    calc(100% - 10px) 100%,
+    10px 100%, 10px calc(100% - 5px), 5px calc(100% - 5px),
+    5px calc(100% - 10px), 0 calc(100% - 10px)
+  );
 }
 /* The LCD lattice. 3px cell = visible pixel gaps, the way a DMG panel reads. */
 .ev-lcd::after {
@@ -256,7 +291,9 @@ html, body {
 }
 .ev-lcd.idle { --ev-c: #2a003d; opacity: 0.5; }
 
-.ev-line { display: flex; align-items: baseline; gap: 10px; }
+/* ── Idle strip ───────────────────────────────────────────────────────── */
+.ev-idle { display: flex; align-items: baseline; gap: 10px; }
+.ev-lcd.open .ev-idle { display: none; }
 .ev-icon {
   font-size: 17px; line-height: 1; flex: none;
   color: var(--ev-c, var(--text-dim));
@@ -269,11 +306,65 @@ html, body {
   text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 16px var(--ev-c, transparent);
   white-space: nowrap; overflow: hidden;
 }
+
+/* ── Open body ────────────────────────────────────────────────────────── */
+.ev-body { display: none; padding: 6px 4px 0; }
+.ev-lcd.open .ev-body { display: block; }
+
+.ev-nameline { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.ev-bigicon {
+  font-size: 40px; line-height: 1; flex: none;
+  color: var(--ev-c);
+  text-shadow: 0 0 24px currentColor;
+  animation: icon-throb 0.6s steps(2, end) infinite;
+}
+@keyframes icon-throb {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+
+/* THE NAME. Someone paid to be on this screen, so their handle is the biggest
+   thing in the box — bigger than the NAV number's label, bigger than the verb.
+   Same four-layer stacked shadow as the arcade NAV figure, so the page has one
+   idea of what "important number/name" looks like. Per-character reveal below. */
+.ev-name {
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 30px; line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+  white-space: nowrap; overflow: hidden;
+  text-shadow:
+    2px 2px 0 #111,
+    4px 4px 0 rgba(0,0,0,0.85),
+    6px 6px 0 rgba(0,0,0,0.5),
+    0 0 26px var(--ev-c);
+}
+/* Each glyph lands on its own frame — the name assembles rather than appears.
+   steps(2) so it snaps in; a smooth scale would read as a CSS transition. */
+.ev-name i {
+  display: inline-block;
+  font-style: normal;
+  animation: name-pop 0.16s steps(2, end) both;
+}
+@keyframes name-pop {
+  from { transform: translateY(-9px) scale(1.5); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+.ev-act {
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 15px; line-height: 1.5;
+  color: var(--ev-c);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9);
+  white-space: nowrap; overflow: hidden;
+  margin-left: 54px;
+}
 .ev-msg {
   font-family: VT323, Consolas, monospace;
-  font-size: 19px; line-height: 1;
+  font-size: 21px; line-height: 1;
   color: var(--text-mid);
-  margin-top: 7px; margin-left: 27px;
+  margin-top: 12px; margin-left: 54px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 

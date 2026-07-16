@@ -307,10 +307,67 @@
         });
       } catch (e) {}
     }
+    // A note with an explicit length — the fanfare needs sustain, which the
+    // short fixed decay above cannot give.
+    function note(freq, at, len, vol, type) {
+      if (!ctx) return;
+      try {
+        var osc = ctx.createOscillator(), g = ctx.createGain();
+        osc.type = type || 'square';
+        osc.frequency.value = freq;
+        var t = ctx.currentTime + at;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(vol, t + 0.008);
+        g.gain.setValueAtTime(vol, t + len * 0.7);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(t); osc.stop(t + len + 0.02);
+      } catch (e) {}
+    }
+
     return {
       entry: function() { play([[330, 0], [440, 0.055]], 0.055, false); },
       win:   function() { play([[659, 0], [784, 0.07], [988, 0.14]], 0.07, false); },
       loss:  function() { play([[392, 0], [311, 0.07], [233, 0.14]], 0.055, true); },
+
+      // ── The fanfare — a viewer did something ────────────────────────────
+      // Deliberately the biggest sound on the stream. A trade win is a 3-note
+      // blip; this is a four-voice, ~1.1s cadence, because a person choosing to
+      // pay is a categorically louder event than the bot closing a position for
+      // 6 cents. If they sounded similar the stream would be lying about what
+      // matters.
+      //
+      // Written from scratch in the style rather than transcribed from any
+      // game: an ascending G-major arpeggio (G5 B5 D6) with a triplet pickup,
+      // resolving to a held G6 over a root-fifth bass, then two sparkle notes.
+      // Original melody — no copyrighted jingle is reproduced here.
+      fanfare: function() {
+        if (!ctx) return;
+        if (ctx.state === 'suspended') { ctx.resume(); return; }
+        var V = 0.055;
+        // pickup triplet
+        note(784,  0.00, 0.06, V);          // G5
+        note(988,  0.06, 0.06, V);          // B5
+        note(1175, 0.12, 0.06, V);          // D6
+        // the hit
+        note(1568, 0.20, 0.42, V * 1.25);   // G6 — held
+        note(1175, 0.20, 0.42, V * 0.5);    // D6 harmony a fifth below
+        // bass
+        note(196,  0.00, 0.20, V * 0.9, 'triangle');   // G3
+        note(294,  0.20, 0.44, V * 0.9, 'triangle');   // D4
+        // sparkle tail
+        note(2093, 0.66, 0.09, V * 0.5);    // C7
+        note(2637, 0.76, 0.22, V * 0.5);    // E7
+      },
+
+      // Per-character text blip — the Gameboy dialogue tell. Very quiet and
+      // very short: it should read as texture under the fanfare, not as a
+      // second melody competing with it.
+      blip: function() {
+        if (!ctx || ctx.state !== 'running') return;
+        note(880 + Math.random() * 80, 0, 0.02, 0.016);
+      },
+
       isReady: function() { return ready && ctx && ctx.state === 'running'; }
     };
   })();
@@ -578,6 +635,17 @@
     return who + ' just ' + verb + (amt ? ' ' + amt : '') + ' !!!';
   }
 
+  // The house format, split so the NAME can be staged on its own.
+  function nameOf(type, p) {
+    if (type === 'risk_breach') return 'RISK BREACH';
+    return (p.from || 'SOMEONE').toUpperCase().slice(0, 14);
+  }
+  function actOf(type, p) {
+    if (type === 'risk_breach') return 'just BROKE ' + (p.limit || '') + ' !!!';
+    var amt = amountFor(type, p);
+    return 'just ' + (VERB[type] || 'DID SOMETHING') + (amt ? ' ' + amt : '') + ' !!!';
+  }
+
   var annQ = [], annBusy = false, annTypeT = null, annHoldT = null;
 
   function annPush(type, payload) {
@@ -601,7 +669,13 @@
     if (!lcd) return;
     if (!annQ.length) {
       annBusy = false;
+      lcd.classList.remove('open');
       lcd.classList.add('idle');
+      lcd.style.removeProperty('--ev-c');
+      $('ev-icon').textContent = '◈';
+      // Idle says something rather than sitting blank — an empty box reads as
+      // broken, a labelled one reads as waiting.
+      $('ev-head').textContent = 'THE BLOB IS TRADING';
       $('ev-more').className = 'ev-more';
       annBadge();
       return;
@@ -612,8 +686,9 @@
 
     var cfg = ANN[ev.type];
     lcd.classList.remove('idle');
+    lcd.classList.add('open');            // snap the box open over his head
     lcd.style.setProperty('--ev-c', cfg.c);
-    $('ev-icon').textContent = cfg.i;
+    $('ev-bigicon').textContent = cfg.i;
     $('ev-more').className = 'ev-more';
 
     // Money hits the panel itself, not just the text.
@@ -621,28 +696,51 @@
       lcd.classList.remove('pop'); void lcd.offsetWidth; lcd.classList.add('pop');
     }
 
-    var head = headline(ev.type, ev.p);
-    var msg  = (ev.p.message || '').slice(0, 46);
-    var hEl = $('ev-head'), mEl = $('ev-msg');
-    hEl.textContent = ''; mEl.textContent = '';
+    // The fanfare fires with the box, not after it — the sound IS the event.
+    SFX.fanfare();
 
-    // Typewriter. ~26ms/char is DMG cadence — fast enough not to stall a
-    // stream, slow enough that the reveal reads as a machine speaking.
-    var i = 0;
+    var name = nameOf(ev.type, ev.p);
+    var act  = actOf(ev.type, ev.p);
+    var msg  = (ev.p.message || '').slice(0, 42);
+    var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg');
+    nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
+
     clearInterval(annTypeT); clearTimeout(annHoldT);
+
+    // ── Stage 1: the NAME assembles, one glyph per frame, each with a blip.
+    // Slower than the body text on purpose (52ms vs 24ms) — this is the part
+    // the viewer paid for, so it gets the airtime.
+    var ni = 0;
     annTypeT = setInterval(function() {
-      if (i < head.length) {
-        hEl.textContent += head[i++];
-      } else if (i - head.length < msg.length) {
-        mEl.textContent += msg[i++ - head.length];
-      } else {
-        clearInterval(annTypeT);
-        $('ev-more').className = 'ev-more on';
-        // Hold longer when nothing is waiting, so a lone event can be read;
-        // shorter during a burst so the queue drains.
-        annHoldT = setTimeout(annNext, annQ.length ? 1400 : 3200);
+      if (ni < name.length) {
+        var ch = document.createElement('i');
+        ch.textContent = name[ni] === ' ' ? ' ' : name[ni];
+        // Stagger the pop so the name lands like a stamp, not a wipe.
+        ch.style.animationDelay = '0s';
+        nEl.appendChild(ch);
+        SFX.blip();
+        ni++;
+        return;
       }
-    }, 26);
+      clearInterval(annTypeT);
+
+      // ── Stage 2: the action line and message type underneath.
+      var i = 0;
+      annTypeT = setInterval(function() {
+        if (i < act.length) {
+          aEl.textContent += act[i++];
+        } else if (i - act.length < msg.length) {
+          mEl.textContent += msg[i++ - act.length];
+        } else {
+          clearInterval(annTypeT);
+          $('ev-more').className = 'ev-more on';
+          // Hold longer when nothing is waiting so a lone event can be read;
+          // shorter during a burst so the queue drains. Longer overall than the
+          // old strip because there is now more to actually look at.
+          annHoldT = setTimeout(annNext, annQ.length ? 1800 : 4000);
+        }
+      }, 24);
+    }, 52);
   }
 
   // Money reads as a win regardless of size; the Blob's amplitude carries the

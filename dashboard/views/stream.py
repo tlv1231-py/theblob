@@ -249,13 +249,24 @@ _STAGE_HTML = """
 
       <!-- Stream events announce here, directly over his head. Gameboy
            dialogue box: bezel, LCD dot grid, typewriter reveal. -->
+      <!-- Idle it is a thin strip; a viewer event expands it into a Gameboy
+           dialogue box over his head. The name is its own element because the
+           name is the point — someone paid to be on screen. -->
       <div id="s-events">
         <div class="ev-lcd" id="ev-lcd">
-          <div class="ev-line">
+          <div class="ev-corners"></div>
+          <div class="ev-idle" id="ev-idle">
             <span class="ev-icon" id="ev-icon">&#x25C8;</span>
             <span class="ev-head" id="ev-head"></span>
           </div>
-          <div class="ev-msg" id="ev-msg"></div>
+          <div class="ev-body" id="ev-body">
+            <div class="ev-nameline">
+              <span class="ev-bigicon" id="ev-bigicon">&#x2665;</span>
+              <span class="ev-name" id="ev-name"></span>
+            </div>
+            <div class="ev-act" id="ev-act"></div>
+            <div class="ev-msg" id="ev-msg"></div>
+          </div>
           <span class="ev-more" id="ev-more">&#x25BC;</span>
           <span class="ev-badge" id="ev-badge"></span>
         </div>
