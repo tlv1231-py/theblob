@@ -1167,6 +1167,10 @@ def _build_daw_html(data: dict) -> str:
     qqq_norm_j    = json.dumps(qqq_norm)
     nav_snap_pts_j = json.dumps(data.get("nav_snap_pts", []))
 
+    import os as _os
+    _alpaca_api_key    = (settings.alpaca_api_key    or _os.environ.get("ALPACA_API_KEY",    "")).strip()
+    _alpaca_secret_key = (settings.alpaca_secret_key or _os.environ.get("ALPACA_SECRET_KEY", "")).strip()
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -2959,6 +2963,21 @@ datalist {{ display:none; }}
 // Supabase credentials — declared here so all block-1 functions can reach them
 var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
 var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
+
+// Alpaca paper account — injected server-side from .env (never hardcoded in source)
+var _ALPACA_DEFAULT = {{ name:'Paper', key:'{_alpaca_api_key}', secret:'{_alpaca_secret_key}', type:'paper' }};
+(function() {{
+  try {{
+    if (!_ALPACA_DEFAULT.key || _ALPACA_DEFAULT.key === '{{alpaca_api_key}}') return;
+    var saved = JSON.parse(localStorage.getItem('_alpacaWallets') || '[]');
+    var already = saved.some(function(w) {{ return w.key === _ALPACA_DEFAULT.key; }});
+    if (!already) {{
+      saved.unshift(_ALPACA_DEFAULT);
+      localStorage.setItem('_alpacaWallets', JSON.stringify(saved));
+      localStorage.setItem('_alpacaActiveIdx', '0');
+    }}
+  }} catch(e) {{}}
+}})();
 
 var _eqCanvasInitData = {_eq_canvas_tiles_j};
 var _queuedActionsData = {_queued_actions_js};
