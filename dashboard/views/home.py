@@ -1219,6 +1219,11 @@ def _build_daw_html(data: dict) -> str:
     _alpaca_portfolio  = _alpaca.get("portfolio_value",   0.0)
     _alpaca_exposure   = _alpaca.get("long_market_value", 0.0)
     _alpaca_cash       = _alpaca.get("cash",              0.0)
+    import subprocess as _sp
+    try:
+        _build_hash = _sp.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        _build_hash = "??????"
 
     return f"""<!DOCTYPE html>
 <html>
@@ -2814,6 +2819,7 @@ datalist {{ display:none; }}
   </div>
   <span id="hdr-winrate" style="display:none">—</span>
   <span id="streak-val" style="display:none">—</span>
+  <span style="font:700 7px Consolas,monospace;letter-spacing:.10em;color:#2a1048;flex-shrink:0;user-select:none" title="build hash">{_build_hash}</span>
   <button id="fs-btn" onclick="_toggleFullscreen()" title="Fullscreen (borderless)" style="
     background:none;border:1px solid #2a003d;color:#3a1a5a;cursor:pointer;
     font:700 8px Consolas,monospace;letter-spacing:.12em;padding:3px 7px;
@@ -9523,7 +9529,6 @@ setTimeout(function() {{
 
       // ── Master tick ───────────────────────────────────────────
       function _stratTick() {{
-        _updateRunnerSlot();
         // TRADES slot updated via window._updateTradesSlot from _updateOrbMetrics
         // WALLET slot updated via window._updateWalletSlot from _updateNavDisplays
         _updateQueueSlot();
