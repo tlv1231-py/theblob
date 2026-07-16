@@ -1661,9 +1661,8 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
 
     // ── 8-BIT CYBERPUNK VAPORWAVE CHART ──────────────────────────────────────
-    // Dark background — stars (ambient-canvas z-10) bleed through the 30% gap
-    ctx.fillStyle = 'rgba(4,0,14,0.70)';
-    ctx.fillRect(0, 0, W, H);
+    // No full-canvas fill — chart is confined to the bottom strip;
+    // feed/positions overlays cover the rest so only the strip is visible.
 
     // ── Data ─────────────────────────────────────────────────────────────────
     var raw = window._navDbPts || [];
@@ -1722,9 +1721,15 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     }
     allPts = Object.keys(_thinned).sort().map(function(k) { return _thinned[k]; });
 
-    // ── Chart area ─────────────────────────────────────────────────────────
-    var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
-    var cW = cx1 - cx0, cH = cy1 - cy0;
+    // ── Chart area: bottom strip only (visible below feed/pos overlays) ───
+    var cy1 = H - _MB;
+    var cy0 = Math.max(H - 110, 20);   // 110px strip from canvas bottom
+    var cx0 = _ML, cx1 = W - _MR;
+    var cW  = cx1 - cx0, cH = Math.max(cy1 - cy0, 1);
+
+    // Fill just the strip so the rest lets stars/ambient bleed through
+    ctx.fillStyle = 'rgba(4,0,14,0.90)';
+    ctx.fillRect(0, cy0 - 20, W, H - (cy0 - 20));
 
     // ── Y range ────────────────────────────────────────────────────────────
     var midV = allPts.length ? allPts[allPts.length-1].v : liveNav;
@@ -1802,18 +1807,18 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     _stepPath(m);
     ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
     var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
-    fillGrad.addColorStop(0,   'rgba(255,0,204,' + (0.18 + breathe * 0.10) + ')');
-    fillGrad.addColorStop(0.4, 'rgba(100,0,255,' + (0.08 + breathe * 0.06) + ')');
-    fillGrad.addColorStop(1,   'rgba(0,240,255,0)');
+    fillGrad.addColorStop(0,   'rgba(255,0,204,' + (0.45 + breathe * 0.15) + ')');
+    fillGrad.addColorStop(0.4, 'rgba(100,0,255,' + (0.22 + breathe * 0.10) + ')');
+    fillGrad.addColorStop(1,   'rgba(0,240,255,0.02)');
     ctx.fillStyle = fillGrad; ctx.fill();
 
-    // ── 8-bit glow passes ─────────────────────────────────────────────────
+    // ── 8-bit glow passes (boosted alphas compensate for canvas opacity:0.55)
     var passes = [
-      { w: 20, a: 0.07, rgb: '0,240,255'  },  // cyan outer halo
-      { w: 12, a: 0.12, rgb: '255,0,200'  },  // pink mid halo
-      { w: 6,  a: 0.25, rgb: '180,0,255'  },  // purple bloom
-      { w: 3,  a: 0.90, rgb: '255,60,220' },  // hot-pink core
-      { w: 1,  a: 1.00, rgb: '0,255,255'  },  // cyan bright edge
+      { w: 32, a: 0.22, rgb: '0,240,255'  },  // cyan outer halo
+      { w: 18, a: 0.55, rgb: '255,0,200'  },  // pink mid halo
+      { w: 9,  a: 0.80, rgb: '180,0,255'  },  // purple bloom
+      { w: 4,  a: 1.00, rgb: '255,60,220' },  // hot-pink core
+      { w: 2,  a: 1.00, rgb: '0,255,255'  },  // cyan bright edge
     ];
     passes.forEach(function(pass) {
       _stepPath(m);
