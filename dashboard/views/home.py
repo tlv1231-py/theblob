@@ -4551,16 +4551,15 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
 
-    // ── Time window ────────────────────────────────────────────────────────
-    var winMs    = window._navWindowMs || 4 * 3600 * 1000;
+    // ── Time window — "now" is always pinned to the horizontal center ─────────
+    var winMs     = window._navWindowMs || 4 * 3600 * 1000;
     var dataStart = allPts.length ? allPts[0].ms : now_ms - 30*60000;
-    var t0 = Math.max(dataStart, now_ms - winMs);
-    t0 = Math.min(t0, now_ms - 30 * 60000);   // minimum 30-min window so flat line is wide
-    // t1 has a 10% right-pad so the dot sits at 90% width, not the far-right edge
-    var span = now_ms - t0;
-    var t1   = now_ms + span * 0.11;
+    // Half-span = how far back we show; minimum 30 min so line has real width
+    var halfSpan  = Math.max(now_ms - Math.max(dataStart, now_ms - winMs), 30*60000);
+    var t0 = now_ms - halfSpan;   // left edge = past
+    var t1 = now_ms + halfSpan;   // right edge = future buffer (now is at center)
 
-    // Add live point, filter, dedupe close timestamps
+    // Add live point, filter
     allPts.push({{ ms: now_ms, v: liveNav }});
     allPts = allPts.filter(function(p) {{ return p.ms >= t0 && p.ms <= t1; }});
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
@@ -4602,7 +4601,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.textAlign = 'center';
     for (var xi = 0; xi <= xTickCount; xi++) {{
       var xms = t0 + (t1 - t0) * xi / xTickCount;
-      if (xms > now_ms) continue;  // don't label the right-pad zone
+      if (xms > now_ms + 60000) continue;  // don't label the future buffer
       var xx  = tx(xms);
       var xd  = new Date(xms);
       var hh  = xd.getHours() % 12 || 12;
