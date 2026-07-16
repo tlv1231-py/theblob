@@ -1225,7 +1225,37 @@ def _build_daw_html(data: dict) -> str:
     except Exception:
         _build_hash = "??????"
 
-    return f"""<!DOCTYPE html>
+    # ── External JS wiring ───────────────────────────────────────────────────────
+    # Build the window._TND data object (all Python-injected values for JS)
+    import pathlib as _pl, json as _jj
+    _tnd_data = (
+        "window._TND = {\n"
+        f"  ALL_TICKERS:     {_all_tickers_j},\n"
+        f"  ALPACA_KEY:      {_jj.dumps(_alpaca_api_key)},\n"
+        f"  ALPACA_SECRET:   {_jj.dumps(_alpaca_secret_key)},\n"
+        f"  ALPACA_EXPOSURE: {_alpaca_exposure:.6f},\n"
+        f"  ALPACA_PORTVAL:  {_alpaca_portfolio:.6f},\n"
+        f"  ALPACA_DEFAULT:  {{name:'Paper',key:{_jj.dumps(_alpaca_api_key)},secret:{_jj.dumps(_alpaca_secret_key)},type:'paper'}},\n"
+        f"  EQ_CANVAS_TILES: {_eq_canvas_tiles_j},\n"
+        f"  EQ_POS:          {_eq_pos_js},\n"
+        f"  NEWEST_EV_TS:    {_newest_ev_ts_js},\n"
+        f"  QUEUED_ACTIONS:  {_queued_actions_js},\n"
+        f"  MARK_TS:         {mark_ts_j},\n"
+        f"  MARK_VALS:       {mark_vals_j},\n"
+        f"  NAV_SNAP_PTS:    {nav_snap_pts_j},\n"
+        f"  PORT_DATES:      {port_dates_j},\n"
+        f"  PORT_VALUES:     {port_values_j},\n"
+        f"  QQQ_DATES:       {qqq_dates_j},\n"
+        f"  QQQ_NORM:        {qqq_norm_j},\n"
+        f"  SPY_DATES:       {spy_dates_j},\n"
+        f"  SPY_NORM:        {spy_norm_j},\n"
+        "};\n"
+    )
+    # Read external JS (home_nav.js lives next to this file's parent dashboard/)
+    _nav_js_path = _pl.Path(__file__).parent.parent / "home_nav.js"
+    _nav_js = _nav_js_path.read_text("utf-8") if _nav_js_path.exists() else ""
+
+    _html = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -9551,6 +9581,25 @@ setTimeout(function() {{
 
 </body>
 </html>"""
+
+    # ── Swap in external JS (string surgery — no f-string curly-brace conflicts) ─
+    if _nav_js:
+        # Sentinel strings that uniquely anchor the start of each inline JS block
+        _B1 = "// Supabase credentials — declared here so all block-1 functions can reach them"
+        _B2 = "// ── Gauge — avg trades per hour ───────────────────────────────────────────"
+        _SC = "</script>"
+
+        # Replace block 1 content: from sentinel to the closing </script>
+        _i1s = _html.index(_B1)
+        _i1e = _html.index(_SC, _i1s)
+        _html = _html[:_i1s] + _tnd_data + "\n" + _nav_js + "\n" + _html[_i1e:]
+
+        # Replace block 2 content: from sentinel to the closing </script>
+        _i2s = _html.index(_B2)
+        _i2e = _html.index(_SC, _i2s)
+        _html = _html[:_i2s] + "// JS consolidated into block above (home_nav.js)\n" + _html[_i2e:]
+
+    return _html
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
