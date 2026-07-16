@@ -38,7 +38,11 @@
   var BAYER = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5]
     .map(function(v) { return v / 16 - 0.5; });
 
-  var MOODS = ['IDLE','HAPPY','SCARED','ALERT','SLEEP','SMUG'];
+  // BRACE is the anticipation beat — he winds up BEFORE a trade lands, so the
+  // impact has something to release. Anticipation is what separates a
+  // performance from a twitch; without it every reaction starts at full volume
+  // from nothing and reads as a flinch.
+  var MOODS = ['IDLE','HAPPY','SCARED','ALERT','SLEEP','SMUG','BRACE'];
 
   function create(canvas, opts) {
     opts = opts || {};
@@ -100,6 +104,13 @@
       if (mood === 'SLEEP')  { sy -= 0.12; sx += 0.08; R -= 0.5;
                                bob = Math.round(Math.sin(t * 0.8) * 1.2); }
       if (mood === 'SMUG')   { sx += 0.06; sy -= 0.03; }
+      // BRACE — the wind-up. He crouches and squats wide, holding still (the
+      // bob is killed) so the release has something to spring from. Deliberately
+      // the OPPOSITE deformation to HAPPY/ALERT: compressing before the impact
+      // is what makes the impact read as a release rather than a jolt.
+      if (mood === 'BRACE')  { sy -= 0.13; sx += 0.10; R -= 0.6;
+                               bob = Math.round(Math.sin(t * 1.7) * 0.4);
+                               accent = P.CYN; }
 
       var cx = W/2 + jx, cy = H/2 + 1 + bob + jy;
       var LX = -0.55, LY = -0.68, LZ = 0.48;   // single light source, upper-left
@@ -165,6 +176,13 @@
       } else if (mood === 'SMUG') {
         rect(CX-7, fy, 5, 1, P.EYE);   rect(CX+3, fy, 5, 1, P.EYE);
         rect(CX-7, fy+1, 5, 2, P.EYE); rect(CX+3, fy+1, 5, 2, P.EYE);
+      } else if (mood === 'BRACE') {
+        // Narrowed, and hard over toward whatever he is about to work — the
+        // glance is doing the pointing, this is the squint that sells intent.
+        // Wide eyes here would read as SCARED; the wind-up is focus, not fear.
+        var bl = Math.round(lookX * 3);
+        rect(CX-7+bl, fy, 5, 3, P.EYE); rect(CX+3+bl, fy, 5, 3, P.EYE);
+        px(CX-6+bl, fy+1, P.WHT); px(CX+4+bl, fy+1, P.WHT);
       } else {
         var ew = mood === 'SCARED' ? 6 : 5;
         rect(CX-7+look, fy-1, ew, ew, P.EYE); rect(CX+3+look, fy-1, ew, ew, P.EYE);
@@ -181,6 +199,8 @@
       else if (mood === 'ALERT')    { rect(CX-2, my-1, 5, 3, P.EYE); }
       else if (mood === 'SLEEP')    { rect(CX-1, my, 3, 1, P.EYE); }
       else if (mood === 'SMUG')     { rect(CX-3, my, 5, 1, P.EYE); rect(CX+2, my-1, 2, 1, P.EYE); }
+      // BRACE — a small tight line. Held breath.
+      else if (mood === 'BRACE')    { rect(CX-1, my, 3, 2, P.EYE); }
       else                          { rect(CX-2, my, 5, 1, P.EYE); }
 
       // ── FX particles ──────────────────────────────────────────────────────

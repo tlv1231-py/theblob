@@ -90,8 +90,12 @@
 
   function syncBlobMood() {
     // Transient moods own the character until they decay; don't stomp them.
+    // BRACE is in this list for a reason that is easy to miss: this runs every
+    // 1000ms and the wind-up is only 500ms, so without it roughly half of every
+    // anticipation beat would be overwritten with IDLE mid-crouch — the wind-up
+    // would visibly abort before the impact it exists to set up.
     var m = blob.getMood();
-    if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED') return;
+    if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED' || m === 'BRACE') return;
 
     // He sleeps when THE SYSTEM is idle, not when NYSE is shut. The crypto
     // strategy trades ~9x/min around the clock; gating on market hours had him
@@ -1184,22 +1188,64 @@
   // Every beat moves all three together — the slot, the Blob, and the score —
   // because they are three views of one event, and staggering them would read
   // as three unrelated things twitching.
+  // ── The beat ─────────────────────────────────────────────────────────────
+  // Three phases per trade, played in order, one trade at a time:
+  //
+  //     PRE (brace)  ->  EVENT (impact)  ->  POST (follow-through)  ->  gap
+  //
+  // This is anticipation / action / follow-through. The old version was action
+  // only: every reaction started at full volume out of nothing, which reads as
+  // a flinch rather than a performance. The wind-up gives the impact something
+  // to release, and the follow-through gives it somewhere to land.
+  //
+  // Slower on purpose. A trade now occupies 1.6s instead of 1.0s, so a burst of
+  // four takes ~6.4s to play out. The book fires roughly every 7s, so a lone
+  // trade finishes well before the next arrives, and a burst simply queues.
+  var PRE_MS = 500;      // he sees it coming and crouches
+  var EVENT_MS = 0;      // the impact — sound, tile and score together
+  var POST_MS = 800;     // the verdict mood plays out
+  var GAP_MS = 300;      // breath before the next wind-up
+  // The Blob runs at 10fps, so ticks are ms/100. BLOB.md: do not raise the FPS.
+  var PRE_TICKS = Math.round(PRE_MS / 100);
+  var POST_TICKS = Math.round(POST_MS / 100);
+
   var tradeQ = [], tradeBusy = false;
-  var TRADE_COOLDOWN = 1000;
 
   function tradePush(t) {
     tradeQ.push(t);
     // A long backlog is stale by the time it plays — better to drop the oldest
-    // than to narrate a minute-old fill as if it just happened.
-    if (tradeQ.length > 8) tradeQ.splice(0, tradeQ.length - 8);
+    // than to narrate a minute-old fill as if it just happened. At 1.6s a beat,
+    // 6 queued is ~10s of backlog, which is about as late as a "live" reaction
+    // can honestly claim to be.
+    if (tradeQ.length > 6) tradeQ.splice(0, tradeQ.length - 6);
     if (!tradeBusy) tradeNext();
   }
 
   function tradeNext() {
     if (!tradeQ.length) { tradeBusy = false; return; }
     tradeBusy = true;
-    applyTrade(tradeQ.shift());
-    setTimeout(tradeNext, TRADE_COOLDOWN);
+    var t = tradeQ.shift();
+
+    // ── PRE ────────────────────────────────────────────────────────────
+    // He looks at the slot and braces. Nothing else moves yet: no sound, no
+    // tile, no score. This half-second is the only warning the viewer gets,
+    // and it is what makes the impact feel caused rather than random.
+    blob.setMood('BRACE', PRE_TICKS + 2);   // +2 so it holds through the handoff
+    glanceAt(t.sym);
+    $('blob-mood').textContent = blob.getMood();
+
+    setTimeout(function() {
+      // ── EVENT ────────────────────────────────────────────────────────
+      applyTrade(t);
+
+      setTimeout(function() {
+        // ── POST ───────────────────────────────────────────────────────
+        // The verdict mood set at the impact is still decaying — this is its
+        // window. Nothing to fire; the beat just isn't over yet, and the next
+        // wind-up must not start on top of the follow-through.
+        setTimeout(tradeNext, GAP_MS);
+      }, POST_MS);
+    }, PRE_MS + EVENT_MS);
   }
 
   // ONE MOMENT. Sound, text and entry animation all land on the same frame.
@@ -1212,9 +1258,13 @@
   function applyTrade(t) {
     var verdict = t.dir === 'ENTER' ? 'enter' : (t.pnl > 0 ? 'win' : 'loss');
 
-    if (verdict === 'win')        blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
-    else if (verdict === 'enter') blob.setMood('ALERT', 18);
-    else                          blob.setMood('ALERT', 12);
+    // The verdict mood IS the follow-through, so its duration is the POST
+    // window — not an arbitrary constant. A win gets a little longer because it
+    // is rare and worth holding; anything shorter than POST_TICKS would have
+    // him snap back to idle while the beat was still running.
+    if (verdict === 'win')        blob.setMood('HAPPY', POST_TICKS + 6);
+    else if (verdict === 'enter') blob.setMood('ALERT', POST_TICKS);
+    else                          blob.setMood('ALERT', POST_TICKS - 2);
     glanceAt(t.sym);
     flashTrade(t.dir, t.sym, t.pnl);
     $('blob-mood').textContent = blob.getMood();

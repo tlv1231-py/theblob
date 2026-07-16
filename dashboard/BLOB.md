@@ -72,19 +72,41 @@ Transient moods take a duration in ticks and decay back to `IDLE`.
 
 | Mood | Reads as | Should map to | Wired? |
 |---|---|---|---|
-| `IDLE` | breathing, occasional blink | flat / normal | — |
-| `HAPPY` | bounce, `^^` eyes, sparks | up day | no |
-| `SCARED` | squish, jitter, sweat, wide eyes | approaching drawdown limit | no |
-| `ALERT` | pop, `!`, cyan | a fill just landed | no |
-| `SLEEP` | flat, `z`, dimmed | market closed | no |
-| `SMUG` | half-lidded, smirk | strong close | no |
+| `IDLE` | breathing, occasional blink | flat / normal | yes |
+| `HAPPY` | bounce, `^^` eyes, sparks | a winning exit | yes |
+| `SCARED` | squish, jitter, sweat, wide eyes | approaching drawdown limit | yes |
+| `ALERT` | pop, `!`, cyan | a fill just landed | yes |
+| `SLEEP` | flat, `z`, dimmed | the *system* is idle (not market hours) | yes |
+| `SMUG` | half-lidded, smirk | day P&L above +1% | yes |
+| `BRACE` | crouch, squat wide, narrowed eyes, held still | **the ~500ms before a trade lands** | yes |
 
-`SMUG` currently maps to nothing real — it exists because a smug blob after a
-good close felt right. Kept deliberately; formalize or cut it, don't leave it
-ambiguous.
+`SMUG` is now formalized: it fires from `syncBlobMood` when day P&L is above +1%.
+
+`BRACE` is the anticipation beat and the reason the rest reads as a performance
+rather than a twitch. It is the OPPOSITE deformation to HAPPY/ALERT — he
+compresses so the impact has something to release. Its bob is nearly killed:
+holding still is what makes the wind-up read as held breath. Eyes narrow rather
+than widen, because wide eyes here would read as SCARED — the wind-up is focus,
+not fear.
 
 Continuous PnL is applied *underneath* whatever mood is active, so he reacts to
 magnitude and category at the same time.
+
+## The beat (stream.js)
+
+A trade is not one moment, it is three:
+
+```
+PRE 500ms (BRACE + glance)  ->  EVENT (sound + tile + score)  ->  POST 800ms  ->  gap 300ms
+```
+
+1.6s per trade, played one at a time from a queue. The verdict mood set at the
+impact IS the follow-through, so its duration is derived from `POST_TICKS` — not
+a constant. Set it shorter and he snaps to idle while the beat is still running.
+
+**`BRACE` must stay in `syncBlobMood`'s protected list.** That function runs
+every 1000ms and the wind-up is only 500ms, so without the guard roughly half of
+every anticipation would be overwritten with IDLE mid-crouch.
 
 ## Wiring plan (not yet done)
 
