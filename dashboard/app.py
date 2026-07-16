@@ -19,7 +19,8 @@ st.set_page_config(
     menu_items={},
 )
 
-from dashboard.views import home, benchmarks, portfolio, signals, backtest_lab, risk_monitor, daytrader, stream
+from dashboard.views import (home, benchmarks, portfolio, signals, backtest_lab,
+                             risk_monitor, daytrader, stream, stream_hq)
 
 # ── Global CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -418,6 +419,7 @@ PAGES = {
     "Risk Monitor":   risk_monitor.render,
     "Daytrader":      daytrader.render,
     "Stream":         stream.render,
+    "Stream HQ":      stream_hq.render,
 }
 
 # ── Page selection via query params ───────────────────────────────────────────
@@ -435,6 +437,7 @@ _PAGE_ICONS = {
     "Risk Monitor":   ("◬", "Risk Monitor"),
     "Daytrader":      ("⊕", "Daytrader"),
     "Stream":         ("▶", "Stream (vertical)"),
+    "Stream HQ":      ("◉", "Stream HQ"),
 }
 
 _rail_items = ""

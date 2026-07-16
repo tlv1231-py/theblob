@@ -13,6 +13,8 @@ from data.models import (  # noqa: F401 — imports needed to register models
     PortfolioSnapshot,
     PriceBar,
     SignalRecord,
+    StreamEvent,
+    StreamHealth,
 )
 
 

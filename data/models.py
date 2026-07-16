@@ -149,6 +149,63 @@ class CryptoPosition(Base):
     strategy:     Mapped[str]  = mapped_column(String(50), default="crypto_momentum")
 
 
+class StreamEvent(Base):
+    """One event bound for the Stream page — real or simulated.
+
+    Stream HQ and the Stream page never share a browser: the stream renders in
+    a headless Chromium on the streaming host, while HQ runs wherever the
+    operator is. postMessage/localStorage cannot cross that gap, so this table
+    IS the channel. Everything the Blob reacts to that did not come from the
+    trading engine passes through here, which is what makes both the
+    hold-and-release countdown and simulation possible.
+
+    Lifecycle: queued -> released -> consumed. A queued row is visible in HQ but
+    invisible to the stream; only `released` (or release_at <= now) is eligible
+    to be picked up. `cancelled` never fires. The Stream page stamps consumed_at
+    so HQ can prove an event actually landed rather than assuming it did.
+    """
+    __tablename__ = "stream_events"
+
+    id:         Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # donation | superchat | supersticker | follow | subscription | membership_gift
+    # | bits | raid | chat | trade_enter | trade_exit | risk_breach
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source:     Mapped[str] = mapped_column(String(20), nullable=False, default="simulated")
+    # streamlabs | simulated | engine
+    payload:    Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status:     Mapped[str] = mapped_column(String(20), nullable=False, default="queued", index=True)
+    # queued | released | consumed | cancelled
+    release_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at:  Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class StreamHealth(Base):
+    """Heartbeat from one component of the streaming stack.
+
+    Each component writes its own row; HQ only reads. This is deliberate — a
+    health check that cannot observe the thing it reports on is worse than no
+    check at all, because it shows green while the stream is dead.
+
+    `stream_page` is written BY the rendered page itself, which is the only way
+    to catch the specific failure that kills this setup: Streamlit drops the
+    idle websocket, the page freezes, and the encoder happily pushes a dead
+    screenshot to YouTube for hours. Nothing outside the render can see that.
+
+    `encoder` must be written by an agent on the streaming host — ffmpeg speed,
+    fps, CPU. Until that agent exists those checks report "no agent", never OK.
+    """
+    __tablename__ = "stream_health"
+
+    id:        Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    component: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    # stream_page | encoder | host | engine
+    status:    Mapped[str] = mapped_column(String(20), nullable=False, default="ok")
+    # ok | degraded | down
+    detail:      Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class NavSnapshot(Base):
     """Intraday NAV samples written every ~30s by the dashboard crypto poller."""
     __tablename__ = "nav_snapshots"

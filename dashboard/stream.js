@@ -546,6 +546,116 @@
       .catch(function() {});
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // STREAM EVENT BUS — donations, subs, raids, and simulated anything
+  // Stream HQ writes to stream_events; this consumes. Only `released` rows are
+  // eligible: a queued row is still cancellable and must never reach air.
+  // Each row is claimed by stamping consumed_at, which is also what lets HQ
+  // prove an event actually landed rather than assuming it did.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Money reads as a win regardless of size; the Blob's amplitude carries the
+  // size. Non-money social events are ALERT — real, but not a verdict.
+  var EVENT_MOOD = {
+    donation:        { mood: 'HAPPY', sfx: 'win',   label: '♥ DONO' },
+    superchat:       { mood: 'HAPPY', sfx: 'win',   label: '♥ SUPERCHAT' },
+    supersticker:    { mood: 'HAPPY', sfx: 'win',   label: '♥ STICKER' },
+    membership_gift: { mood: 'HAPPY', sfx: 'win',   label: '♥ GIFTED' },
+    bits:            { mood: 'HAPPY', sfx: 'win',   label: '♥ BITS' },
+    subscription:    { mood: 'ALERT', sfx: 'entry', label: '★ SUB' },
+    follow:          { mood: 'ALERT', sfx: 'entry', label: '★ FOLLOW' },
+    raid:            { mood: 'ALERT', sfx: 'entry', label: '★ RAID' },
+    chat:            { mood: 'ALERT', sfx: null,    label: '· CHAT' },
+    trade_enter:     { mood: 'ALERT', sfx: 'entry', label: '▲ ENTER' },
+    trade_exit:      { mood: null,    sfx: null,    label: '✗ EXIT' },
+    risk_breach:     { mood: 'SCARED', sfx: 'loss', label: '⚠ RISK' }
+  };
+
+  function applyStreamEvent(ev) {
+    var p = ev.payload || {};
+    var cfg = EVENT_MOOD[ev.event_type];
+    if (!cfg) return;
+
+    // trade_exit's verdict comes from its pnl, not its type.
+    var mood = cfg.mood, sfx = cfg.sfx;
+    if (ev.event_type === 'trade_exit') {
+      var win = Number(p.pnl || 0) > 0;
+      mood = win ? 'HAPPY' : 'ALERT';
+      sfx  = win ? 'win' : 'loss';
+    }
+
+    var amt = p.amount != null ? Number(p.amount) : null;
+    var who = p.from || p.symbol || '';
+    var txt = cfg.label + ' ' + who + (amt != null ? '  $' + amt.toFixed(2) : '');
+
+    if (mood) blob.setMood(mood, mood === 'HAPPY' ? 26 : 18);
+    if (sfx && SFX[sfx]) SFX[sfx]();
+
+    var el = $('trade-flash');
+    if (el) {
+      el.textContent = txt;
+      el.className = 'trade-flash show ' +
+        (sfx === 'loss' ? 'loss' : (sfx === 'win' ? 'win' : 'enter'));
+      clearTimeout(el._t);
+      el._t = setTimeout(function() { el.className = 'trade-flash'; }, 3000);
+    }
+    $('blob-mood').textContent = blob.getMood();
+  }
+
+  function pollStreamEvents() {
+    fetch(S.supa.url + '/rest/v1/stream_events?select=id,event_type,source,payload' +
+          '&status=eq.released&consumed_at=is.null&order=created_at.asc&limit=10',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || !rows.length) return;
+        rows.forEach(function(ev, i) {
+          // Stagger a burst so ten queued events don't collapse into one frame.
+          setTimeout(function() { applyStreamEvent(ev); }, i * 1200);
+          // Claim it immediately — status flips to consumed so a second poll
+          // (or a second renderer) cannot replay the same event.
+          fetch(S.supa.url + '/rest/v1/stream_events?id=eq.' + ev.id, {
+            method: 'PATCH',
+            headers: {
+              apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key,
+              'Content-Type': 'application/json', Prefer: 'return=minimal'
+            },
+            body: JSON.stringify({ status: 'consumed',
+                                   consumed_at: new Date().toISOString() })
+          }).catch(function() {});
+        });
+      })
+      .catch(function() {});
+  }
+
+  // Heartbeat. This is the ONLY way to catch the failure that kills this setup:
+  // Streamlit drops the idle websocket, the page freezes, and the encoder keeps
+  // pushing a dead screenshot to YouTube for hours. Nothing outside the render
+  // can tell — so the render reports on itself.
+  var _beats = 0;
+  function beat() {
+    _beats++;
+    fetch(S.supa.url + '/rest/v1/stream_health', {
+      method: 'POST',
+      headers: {
+        apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key,
+        'Content-Type': 'application/json', Prefer: 'return=minimal'
+      },
+      body: JSON.stringify({
+        component: 'stream_page',
+        status: isSystemLive() ? 'ok' : 'degraded',
+        detail: {
+          beats: _beats,
+          nav: Math.round(state.nav),
+          mood: blob.getMood(),
+          tiles: document.querySelectorAll('.tile').length,
+          audio: SFX.isReady() ? 'on' : 'blocked'
+        },
+        recorded_at: new Date().toISOString()
+      })
+    }).catch(function() {});
+  }
+
   // The slot that just traded acknowledges it, so a fill is legible on the
   // board and not only on the Blob.
   function hitTile(sym) {
@@ -713,7 +823,15 @@
   // CoinGecko is free/unauthenticated and rate-limits hard — 15s is the floor
   // that stays safely under it. Tiles are a P&L read, not a tape.
   setInterval(pollCryptoPrices, 15000);
+  // Donations and simulated events land within ~2s of release — fast enough
+  // that a dono feels acknowledged, cheap enough to run for hours.
+  setInterval(pollStreamEvents, 2000);
+  // Beat faster than Stream HQ's 60s staleness window so one dropped request
+  // is never mistaken for a frozen page.
+  setInterval(beat, 15000);
   window.addEventListener('resize', drawChart);
   pollEvents();
   pollCryptoPrices();
+  pollStreamEvents();
+  beat();
 })();
