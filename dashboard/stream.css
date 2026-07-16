@@ -100,10 +100,10 @@ html, body {
   flex-direction: column;
 }
 
-/* 48 + 260 + 150 + 200 + 502 = 1160. Each band is fixed so the stack can
-   never reflow into the reserved zones. HOLDINGS now takes the largest share:
-   the book runs 9 crypto + 5 equity = 14 tiles, and they are the gamified
-   centrepiece. The Blob and chart gave up height to pay for it. */
+/* 48 + 96 + 260 + 140 + 160 + 456 = 1160. Each band is fixed so the stack can
+   never reflow into the reserved zones. The chart pays for the event box: at
+   this size it was never a chart anyway, it's a direction cue, and a stream
+   event ("MIKE88 SUBSCRIBED!") is worth more screen than a sixth axis label. */
 
 /* ── Status strip · 48 ────────────────────────────────────────────────── */
 #s-status {
@@ -142,6 +142,102 @@ html, body {
 .st-clock {
   font-size: 15px; font-weight: 700; letter-spacing: 0.08em;
   color: var(--text-mid); font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STREAM EVENTS · 96 — Gameboy dialogue box meets cyberpunk
+   Sits directly over the Blob's head: he is what reacts, this is what says why.
+
+   The Gameboy read comes from form, not colour:
+     1. A BEZEL — double border, hard-stepped, no radius. A DMG text box has a
+        frame, and the frame is most of the recognition.
+     2. The LCD DOT GRID — a real pixel lattice ruled over the panel. This is
+        the single most period-correct detail; a flat panel reads as a web toast.
+     3. TYPEWRITER + ▼ — text arrives a character at a time and waits with a
+        blinking arrow. That cadence IS a Gameboy, and it gives each event a
+        beat instead of a flash.
+   Cyberpunk supplies only the palette. Swap the colours and it is still a DMG.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#s-events {
+  height: 96px; flex: none;
+  display: flex; align-items: center;
+  padding: 6px 0 10px;
+}
+
+.ev-lcd {
+  position: relative;
+  width: 100%; height: 100%;
+  padding: 11px 14px;
+  background: linear-gradient(180deg, #10001a, #06000c);
+  /* Stepped bezel — outer frame, inner rule, hard shadow. No soft edges. */
+  border: 3px solid var(--ev-c, #3d0055);
+  box-shadow:
+    inset 0 0 0 2px #06000c,
+    inset 0 0 0 3px rgba(255,255,255,0.06),
+    0 0 22px -6px var(--ev-c, transparent);
+  transition: border-color 0.25s steps(2, end), box-shadow 0.25s steps(2, end);
+  overflow: hidden;
+}
+/* The LCD lattice. 3px cell = visible pixel gaps, the way a DMG panel reads. */
+.ev-lcd::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.30) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg,  rgba(0,0,0,0.30) 0 1px, transparent 1px 3px);
+}
+.ev-lcd.idle { --ev-c: #2a003d; opacity: 0.5; }
+
+.ev-line { display: flex; align-items: baseline; gap: 10px; }
+.ev-icon {
+  font-size: 17px; line-height: 1; flex: none;
+  color: var(--ev-c, var(--text-dim));
+  text-shadow: 0 0 10px currentColor;
+}
+.ev-head {
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 15px; line-height: 1.35;
+  color: var(--ev-c, var(--text-dim));
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 16px var(--ev-c, transparent);
+  white-space: nowrap; overflow: hidden;
+}
+.ev-msg {
+  font-family: VT323, Consolas, monospace;
+  font-size: 19px; line-height: 1;
+  color: var(--text-mid);
+  margin-top: 7px; margin-left: 27px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Blinks only while a message is holding — the DMG "press A" tell. */
+.ev-more {
+  position: absolute; right: 12px; bottom: 9px;
+  font-size: 13px; color: var(--ev-c, var(--text-dim));
+  opacity: 0;
+}
+.ev-more.on { animation: ev-arrow 0.7s steps(2, end) infinite; }
+@keyframes ev-arrow { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* Queue depth — "3 more waiting" during a dono burst. */
+.ev-badge {
+  position: absolute; right: 12px; top: 9px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; letter-spacing: 0.1em;
+  color: var(--text-dim);
+  opacity: 0;
+}
+.ev-badge.on { opacity: 1; }
+
+/* A money event flashes the whole panel once. Steps, not ease — a smooth
+   pulse reads as CSS; this should read as a screen being hit. */
+.ev-lcd.pop { animation: ev-pop 0.36s steps(3, end); }
+@keyframes ev-pop {
+  0%   { box-shadow: inset 0 0 0 2px #06000c, inset 0 0 0 3px rgba(255,255,255,0.06),
+                     0 0 40px -2px var(--ev-c); }
+  100% { box-shadow: inset 0 0 0 2px #06000c, inset 0 0 0 3px rgba(255,255,255,0.06),
+                     0 0 22px -6px var(--ev-c); }
 }
 
 /* ── Blob · 260 ───────────────────────────────────────────────────────── */
@@ -200,7 +296,7 @@ html, body {
 
 /* ── NAV · 150 ────────────────────────────────────────────────────────── */
 #s-nav {
-  height: 150px; flex: none;
+  height: 140px; flex: none;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 3px;
 }
@@ -230,7 +326,7 @@ html, body {
 
 /* ── Chart · 200 ──────────────────────────────────────────────────────── */
 #s-chart {
-  height: 200px; flex: none;
+  height: 160px; flex: none;
   position: relative;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -261,7 +357,7 @@ html, body {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #s-pos {
-  height: 502px; flex: none;
+  height: 456px; flex: none;
   display: flex; flex-direction: column;
 }
 .pos-hdr {

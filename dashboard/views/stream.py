@@ -207,6 +207,20 @@ _STAGE_HTML = """
         <span class="st-clock" id="hd-clock">--:--:--</span>
       </div>
 
+      <!-- Stream events announce here, directly over his head. Gameboy
+           dialogue box: bezel, LCD dot grid, typewriter reveal. -->
+      <div id="s-events">
+        <div class="ev-lcd" id="ev-lcd">
+          <div class="ev-line">
+            <span class="ev-icon" id="ev-icon">&#x25C8;</span>
+            <span class="ev-head" id="ev-head"></span>
+          </div>
+          <div class="ev-msg" id="ev-msg"></div>
+          <span class="ev-more" id="ev-more">&#x25BC;</span>
+          <span class="ev-badge" id="ev-badge"></span>
+        </div>
+      </div>
+
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
         <canvas id="blobCanvas"></canvas>

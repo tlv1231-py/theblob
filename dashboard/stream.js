@@ -554,6 +554,124 @@
   // prove an event actually landed rather than assuming it did.
   // ═══════════════════════════════════════════════════════════════════════
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // THE ANNOUNCER — Gameboy dialogue box above the Blob's head
+  //
+  // A QUEUE, not a swap. Donations arrive in bursts (a raid, a dono train),
+  // and a burst that overwrites itself shows the viewer nothing — the one
+  // moment you most need legible is the one that collides. Each event gets its
+  // own beat: type it out, hold, advance, and show a depth badge so a viewer
+  // knows more is coming.
+  //
+  // Colour follows the language already established on the board: green is
+  // money, pink is identity, cyan is activity. A viewer who has learned the
+  // tiles already knows how to read this.
+  // ═══════════════════════════════════════════════════════════════════════
+  var ANN = {
+    donation:        { c: '#00ff9d', i: '♥', verb: 'DONATED' },
+    superchat:       { c: '#00ff9d', i: '♥', verb: 'SUPERCHATTED' },
+    supersticker:    { c: '#00ff9d', i: '♥', verb: 'SENT A STICKER' },
+    bits:            { c: '#00ff9d', i: '◆', verb: 'CHEERED' },
+    membership_gift: { c: '#ff00cc', i: '♦', verb: 'GIFTED' },
+    subscription:    { c: '#ff00cc', i: '★', verb: 'SUBSCRIBED' },
+    follow:          { c: '#00e5ff', i: '◈', verb: 'FOLLOWED' },
+    raid:            { c: '#9400ff', i: '⚡', verb: 'RAIDED' },
+    chat:            { c: '#8060a0', i: '·', verb: '' },
+    risk_breach:     { c: '#ff3366', i: '⚠', verb: '' }
+  };
+
+  function money(p) {
+    if (p.amount == null) return '';
+    var n = Number(p.amount);
+    return '$' + (n % 1 === 0 ? n.toFixed(0) : n.toFixed(2));
+  }
+
+  // Headline per type. Written as an announcer would say it out loud —
+  // "MIKE88 SUBSCRIBED!" not "subscription_event: mike88".
+  function headline(type, p) {
+    var who = (p.from || 'SOMEONE').toUpperCase();
+    switch (type) {
+      case 'donation':        return who + ' DONATED ' + money(p) + '!';
+      case 'superchat':       return who + ' DROPPED ' + money(p) + '!';
+      case 'supersticker':    return who + ' SENT ' + money(p) + '!';
+      case 'bits':            return who + ' CHEERED ' + (p.amount || 0) + ' BITS!';
+      case 'membership_gift': return who + ' GIFTED ' + (p.count || 1) + '!';
+      case 'subscription':    return who + ' SUBSCRIBED!';
+      case 'follow':          return who + ' FOLLOWED!';
+      case 'raid':            return who + ' RAIDED +' + (p.viewers || 0) + '!';
+      case 'chat':            return who + ':';
+      case 'risk_breach':     return 'RISK BREACH — ' + (p.limit || '');
+      default:                return who;
+    }
+  }
+
+  var annQ = [], annBusy = false, annTypeT = null, annHoldT = null;
+
+  function annPush(type, payload) {
+    if (!ANN[type]) return;
+    annQ.push({ type: type, p: payload || {} });
+    if (annQ.length > 6) annQ.splice(0, annQ.length - 6);  // drop the oldest
+    if (!annBusy) annNext();
+    annBadge();
+  }
+
+  function annBadge() {
+    var b = $('ev-badge');
+    if (!b) return;
+    var n = annQ.length;
+    b.textContent = n > 0 ? '+' + n + ' MORE' : '';
+    b.className = 'ev-badge' + (n > 0 ? ' on' : '');
+  }
+
+  function annNext() {
+    var lcd = $('ev-lcd');
+    if (!lcd) return;
+    if (!annQ.length) {
+      annBusy = false;
+      lcd.classList.add('idle');
+      $('ev-more').className = 'ev-more';
+      annBadge();
+      return;
+    }
+    annBusy = true;
+    var ev = annQ.shift();
+    annBadge();
+
+    var cfg = ANN[ev.type];
+    lcd.classList.remove('idle');
+    lcd.style.setProperty('--ev-c', cfg.c);
+    $('ev-icon').textContent = cfg.i;
+    $('ev-more').className = 'ev-more';
+
+    // Money hits the panel itself, not just the text.
+    if (cfg.c === '#00ff9d') {
+      lcd.classList.remove('pop'); void lcd.offsetWidth; lcd.classList.add('pop');
+    }
+
+    var head = headline(ev.type, ev.p);
+    var msg  = (ev.p.message || '').slice(0, 46);
+    var hEl = $('ev-head'), mEl = $('ev-msg');
+    hEl.textContent = ''; mEl.textContent = '';
+
+    // Typewriter. ~26ms/char is DMG cadence — fast enough not to stall a
+    // stream, slow enough that the reveal reads as a machine speaking.
+    var i = 0;
+    clearInterval(annTypeT); clearTimeout(annHoldT);
+    annTypeT = setInterval(function() {
+      if (i < head.length) {
+        hEl.textContent += head[i++];
+      } else if (i - head.length < msg.length) {
+        mEl.textContent += msg[i++ - head.length];
+      } else {
+        clearInterval(annTypeT);
+        $('ev-more').className = 'ev-more on';
+        // Hold longer when nothing is waiting, so a lone event can be read;
+        // shorter during a burst so the queue drains.
+        annHoldT = setTimeout(annNext, annQ.length ? 1400 : 3200);
+      }
+    }, 26);
+  }
+
   // Money reads as a win regardless of size; the Blob's amplitude carries the
   // size. Non-money social events are ALERT — real, but not a verdict.
   var EVENT_MOOD = {
@@ -584,20 +702,18 @@
       sfx  = win ? 'win' : 'loss';
     }
 
-    var amt = p.amount != null ? Number(p.amount) : null;
-    var who = p.from || p.symbol || '';
-    var txt = cfg.label + ' ' + who + (amt != null ? '  $' + amt.toFixed(2) : '');
-
     if (mood) blob.setMood(mood, mood === 'HAPPY' ? 26 : 18);
     if (sfx && SFX[sfx]) SFX[sfx]();
 
-    var el = $('trade-flash');
-    if (el) {
-      el.textContent = txt;
-      el.className = 'trade-flash show ' +
-        (sfx === 'loss' ? 'loss' : (sfx === 'win' ? 'win' : 'enter'));
-      clearTimeout(el._t);
-      el._t = setTimeout(function() { el.className = 'trade-flash'; }, 3000);
+    // Trades speak through the flash under his chin; stream events get the
+    // announcer over his head. Keeping the two channels separate is what lets
+    // a viewer tell "the bot did something" from "a person did something".
+    if (ev.event_type === 'trade_enter' || ev.event_type === 'trade_exit') {
+      flashTrade(ev.event_type === 'trade_enter' ? 'ENTER' : 'EXIT',
+                 p.symbol || '', p.pnl != null ? Number(p.pnl) : null);
+      if (p.symbol) hitTile(p.symbol);
+    } else {
+      annPush(ev.event_type, p);
     }
     $('blob-mood').textContent = blob.getMood();
   }
@@ -811,6 +927,7 @@
   renderHero();
   renderPositions();
   drawChart();
+  annNext();   // settles the panel into its idle state
 
   // The chart head pulses, so it needs its own repaint clock. 20fps is plenty
   // for a glow and keeps an unattended stream from cooking a CPU for hours.
