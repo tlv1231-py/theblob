@@ -29,6 +29,31 @@ _MONITOR_TARGET   = 20
 
 # ── Alpaca order execution ──────────────────────────────────────────────────────
 
+def _fetch_alpaca_account() -> dict:
+    """Fetch portfolio_value and long_market_value from Alpaca. Returns {} on any failure."""
+    import os
+    from config.settings import settings
+    api_key    = settings.alpaca_api_key    or os.environ.get("ALPACA_API_KEY", "")
+    secret_key = settings.alpaca_secret_key or os.environ.get("ALPACA_SECRET_KEY", "")
+    base_url   = settings.alpaca_base_url   or os.environ.get("ALPACA_BASE_URL",
+                                                               "https://paper-api.alpaca.markets")
+    if not api_key or not secret_key:
+        return {}
+    try:
+        from alpaca.trading.client import TradingClient
+        client = TradingClient(api_key=api_key, secret_key=secret_key,
+                               paper="paper-api" in base_url)
+        acct = client.get_account()
+        return {
+            "portfolio_value":    float(getattr(acct, "portfolio_value",    0) or 0),
+            "long_market_value":  float(getattr(acct, "long_market_value",  0) or 0),
+            "buying_power":       float(getattr(acct, "buying_power",       0) or 0),
+            "cash":               float(getattr(acct, "cash",               0) or 0),
+        }
+    except Exception:
+        return {}
+
+
 def _submit_alpaca_order(sym: str, side: str, notional: float, strategy: str = "user") -> None:
     """Submit a notional market order to Alpaca and write the fill to DB."""
     import os
@@ -575,6 +600,7 @@ def _load_chart_data() -> dict:
         "positions_data": positions_data,
         "queued_actions": queued_actions,
         "nav_snap_pts": nav_snap_pts,
+        "alpaca": _fetch_alpaca_account(),
     }
 
 
@@ -1184,6 +1210,10 @@ def _build_daw_html(data: dict) -> str:
     from config.settings import settings as _settings
     _alpaca_api_key    = (_settings.alpaca_api_key    or _os.environ.get("ALPACA_API_KEY",    "")).strip()
     _alpaca_secret_key = (_settings.alpaca_secret_key or _os.environ.get("ALPACA_SECRET_KEY", "")).strip()
+    _alpaca            = data.get("alpaca", {})
+    _alpaca_portfolio  = _alpaca.get("portfolio_value",   0.0)
+    _alpaca_exposure   = _alpaca.get("long_market_value", 0.0)
+    _alpaca_cash       = _alpaca.get("cash",              0.0)
 
     return f"""<!DOCTYPE html>
 <html>
@@ -2820,7 +2850,7 @@ datalist {{ display:none; }}
   </div>
   <div class="strat-slot" id="ss-pipeline">
     <div class="ss-icon">◈</div>
-    <div class="ss-name">PORTFOLIO STRENGTH</div>
+    <div class="ss-name">LONG EXPOSURE</div>
     <div class="ss-trades-row">
       <div class="ss-trades-anchor">
         <span class="ss-status" id="ss-pipeline-st" style="font-family:Consolas,monospace;font-size:11px">—</span>
@@ -2979,7 +3009,9 @@ var SUPA_URL = 'https://seeevuklabvhkawawtxn.supabase.co';
 var SUPA_KEY = 'sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY';
 
 // Alpaca paper account — injected server-side from .env (never hardcoded in source)
-var _ALPACA_DEFAULT = {{ name:'Paper', key:'{_alpaca_api_key}', secret:'{_alpaca_secret_key}', type:'paper' }};
+var _ALPACA_DEFAULT  = {{ name:'Paper', key:'{_alpaca_api_key}', secret:'{_alpaca_secret_key}', type:'paper' }};
+var _ALPACA_EXPOSURE = {_alpaca_exposure:.2f};   // long_market_value injected server-side
+var _ALPACA_PORTVAL  = {_alpaca_portfolio:.2f};  // portfolio_value injected server-side
 (function() {{
   try {{
     if (!_ALPACA_DEFAULT.key || _ALPACA_DEFAULT.key === '{{alpaca_api_key}}') return;
@@ -8993,37 +9025,29 @@ setTimeout(function() {{
       // Initial fetch after short delay
       setTimeout(function() {{ _fetchAlpacaBalance(); _alpacaSyncSecs = 30; }}, 1500);
 
-      // ── PORTFOLIO STRENGTH slot — sluggish sum from DB ────────
-      var _portStrengthDisp = null, _portStrengthRaf = null;
-      function _animatePortStrength(toVal) {{
+      // ── LONG EXPOSURE slot — market value of open positions, server-injected ────────
+      var _longExpDisp = null, _longExpRaf = null;
+      function _animateLongExp(toVal) {{
         var el = document.getElementById('ss-pipeline-st');
         if (!el) return;
-        var from = _portStrengthDisp !== null ? _portStrengthDisp : toVal;
-        if (_portStrengthRaf) cancelAnimationFrame(_portStrengthRaf);
+        var from = _longExpDisp !== null ? _longExpDisp : toVal;
+        if (_longExpRaf) cancelAnimationFrame(_longExpRaf);
         var start = null;
         function step(ts) {{
           if (!start) start = ts;
-          var p = Math.min(1, (ts - start) / 3500);  // 3.5s — deliberately sluggish
-          var e = 1 - Math.pow(1 - p, 2);
-          _portStrengthDisp = from + (toVal - from) * e;
-          el.textContent = '$' + Math.round(_portStrengthDisp).toLocaleString('en-US');
-          if (p < 1) _portStrengthRaf = requestAnimationFrame(step);
-          else {{ _portStrengthDisp = toVal; _portStrengthRaf = null; }}
+          var p = Math.min(1, (ts - start) / 2000);
+          var e = 1 - Math.pow(1 - p, 3);
+          _longExpDisp = from + (toVal - from) * e;
+          el.textContent = '$' + Math.round(_longExpDisp).toLocaleString('en-US');
+          if (p < 1) _longExpRaf = requestAnimationFrame(step);
+          else {{ _longExpDisp = toVal; _longExpRaf = null; }}
         }}
-        _portStrengthRaf = requestAnimationFrame(step);
+        _longExpRaf = requestAnimationFrame(step);
       }}
-      function _fetchPortStrength() {{
-        fetch(SUPA_URL + '/rest/v1/portfolio_snapshots?select=total_value&order=recorded_at.desc&limit=1',
-          {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
-          .then(function(r) {{ return r.json(); }})
-          .then(function(rows) {{
-            if (!Array.isArray(rows) || !rows.length) return;
-            var val = parseFloat(rows[0].total_value);
-            if (val > 0) _animatePortStrength(val);
-          }}).catch(function() {{}});
+      // Seed from server-injected Alpaca long_market_value
+      if (typeof _ALPACA_EXPOSURE === 'number' && _ALPACA_EXPOSURE > 0) {{
+        setTimeout(function() {{ _animateLongExp(_ALPACA_EXPOSURE); }}, 800);
       }}
-      setTimeout(_fetchPortStrength, 2000);
-      setInterval(_fetchPortStrength, 60000);  // refresh every 60s (data doesn't update fast)
 
       // ── TRADES slot — accurate fill count from Supabase ───────
       function _fetchFillCount() {{
