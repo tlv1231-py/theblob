@@ -184,10 +184,121 @@ _EVENT_TYPES = {
 }
 
 
-def _queue_event(event_type: str, payload: dict, delay_s: int, source: str = "simulated") -> None:
+# ── Release policy ────────────────────────────────────────────────────────────
+# Stored in strategy_params under strategy='stream' rather than a new table —
+# it is already the project's key/value config store with a (strategy, param)
+# unique constraint.
+#
+# The policy lives in the DB, not in this page, because the thing that will
+# eventually create real events (a Streamlabs listener) is not this page. It has
+# to read the same rule, and it will be running when HQ is closed.
+
+_POLICY_DEFAULTS = {"auto_release": "1", "default_hold_s": "5"}
+
+
+def _get_policy() -> dict:
+    out = dict(_POLICY_DEFAULTS)
+    try:
+        with get_session() as s:
+            for r in s.execute(text(
+                "SELECT param, value FROM strategy_params WHERE strategy = 'stream'"
+            )).fetchall():
+                if r.value is not None:
+                    out[r.param] = r.value
+    except Exception:
+        pass
+    return out
+
+
+def _set_policy(param: str, value: str, label: str) -> None:
+    with get_session() as s:
+        s.execute(text("""
+            INSERT INTO strategy_params (strategy, param, value, unit, label, updated_at)
+            VALUES ('stream', :p, :v, '', :l, :now)
+            ON CONFLICT (strategy, param)
+            DO UPDATE SET value = :v, updated_at = :now
+        """), {"p": param, "v": value, "l": label, "now": datetime.utcnow()})
+        s.commit()
+
+
+def _render_policy() -> None:
+    st.markdown("### Release policy")
+    st.caption(
+        "The default rule applied to events as they arrive. Lives in the database, "
+        "so a future Streamlabs listener obeys it too — not just this page."
+    )
+    pol = _get_policy()
+    auto = pol.get("auto_release", "1") == "1"
+    hold = int(pol.get("default_hold_s", "5") or 5)
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        new_auto = st.toggle("Auto-release", value=auto,
+                             help="Off holds every incoming event indefinitely — nothing "
+                                  "reaches the stream until you release it by hand.")
+    with c2:
+        new_hold = st.slider("Default hold before air (seconds)", 0, 60, hold,
+                             disabled=not new_auto,
+                             help="0 airs on the stream's next poll (~2s). Anything higher "
+                                  "gives you a window to cancel.")
+
+    if new_auto != auto or new_hold != hold:
+        _set_policy("auto_release", "1" if new_auto else "0", "Auto-release incoming events")
+        _set_policy("default_hold_s", str(new_hold), "Default hold before air (s)")
+        st.rerun()
+
+    if not new_auto:
+        st.warning("**Auto-release is OFF.** Every incoming event — real donations included — "
+                   "holds until released by hand. Nothing airs while nobody is watching HQ.")
+    elif new_hold == 0:
+        st.info("**Instant.** Events air on the stream's next poll with no window to cancel.")
+    else:
+        st.success(f"Events air **{new_hold}s** after arriving, cancellable until then.")
+
+
+# The house format: {USER} just {ACTIONED} {AMOUNT} !!!
+# NOTE: this mirrors headline()/VERB in dashboard/stream.js. It is duplicated on
+# purpose — HQ must show what will air without importing the renderer — but the
+# two must be changed together or the preview starts lying.
+_VERB = {
+    "donation": "DONATED", "superchat": "SUPERCHATTED", "supersticker": "STICKERED",
+    "bits": "CHEERED", "membership_gift": "GIFTED", "subscription": "SUBSCRIBED",
+    "follow": "FOLLOWED", "raid": "RAIDED", "chat": "SAID",
+}
+
+
+def _headline_preview(event_type: str, p: dict) -> str:
+    if event_type == "risk_breach":
+        return f"RISK BREACH — {p.get('limit', '')} !!!"
+    who = str(p.get("from", "SOMEONE")).upper()
+    verb = _VERB.get(event_type, "DID SOMETHING")
+
+    amt = ""
+    if event_type in ("donation", "superchat", "supersticker"):
+        v = float(p.get("amount") or 0)
+        amt = f"${v:.0f}" if v % 1 == 0 else f"${v:.2f}"
+    elif event_type == "bits":
+        amt = f"{p.get('amount', 0)} BITS"
+    elif event_type == "membership_gift":
+        amt = f"{p.get('count', 1)}x"
+    elif event_type == "raid":
+        amt = f"+{p.get('viewers', 0)}"
+
+    return f"{who} just {verb}{(' ' + amt) if amt else ''} !!!"
+
+
+def _queue_event(event_type: str, payload: dict, delay_s: int | None, source: str = "simulated") -> None:
     """Queue an event. `release_at` is the gate — the stream fires it on its own
     when the countdown expires. Nothing has to be clicked; a delay of 0 means
-    release_at is now, so it airs on the stream's next poll (~2s)."""
+    release_at is now, so it airs on the stream's next poll (~2s).
+
+    delay_s=None means "hold indefinitely": release_at stays NULL, and the
+    stream's `release_at=lte.now` filter can never match a NULL, so the event
+    waits for a manual release. That is how Auto-release OFF is enforced —
+    in the data, not in a UI flag the stream would have to trust.
+    """
+    now = datetime.utcnow()
+    rel = None if delay_s is None else now + timedelta(seconds=max(0, delay_s))
     with get_session() as s:
         s.execute(text("""
             INSERT INTO stream_events
@@ -196,8 +307,7 @@ def _queue_event(event_type: str, payload: dict, delay_s: int, source: str = "si
                 (:t, :src, CAST(:p AS JSON), 'queued', :rel, :now)
         """), {
             "t": event_type, "src": source, "p": json.dumps(payload),
-            "rel": datetime.utcnow() + timedelta(seconds=max(0, delay_s)),
-            "now": datetime.utcnow(),
+            "rel": rel, "now": now,
         })
         s.commit()
 
@@ -233,8 +343,8 @@ def _load_events(limit: int = 40) -> pd.DataFrame:
 def _render_bus() -> None:
     st.markdown("### Event bus")
     st.caption(
-        "Everything bound for the Blob lands here first. Queued events are invisible "
-        "to the stream until released — the stream only ever picks up `released`."
+        "Everything bound for the Blob lands here first. `release_at` is the gate — "
+        "an event airs on its own once its countdown expires, whether or not this page is open."
     )
 
     df = _load_events()
@@ -242,8 +352,29 @@ def _render_bus() -> None:
         st.info("No events yet. Fire one from the simulator below.")
         return
 
+    # Delivery is proven by consumed_at, NOT by status — status stays 'queued'
+    # after air, because flipping it would pull the row out of other renderers'
+    # broadcast query. Filtering these lists on status would flag every
+    # successfully aired event as stuck.
+    aired = df["consumed_at"].notna()
+    live = (df["status"] == "queued") & ~aired
+
+    # Held indefinitely: no release_at at all. Not "late" — it has no T.
+    held = df[live & df["release_at"].isna()]
+    if not held.empty:
+        st.markdown("**Held — no countdown, waiting on you**")
+        for _, r in held.iterrows():
+            c1, c2, c3 = st.columns([3, 5, 2])
+            c1.markdown(f"**{r['event_type']}**  \n`{r['source']}`")
+            c2.code(json.dumps(r["payload"] or {}), language="json")
+            if c3.button("Release", key=f"hrel{r['id']}", type="primary"):
+                _release_now(int(r["id"])); st.rerun()
+            if c3.button("Cancel", key=f"hcan{r['id']}"):
+                _set_status(int(r["id"]), "cancelled"); st.rerun()
+        st.divider()
+
     # Still counting down — the only window in which cancelling is possible.
-    pending = df[(df["status"] == "queued") & (df["countdown"].fillna(0) > 0)]
+    pending = df[live & df["release_at"].notna() & (df["countdown"].fillna(0) > 0)]
     if not pending.empty:
         st.markdown("**Counting down — fires automatically at T-0**")
         st.caption("Cancel now or it airs on its own. Release skips the countdown.")
@@ -261,17 +392,22 @@ def _render_bus() -> None:
                 "the event fires whether or not HQ is open. Hit Refresh to update the clock.")
         st.divider()
 
-    # Due but not yet picked up. A row sitting here for more than a few seconds
-    # means no renderer is polling — that is the signal worth surfacing.
-    due = df[(df["status"] == "queued") & (df["countdown"].fillna(0) <= 0)]
+    # Past T-0, eligible, and still unaired. Give it a few seconds of slack for
+    # the stream's ~2s poll before calling it stuck — otherwise this cries wolf
+    # on every healthy event during its normal flight time.
+    due = df[live & df["release_at"].notna() & (df["countdown"].fillna(0) <= -8)]
     if not due.empty:
-        st.warning(
-            f"**{len(due)} event(s) past T-0 but not yet aired.** They are eligible right now. "
-            "If they stay here, no Stream page is polling — check the Stream page heartbeat above."
+        st.error(
+            f"**{len(due)} event(s) past T-0 by 8s+ and still not aired.** They are eligible now. "
+            "No Stream page is picking them up — check the Stream page heartbeat above."
         )
 
     st.markdown("**Recent**")
-    view = df[["id", "event_type", "source", "status", "created_at", "consumed_at"]].copy()
+    view = df[["id", "event_type", "source", "created_at", "consumed_at"]].copy()
+    # "On air" is the only status an operator cares about, and it is the one the
+    # status column cannot tell them — consumed_at is the truth.
+    view.insert(1, "on_air", df["consumed_at"].notna().map({True: "AIRED", False: "—"}))
+    view.loc[df["status"] == "cancelled", "on_air"] = "CANCELLED"
     view["created_at"] = pd.to_datetime(view["created_at"]).dt.strftime("%H:%M:%S")
     view["consumed_at"] = pd.to_datetime(view["consumed_at"]).dt.strftime("%H:%M:%S")
     st.dataframe(view, use_container_width=True, hide_index=True, height=260)
@@ -293,15 +429,39 @@ def _render_sim() -> None:
         "the same code path as production."
     )
 
+    pol = _get_policy()
+    pol_auto = pol.get("auto_release", "1") == "1"
+    pol_hold = int(pol.get("default_hold_s", "5") or 5)
+
     c1, c2 = st.columns([1, 1])
     with c1:
         etype = st.selectbox("Event", list(_EVENT_TYPES.keys()))
-        delay = st.slider("Hold before release (seconds)", 0, 60, 5,
-                          help="0 fires immediately. Anything else holds it in the bus "
-                               "so you can cancel before it reaches the stream.")
+        mode = st.radio(
+            "Release",
+            ["Use policy", "Fire now", "Hold for me"],
+            horizontal=True,
+            help="Use policy applies the rule above — the same path a real event takes. "
+                 "Fire now skips the countdown. Hold for me waits for a manual release.",
+        )
+        if mode == "Use policy":
+            delay = pol_hold if pol_auto else None
+            st.caption(f"→ {'airs in ' + str(pol_hold) + 's' if pol_auto else 'held until released'}")
+        elif mode == "Fire now":
+            delay = 0
+            st.caption("→ airs on the next poll (~2s)")
+        else:
+            delay = None
+            st.caption("→ held until you release it")
     with c2:
         default = json.dumps(_EVENT_TYPES[etype], indent=2)
-        raw = st.text_area("Payload", value=default, height=180, key=f"pl_{etype}")
+        raw = st.text_area("Payload", value=default, height=190, key=f"pl_{etype}")
+
+    # Show exactly what the stream will announce, before it goes out.
+    try:
+        _preview = json.loads(raw)
+        st.markdown(f"**On air:**  `{_headline_preview(etype, _preview)}`")
+    except json.JSONDecodeError:
+        st.caption("Payload is not valid JSON — fix it to see the on-air preview.")
 
     if st.button("Queue event", type="primary"):
         try:
@@ -310,7 +470,12 @@ def _render_sim() -> None:
             st.error(f"Payload is not valid JSON: {e}")
             return
         _queue_event(etype, payload, delay)
-        st.success(f"`{etype}` queued — releases in {delay}s" if delay else f"`{etype}` released now")
+        if delay is None:
+            st.success(f"`{etype}` held — release it from the bus above.")
+        elif delay == 0:
+            st.success(f"`{etype}` on air within ~2s.")
+        else:
+            st.success(f"`{etype}` airs in {delay}s — cancellable until then.")
         st.rerun()
 
 
@@ -324,6 +489,8 @@ def render() -> None:
         st.rerun()
 
     _render_health()
+    st.divider()
+    _render_policy()
     st.divider()
     _render_bus()
     st.divider()

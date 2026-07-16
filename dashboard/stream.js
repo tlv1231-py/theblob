@@ -586,23 +586,47 @@
     return '$' + (n % 1 === 0 ? n.toFixed(0) : n.toFixed(2));
   }
 
-  // Headline per type. Written as an announcer would say it out loud —
-  // "MIKE88 SUBSCRIBED!" not "subscription_event: mike88".
-  function headline(type, p) {
-    var who = (p.from || 'SOMEONE').toUpperCase();
+  // ── The house format ─────────────────────────────────────────────────────
+  //   {USER} just {ACTIONED} {AMOUNT} !!!
+  //
+  // One shape for every event, so the box is recognisable before it is read —
+  // a returning viewer clocks "someone did a thing" from the silhouette alone
+  // and only then reads who and how much. "just" keeps it present-tense; the
+  // !!! is the brand, and it is on every event so its absence would read as a
+  // different kind of message rather than a quieter one.
+  //
+  // The verb is the variable. AMOUNT is omitted where there is none rather
+  // than padded with a zero — "MIKE88 just SUBSCRIBED !!!" is the whole line.
+  var VERB = {
+    donation:        'DONATED',
+    superchat:       'SUPERCHATTED',
+    supersticker:    'STICKERED',
+    bits:            'CHEERED',
+    membership_gift: 'GIFTED',
+    subscription:    'SUBSCRIBED',
+    follow:          'FOLLOWED',
+    raid:            'RAIDED',
+    chat:            'SAID'
+  };
+
+  function amountFor(type, p) {
     switch (type) {
-      case 'donation':        return who + ' DONATED ' + money(p) + '!';
-      case 'superchat':       return who + ' DROPPED ' + money(p) + '!';
-      case 'supersticker':    return who + ' SENT ' + money(p) + '!';
-      case 'bits':            return who + ' CHEERED ' + (p.amount || 0) + ' BITS!';
-      case 'membership_gift': return who + ' GIFTED ' + (p.count || 1) + '!';
-      case 'subscription':    return who + ' SUBSCRIBED!';
-      case 'follow':          return who + ' FOLLOWED!';
-      case 'raid':            return who + ' RAIDED +' + (p.viewers || 0) + '!';
-      case 'chat':            return who + ':';
-      case 'risk_breach':     return 'RISK BREACH — ' + (p.limit || '');
-      default:                return who;
+      case 'donation':
+      case 'superchat':
+      case 'supersticker':    return money(p);
+      case 'bits':            return (p.amount || 0) + ' BITS';
+      case 'membership_gift': return (p.count || 1) + 'x';
+      case 'raid':            return '+' + (p.viewers || 0);
+      default:                return '';
     }
+  }
+
+  function headline(type, p) {
+    if (type === 'risk_breach') return 'RISK BREACH — ' + (p.limit || '') + ' !!!';
+    var who = (p.from || 'SOMEONE').toUpperCase();
+    var verb = VERB[type] || 'DID SOMETHING';
+    var amt = amountFor(type, p);
+    return who + ' just ' + verb + (amt ? ' ' + amt : '') + ' !!!';
   }
 
   var annQ = [], annBusy = false, annTypeT = null, annHoldT = null;
