@@ -2771,18 +2771,41 @@ datalist {{ display:none; }}
 <!-- sys-health-bar retired — all indicators now live in topbar -->
 <!-- ── Stratagem HUD bar ── -->
 <div id="strat-bar">
-  <div class="strat-slot" id="ss-runner">
+  <div class="strat-slot" id="ss-runner" style="cursor:pointer;position:relative;user-select:none" onclick="window._toggleAlpacaDropdown()">
     <div class="ss-icon">⚡</div>
-    <div class="ss-name">RUNNER</div>
-    <div class="ss-status" id="ss-runner-st">—</div>
-  </div>
-  <div class="strat-slot" id="ss-pipeline">
-    <div class="ss-icon">↯</div>
-    <div class="ss-name">TRADES</div>
+    <div class="ss-name">ALPACA WALLET <span id="ss-alpaca-sync-cd" style="font-size:6px;color:rgba(148,0,255,.4);letter-spacing:.1em"></span></div>
     <div class="ss-trades-row">
       <div class="ss-trades-anchor">
-        <span class="ss-status" id="ss-pipeline-st">—</span>
-        <span class="ss-trades-chip" id="ss-trades-chip"></span>
+        <span class="ss-status" id="ss-runner-st" style="font-family:Consolas,monospace;font-size:11px">—</span>
+        <span class="ss-trades-chip" id="ss-alpaca-chip"></span>
+      </div>
+    </div>
+  </div>
+  <!-- Alpaca wallet dropdown -->
+  <div id="alpaca-dropdown" style="display:none;position:fixed;z-index:9999;background:rgba(4,0,12,.97);border:1px solid rgba(148,0,255,.35);border-radius:2px;min-width:320px;padding:8px 0;font-family:Consolas,monospace;box-shadow:0 8px 32px rgba(0,0,0,.8)">
+    <div style="font-size:7px;letter-spacing:.2em;color:rgba(148,0,255,.5);padding:6px 14px 4px;text-transform:uppercase">alpaca wallets</div>
+    <div id="alpaca-wallet-list" style="max-height:160px;overflow-y:auto"></div>
+    <div style="border-top:1px solid rgba(148,0,255,.18);margin:6px 0 4px"></div>
+    <div id="alpaca-add-form" style="padding:0 14px 8px">
+      <div style="font-size:7px;letter-spacing:.15em;color:rgba(148,0,255,.5);margin-bottom:6px;text-transform:uppercase">+ ADD WALLET</div>
+      <input id="alp-name"   placeholder="Name (e.g. Paper)"  style="width:100%;margin-bottom:4px;background:#0a0018;border:1px solid rgba(148,0,255,.3);color:#c090ff;font-family:Consolas,monospace;font-size:10px;padding:4px 6px;outline:none;box-sizing:border-box"/>
+      <input id="alp-key"    placeholder="API Key ID"          style="width:100%;margin-bottom:4px;background:#0a0018;border:1px solid rgba(148,0,255,.3);color:#c090ff;font-family:Consolas,monospace;font-size:10px;padding:4px 6px;outline:none;box-sizing:border-box"/>
+      <input id="alp-secret" placeholder="API Secret"  type="password" style="width:100%;margin-bottom:4px;background:#0a0018;border:1px solid rgba(148,0,255,.3);color:#c090ff;font-family:Consolas,monospace;font-size:10px;padding:4px 6px;outline:none;box-sizing:border-box"/>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px">
+        <select id="alp-type" style="flex:1;background:#0a0018;border:1px solid rgba(148,0,255,.3);color:#c090ff;font-family:Consolas,monospace;font-size:10px;padding:3px 6px;outline:none">
+          <option value="paper">Paper</option>
+          <option value="live">Live</option>
+        </select>
+        <button onclick="window._saveAlpacaWallet()" style="background:rgba(148,0,255,.2);border:1px solid rgba(148,0,255,.4);color:#c090ff;font-family:Consolas,monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.1em">SAVE</button>
+      </div>
+    </div>
+  </div>
+  <div class="strat-slot" id="ss-pipeline">
+    <div class="ss-icon">◈</div>
+    <div class="ss-name">PORTFOLIO STRENGTH</div>
+    <div class="ss-trades-row">
+      <div class="ss-trades-anchor">
+        <span class="ss-status" id="ss-pipeline-st" style="font-family:Consolas,monospace;font-size:11px">—</span>
       </div>
     </div>
   </div>
@@ -2807,11 +2830,11 @@ datalist {{ display:none; }}
     <div id="queue-dropdown-items"></div>
   </div>
   <div class="strat-slot" id="ss-nav">
-    <div class="ss-icon">◉</div>
-    <div class="ss-name">CURRENT POS</div>
+    <div class="ss-icon">↯</div>
+    <div class="ss-name">TRADES</div>
     <div class="ss-trades-row">
       <div class="ss-trades-anchor">
-        <span class="ss-status" id="ss-nav-st">—</span>
+        <span class="ss-status" id="ss-nav-st" style="font-family:Consolas,monospace;font-size:13px">—</span>
         <span class="ss-wallet-chip" id="ss-nav-chip"></span>
       </div>
     </div>
@@ -4772,7 +4795,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
 
     // ── Animated portfolio counter — lerps to real value each frame ───────────
-    var _rawNav = allPts.length ? allPts[allPts.length-1].v : liveNav;
+    var _rawNav = window._lastKnownNav || (allPts.length ? allPts[allPts.length-1].v : liveNav);
     if (!window._navDispVal || Math.abs(window._navDispVal - _rawNav) > 5000) {{
       window._navDispVal = _rawNav;  // hard-set on first draw or big jump
     }} else {{
@@ -4783,7 +4806,7 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var tw = ctx.measureText(valStr).width;
     var lx = tipX - tw / 2;
     lx = Math.max(cx0 + 4, Math.min(cx1 - tw - 4, lx));
-    var ly = tipY + 75;  // below outer ring + orbital dots
+    var ly = tipY + 92;  // below outer ring + orbital dots
     ly = Math.min(cy1 - 4, ly);
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.textAlign = 'left';
@@ -8789,38 +8812,180 @@ setTimeout(function() {{
         return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
       }}
 
-      // ── RUNNER slot — reads from runner-dot age ───────────────
-      function _updateRunnerSlot() {{
-        var dot = document.getElementById('runner-dot');
-        if (!dot) return;
-        var cls = dot.className; // 'ok', 'warn', 'dead'
-        var ageEl = document.getElementById('runner-age');
-        var age = ageEl ? ageEl.textContent : '—';
-        if (cls === 'ok') {{
-          _ssSet('ss-runner-st', 'ss-active', 'ALIVE · ' + age);
-        }} else if (cls === 'warn') {{
-          _ssSet('ss-runner-st', 'ss-warn', 'STALE · ' + age);
-        }} else if (cls === 'dead') {{
-          _ssSet('ss-runner-st', 'ss-warn', 'DEAD · ' + age);
-        }} else {{
-          _ssSet('ss-runner-st', '', '—');
+      // ── ALPACA WALLET slot ────────────────────────────────────
+      var _alpacaWallets   = JSON.parse(localStorage.getItem('_alpacaWallets') || '[]');
+      var _alpacaActiveIdx = parseInt(localStorage.getItem('_alpacaActiveIdx') || '0', 10);
+      var _alpacaSyncSecs  = 0;
+      var _alpacaDropOpen  = false;
+
+      window._toggleAlpacaDropdown = function() {{
+        var dd = document.getElementById('alpaca-dropdown');
+        if (!dd) return;
+        _alpacaDropOpen = !_alpacaDropOpen;
+        if (_alpacaDropOpen) {{
+          var r = document.getElementById('ss-runner').getBoundingClientRect();
+          dd.style.left  = r.left + 'px';
+          dd.style.top   = (r.bottom + 4) + 'px';
+          dd.style.display = 'block';
+          _renderAlpacaList();
+        }} else {{ dd.style.display = 'none'; }}
+      }};
+      document.addEventListener('click', function(e) {{
+        if (_alpacaDropOpen && !e.target.closest('#alpaca-dropdown') && !e.target.closest('#ss-runner')) {{
+          _alpacaDropOpen = false;
+          var dd = document.getElementById('alpaca-dropdown');
+          if (dd) dd.style.display = 'none';
         }}
+      }});
+
+      function _renderAlpacaList() {{
+        var list = document.getElementById('alpaca-wallet-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!_alpacaWallets.length) {{
+          list.innerHTML = '<div style="padding:6px 14px;font-size:9px;color:rgba(148,0,255,.4)">no wallets saved</div>';
+          return;
+        }}
+        _alpacaWallets.forEach(function(w, i) {{
+          var row = document.createElement('div');
+          row.style.cssText = 'padding:5px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;' +
+            (i === _alpacaActiveIdx ? 'background:rgba(148,0,255,.15);' : '');
+          row.innerHTML = '<span style="font-size:10px;color:' + (i===_alpacaActiveIdx?'#c090ff':'#6a4a8a') + '">' +
+            (i===_alpacaActiveIdx?'▶ ':'  ') + w.name + ' <span style="font-size:8px;color:rgba(148,0,255,.4)">[' + w.type + ']</span></span>' +
+            '<span style="font-size:8px;color:#ff3366;cursor:pointer" onclick="window._removeAlpacaWallet(' + i + ');event.stopPropagation()">✕</span>';
+          row.onclick = function() {{ _alpacaActiveIdx = i; localStorage.setItem('_alpacaActiveIdx', i); _renderAlpacaList(); _fetchAlpacaBalance(); }};
+          list.appendChild(row);
+        }});
       }}
 
-      // ── TRADES slot — total trade count (window-exposed for outer scope) ─
-      var _hudTradeTotal = 0;
-      window._updateTradesSlot = function(count) {{
-        if (count !== undefined) _hudTradeTotal = count;
+      window._saveAlpacaWallet = function() {{
+        var name   = (document.getElementById('alp-name')   || {{}}).value || '';
+        var key    = (document.getElementById('alp-key')    || {{}}).value || '';
+        var secret = (document.getElementById('alp-secret') || {{}}).value || '';
+        var type   = (document.getElementById('alp-type')   || {{}}).value || 'paper';
+        if (!name || !key || !secret) return;
+        _alpacaWallets.push({{ name:name, key:key, secret:secret, type:type }});
+        localStorage.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
+        _alpacaActiveIdx = _alpacaWallets.length - 1;
+        localStorage.setItem('_alpacaActiveIdx', _alpacaActiveIdx);
+        ['alp-name','alp-key','alp-secret'].forEach(function(id) {{ var el=document.getElementById(id); if(el) el.value=''; }});
+        _renderAlpacaList();
+        _fetchAlpacaBalance();
+      }};
+
+      window._removeAlpacaWallet = function(i) {{
+        _alpacaWallets.splice(i, 1);
+        localStorage.setItem('_alpacaWallets', JSON.stringify(_alpacaWallets));
+        if (_alpacaActiveIdx >= _alpacaWallets.length) _alpacaActiveIdx = Math.max(0, _alpacaWallets.length - 1);
+        localStorage.setItem('_alpacaActiveIdx', _alpacaActiveIdx);
+        _renderAlpacaList();
+        _fetchAlpacaBalance();
+      }};
+
+      var _alpacaAnimRaf = null, _alpacaDispVal = null;
+      function _animateAlpacaVal(toVal) {{
+        var el = document.getElementById('ss-runner-st');
+        if (!el) return;
+        var from = _alpacaDispVal !== null ? _alpacaDispVal : toVal;
+        if (_alpacaAnimRaf) cancelAnimationFrame(_alpacaAnimRaf);
+        var start = null;
+        function step(ts) {{
+          if (!start) start = ts;
+          var p = Math.min(1, (ts - start) / 800);
+          var e = 1 - Math.pow(1 - p, 3);
+          _alpacaDispVal = from + (toVal - from) * e;
+          el.textContent = '$' + _alpacaDispVal.toLocaleString('en-US', {{minimumFractionDigits:2, maximumFractionDigits:2}});
+          if (p < 1) _alpacaAnimRaf = requestAnimationFrame(step);
+          else {{ _alpacaDispVal = toVal; _alpacaAnimRaf = null; }}
+        }}
+        _alpacaAnimRaf = requestAnimationFrame(step);
+      }}
+
+      function _fetchAlpacaBalance() {{
+        var w = _alpacaWallets[_alpacaActiveIdx];
+        if (!w) {{ var el = document.getElementById('ss-runner-st'); if (el) el.textContent = '—'; return; }}
+        var base = w.type === 'live' ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets';
+        fetch(base + '/v2/account', {{ headers: {{ 'APCA-API-KEY-ID': w.key, 'APCA-API-SECRET-KEY': w.secret }} }})
+          .then(function(r) {{ return r.json(); }})
+          .then(function(data) {{
+            var val = parseFloat(data.portfolio_value || data.equity || 0);
+            if (!val) return;
+            _animateAlpacaVal(val);
+            // Sync success flash
+            var chip = document.getElementById('ss-alpaca-chip');
+            if (chip) {{ chip.textContent = '✓ SYNCED'; chip.style.color = '#00ff9d'; chip.style.opacity = '1';
+              setTimeout(function() {{ chip.style.opacity = '0'; }}, 2500); }}
+            _alpacaSyncSecs = 30;  // reset countdown
+          }}).catch(function() {{
+            var el = document.getElementById('ss-runner-st');
+            if (el) el.textContent = 'ERR';
+          }});
+      }}
+
+      // 30-second sync countdown
+      setInterval(function() {{
+        var cd = document.getElementById('ss-alpaca-sync-cd');
+        if (_alpacaSyncSecs > 0) {{
+          _alpacaSyncSecs--;
+          if (cd) cd.textContent = _alpacaSyncSecs + 's';
+          if (_alpacaSyncSecs === 0) _fetchAlpacaBalance();
+        }} else {{
+          if (cd) cd.textContent = '';
+        }}
+      }}, 1000);
+      // Initial fetch after short delay
+      setTimeout(function() {{ _fetchAlpacaBalance(); _alpacaSyncSecs = 30; }}, 1500);
+
+      // ── PORTFOLIO STRENGTH slot — sluggish sum from DB ────────
+      var _portStrengthDisp = null, _portStrengthRaf = null;
+      function _animatePortStrength(toVal) {{
         var el = document.getElementById('ss-pipeline-st');
-        if (el) {{ el.textContent = _hudTradeTotal; el.style.color = _hudTradeTotal > 0 ? '#ff9900' : 'rgba(148,0,255,.4)'; el.style.textShadow = _hudTradeTotal > 0 ? '0 0 10px rgba(255,153,0,.6)' : 'none'; }}
-      }};
-      window._tradeSlotCombo = function(delta) {{
-        var chip = document.getElementById('ss-trades-chip');
-        if (!chip || delta <= 0) return;
-        chip.textContent = '+' + delta;
-        chip.style.opacity = '1';
-        setTimeout(function() {{ chip.style.opacity = '0'; }}, 4000);
-      }};
+        if (!el) return;
+        var from = _portStrengthDisp !== null ? _portStrengthDisp : toVal;
+        if (_portStrengthRaf) cancelAnimationFrame(_portStrengthRaf);
+        var start = null;
+        function step(ts) {{
+          if (!start) start = ts;
+          var p = Math.min(1, (ts - start) / 3500);  // 3.5s — deliberately sluggish
+          var e = 1 - Math.pow(1 - p, 2);
+          _portStrengthDisp = from + (toVal - from) * e;
+          el.textContent = '$' + Math.round(_portStrengthDisp).toLocaleString('en-US');
+          if (p < 1) _portStrengthRaf = requestAnimationFrame(step);
+          else {{ _portStrengthDisp = toVal; _portStrengthRaf = null; }}
+        }}
+        _portStrengthRaf = requestAnimationFrame(step);
+      }}
+      function _fetchPortStrength() {{
+        fetch(SUPA_URL + '/rest/v1/portfolio_snapshots?select=total_value&order=recorded_at.desc&limit=1',
+          {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }} }})
+          .then(function(r) {{ return r.json(); }})
+          .then(function(rows) {{
+            if (!Array.isArray(rows) || !rows.length) return;
+            var val = parseFloat(rows[0].total_value);
+            if (val > 0) _animatePortStrength(val);
+          }}).catch(function() {{}});
+      }}
+      setTimeout(_fetchPortStrength, 2000);
+      setInterval(_fetchPortStrength, 60000);  // refresh every 60s (data doesn't update fast)
+
+      // ── TRADES slot — accurate fill count from Supabase ───────
+      function _fetchFillCount() {{
+        fetch(SUPA_URL + '/rest/v1/fills?select=id',
+          {{ headers: {{ 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+             'Prefer': 'count=exact', 'Range': '0-0' }} }})
+          .then(function(r) {{
+            var ct = r.headers.get('content-range');  // "0-0/1376"
+            if (ct) {{
+              var total = parseInt(ct.split('/')[1], 10);
+              if (!isNaN(total)) {{
+                var el = document.getElementById('ss-nav-st');
+                if (el) {{ el.textContent = total.toLocaleString('en-US'); el.style.color = total > 0 ? '#ff9900' : 'rgba(148,0,255,.4)'; }}
+              }}
+            }}
+          }}).catch(function() {{}});
+      }}
+      setTimeout(_fetchFillCount, 3000);
+      setInterval(_fetchFillCount, 30000);
 
       // ── WALLET slot — Alpaca NAV with gain/loss color flash (window-exposed) ─
       var _lastWalletVal = null;
@@ -8997,29 +9162,11 @@ setTimeout(function() {{
         if (_queueOpen) _renderQueueItems();  // live-update countdowns while open
       }}
 
-      // ── CURRENT POS slot — open position count ───────────────
-      var _prevPosCount = null;
+      // ── TRADES slot (was CURRENT POS) — fill count from Supabase (updated by _fetchFillCount) ─
       function _updateNavSlot() {{
         var nav = window._lastKnownNav;
         if (window._updateWalletSlot && nav) window._updateWalletSlot(nav);
-        var count = Object.keys(window._cryptoPositionsMap || {{}}).length;
-        var eq = document.querySelectorAll('#pos-equity-section .pos-card[data-sym]').length;
-        var total = count + eq;
-        _ssSet('ss-nav-st', total > 0 ? 'ss-active' : '', total > 0 ? total + ' OPEN' : 'FLAT');
-        // Fire combo chip when count changes
-        if (_prevPosCount !== null && total !== _prevPosCount) {{
-          var diff = total - _prevPosCount;
-          var chip = document.getElementById('ss-nav-chip');
-          if (chip) {{
-            chip.textContent = (diff > 0 ? '+' : '') + diff;
-            chip.style.color = diff > 0 ? '#00ff9d' : '#ff3366';
-            chip.classList.remove('dmg-active');
-            void chip.offsetWidth;
-            chip.classList.add('dmg-active');
-            setTimeout(function() {{ chip.classList.remove('dmg-active'); }}, 2300);
-          }}
-        }}
-        _prevPosCount = total;
+        // fill count is updated by _fetchFillCount on its own interval — nothing extra here
       }}
 
       // ── Callout system — stackable drop-in notifications ────────
