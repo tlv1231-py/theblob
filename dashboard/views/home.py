@@ -4512,16 +4512,20 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
   setTimeout(_resize, 100);
   window.addEventListener('resize', _resize);
 
-  // Scroll wheel zooms the time window
-  window._navWindowMs = 4 * 3600 * 1000; // default: 4-hour window
+  // Scroll wheel zooms time window with smooth easing
+  window._navWindowMs       = 4 * 3600 * 1000;  // current (lerped)
+  window._navTargetWindowMs = 4 * 3600 * 1000;  // target (set by wheel)
+  var _WIN_MIN = 5  * 60 * 1000;         //  5 minutes
+  var _WIN_MAX = 365 * 86400 * 1000;     //  1 year (full lifetime)
   (function() {{
     var ma = document.getElementById('main-area');
     if (!ma) return;
     ma.addEventListener('wheel', function(e) {{
       e.preventDefault(); e.stopPropagation();
-      var factor = e.deltaY > 0 ? 1.2 : 0.83;
-      window._navWindowMs = Math.max(5 * 60000, Math.min(30 * 86400000,
-        (window._navWindowMs || 4*3600000) * factor));
+      // Faster zoom: 1.6× per tick in either direction
+      var factor = e.deltaY > 0 ? 1.6 : 0.625;
+      window._navTargetWindowMs = Math.max(_WIN_MIN,
+        Math.min(_WIN_MAX, window._navTargetWindowMs * factor));
     }}, {{ passive: false }});
   }})();
 
@@ -4550,6 +4554,10 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
       if (!isNaN(ms)) allPts.push({{ ms: ms, v: parseFloat(pts[i].v) }});
     }}
     allPts.sort(function(a,b){{return a.ms-b.ms;}});
+
+    // ── Smooth zoom: lerp current window toward target each frame ─────────────
+    var _tgt = window._navTargetWindowMs || window._navWindowMs || 4*3600*1000;
+    window._navWindowMs += (_tgt - window._navWindowMs) * 0.10;
 
     // ── Time window — "now" is always pinned to the horizontal center ─────────
     var winMs     = window._navWindowMs || 4 * 3600 * 1000;
