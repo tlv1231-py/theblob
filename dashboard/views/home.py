@@ -2368,21 +2368,21 @@ body::after {{
 /* ── Buy console (bottom-right) ── */
 #buy-console {{
   position:fixed; bottom:20px; right:20px; z-index:300;
-  display:flex; align-items:center; gap:2px;
-  font-family:Consolas,'Courier New',monospace; font-size:15px; font-weight:400;
+  display:flex; align-items:center; gap:6px;
+  font-family:'Press Start 2P',monospace; font-size:11px; font-weight:400;
   color:rgba(210,210,210,0.60);
   white-space:nowrap;
 }}
-#buy-console .bc-lbl {{ pointer-events:none; font-size:15px; }}
+#buy-console .bc-lbl {{ pointer-events:none; }}
 .bc-edit-wrap {{
   background:rgba(255,255,255,0.07); border-radius:3px;
-  padding:3px 10px; cursor:text; display:inline-flex; align-items:center;
-  transition:background .12s;
+  padding:4px 10px; cursor:text; display:inline-flex; align-items:center;
+  justify-content:center; transition:background .12s;
 }}
 .bc-edit-wrap:hover {{ background:rgba(255,255,255,0.13); }}
 #bc-amt {{
   background:transparent; border:none; outline:none;
-  width:66px; text-align:center;
+  width:54px; text-align:center;
   font:inherit; font-weight:400;
   color:rgba(100,210,255,0.95);
   text-shadow:0 0 8px rgba(0,190,255,0.7), 0 0 22px rgba(0,140,255,0.35);
@@ -2390,15 +2390,17 @@ body::after {{
 }}
 #bc-amt::placeholder {{ color:rgba(80,170,255,0.30); }}
 #bc-ticker-wrap {{
-  cursor:pointer; min-width:72px; justify-content:center;
+  cursor:pointer;
+  width:88px; flex:0 0 88px;
+  overflow:hidden; justify-content:center;
 }}
 #bc-ticker-loop {{
-  letter-spacing:0.06em; text-transform:uppercase;
-  display:inline-block; transition:none;
+  text-transform:uppercase; display:inline-block;
+  transition:none; will-change:filter;
 }}
 #bc-ticker-input {{
   background:transparent; border:none; outline:none;
-  width:72px; text-align:center;
+  width:82px; text-align:center;
   font:inherit; font-weight:400;
   color:rgba(100,210,255,0.95);
   text-shadow:0 0 8px rgba(0,190,255,0.7);
@@ -2407,14 +2409,14 @@ body::after {{
 datalist {{ display:none; }}
 #bc-buy {{
   background:transparent; border:none; outline:none;
-  font:inherit; font-size:14px; font-weight:400; color:rgba(210,210,210,0.55);
-  cursor:pointer; margin-left:10px;
+  font:inherit; font-weight:400; color:rgba(210,210,210,0.55);
+  cursor:pointer;
   transition:color .12s;
 }}
 #bc-buy:hover {{ color:rgba(255,255,255,0.92); text-shadow:0 0 8px rgba(255,255,255,0.4); }}
 #bc-buy:disabled {{ opacity:.25; cursor:default; }}
 #bc-status {{
-  font-size:10px; padding-left:10px;
+  font-size:8px; padding-left:6px;
   color:rgba(210,210,210,0.35); transition:color .2s; min-width:0;
 }}
 /* Double-click hint on tiles */
