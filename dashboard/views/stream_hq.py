@@ -482,13 +482,14 @@ def render() -> None:
     </style>
     """, unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns([5, 3, 1])
+    c1, c2, c3, c4 = st.columns([4, 3, 2, 1])
     c1.markdown("#### ◉ Stream HQ")
+
+    pol = _get_policy()
 
     # TEMP: the YouTube filter switch. Lives in the header, not behind a tab —
     # it must be visible at a glance, because leaving it on during a real
     # capture puts fake YouTube chrome on the actual broadcast.
-    pol = _get_policy()
     yt_on = pol.get("yt_overlay", "1") != "0"
     if c2.button("YT FILTER: " + ("ON" if yt_on else "OFF"),
                  use_container_width=True,
@@ -499,9 +500,25 @@ def render() -> None:
         _set_policy("yt_overlay", "0" if yt_on else "1", "Temp YouTube safe-zone filter")
         st.rerun()
 
+    # Mutes YOUR Stream windows — never the broadcast. HQ itself has no audio at
+    # all: the noise is coming from a Stream page you have open in another
+    # window, and this is what reaches across to it (different browsers, so the
+    # DB is the only channel).
+    #
+    # The render the encoder captures runs with ?live=1 and does not even poll
+    # this, so no setting and no outage can silence the actual stream.
+    muted = pol.get("preview_muted", "0") == "1"
+    if c3.button("MUTED" if muted else "SOUND",
+                 use_container_width=True,
+                 type="secondary" if muted else "primary",
+                 help="Silences every Stream page EXCEPT the live broadcast "
+                      "(?live=1), which never mutes. Applies in ~3s, no reload."):
+        _set_policy("preview_muted", "0" if muted else "1", "Mute non-broadcast renders")
+        st.rerun()
+
     # Health and the bus refresh themselves (fragments, 3s / 1s). This is only
     # for the parts that don't — the plan text and the policy row.
-    if c3.button("↻", use_container_width=True, help="Force a full reload"):
+    if c4.button("↻", use_container_width=True, help="Force a full reload"):
         st.rerun()
 
     if yt_on:

@@ -244,6 +244,18 @@
   // ═══════════════════════════════════════════════════════════════════════
   var SFX = (function() {
     var ctx = null, ready = false;
+
+    // ── Mute ────────────────────────────────────────────────────────────
+    // THE BROADCAST IS NEVER MUTED. ?live=1 marks the render the encoder is
+    // capturing, and it ignores this entirely. Every other window — yours, a
+    // spare tab — obeys Stream HQ's toggle.
+    //
+    // This split is the whole point. A naive global mute would be read by the
+    // VM's browser too, so silencing the noise on your desk would silence the
+    // actual YouTube stream, and nothing on the page would say so. The one
+    // render that must stay audible is the one nobody is sitting in front of.
+    var muted = false;
+    var isLive = !!window._TND_LIVE;
     function init() {
       if (ctx) return;
       try {
@@ -261,8 +273,12 @@
     });
     init();
 
+    // One gate for every sound on the page: play() and note() are the only two
+    // places an oscillator is ever created, so nothing can slip past this.
+    function silent() { return muted && !isLive; }
+
     function play(notes, vol, lowpass) {
-      if (!ctx) return;
+      if (!ctx || silent()) return;
       if (ctx.state === 'suspended') { ctx.resume(); return; }
       try {
         notes.forEach(function(n) {
@@ -288,7 +304,7 @@
     // A note with an explicit length — the fanfare needs sustain, which the
     // short fixed decay above cannot give.
     function note(freq, at, len, vol, type) {
-      if (!ctx) return;
+      if (!ctx || silent()) return;
       try {
         var osc = ctx.createOscillator(), g = ctx.createGain();
         osc.type = type || 'square';
@@ -346,7 +362,10 @@
         note(880 + Math.random() * 80, 0, 0.02, 0.016);
       },
 
-      isReady: function() { return ready && ctx && ctx.state === 'running'; }
+      setMuted: function(m) { muted = !!m; return muted; },
+      isMuted:  function() { return silent(); },
+      isLive:   function() { return isLive; },
+      isReady:  function() { return ready && ctx && ctx.state === 'running'; }
     };
   })();
 
@@ -866,6 +885,25 @@
       .catch(function() {});
   }
 
+  // Stream HQ's mute switch. Same store and shape as the YT filter toggle:
+  // strategy_params is the only thing HQ and this page can both reach, since
+  // they are different browsers.
+  //
+  // The BROADCAST short-circuits this — ?live=1 never even polls, so no setting,
+  // no outage and no bad row can ever silence the actual stream.
+  function pollMute() {
+    if (SFX.isLive()) return;
+    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=eq.preview_muted&select=value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || !rows.length) return;   // never set — stay audible
+        SFX.setMuted(rows[0].value === '1');
+      })
+      .catch(function() {});
+  }
+
   // Heartbeat. This is the ONLY way to catch the failure that kills this setup:
   // Streamlit drops the idle websocket, the page freezes, and the encoder keeps
   // pushing a dead screenshot to YouTube for hours. Nothing outside the render
@@ -887,7 +925,12 @@
           nav: Math.round(state.nav),
           mood: blob.getMood(),
           tiles: document.querySelectorAll('.tile').length,
-          audio: SFX.isReady() ? 'on' : 'blocked'
+          // 'muted' is distinct from 'blocked': blocked means the autoplay flag
+          // is missing and the render CANNOT make sound; muted means someone
+          // chose it. The watchdog alarms on the first and not the second, so
+          // they must not collapse into one value.
+          audio: SFX.isMuted() ? 'muted' : (SFX.isReady() ? 'on' : 'blocked'),
+          live: SFX.isLive()
         },
         recorded_at: new Date().toISOString()
       })
@@ -1388,6 +1431,10 @@
   // window. Remove with yt_overlay.js.
   setInterval(pollYtOverlay, 3000);
   pollYtOverlay();
+  // Mute lands within ~3s of hitting the button — fast enough that it feels
+  // like a mute button rather than a setting.
+  setInterval(pollMute, 3000);
+  pollMute();
   pollEvents();
   pollCryptoPrices();
   pollStreamEvents();

@@ -135,7 +135,8 @@ def _load_crypto_positions() -> list[dict]:
     } for r in rows]
 
 
-def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
+def _build_stream_html(data: dict, yt_overlay: bool = False,
+                       live: bool = False) -> str:
     """Assemble the portrait stage: CSS, DOM skeleton, payload, renderers."""
     # Live NAV from the engine's UPDATE stream — see _load_live_nav for why
     # nav_snapshots is not trusted here. Falls back to the old series only if
@@ -210,6 +211,7 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
         + "<script>window._TND_STREAM = "
         + json.dumps(payload, default=str)
         + ";window._TND_YT_INITIAL = " + ("true" if yt_overlay else "false")
+        + ";window._TND_LIVE = " + ("true" if live else "false")
         + ";</script>"
         + "<script>" + blob_js + "</script>"
         + "<script>" + bg_js + "</script>"
@@ -341,7 +343,14 @@ def render() -> None:
     _qp = st.query_params.get("yt")
     _yt = (_qp != "0") if _qp is not None else _yt_overlay_default()
 
-    components.html(_build_stream_html(data, yt_overlay=_yt),
+    # ?live=1 marks THE BROADCAST — the render the encoder is capturing.
+    # It is the one page that must never be muted, so it ignores HQ's mute
+    # toggle entirely. Every other render (an operator's window, a spare tab)
+    # respects it. Without this split, muting to stop the noise on your own
+    # desk would silence the actual YouTube stream and nothing would say so.
+    _live = st.query_params.get("live") == "1"
+
+    components.html(_build_stream_html(data, yt_overlay=_yt, live=_live),
                     height=_STAGE_H, scrolling=False)
 
     # Same trick as Home: a 0-height sibling iframe reaches into the parent
