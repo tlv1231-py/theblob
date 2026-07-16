@@ -4519,12 +4519,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
     ctx.clearRect(0, 0, W, H);
 
-    // Dynamic margins: leave room for feed overlay (left) and holdings panel (right)
-    var feedEl = document.getElementById('feed-overlay');
-    var tileEl = document.getElementById('pos-overlay');
-    _ML = feedEl ? Math.min(feedEl.offsetWidth + 8, W * 0.35) : 64;
-    _MR = tileEl ? Math.min(tileEl.offsetWidth + 16, W * 0.55) : 20;
-    _MT = 28; _MB = 32;
+    // Fixed margins — chart fills the full canvas, overlays sit on top
+    _ML = 8; _MR = 8; _MT = 28; _MB = 32;
 
     var liveNav = parseFloat(window._lastKnownNav);
     if (!liveNav || isNaN(liveNav)) {{ window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }}
@@ -4652,12 +4648,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     }}
 
     // ── Orb position for pulse canvas ──────────────────────────────────────
-    // When only 1 point (no history yet), center the dot in the visible area
-    var tipX = (n > 1) ? m[n-1].x : (cx0 + cW * 0.85);
-    var tipY = (n > 0) ? m[n-1].y : (cy0 + cH * 0.5);
-    // Clamp dot to visible chart area (keep it from landing behind tiles)
-    tipX = Math.max(cx0 + 10, Math.min(tipX, cx1 - 10));
-    tipY = Math.max(cy0 + 10, Math.min(tipY, cy1 - 10));
+    var tipX = n ? m[n-1].x : cx0 + cW * 0.5;
+    var tipY = n ? m[n-1].y : cy0 + cH * 0.5;
     var ncRect = _nc.getBoundingClientRect();
     var scrX = ncRect.left + tipX * (ncRect.width  / W);
     var scrY = ncRect.top  + tipY * (ncRect.height / H);
