@@ -2227,7 +2227,7 @@ function _fetchIntradayMarks() {
       var m = msg.match(/marked the book at \$?([\d,]+)/);
       if (m) {
         var v = parseFloat(m[1].replace(/,/g,''));
-        if (!isNaN(v) && v > 50000 && v < 200000) {
+        if (!isNaN(v) && v > 1000 && v < 10000000) {
           xs.push(new Date(row.recorded_at).toISOString());
           ys.push(v);
         }
@@ -5663,7 +5663,7 @@ setTimeout(function() {
         var age = Date.now() - new Date(row.recorded_at).getTime();
         if (age > 120000) return; // ignore rows older than 2 min — stale
         var nav = parseFloat(row.nav);
-        if (!nav || nav < 50000 || nav > 5000000) return;
+        if (!nav || nav < 1000 || nav > 10000000) return;
         // Only update display if DB value differs meaningfully from what's shown
         var shown = window._lastKnownNav || 0;
         if (Math.abs(nav - shown) < 0.01) return;
@@ -5943,7 +5943,7 @@ setTimeout(function() {
 
       function _fetchAlpacaBalance() {
         var w = _alpacaWallets[_alpacaActiveIdx];
-        if (!w) { var el = document.getElementById('ss-runner-st'); if (el) el.textContent = '—'; return; }
+        if (!w) return;  // no wallet configured — keep server-seeded value
         var base = w.type === 'live' ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets';
         fetch(base + '/v2/account', { headers: { 'APCA-API-KEY-ID': w.key, 'APCA-API-SECRET-KEY': w.secret } })
           .then(function(r) { return r.json(); })
@@ -5951,6 +5951,8 @@ setTimeout(function() {
             var val = parseFloat(data.portfolio_value || data.equity || 0);
             if (!val) return;
             _animateAlpacaVal(val);
+            var lmv = parseFloat(data.long_market_value || 0);
+            if (lmv >= 0) _animateLongExp(lmv);
             // Sync success flash
             var chip = document.getElementById('ss-alpaca-chip');
             if (chip) { chip.textContent = '✓ SYNCED'; chip.style.color = '#00ff9d'; chip.style.opacity = '1';
