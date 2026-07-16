@@ -472,10 +472,29 @@ def render() -> None:
     </style>
     """, unsafe_allow_html=True)
 
-    c1, c2 = st.columns([4, 1])
+    c1, c2, c3 = st.columns([5, 3, 1])
     c1.markdown("#### ◉ Stream HQ")
-    if c2.button("↻", use_container_width=True, help="Refresh health, bus, and countdowns"):
+
+    # TEMP: the YouTube filter switch. Lives in the header, not behind a tab —
+    # it must be visible at a glance, because leaving it on during a real
+    # capture puts fake YouTube chrome on the actual broadcast.
+    pol = _get_policy()
+    yt_on = pol.get("yt_overlay", "1") != "0"
+    if c2.button("YT FILTER: " + ("ON" if yt_on else "OFF"),
+                 use_container_width=True,
+                 type="primary" if yt_on else "secondary",
+                 help="Overlays YouTube's vertical-live chrome and safe zones on the "
+                      "Stream page. Applies live (~3s), no reload. MUST be off for a "
+                      "real capture."):
+        _set_policy("yt_overlay", "0" if yt_on else "1", "Temp YouTube safe-zone filter")
         st.rerun()
+
+    if c3.button("↻", use_container_width=True, help="Refresh health, bus, and countdowns"):
+        st.rerun()
+
+    if yt_on:
+        st.caption("⚠︎ **YT filter is ON** — the Stream page is showing the design overlay, "
+                   "not a clean capture.")
 
     _render_health()
 

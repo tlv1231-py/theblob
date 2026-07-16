@@ -88,6 +88,23 @@ def _load_live_nav() -> list[dict]:
     return pts
 
 
+def _yt_overlay_default() -> bool:
+    """Whether the temp YouTube filter starts visible.
+
+    Read from strategy_params so Stream HQ's toggle is the source of truth and
+    survives a reload. `?yt=0` / `?yt=1` still overrides for a single page load.
+    """
+    try:
+        with get_session() as s:
+            v = s.execute(text("""
+                SELECT value FROM strategy_params
+                WHERE strategy = 'stream' AND param = 'yt_overlay'
+            """)).scalar()
+        return v != "0"      # default ON while the layout is being designed
+    except Exception:
+        return True
+
+
 def _latest_stream_event_id() -> int:
     """Newest stream_event id at render time — the page's starting high-water mark."""
     try:
@@ -178,9 +195,11 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
     stream_js = (_DASHBOARD / "stream.js").read_text("utf-8")
     css       = (_DASHBOARD / "stream.css").read_text("utf-8")
 
-    # TEMP design aid. Loads last so it sits above the stage. Delete
-    # dashboard/yt_overlay.js and this block to remove it entirely.
-    yt_js = (_DASHBOARD / "yt_overlay.js").read_text("utf-8") if yt_overlay else ""
+    # TEMP design aid. Loads last so it sits above the stage. Always injected
+    # but starts hidden unless enabled — it is toggled at runtime from Stream
+    # HQ, which cannot reach this page any other way (different browsers).
+    # Delete dashboard/yt_overlay.js and this block to remove it entirely.
+    yt_js = (_DASHBOARD / "yt_overlay.js").read_text("utf-8")
 
     # Not an f-string: the CSS/JS brace density makes escaping a liability.
     # Data crosses into JS through one payload object instead.
@@ -190,11 +209,12 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
         + _STAGE_HTML
         + "<script>window._TND_STREAM = "
         + json.dumps(payload, default=str)
+        + ";window._TND_YT_INITIAL = " + ("true" if yt_overlay else "false")
         + ";</script>"
         + "<script>" + blob_js + "</script>"
         + "<script>" + bg_js + "</script>"
         + "<script>" + stream_js + "</script>"
-        + ("<script>" + yt_js + "</script>" if yt_js else "")
+        + "<script>" + yt_js + "</script>"
     )
 
 
@@ -313,9 +333,11 @@ def render() -> None:
         st.error(f"DB connection failed: {e}")
         return
 
-    # TEMP: YouTube safe-zone overlay, on by default while the page is being
-    # laid out. ?yt=0 to see the stage clean. Must be off for a real capture.
-    _yt = st.query_params.get("yt", "1") != "0"
+    # TEMP: YouTube safe-zone overlay. Stream HQ's toggle is the source of
+    # truth; ?yt=0 / ?yt=1 overrides it for a single page load. Must be off for
+    # a real capture — HQ shows the state so it can't be forgotten silently.
+    _qp = st.query_params.get("yt")
+    _yt = (_qp != "0") if _qp is not None else _yt_overlay_default()
 
     components.html(_build_stream_html(data, yt_overlay=_yt),
                     height=_STAGE_H, scrolling=False)

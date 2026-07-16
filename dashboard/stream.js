@@ -674,6 +674,26 @@
       .catch(function() {});
   }
 
+  // TEMP: the YouTube filter's runtime switch. Stream HQ writes
+  // strategy_params.yt_overlay; this applies it without a reload, which is the
+  // whole point — HQ and this page are different browsers, so a server-side
+  // gate could only take effect on refresh. Remove alongside yt_overlay.js.
+  function pollYtOverlay() {
+    if (!window._ytToggle) return;
+    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=eq.yt_overlay&select=value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) return;
+        // No row means never configured — keep the server-rendered default
+        // rather than guessing.
+        if (!rows.length) return;
+        window._ytToggle(rows[0].value !== '0');
+      })
+      .catch(function() {});
+  }
+
   // Heartbeat. This is the ONLY way to catch the failure that kills this setup:
   // Streamlit drops the idle websocket, the page freezes, and the encoder keeps
   // pushing a dead screenshot to YouTube for hours. Nothing outside the render
@@ -1004,6 +1024,10 @@
   // Beat faster than Stream HQ's 60s staleness window so one dropped request
   // is never mistaken for a frozen page.
   setInterval(beat, 15000);
+  // TEMP: filter toggle. 3s feels instant when you're flipping it in the next
+  // window. Remove with yt_overlay.js.
+  setInterval(pollYtOverlay, 3000);
+  pollYtOverlay();
   pollEvents();
   pollCryptoPrices();
   pollStreamEvents();

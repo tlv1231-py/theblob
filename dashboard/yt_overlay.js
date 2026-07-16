@@ -27,6 +27,11 @@
 //     higher than any Shorts template implies.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Always injected, but starts hidden unless enabled. It is toggled at RUNTIME
+// (Stream HQ writes strategy_params.yt_overlay; stream.js polls it) rather than
+// gated server-side, because HQ and the Stream page are different browsers —
+// a server-side gate could only take effect on a reload, which is useless when
+// you are designing against the filter live in the next window.
 (function () {
   var stage = document.getElementById('stage');
   if (!stage) return;
@@ -147,4 +152,15 @@
     + '<div class="yhome"></div>';
 
   stage.appendChild(ov);
+
+  // Runtime switch. stream.js polls the setting and calls this; Stream HQ
+  // writes it. Idempotent, so polling it every few seconds is free.
+  var on = null;
+  window._ytToggle = function (show) {
+    show = !!show;
+    if (show === on) return;
+    on = show;
+    ov.style.display = show ? '' : 'none';
+  };
+  window._ytToggle(!!window._TND_YT_INITIAL);
 })();
