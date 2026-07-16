@@ -60,6 +60,10 @@
       onAccent: opts.onAccent || null   // cb(rgbArray) — for outer bloom
     };
     var blinkUntil = -1, nextBlink = 30, moodUntil = -1, fx = [];
+    // Transient gaze. Same shape as a transient mood: takes ticks and decays
+    // back to the P&L-driven drift. He needs to be able to look AT something
+    // (a tile he is about to place) and not only toward the move.
+    var lookX = 0, lookUntil = -1;
 
     function px(x, y, c) {
       if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -137,7 +141,10 @@
       var fy = Math.round(cy) - 2;
       var CX = Math.round(cx);
       var blinking = self.tick < blinkUntil;
-      var look = Math.round(p * 1.6);   // eyes drift toward the move
+      // Eyes drift toward the move — unless he is deliberately looking at
+      // something, in which case the glance wins until it decays.
+      var look = Math.round(p * 1.6);
+      if (self.tick < lookUntil) look = Math.round(lookX * 2.4);
 
       if (self.visor) {
         rect(CX-9, fy-2, 18, 5, P.OUT);
@@ -230,6 +237,17 @@
       },
       setPnl:   function(pct) { self.pnl = pct; return api; },
       setVisor: function(on)  { self.visor = !!on; return api; },
+
+      // Look at something. dx is -1 (hard left) .. +1 (hard right); durTicks
+      // decays back to the P&L drift, same as a transient mood. Used to glance
+      // at a tile a beat BEFORE it lands — which is what makes him read as
+      // placing it rather than reacting to it.
+      glance: function(dx, durTicks) {
+        lookX = Math.max(-1, Math.min(1, dx));
+        lookUntil = self.tick + (durTicks || 12);
+        return api;
+      },
+
       getMood:  function()    { return self.mood; },
       MOODS: MOODS
     };

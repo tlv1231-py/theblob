@@ -542,6 +542,7 @@
           };
         });
         renderPositions();
+        spawnNewTiles();   // any slot that just arrived flies in from him
       })
       .catch(function() {});
   }
@@ -831,6 +832,60 @@
     el.classList.add('hit');
   }
 
+  // ── Agency ───────────────────────────────────────────────────────────────
+  // Making the Blob look like he is DOING this rather than reacting to it.
+  // The whole trick is sequence: he moves first, the board answers ~220ms
+  // later. Same events, same data — but cause then effect, instead of two
+  // symptoms firing at once with the cause invisible.
+
+  var seenSyms = {};   // symbol -> true, so a re-render can tell new from old
+
+  function blobCenter() {
+    var c = $('blobCanvas');
+    if (!c) return null;
+    var r = c.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  // Fly every newly-arrived tile in from his position.
+  function spawnNewTiles() {
+    var origin = blobCenter();
+    if (!origin) return;
+    document.querySelectorAll('.tile').forEach(function(el) {
+      var sym = el.getAttribute('data-sym');
+      if (!sym || seenSyms[sym]) return;
+      seenSyms[sym] = true;
+      var r = el.getBoundingClientRect();
+      // Offset from the tile's resting slot back to him — quantized to 4px so
+      // the flight lands on the same grid the rest of the art lives on.
+      var dx = Math.round((origin.x - (r.left + r.width / 2)) / 4) * 4;
+      var dy = Math.round((origin.y - (r.top + r.height / 2)) / 4) * 4;
+      el.style.setProperty('--fx', dx + 'px');
+      el.style.setProperty('--fy', dy + 'px');
+      el.classList.remove('spawn');
+      void el.offsetWidth;
+      el.classList.add('spawn');
+    });
+    // Forget symbols that left, so a re-entry flies in again rather than
+    // silently appearing.
+    var live = {};
+    document.querySelectorAll('.tile').forEach(function(el) {
+      live[el.getAttribute('data-sym')] = true;
+    });
+    Object.keys(seenSyms).forEach(function(s) { if (!live[s]) delete seenSyms[s]; });
+  }
+
+  // Glance toward a symbol's slot. -1 hard left .. +1 hard right, measured
+  // against his own centre so it works whatever the grid does.
+  function glanceAt(sym) {
+    var el = document.querySelector('.tile[data-sym="' + sym + '"]');
+    var origin = blobCenter();
+    if (!el || !origin) return;
+    var r = el.getBoundingClientRect();
+    var dx = (r.left + r.width / 2 - origin.x) / (window.innerWidth / 2 || 1);
+    blob.glance(Math.max(-1, Math.min(1, dx * 2)), 16);
+  }
+
   // The feed and footer ticker are gone — they sat in the bottom 380, which
   // YouTube's chat occupies permanently. pollEvents() below still runs: fills
   // drive the Blob's ALERT mood even though nothing lists them any more.
@@ -950,11 +1005,13 @@
         });
         if (!best) return;
 
+        // ── He acts FIRST ────────────────────────────────────────────────
+        // Everything below is the cause. The board is not touched yet.
         if (best.rank === 3)      blob.setMood('HAPPY', 22);   // ~2.2s at 10fps
         else if (best.rank === 2) blob.setMood('ALERT', 18);
         else                      blob.setMood('ALERT', 12);
+        glanceAt(best.sym);                    // looks at the slot he's about to work
         flashTrade(best.dir, best.sym, best.pnl);
-        hitTile(best.sym);
         $('blob-mood').textContent = blob.getMood();
 
         // Sound follows the verdict, not the event: acquisitions are neutral
@@ -963,10 +1020,16 @@
         else if (best.pnl > 0)       SFX.win();
         else                         SFX.loss();
 
-        // The book turns over ~9x/min. Re-render so a closed position leaves
-        // the board and a new one takes its slot.
+        // ── ...and the board answers ─────────────────────────────────────
+        // 220ms is the whole illusion. Fire this on the same frame and the eye
+        // reads two simultaneous symptoms of an unseen cause; delay it and the
+        // Blob becomes the cause. Long enough to register as consequence,
+        // short enough to still feel connected.
         if (fresh.some(function(r) { return r.event_type === 'TRADE'; })) {
-          refreshCrypto();
+          setTimeout(function() {
+            hitTile(best.sym);
+            refreshCrypto();
+          }, 220);
         }
       })
       .catch(function() {});
@@ -977,6 +1040,11 @@
   renderPositions();
   drawChart();
   annNext();   // settles the panel into its idle state
+  // Seed the roster WITHOUT animating: on first paint the book already exists,
+  // and flying 14 tiles in at once would claim he just placed them all.
+  document.querySelectorAll('.tile').forEach(function(el) {
+    seenSyms[el.getAttribute('data-sym')] = true;
+  });
 
   // The chart head pulses, so it needs its own repaint clock. 20fps is plenty
   // for a glow and keeps an unattended stream from cooking a CPU for hours.

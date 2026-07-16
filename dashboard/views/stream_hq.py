@@ -96,30 +96,38 @@ _DOT = {"ok": "🟢", "degraded": "🟡", "down": "🔴", "absent": "⚫", "unkn
 
 
 def _render_health() -> None:
-    st.markdown("### Pipeline health")
-
+    """Compact by design — this page lives in a narrow column beside the stream
+    itself, so health is a strip you glance at, not a section you read."""
     checks = [
-        ("Database",      _check_db(),                    "Supabase — the channel everything rides on"),
-        ("Trading engine", _check_engine(),               "pipeline_events still flowing"),
-        ("Stream page",   _check_heartbeat("stream_page"), "the render itself — catches a frozen page"),
-        ("Encoder",       _check_heartbeat("encoder"),     "ffmpeg speed / fps — needs host agent"),
-        ("Host",          _check_heartbeat("host"),        "Oracle VM CPU / memory — needs host agent"),
+        ("DB",      _check_db(),                     "Supabase — the channel everything rides on"),
+        ("ENGINE",  _check_engine(),                 "pipeline_events still flowing"),
+        ("PAGE",    _check_heartbeat("stream_page"), "the render itself — catches a frozen page"),
+        ("ENCODER", _check_heartbeat("encoder"),     "ffmpeg speed / fps — needs a host agent"),
+        ("HOST",    _check_heartbeat("host"),        "Oracle VM CPU / mem — needs a host agent"),
     ]
 
-    for name, res, why in checks:
-        c1, c2, c3 = st.columns([2, 3, 5])
-        c1.markdown(f"{_DOT.get(res['status'], '⚪')} **{name}**")
-        c2.markdown(f"`{res['status'].upper()}`")
-        c3.caption(f"{res['detail']}  —  {why}")
+    # One line, five dots. Detail moves into the tooltip so the strip stays
+    # readable at ~600px instead of wrapping into five paragraphs.
+    strip = "  ".join(
+        f"{_DOT.get(r['status'], '⚪')} `{n}`" for n, r, _ in checks
+    )
+    st.markdown(strip)
 
-    absent = [n for n, r, _ in checks if r["status"] == "absent"]
-    if absent:
-        st.warning(
-            f"**{', '.join(absent)} report ⚫ ABSENT — nothing is measuring them.** "
-            "These live on the streaming host and cannot be observed from this app. "
-            "They stay absent until an agent on the VM writes to `stream_health`. "
-            "Treat them as unknown, not healthy."
-        )
+    with st.expander("health detail", expanded=False):
+        for name, res, why in checks:
+            st.markdown(
+                f"{_DOT.get(res['status'], '⚪')} **{name}** — `{res['status'].upper()}`  \n"
+                f"<span style='color:#8060a0;font-size:0.8em'>{res['detail']} · {why}</span>",
+                unsafe_allow_html=True,
+            )
+        absent = [n for n, r, _ in checks if r["status"] == "absent"]
+        if absent:
+            st.warning(
+                f"**{', '.join(absent)} are ⚫ ABSENT — nothing is measuring them.** "
+                "They live on the streaming host and cannot be seen from this app. "
+                "Absent until an agent on the VM writes to `stream_health`. "
+                "Unknown, not healthy."
+            )
 
 
 # ── Build plan ────────────────────────────────────────────────────────────────
@@ -222,11 +230,6 @@ def _set_policy(param: str, value: str, label: str) -> None:
 
 
 def _render_policy() -> None:
-    st.markdown("### Release policy")
-    st.caption(
-        "The default rule applied to events as they arrive. Lives in the database, "
-        "so a future Streamlabs listener obeys it too — not just this page."
-    )
     pol = _get_policy()
     auto = pol.get("auto_release", "1") == "1"
     hold = int(pol.get("default_hold_s", "5") or 5)
@@ -237,10 +240,9 @@ def _render_policy() -> None:
                              help="Off holds every incoming event indefinitely — nothing "
                                   "reaches the stream until you release it by hand.")
     with c2:
-        new_hold = st.slider("Default hold before air (seconds)", 0, 60, hold,
-                             disabled=not new_auto,
-                             help="0 airs on the stream's next poll (~2s). Anything higher "
-                                  "gives you a window to cancel.")
+        new_hold = st.slider("Hold (s)", 0, 60, hold, disabled=not new_auto,
+                             help="0 airs on the stream's next poll (~2s). Higher gives "
+                                  "you a window to cancel.")
 
     if new_auto != auto or new_hold != hold:
         _set_policy("auto_release", "1" if new_auto else "0", "Auto-release incoming events")
@@ -248,12 +250,12 @@ def _render_policy() -> None:
         st.rerun()
 
     if not new_auto:
-        st.warning("**Auto-release is OFF.** Every incoming event — real donations included — "
-                   "holds until released by hand. Nothing airs while nobody is watching HQ.")
+        st.warning("**OFF** — every event, real donations included, holds until released by hand.")
     elif new_hold == 0:
-        st.info("**Instant.** Events air on the stream's next poll with no window to cancel.")
+        st.caption("Instant — airs on the next poll, no window to cancel.")
     else:
-        st.success(f"Events air **{new_hold}s** after arriving, cancellable until then.")
+        st.caption(f"Airs **{new_hold}s** after arriving · cancellable until then · "
+                   "rule lives in the DB, so a future Streamlabs listener obeys it too.")
 
 
 # The house format: {USER} just {ACTIONED} {AMOUNT} !!!
@@ -341,15 +343,9 @@ def _load_events(limit: int = 40) -> pd.DataFrame:
 
 
 def _render_bus() -> None:
-    st.markdown("### Event bus")
-    st.caption(
-        "Everything bound for the Blob lands here first. `release_at` is the gate — "
-        "an event airs on its own once its countdown expires, whether or not this page is open."
-    )
-
     df = _load_events()
     if df.empty:
-        st.info("No events yet. Fire one from the simulator below.")
+        st.info("No events yet — fire one from Simulate.")
         return
 
     # Delivery is proven by consumed_at, NOT by status — status stays 'queued'
@@ -362,34 +358,33 @@ def _render_bus() -> None:
     # Held indefinitely: no release_at at all. Not "late" — it has no T.
     held = df[live & df["release_at"].isna()]
     if not held.empty:
-        st.markdown("**Held — no countdown, waiting on you**")
+        st.markdown("**Held** — no countdown, waiting on you")
         for _, r in held.iterrows():
-            c1, c2, c3 = st.columns([3, 5, 2])
-            c1.markdown(f"**{r['event_type']}**  \n`{r['source']}`")
-            c2.code(json.dumps(r["payload"] or {}), language="json")
-            if c3.button("Release", key=f"hrel{r['id']}", type="primary"):
+            c1, c2 = st.columns([5, 3])
+            c1.markdown(f"`{r['event_type']}` {_headline_preview(r['event_type'], r['payload'] or {})}")
+            b1, b2 = c2.columns(2)
+            if b1.button("Air", key=f"hrel{r['id']}", type="primary", use_container_width=True):
                 _release_now(int(r["id"])); st.rerun()
-            if c3.button("Cancel", key=f"hcan{r['id']}"):
+            if b2.button("Kill", key=f"hcan{r['id']}", use_container_width=True):
                 _set_status(int(r["id"]), "cancelled"); st.rerun()
         st.divider()
 
     # Still counting down — the only window in which cancelling is possible.
     pending = df[live & df["release_at"].notna() & (df["countdown"].fillna(0) > 0)]
     if not pending.empty:
-        st.markdown("**Counting down — fires automatically at T-0**")
-        st.caption("Cancel now or it airs on its own. Release skips the countdown.")
+        st.markdown("**Counting down** — fires on its own at T-0")
         for _, r in pending.iterrows():
             cd = int(r["countdown"] or 0)
-            c1, c2, c3, c4 = st.columns([3, 4, 2, 2])
-            c1.markdown(f"**{r['event_type']}**  \n`{r['source']}`")
-            c2.code(json.dumps(r["payload"] or {}), language="json")
-            c3.metric("T-minus", f"{max(0, cd)}s")
-            if c4.button("Release", key=f"rel{r['id']}", type="primary"):
+            c1, c2 = st.columns([5, 3])
+            c1.markdown(f"**T-{max(0, cd)}s** · `{r['event_type']}`  \n"
+                        f"{_headline_preview(r['event_type'], r['payload'] or {})}")
+            b1, b2 = c2.columns(2)
+            if b1.button("Air", key=f"rel{r['id']}", type="primary", use_container_width=True):
                 _release_now(int(r["id"])); st.rerun()
-            if c4.button("Cancel", key=f"can{r['id']}"):
+            if b2.button("Kill", key=f"can{r['id']}", use_container_width=True):
                 _set_status(int(r["id"]), "cancelled"); st.rerun()
-        st.info("Countdowns tick in the database, not in this page — "
-                "the event fires whether or not HQ is open. Hit Refresh to update the clock.")
+        st.caption("Countdowns tick in the DB — these fire whether or not HQ is open. "
+                   "Refresh to update the clock.")
         st.divider()
 
     # Past T-0, eligible, and still unaired. Give it a few seconds of slack for
@@ -402,68 +397,50 @@ def _render_bus() -> None:
             "No Stream page is picking them up — check the Stream page heartbeat above."
         )
 
-    st.markdown("**Recent**")
-    view = df[["id", "event_type", "source", "created_at", "consumed_at"]].copy()
-    # "On air" is the only status an operator cares about, and it is the one the
-    # status column cannot tell them — consumed_at is the truth.
-    view.insert(1, "on_air", df["consumed_at"].notna().map({True: "AIRED", False: "—"}))
-    view.loc[df["status"] == "cancelled", "on_air"] = "CANCELLED"
-    view["created_at"] = pd.to_datetime(view["created_at"]).dt.strftime("%H:%M:%S")
-    view["consumed_at"] = pd.to_datetime(view["consumed_at"]).dt.strftime("%H:%M:%S")
-    st.dataframe(view, use_container_width=True, hide_index=True, height=260)
+    # Narrow column: only the columns an operator actually scans. "On air" is
+    # the one thing they care about and the one thing `status` cannot tell them
+    # — consumed_at is the truth.
+    view = pd.DataFrame({
+        "id": df["id"],
+        "on_air": df["consumed_at"].notna().map({True: "AIRED", False: "—"}),
+        "event": df["event_type"],
+        "at": pd.to_datetime(df["created_at"]).dt.strftime("%H:%M:%S"),
+    })
+    view.loc[df["status"] == "cancelled", "on_air"] = "KILLED"
+    st.dataframe(view, use_container_width=True, hide_index=True, height=200)
 
     st.caption(
-        "`consumed_at` is stamped by the first renderer to air an event — it is proof of "
-        "delivery, not a lock. Events broadcast: every open Stream page shows every event. "
-        "Note this means any Stream page you leave open elsewhere also airs them."
+        "`consumed_at` is stamped by the first renderer to air an event — proof of delivery, "
+        "not a lock. Events **broadcast**: every open Stream page airs every event, so a tab "
+        "you left open elsewhere is also showing them."
     )
 
 
 # ── Simulator ─────────────────────────────────────────────────────────────────
 
 def _render_sim() -> None:
-    st.markdown("### Simulator")
-    st.caption(
-        "Fire any event the Blob can react to, without waiting for a real one. "
-        "Payloads match the shape the real source sends, so a rehearsal exercises "
-        "the same code path as production."
-    )
-
     pol = _get_policy()
     pol_auto = pol.get("auto_release", "1") == "1"
     pol_hold = int(pol.get("default_hold_s", "5") or 5)
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        etype = st.selectbox("Event", list(_EVENT_TYPES.keys()))
-        mode = st.radio(
-            "Release",
-            ["Use policy", "Fire now", "Hold for me"],
-            horizontal=True,
-            help="Use policy applies the rule above — the same path a real event takes. "
-                 "Fire now skips the countdown. Hold for me waits for a manual release.",
-        )
-        if mode == "Use policy":
-            delay = pol_hold if pol_auto else None
-            st.caption(f"→ {'airs in ' + str(pol_hold) + 's' if pol_auto else 'held until released'}")
-        elif mode == "Fire now":
-            delay = 0
-            st.caption("→ airs on the next poll (~2s)")
-        else:
-            delay = None
-            st.caption("→ held until you release it")
-    with c2:
-        default = json.dumps(_EVENT_TYPES[etype], indent=2)
-        raw = st.text_area("Payload", value=default, height=190, key=f"pl_{etype}")
+    c1, c2 = st.columns([2, 3])
+    etype = c1.selectbox("Event", list(_EVENT_TYPES.keys()), label_visibility="collapsed")
+    mode = c2.radio("Release", ["Policy", "Now", "Hold"], horizontal=True,
+                    label_visibility="collapsed",
+                    help="Policy applies the rule above — the same path a real event takes. "
+                         "Now skips the countdown. Hold waits for a manual release.")
+    delay = (pol_hold if pol_auto else None) if mode == "Policy" else (0 if mode == "Now" else None)
+
+    raw = st.text_area("Payload", value=json.dumps(_EVENT_TYPES[etype]),
+                       height=80, key=f"pl_{etype}", label_visibility="collapsed")
 
     # Show exactly what the stream will announce, before it goes out.
     try:
-        _preview = json.loads(raw)
-        st.markdown(f"**On air:**  `{_headline_preview(etype, _preview)}`")
+        st.markdown(f"**On air →** `{_headline_preview(etype, json.loads(raw))}`")
     except json.JSONDecodeError:
-        st.caption("Payload is not valid JSON — fix it to see the on-air preview.")
+        st.caption("Payload is not valid JSON — fix it to see the on-air line.")
 
-    if st.button("Queue event", type="primary"):
+    if st.button("QUEUE EVENT", type="primary", use_container_width=True):
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as e:
@@ -471,29 +448,43 @@ def _render_sim() -> None:
             return
         _queue_event(etype, payload, delay)
         if delay is None:
-            st.success(f"`{etype}` held — release it from the bus above.")
+            st.success(f"`{etype}` held — air it from Bus.")
         elif delay == 0:
             st.success(f"`{etype}` on air within ~2s.")
         else:
-            st.success(f"`{etype}` airs in {delay}s — cancellable until then.")
+            st.success(f"`{etype}` airs in {delay}s.")
         st.rerun()
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def render() -> None:
-    st.markdown("## Stream HQ")
-    st.caption("Operator console — health, event bus, and simulation for the 24/7 stream.")
+    # Laid out for a narrow column beside the stream itself, not full width.
+    # Health is a one-line strip and everything else is tabbed, so the console
+    # never pushes the thing you are actually watching off screen.
+    st.markdown("""
+    <style>
+    [data-testid="stMainBlockContainer"] { padding-top: 2.4rem !important; }
+    /* Tight vertical rhythm — this page is scanned, not read. */
+    [data-testid="stVerticalBlock"] { gap: 0.55rem !important; }
+    .stTabs [data-baseweb="tab"] { padding: 6px 12px !important; }
+    [data-testid="stMetricValue"] { font-size: 1rem !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
-    if st.button("Refresh"):
+    c1, c2 = st.columns([4, 1])
+    c1.markdown("#### ◉ Stream HQ")
+    if c2.button("↻", use_container_width=True, help="Refresh health, bus, and countdowns"):
         st.rerun()
 
     _render_health()
-    st.divider()
-    _render_policy()
-    st.divider()
-    _render_bus()
-    st.divider()
-    _render_sim()
-    st.divider()
-    _render_plan()
+
+    tab_sim, tab_bus, tab_pol, tab_plan = st.tabs(["Simulate", "Bus", "Policy", "Plan"])
+    with tab_sim:
+        _render_sim()
+    with tab_bus:
+        _render_bus()
+    with tab_pol:
+        _render_policy()
+    with tab_plan:
+        _render_plan()

@@ -484,6 +484,24 @@ html, body {
   box-shadow: 0 0 5px rgba(255,255,255,0.55);
 }
 
+/* He places it. The tile flies in FROM his position (--fx/--fy are set inline
+   per tile, measured against his canvas centre) and lands in its slot.
+   steps(4) not ease: the position snaps across four frames the way a sprite
+   moves, instead of gliding the way a web element does. Origin is the whole
+   point — a tile that grows in place appeared on its own; a tile that arrives
+   from the Blob was put there by him. */
+.tile.spawn { animation: tile-spawn 0.16s steps(4, end); }
+@keyframes tile-spawn {
+  from { transform: translate(var(--fx, 0), var(--fy, 0)) scale(0.35); opacity: 0.55; }
+  to   { transform: none; opacity: 1; }
+}
+/* Corner sparks on landing — 80ms, same as the Command Center's tile engine. */
+.tile.spawn::before { animation: spawn-spark 0.24s steps(3, end); }
+@keyframes spawn-spark {
+  0%   { box-shadow: 0 0 24px 4px #fff; background: #fff; }
+  100% { box-shadow: 0 0 12px var(--tc); background: var(--tc); }
+}
+
 /* A fill just landed on this symbol — the slot itself acknowledges it. */
 .tile.hit { animation: tile-hit 0.42s steps(3, end); }
 @keyframes tile-hit {
