@@ -9031,7 +9031,11 @@ setTimeout(function() {{
           if (cd) cd.textContent = '';
         }}
       }}, 1000);
-      // Initial fetch after short delay
+      // Seed wallet slot immediately from server-injected value (no CORS needed)
+      if (typeof _ALPACA_PORTVAL === 'number' && _ALPACA_PORTVAL > 0) {{
+        _animateAlpacaVal(_ALPACA_PORTVAL);
+      }}
+      // Initial fetch after short delay — overwrites seed if client-side succeeds
       setTimeout(function() {{ _fetchAlpacaBalance(); _alpacaSyncSecs = 30; }}, 1500);
 
       // ── LONG EXPOSURE slot — market value of open positions, server-injected ────────
