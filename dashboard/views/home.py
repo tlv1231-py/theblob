@@ -218,7 +218,7 @@ def _load_chart_data() -> dict:
             LIMIT 2000
         """)).fetchall()
         nav_snap_pts = [
-            {"t": r.recorded_at.isoformat(), "v": float(r.nav)}
+            {"t": r.recorded_at.isoformat() + "Z", "v": float(r.nav)}
             for r in nav_snap_rows
         ]
 
