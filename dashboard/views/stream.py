@@ -43,7 +43,7 @@ _STAGE_W = 1080
 _STAGE_H = 1920
 
 
-def _build_stream_html(data: dict) -> str:
+def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
     """Assemble the portrait stage: CSS, DOM skeleton, payload, renderers."""
     nav_pts = data.get("nav_snap_pts") or []
     port = data.get("portfolio") or {}
@@ -87,6 +87,10 @@ def _build_stream_html(data: dict) -> str:
     stream_js = (_DASHBOARD / "stream.js").read_text("utf-8")
     css       = (_DASHBOARD / "stream.css").read_text("utf-8")
 
+    # TEMP design aid. Loads last so it sits above the stage. Delete
+    # dashboard/yt_overlay.js and this block to remove it entirely.
+    yt_js = (_DASHBOARD / "yt_overlay.js").read_text("utf-8") if yt_overlay else ""
+
     # Not an f-string: the CSS/JS brace density makes escaping a liability.
     # Data crosses into JS through one payload object instead.
     return (
@@ -97,75 +101,61 @@ def _build_stream_html(data: dict) -> str:
         + ";</script>"
         + "<script>" + blob_js + "</script>"
         + "<script>" + stream_js + "</script>"
+        + ("<script>" + yt_js + "</script>" if yt_js else "")
     )
 
 
+# Laid out against YouTube's vertical-live safe zone. The top 380 and bottom
+# 380 are reserved by YouTube chrome, and the right ~120 by the action rail —
+# so EVERY informational element lives in #safe (870x1160 at 90,380) and
+# nothing outside it carries meaning. The bands get ambient glow only: it costs
+# nothing to lose, because YouTube is going to paint over it regardless.
 _STAGE_HTML = """
 <div id="stage-wrap">
   <div id="stage">
+    <div id="ambient"></div>
     <div id="scanlines"></div>
     <div id="vignette"></div>
 
-    <!-- ── Header ─────────────────────────────────────────────────────── -->
-    <header id="s-head">
-      <div class="hd-brand"><span class="hd-mark">&#x25C8;</span> THE BLOB</div>
-      <div class="hd-right">
-        <span class="hd-live"><i class="dot"></i>LIVE</span>
-        <span class="hd-clock" id="hd-clock">--:--:--</span>
-        <span class="hd-sess" id="hd-sess">&mdash;</span>
-      </div>
-    </header>
+    <!-- ── SAFE BOX — 870 x 1160 @ (90, 380) ──────────────────────────── -->
+    <div id="safe">
 
-    <!-- ── Hero: blob + NAV ───────────────────────────────────────────── -->
-    <section id="s-hero">
-      <div class="hero-blob">
+      <div id="s-status">
+        <span class="st-live"><i class="dot"></i>LIVE</span>
+        <span class="st-chip" id="chip-status">PAPER</span>
+        <span class="st-chip st-dim" id="chip-day">DAY &mdash;/20</span>
+        <span class="st-spacer"></span>
+        <span class="st-sess" id="hd-sess">&mdash;</span>
+        <span class="st-clock" id="hd-clock">--:--:--</span>
+      </div>
+
+      <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
         <canvas id="blobCanvas"></canvas>
         <div class="blob-mood" id="blob-mood">IDLE</div>
       </div>
-      <div class="hero-num">
-        <div class="hero-label">PORTFOLIO VALUE</div>
-        <div class="hero-nav" id="hero-nav">$&mdash;</div>
-        <div class="hero-day" id="hero-day">&mdash;</div>
-        <div class="hero-chips">
-          <span class="chip" id="chip-status">PAPER</span>
-          <span class="chip chip-dim" id="chip-day">DAY &mdash;/20</span>
-          <span class="chip chip-dim" id="chip-total">TOTAL &mdash;</span>
+
+      <div id="s-nav">
+        <div class="nav-label">PORTFOLIO VALUE</div>
+        <div class="nav-big" id="hero-nav">$&mdash;</div>
+        <div class="nav-day" id="hero-day">&mdash;</div>
+        <div class="nav-sub" id="chip-total">&mdash;</div>
+      </div>
+
+      <div id="s-chart">
+        <canvas id="navCanvas"></canvas>
+        <div class="chart-meta" id="chart-meta">&mdash;</div>
+      </div>
+
+      <div id="s-pos">
+        <div class="pos-hdr">
+          <span class="pos-name">POSITIONS</span>
+          <span class="pos-meta" id="pos-meta">&mdash;</span>
         </div>
+        <div id="pos-list"></div>
       </div>
-    </section>
 
-    <!-- ── NAV chart ──────────────────────────────────────────────────── -->
-    <section id="s-chart">
-      <div class="sect-hdr">
-        <span class="sect-name">NAV</span>
-        <span class="sect-meta" id="chart-meta">&mdash;</span>
-      </div>
-      <canvas id="navCanvas"></canvas>
-    </section>
-
-    <!-- ── Positions ──────────────────────────────────────────────────── -->
-    <section id="s-pos">
-      <div class="sect-hdr">
-        <span class="sect-name">POSITIONS</span>
-        <span class="sect-meta" id="pos-meta">&mdash;</span>
-      </div>
-      <div id="pos-list"></div>
-    </section>
-
-    <!-- ── Feed ───────────────────────────────────────────────────────── -->
-    <section id="s-feed">
-      <div class="sect-hdr">
-        <span class="sect-name">FEED</span>
-        <span class="sect-meta" id="feed-meta">&mdash;</span>
-      </div>
-      <div id="feed-list"></div>
-    </section>
-
-    <!-- ── Footer ticker ──────────────────────────────────────────────── -->
-    <footer id="s-foot">
-      <div id="foot-track"></div>
-    </footer>
+    </div>
   </div>
 </div>
 """
@@ -205,7 +195,12 @@ def render() -> None:
         st.error(f"DB connection failed: {e}")
         return
 
-    components.html(_build_stream_html(data), height=_STAGE_H, scrolling=False)
+    # TEMP: YouTube safe-zone overlay, on by default while the page is being
+    # laid out. ?yt=0 to see the stage clean. Must be off for a real capture.
+    _yt = st.query_params.get("yt", "1") != "0"
+
+    components.html(_build_stream_html(data, yt_overlay=_yt),
+                    height=_STAGE_H, scrolling=False)
 
     # Same trick as Home: a 0-height sibling iframe reaches into the parent
     # (same-origin) and sizes the stage iframe to the real viewport, so the

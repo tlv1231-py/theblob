@@ -1,8 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   VERTICAL STREAM — 1080x1920 stage
-   Palette matches app.py's futurepunk vars. Type is sized for a phone screen
-   at a glance, not for a desk monitor: everything is roughly 2x the Command
-   Center's density because the viewer is watching, not inspecting.
+   VERTICAL STREAM — 1080x1920 stage, laid out for YouTube vertical live.
+
+   The governing constraint is not the canvas, it's the safe zone. YouTube
+   reserves the top 380 and bottom 380 (chat is PERMANENT down there on a live
+   stream) and the right ~120 for the action rail. That leaves 870 x 1160 at
+   (90, 380) — about 49% of the canvas — and it is the only place information
+   is allowed to live. Everything here is sized against that box, not the 1920.
+
+   Palette is app.py's futurepunk set. Type is sized for a phone at a glance.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -20,6 +25,12 @@
   --danger:  #ff3366;
   --warn:    #ff9900;
   --ok:      #00ff9d;
+
+  /* The safe box, named once so nothing re-derives it by hand. */
+  --safe-x: 90px;
+  --safe-y: 380px;
+  --safe-w: 870px;
+  --safe-h: 1160px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -33,7 +44,8 @@ html, body {
 
 /* Letterbox: the stage is always exactly 1080x1920 in its own coordinate
    space. The browser only scales it to fit. At a true 1080x1920 capture the
-   scale resolves to 1 and every pixel is native. */
+   scale resolves to 1 and every pixel is native — which is what keeps the
+   Blob's pixel art unresampled. */
 #stage-wrap {
   position: fixed;
   inset: 0;
@@ -50,14 +62,20 @@ html, body {
   flex: none;
   background: var(--bg);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
   transform-origin: center center;
-  /* JS sets --s from the viewport; the fallback keeps it sane pre-script. */
   transform: scale(var(--s, 0.5));
 }
 
-/* ── Overlays ─────────────────────────────────────────────────────────── */
+/* ── Ambient ──────────────────────────────────────────────────────────── */
+/* Deliberately spills into the reserved bands. It is atmosphere, never
+   information — losing it under YouTube's chrome costs nothing. */
+#ambient {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 34% at 50% 30%, rgba(255,0,204,0.13), transparent 70%),
+    radial-gradient(ellipse 90% 30% at 50% 88%, rgba(148,0,255,0.10), transparent 70%),
+    var(--bg);
+}
 
 #scanlines {
   position: absolute; inset: 0; z-index: 90; pointer-events: none;
@@ -68,294 +86,194 @@ html, body {
 
 #vignette {
   position: absolute; inset: 0; z-index: 89; pointer-events: none;
-  background: radial-gradient(ellipse 78% 62% at 50% 44%,
-              transparent 42%, rgba(0,0,0,0.62) 100%);
+  background: radial-gradient(ellipse 74% 46% at 50% 50%,
+              transparent 40%, rgba(0,0,0,0.72) 100%);
 }
 
-/* ── Header ───────────────────────────────────────────────────────────── */
+/* ── The safe box ─────────────────────────────────────────────────────── */
+#safe {
+  position: absolute;
+  left: var(--safe-x); top: var(--safe-y);
+  width: var(--safe-w); height: var(--safe-h);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
 
-#s-head {
-  height: 88px; flex: none;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 40px;
+/* 56 + 350 + 190 + 330 + 234 = 1160. Each band is fixed so the stack can
+   never reflow into the reserved zones. */
+
+/* ── Status strip · 56 ────────────────────────────────────────────────── */
+#s-status {
+  height: 56px; flex: none;
+  display: flex; align-items: center; gap: 12px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--bg2), var(--bg));
 }
-.hd-brand {
-  font-size: 26px; font-weight: 700; letter-spacing: 0.30em;
-  color: var(--text-hi);
-}
-.hd-mark {
-  color: var(--accent);
-  text-shadow: 0 0 22px rgba(255,0,204,0.85);
-  margin-right: 6px;
-}
-.hd-right { display: flex; align-items: center; gap: 26px; }
-.hd-live {
-  display: flex; align-items: center; gap: 9px;
-  font-size: 17px; font-weight: 700; letter-spacing: 0.24em;
+.st-live {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 17px; font-weight: 700; letter-spacing: 0.22em;
   color: var(--accent);
 }
-.hd-live .dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent);
+.st-live .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 12px var(--accent);
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
 @keyframes dot-pulse {
-  0%, 100% { opacity: 1;   box-shadow: 0 0 14px rgba(255,0,204,0.9); }
+  0%, 100% { opacity: 1;    box-shadow: 0 0 14px rgba(255,0,204,0.9); }
   50%      { opacity: 0.25; box-shadow: 0 0 4px rgba(255,0,204,0.2); }
 }
-.hd-clock {
-  font-size: 19px; font-weight: 700; letter-spacing: 0.10em;
-  color: var(--text-mid); font-variant-numeric: tabular-nums;
-}
-.hd-sess {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.20em;
-  padding: 5px 11px; border: 1px solid var(--border2);
-  color: var(--text-dim);
-}
-.hd-sess.open   { color: var(--ok);       border-color: rgba(0,255,157,0.45); }
-.hd-sess.closed { color: var(--text-dim); }
-
-/* ── Hero ─────────────────────────────────────────────────────────────── */
-
-#s-hero {
-  height: 340px; flex: none;
-  display: flex; align-items: center; gap: 42px;
-  padding: 0 46px;
-  border-bottom: 1px solid var(--border);
-  background:
-    radial-gradient(ellipse 60% 100% at 16% 50%, rgba(255,0,204,0.09), transparent 70%),
-    var(--bg);
-}
-
-.hero-blob {
-  position: relative; flex: none;
-  width: 240px; height: 240px;
-  display: flex; align-items: center; justify-content: center;
-}
-/* Bloom tints from the Blob's own accent callback, so the glow tracks his
-   mood without ever recolouring his body. See BLOB.md "always pink". */
-.blob-bloom {
-  position: absolute; inset: -22px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,0,204,0.30), transparent 68%);
-  filter: blur(18px);
-  transition: background 0.45s linear;
-}
-#blobCanvas {
-  position: relative;
-  width: 240px; height: 240px;   /* 48px grid x5 — integer scale, no resample */
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
-.blob-mood {
-  position: absolute; bottom: -4px; left: 50%;
-  transform: translateX(-50%);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.22em;
-  color: var(--text-dim);
-}
-
-.hero-num { flex: 1; min-width: 0; }
-.hero-label {
-  font-size: 14px; font-weight: 700; letter-spacing: 0.26em;
-  color: var(--text-dim); margin-bottom: 8px;
-}
-.hero-nav {
-  font-size: 82px; font-weight: 700; line-height: 1;
-  letter-spacing: -0.035em; color: var(--text-hi);
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 34px rgba(240,224,255,0.22);
-}
-.hero-day {
-  font-size: 32px; font-weight: 700; line-height: 1;
-  margin-top: 12px; letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.hero-day.up   { color: var(--ok);     text-shadow: 0 0 22px rgba(0,255,157,0.4); }
-.hero-day.down { color: var(--danger); text-shadow: 0 0 22px rgba(255,51,102,0.4); }
-.hero-day.flat { color: var(--text-mid); }
-
-.hero-chips { display: flex; gap: 9px; margin-top: 18px; flex-wrap: wrap; }
-.chip {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.18em;
-  padding: 6px 12px;
+.st-chip {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.16em;
+  padding: 5px 10px;
   border: 1px solid var(--accent);
   color: var(--accent);
   background: rgba(255,0,204,0.07);
 }
-.chip-dim { border-color: var(--border2); color: var(--text-mid); background: none; }
-
-/* ── Section shell ────────────────────────────────────────────────────── */
-
-.sect-hdr {
-  height: 42px; flex: none;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 46px;
-  border-left: 3px solid var(--accent);
+.st-dim { border-color: var(--border2); color: var(--text-mid); background: none; }
+.st-spacer { flex: 1; }
+.st-sess {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.18em;
+  color: var(--text-dim);
 }
-.sect-name {
-  font-size: 14px; font-weight: 700; letter-spacing: 0.30em;
-  color: var(--accent);
-  text-shadow: 0 0 14px rgba(255,0,204,0.55);
-}
-.sect-meta {
-  font-size: 13px; font-weight: 700; letter-spacing: 0.10em;
-  color: var(--text-dim); font-variant-numeric: tabular-nums;
+.st-sess.open { color: var(--ok); }
+.st-clock {
+  font-size: 16px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--text-mid); font-variant-numeric: tabular-nums;
 }
 
-/* ── Chart ────────────────────────────────────────────────────────────── */
+/* ── Blob · 350 ───────────────────────────────────────────────────────── */
+/* He is the reason anyone watches, so he gets the single biggest block in the
+   box and sits above centre where nothing competes. */
+#s-blob {
+  height: 350px; flex: none;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.blob-bloom {
+  position: absolute; top: 50%; left: 50%;
+  width: 380px; height: 380px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,0,204,0.30), transparent 68%);
+  filter: blur(26px);
+  transition: background 0.45s linear;
+}
+#blobCanvas {
+  position: relative;
+  width: 336px; height: 336px;   /* 48 x 7 — integer scale, no resample */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.blob-mood {
+  position: absolute; bottom: 6px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.24em;
+  color: var(--text-dim);
+}
 
+/* ── NAV · 190 ────────────────────────────────────────────────────────── */
+#s-nav {
+  height: 190px; flex: none;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4px;
+}
+.nav-label {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.28em;
+  color: var(--text-dim);
+}
+.nav-big {
+  font-size: 96px; font-weight: 700; line-height: 1;
+  letter-spacing: -0.04em; color: var(--text-hi);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 40px rgba(240,224,255,0.25);
+}
+.nav-day {
+  font-size: 34px; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.nav-day.up   { color: var(--ok);      text-shadow: 0 0 24px rgba(0,255,157,0.4); }
+.nav-day.down { color: var(--danger);  text-shadow: 0 0 24px rgba(255,51,102,0.4); }
+.nav-day.flat { color: var(--text-mid); }
+.nav-sub {
+  font-size: 14px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--text-mid); margin-top: 2px;
+}
+.nav-sub.up   { color: var(--ok); }
+.nav-sub.down { color: var(--danger); }
+
+/* ── Chart · 330 ──────────────────────────────────────────────────────── */
 #s-chart {
-  height: 430px; flex: none;
-  display: flex; flex-direction: column;
+  height: 330px; flex: none;
+  position: relative;
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: var(--bg2);
 }
 /* min-height:0 is load-bearing. A canvas is a replaced element, so the flex
    default of min-height:auto resolves to its intrinsic (attribute) height —
    and JS sets that attribute from the measured box. Without this the canvas
    ratchets itself larger every resize and spills into POSITIONS. */
-#navCanvas { flex: 1; width: 100%; min-height: 0; display: block; }
-
-/* ── Positions ────────────────────────────────────────────────────────── */
-
-#s-pos {
-  height: 470px; flex: none;
-  display: flex; flex-direction: column;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+#navCanvas { width: 100%; height: 100%; min-height: 0; display: block; }
+.chart-meta {
+  position: absolute; top: 8px; right: 4px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
-#pos-list { flex: 1; overflow: hidden; padding: 4px 46px 0; }
+
+/* ── Positions · 234 ──────────────────────────────────────────────────── */
+#s-pos {
+  height: 234px; flex: none;
+  display: flex; flex-direction: column;
+}
+.pos-hdr {
+  height: 34px; flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.pos-name {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(255,0,204,0.5);
+}
+.pos-meta {
+  font-size: 12px; font-weight: 700; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+#pos-list { flex: 1; overflow: hidden; }
 
 .pos-row {
-  display: flex; align-items: center; gap: 18px;
-  height: 76px;
-  border-bottom: 1px solid rgba(42,0,61,0.55);
+  display: flex; align-items: center; gap: 14px;
+  height: 40px;
+  border-bottom: 1px solid rgba(42,0,61,0.5);
 }
 .pos-row:last-child { border-bottom: none; }
-.pos-rank {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.10em;
-  color: var(--text-dim); width: 30px; flex: none;
-}
 .pos-sym {
-  font-size: 27px; font-weight: 700; letter-spacing: -0.01em;
-  color: var(--text-hi); width: 116px; flex: none;
+  font-size: 20px; font-weight: 700;
+  color: var(--text-hi); width: 92px; flex: none;
 }
-.pos-mid { flex: 1; min-width: 0; }
-.pos-sub {
-  font-size: 12px; letter-spacing: 0.05em; color: var(--text-dim);
-  margin-bottom: 6px; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+.pos-qty {
+  font-size: 12px; color: var(--text-dim);
+  width: 118px; flex: none;
 }
-/* Entry->now travel, clamped to the -5% stop / +10% target band that
-   risk_limits defines. Centre tick is the entry. */
 .pos-bar {
-  height: 5px; background: var(--bg3);
+  flex: 1; height: 4px; background: var(--bg3);
   position: relative; overflow: hidden;
 }
-.pos-bar i {
-  position: absolute; top: 0; bottom: 0;
-  transition: all 0.6s ease;
-}
+.pos-bar i { position: absolute; top: 0; bottom: 0; transition: all 0.6s ease; }
 .pos-bar .tick {
   position: absolute; top: -2px; bottom: -2px;
   width: 1px; background: var(--border2);
 }
-.pos-val {
-  text-align: right; width: 168px; flex: none;
+.pos-pct {
+  font-size: 19px; font-weight: 700;
+  width: 96px; flex: none; text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.pos-pct { font-size: 25px; font-weight: 700; line-height: 1.15; }
-.pos-abs { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
 .up   { color: var(--ok); }
 .down { color: var(--danger); }
 .flat { color: var(--text-mid); }
 
-.pos-empty, .feed-empty {
+.pos-empty {
   display: flex; align-items: center; justify-content: center;
   height: 100%;
-  font-size: 15px; letter-spacing: 0.18em; color: var(--text-dim);
-}
-
-/* ── Feed ─────────────────────────────────────────────────────────────── */
-
-#s-feed {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column;
-  background: var(--bg2);
-}
-#feed-list {
-  flex: 1; overflow: hidden;
-  padding: 4px 46px 0;
-  /* Oldest rows dissolve at the bottom edge instead of being cut mid-glyph. */
-  -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
-          mask-image: linear-gradient(180deg, #000 78%, transparent 100%);
-}
-
-.feed-row {
-  display: flex; align-items: baseline; gap: 14px;
-  padding: 11px 0 10px;
-  border-bottom: 1px solid rgba(42,0,61,0.4);
-  animation: feed-in 0.45s ease both;
-}
-@keyframes feed-in {
-  from { opacity: 0; transform: translateX(-14px); }
-  to   { opacity: 1; transform: none; }
-}
-.feed-tag {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.18em;
-  width: 106px; flex: none; opacity: 0.85;
-}
-.feed-sym {
-  font-size: 18px; font-weight: 700;
-  width: 116px; flex: none;
-  color: var(--text-hi);
-}
-.feed-msg {
-  flex: 1; min-width: 0;
-  font-size: 16px; color: var(--text-mid);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.feed-ts {
-  font-size: 12px; color: var(--text-dim);
-  flex: none; font-variant-numeric: tabular-nums;
-}
-.ev-fill     { color: var(--accent); }
-.ev-signal   { color: var(--accent2); }
-.ev-snapshot { color: var(--accent3); }
-.ev-pipeline { color: var(--text-mid); }
-
-/* ── Footer ───────────────────────────────────────────────────────────── */
-
-#s-foot {
-  height: 72px; flex: none;
-  display: flex; align-items: center;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  overflow: hidden;
-  white-space: nowrap;
-}
-#foot-track {
-  display: inline-flex; align-items: center;
-  will-change: transform;
-  animation: marquee 42s linear infinite;
-}
-@keyframes marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }   /* track is rendered twice */
-}
-.ft-item {
-  display: inline-flex; align-items: baseline; gap: 10px;
-  padding: 0 30px;
-  border-right: 1px solid var(--border);
-}
-.ft-k {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.22em;
-  color: var(--text-dim);
-}
-.ft-v {
-  font-size: 19px; font-weight: 700;
-  color: var(--text-hi); font-variant-numeric: tabular-nums;
+  font-size: 14px; letter-spacing: 0.18em; color: var(--text-dim);
 }

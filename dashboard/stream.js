@@ -110,25 +110,29 @@
     pts:        (S.nav_pts || []).map(function(p) {
                   return { t: new Date(p.t).getTime(), v: Number(p.v) };
                 }).filter(function(p) { return !isNaN(p.t) && !isNaN(p.v); }),
-    events:     S.events || [],
     seenEvTs:   null
   };
 
-  // ── Hero ─────────────────────────────────────────────────────────────────
+  // ── NAV block ────────────────────────────────────────────────────────────
   function renderHero() {
     $('hero-nav').textContent = usd(state.nav);
     var d = $('hero-day');
     d.textContent = signed(state.dayPnl) + '  ' + pct(state.dayPnlPct);
-    d.className = 'hero-day ' + dirClass(state.dayPnlPct);
+    d.className = 'nav-day ' + dirClass(state.dayPnlPct);
 
     $('chip-status').textContent = S.status || 'PAPER';
     $('chip-day').textContent = 'DAY ' + (S.monitoring_days || 0) + '/20';
 
-    var total = state.nav - S.starting_capital;
-    var totalPct = S.starting_capital ? total / S.starting_capital * 100 : 0;
+    // Deliberately NOT (nav - starting_capital) / starting_capital. The NAV
+    // series comes from nav_snapshots, which is keyed only by timestamp and is
+    // written by whichever Alpaca wallet happens to be active in the browser —
+    // so it is not denominated in the $100k model baseline, and that ratio
+    // renders as a ~-72% "loss" that never happened. The pnl table's own
+    // cumulative figure is the only honest strategy-scoped number here.
+    var cum = Number(S.cumulative_pnl || 0);
     var ct = $('chip-total');
-    ct.textContent = 'TOTAL ' + pct(totalPct);
-    ct.className = 'chip chip-dim ' + dirClass(totalPct);
+    ct.textContent = 'STRATEGY P&L  ' + signed(cum);
+    ct.className = 'nav-sub ' + dirClass(cum);
 
     blob.setPnl(state.dayPnlPct);
     $('blob-mood').textContent = blob.getMood();
@@ -136,8 +140,8 @@
 
   // ── NAV chart ────────────────────────────────────────────────────────────
   // Portrait rewrites the chart's job. The wide version can afford 30 days of
-  // x-axis; at 1080 wide that's an unreadable smear, so this shows the live
-  // session and lets the footer carry the long-horizon stats instead.
+  // x-axis; inside an 870-wide safe box that's an unreadable smear, so this
+  // shows the live session only.
   var cv = $('navCanvas'), cx = cv.getContext('2d');
   var WIN_MS = 8 * 3600 * 1000;   // trailing 8h — covers a full session
 
@@ -164,7 +168,7 @@
   function drawChart() {
     var dim = sizeCanvas(), W = dim.w, H = dim.h;
     if (!W || !H) return;
-    var ML = 16, MR = 132, MT = 18, MB = 30;
+    var ML = 0, MR = 112, MT = 26, MB = 24;   // MR holds the live value tag
     cx.clearRect(0, 0, W, H);
 
     var pts = state.pts;
@@ -285,9 +289,8 @@
     var gross = ps.reduce(function(s, p) { return s + (p.value || 0); }, 0);
     $('pos-meta').textContent = ps.length + ' OPEN · ' + usd(gross) + ' GROSS';
 
-    list.innerHTML = ps.map(function(p, i) {
+    list.innerHTML = ps.map(function(p) {
       var pc = Number(p.entry_pnl_pct || 0);
-      var d  = dirClass(pc);
       var col = pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
 
       // Clamp travel to the stop/target band from risk_limits: -5% stop is the
@@ -298,72 +301,20 @@
 
       return '' +
         '<div class="pos-row">' +
-          '<div class="pos-rank">' + (p.rank ? '#' + p.rank : '·') + '</div>' +
           '<div class="pos-sym">' + p.sym + '</div>' +
-          '<div class="pos-mid">' +
-            '<div class="pos-sub">' + (p.qty || 0) + ' @ ' + usd(p.entry_price, 2) +
-              ' · ' + (p.days_held || 0) + 'd · ' + usd(p.value) + '</div>' +
-            '<div class="pos-bar">' +
-              '<i style="left:' + left + '%;width:' + w + '%;background:' + col + '"></i>' +
-              '<span class="tick" style="left:50%"></span>' +
-            '</div>' +
+          '<div class="pos-qty">' + (p.qty || 0) + ' · ' + usd(p.value) + '</div>' +
+          '<div class="pos-bar">' +
+            '<i style="left:' + left + '%;width:' + w + '%;background:' + col + '"></i>' +
+            '<span class="tick" style="left:50%"></span>' +
           '</div>' +
-          '<div class="pos-val">' +
-            '<div class="pos-pct ' + d + '">' + pct(pc) + '</div>' +
-            '<div class="pos-abs">' + signed(p.entry_pnl) + '</div>' +
-          '</div>' +
+          '<div class="pos-pct ' + dirClass(pc) + '">' + pct(pc) + '</div>' +
         '</div>';
     }).join('');
   }
 
-  // ── Feed ─────────────────────────────────────────────────────────────────
-  function hhmmss(ts) {
-    var d = new Date(ts);
-    if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York', hour12: false,
-      hour: '2-digit', minute: '2-digit' }).format(d);
-  }
-  function renderFeed() {
-    var list = $('feed-list');
-    var evs = (state.events || []).slice(0, 9);   // what fits above the mask
-    if (!evs.length) {
-      list.innerHTML = '<div class="feed-empty">NO EVENTS</div>';
-      return;
-    }
-    $('feed-meta').textContent = 'LAST ' + evs.length;
-    list.innerHTML = evs.map(function(e) {
-      return '' +
-        '<div class="feed-row">' +
-          '<span class="feed-tag ' + (e.cls || 'ev-pipeline') + '">' + (e.tag || 'EVT') + '</span>' +
-          '<span class="feed-sym">' + (e.sym || '') + '</span>' +
-          '<span class="feed-msg">' + (e.line1 || '') + '</span>' +
-          '<span class="feed-ts">' + hhmmss(e.ts) + '</span>' +
-        '</div>';
-    }).join('');
-  }
-
-  // ── Footer ticker ────────────────────────────────────────────────────────
-  function renderFooter() {
-    var items = [
-      ['SHARPE',    S.sharpe != null ? Number(S.sharpe).toFixed(2) : '—'],
-      ['CAGR',      S.cagr != null ? (Number(S.cagr) * 100).toFixed(1) + '%' : '—'],
-      ['MAX DD',    S.max_drawdown != null ? (Number(S.max_drawdown) * 100).toFixed(1) + '%' : '—'],
-      ['CUM P&L',   signed(S.cumulative_pnl)],
-      ['DD LIMIT',  (S.limits.daily_dd * 100).toFixed(0) + '% DAY / ' +
-                    (S.limits.total_dd * 100).toFixed(0) + '% TOTAL'],
-      ['MAX POS',   (S.limits.max_pos * 100).toFixed(0) + '%'],
-      ['LAST RUN',  S.last_run || '—'],
-      ['STRATEGY',  'MOMENTUM 12-1'],
-      ['MODE',      (S.status || 'PAPER') + ' · NO REAL MONEY']
-    ];
-    var html = items.map(function(kv) {
-      return '<span class="ft-item"><span class="ft-k">' + kv[0] +
-             '</span><span class="ft-v">' + kv[1] + '</span></span>';
-    }).join('');
-    // Doubled so the -50% marquee keyframe wraps seamlessly.
-    $('foot-track').innerHTML = html + html;
-  }
+  // The feed and footer ticker are gone — they sat in the bottom 380, which
+  // YouTube's chat occupies permanently. pollEvents() below still runs: fills
+  // drive the Blob's ALERT mood even though nothing lists them any more.
 
   // ── Live poll ────────────────────────────────────────────────────────────
   // Same 10s cadence and same table as home_nav.js. Streamlit is never asked
@@ -422,18 +373,6 @@
         var firstRun = !state.seenEvTs;
         state.seenEvTs = newest;
 
-        var MAP = {
-          ENTRY: ['ev-fill', 'BUY'], EXIT: ['ev-fill', 'SELL'], TRADE: ['ev-fill', 'TRADE'],
-          SIGNAL: ['ev-signal', 'SIGNAL'], SNAPSHOT: ['ev-snapshot', 'NAV'],
-          RISK_VETO: ['ev-fill', 'VETO'], HOLD: ['ev-snapshot', 'HOLD']
-        };
-        state.events = rows.map(function(r) {
-          var m = MAP[r.event_type] || ['ev-pipeline', r.event_type];
-          return { cls: m[0], tag: m[1], sym: r.symbol || r.event_type,
-                   line1: r.message, ts: r.recorded_at };
-        });
-        renderFeed();
-
         // Don't fire a mood on the first hydration — that history is old.
         if (!firstRun && ['ENTRY', 'EXIT', 'TRADE'].indexOf(rows[0].event_type) >= 0) {
           blob.setMood('ALERT', 12);
@@ -445,8 +384,6 @@
   // ── Boot ─────────────────────────────────────────────────────────────────
   renderHero();
   renderPositions();
-  renderFeed();
-  renderFooter();
   drawChart();
 
   // The chart head pulses, so it needs its own repaint clock. 20fps is plenty

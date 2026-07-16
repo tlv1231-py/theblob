@@ -89,6 +89,31 @@ Prerequisites before building:
 
 ---
 
+## Known Bugs — OPEN
+
+- **`nav_snapshots` has no account column — NAV history splices two books.**
+  Table is `(id, recorded_at, nav)` only, and is written *client-side* from
+  `home_nav.js`, which switches Alpaca wallets via `localStorage._alpacaActiveIdx`.
+  Whichever wallet is active in whatever browser is open appends to one series.
+  Observed 2026-07-16: a −$59,527 discontinuity between 07-12T16:44 and 07-16T00:20
+  (daily last: 06-17 $104,654 → 07-12 $89,721 → 07-16 $25,526). **This is not
+  performance** — `pnl.cumulative_pnl` for momentum is only −$1,211.89 over the same
+  window. Any % return computed against the $100k model baseline off this series is
+  fiction (renders as ~−72%). Blocks livestreaming until fixed: the Stream page would
+  broadcast a loss that never happened.
+
+- **`positions_data.entry_price` is 0 for all positions** → `entry_pnl` and
+  `entry_pnl_pct` are all 0, so every position P&L reads +0.00%. Affects Home and
+  Stream (both consume `_load_chart_data()`). Entry lookup against fills is not
+  resolving.
+
+- **Two books are presented as one.** `_load_chart_data()` returns Alpaca account NAV
+  (~$25k, mostly cash, crypto fills in the feed) alongside momentum paper-model
+  positions (~$96k gross across 5 equities). The Command Center gets away with this
+  because each HUD tile is separately labelled; any view that composes them into a
+  single narrative (like Stream) will misrepresent. Decide which book a display
+  surface represents before shipping it.
+
 ## Known Fixes Applied
 
 - **np.float64 casting:** yfinance returns `np.float64` values. These must be cast to Python `float` before SQLAlchemy passes them to psycopg2. Apply at ingestion boundary.
@@ -279,6 +304,38 @@ Paper portfolio start date: **2026-05-29**
   - **Signals**: latest signals, score distribution, filterable history
   - **Backtest Lab**: parameter sliders, inline backtest, experiment comparison
   - **Risk Monitor**: exposure vs limits, drawdown history
+  - **Stream**: vertical 1080×1920 display page for autonomous livestreaming (`?page=Stream`).
+    Files: `dashboard/views/stream.py`, `stream.css`, `stream.js`, `yt_overlay.js`.
+    **This is the first surface where the Blob is wired to live state.**
+
+    **The safe zone governs this page, not the canvas.** YouTube vertical live surfaces
+    in the Shorts feed, so Shorts safe zones apply: top 380 and bottom 380 are reserved
+    (on a *live* stream the chat input is permanent down there), and the right ~120 is the
+    action rail. Usable area is **870 × 1160 at (90, 380)** — ~49% of the canvas — declared
+    once as `--safe-*` in stream.css. Every informational element lives in `#safe`; the
+    reserved bands carry ambient glow only, because YouTube paints over them regardless.
+    Layout inside the box: status 56 / Blob 350 / NAV 190 / chart 330 / positions 234 = 1160.
+    Verified by measurement: zero elements breach the box, Blob is centred at x525.
+
+    Stage is fixed 1080×1920 and letterboxes via CSS transform — at a true 1080×1920
+    capture the scale resolves to exactly 1 and the Blob's pixel art is unresampled
+    (he renders at 336px = 48×7, an integer scale — keep any resize on a 48px multiple).
+
+    Reuses `home._load_chart_data()` and `blob.js` verbatim; deliberately does NOT reuse
+    `home_nav.js` (173 getElementById bindings to Command Center nodes, and margins tuned
+    for a wide stage). No feed or footer ticker: both sat in the bottom 380 and no
+    arrangement saves them. `pollEvents()` still runs so fills drive the Blob's ALERT mood.
+
+    `dashboard/yt_overlay.js` is a **TEMP** design aid drawing YouTube's chrome + safe
+    zones over the stage. Geometry is sourced and exact; the chrome art is approximate and
+    per-element placement is reconstructed (no published pixel map exists). **Defaults ON
+    (`?yt=0` to disable) — must be off for a real capture.** Delete that file plus the
+    hook in stream.py to remove.
+
+    Streaming host not yet chosen. Safe-zone numbers are from published Shorts guides and
+    reconcile arithmetically (380+1160+380=1920, 90+900+90=1080) but are **not verified
+    against a real YouTube test stream** — live chat behaviour especially may push the
+    usable bottom edge above y1540.
 - [ ] Complete 20-trading-day monitoring period
 - [ ] Confirm daily PnL and snapshot writes are clean each day
 - [ ] Review rolling Sharpe once 5+ days accumulate
