@@ -1663,7 +1663,9 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
 
     _ML = 8; _MR = 8; _MT = 28; _MB = 48;
 
-    var liveNav = parseFloat(window._lastKnownNav);
+    // Prefer the most recent nav_snapshot value as the live price; fall back to _lastKnownNav
+    var pts0 = window._navDbPts || [];
+    var liveNav = pts0.length ? parseFloat(pts0[pts0.length-1].v) : parseFloat(window._lastKnownNav);
     if (!liveNav || isNaN(liveNav)) { window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }
 
     // ── Build point list ───────────────────────────────────────────────────

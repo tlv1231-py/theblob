@@ -191,9 +191,10 @@ def _load_chart_data() -> dict:
     with get_session() as s:
         # Portfolio track — from portfolio_snapshots
         port_rows = s.execute(text("""
-            SELECT snapshot_date::text as d, total_value
+            SELECT DISTINCT ON (snapshot_date)
+                   snapshot_date::text as d, total_value
             FROM portfolio_snapshots
-            ORDER BY snapshot_date
+            ORDER BY snapshot_date, recorded_at DESC
         """)).fetchall()
 
         # Fallback: reconstruct from pnl table
