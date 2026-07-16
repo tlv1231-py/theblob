@@ -30,31 +30,28 @@ _MONITOR_TARGET   = 20
 # ── Alpaca order execution ──────────────────────────────────────────────────────
 
 def _fetch_alpaca_account() -> dict:
-    """Fetch portfolio_value and long_market_value from Alpaca. Returns {} on any failure."""
-    import os, concurrent.futures
+    """Fetch portfolio_value and long_market_value from Alpaca via direct HTTP. Returns {} on failure."""
+    import os, requests as _req
     from config.settings import settings
     api_key    = settings.alpaca_api_key    or os.environ.get("ALPACA_API_KEY", "")
     secret_key = settings.alpaca_secret_key or os.environ.get("ALPACA_SECRET_KEY", "")
-    base_url   = settings.alpaca_base_url   or os.environ.get("ALPACA_BASE_URL",
-                                                               "https://paper-api.alpaca.markets")
+    base_url   = (settings.alpaca_base_url  or os.environ.get("ALPACA_BASE_URL",
+                                                               "https://paper-api.alpaca.markets")).rstrip("/")
     if not api_key or not secret_key:
         return {}
-
-    def _call():
-        from alpaca.trading.client import TradingClient
-        client = TradingClient(api_key=api_key, secret_key=secret_key,
-                               paper="paper-api" in base_url)
-        acct = client.get_account()
-        return {
-            "portfolio_value":    float(getattr(acct, "portfolio_value",    0) or 0),
-            "long_market_value":  float(getattr(acct, "long_market_value",  0) or 0),
-            "buying_power":       float(getattr(acct, "buying_power",       0) or 0),
-            "cash":               float(getattr(acct, "cash",               0) or 0),
-        }
-
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            return ex.submit(_call).result(timeout=4)
+        r = _req.get(
+            f"{base_url}/v2/account",
+            headers={"APCA-API-KEY-ID": api_key, "APCA-API-SECRET-KEY": secret_key},
+            timeout=6,
+        )
+        d = r.json()
+        return {
+            "portfolio_value":   float(d.get("portfolio_value",   0) or 0),
+            "long_market_value": float(d.get("long_market_value", 0) or 0),
+            "buying_power":      float(d.get("buying_power",      0) or 0),
+            "cash":              float(d.get("cash",              0) or 0),
+        }
     except Exception:
         return {}
 
