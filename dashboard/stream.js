@@ -273,12 +273,32 @@
     $('chart-meta').textContent = win.length + ' PTS · ' + hhmm(x0) + '–' + hhmm(x1) + ' ET';
   }
 
-  // ── Positions ────────────────────────────────────────────────────────────
+  // ── Holdings — arcade tiles ──────────────────────────────────────────────
+  // DOM port of the Command Center's canvas tile (home_nav.js _etPaintTile):
+  // same anatomy — rank, strategy badge, sym, entry, hold timer, meter, P&L —
+  // at ~5x scale because here they are the centrepiece, not a sidebar.
+
+  var SEGS = 24;   // meter resolution. Low on purpose: chunky reads as 8-bit.
+
+  // Matches _TILE_BADGES in home_nav.js so a symbol carries the same glyph on
+  // both surfaces. A viewer should never have to relearn the iconography.
+  var BADGES = {
+    momentum: '▲▲', crypto: '◈', user: '◎', daytrader: '⊕',
+    reversion: '⇌', sentiment: '◉', volatility: '⚡', factor: '✦'
+  };
+
+  function holdStr(days) {
+    var d = Number(days || 0);
+    if (d <= 0)  return 'NEW';
+    if (d === 1) return '1 DAY';
+    return d + ' DAYS';
+  }
+
   function renderPositions() {
     var list = $('pos-list');
     var ps = (S.positions || []).slice()
       .sort(function(a, b) { return (b.value || 0) - (a.value || 0); })
-      .slice(0, 5);   // top-5 config — the stage has room for exactly this
+      .slice(0, 5);   // top-5 config — the box has room for exactly this
 
     if (!ps.length) {
       list.innerHTML = '<div class="pos-empty">NO OPEN POSITIONS</div>';
@@ -287,27 +307,51 @@
     }
 
     var gross = ps.reduce(function(s, p) { return s + (p.value || 0); }, 0);
-    $('pos-meta').textContent = ps.length + ' OPEN · ' + usd(gross) + ' GROSS';
+    var wins  = ps.filter(function(p) { return Number(p.entry_pnl_pct || 0) > 0; }).length;
+    $('pos-meta').textContent = wins + '/' + ps.length + ' UP  ·  ' + usd(gross) + ' GROSS';
+
+    var stopPct   = S.limits.stop_loss * 100;   // -5% wall
+    var targetPct = stopPct * 2;                // +10% target — the band's right edge
 
     list.innerHTML = ps.map(function(p) {
-      var pc = Number(p.entry_pnl_pct || 0);
+      var pc  = Number(p.entry_pnl_pct || 0);
       var col = pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
 
-      // Clamp travel to the stop/target band from risk_limits: -5% stop is the
-      // left wall, +10% target the right, entry dead centre.
-      var frac = Math.max(-1, Math.min(1, pc >= 0 ? pc / 10 : pc / 5));
-      var half = 50, w = Math.abs(frac) * half;
-      var left = frac >= 0 ? half : half - w;
+      // Entry sits dead centre. Left of it is travel toward the stop, right is
+      // toward the target — the same band risk_limits defines.
+      var frac = pc >= 0 ? Math.min(1, pc / targetPct) : Math.max(-1, pc / stopPct);
+      var mid  = SEGS / 2;
+      var lit  = Math.round(Math.abs(frac) * mid);
+
+      var segs = '';
+      for (var i = 0; i < SEGS; i++) {
+        var on, tip = false;
+        if (frac >= 0) { on = i >= mid && i < mid + lit;  tip = on && i === mid + lit - 1; }
+        else           { on = i < mid  && i >= mid - lit; tip = on && i === mid - lit; }
+        var cls = 't-seg' + (on ? ' on' : '') + (tip ? ' tip' : '') +
+                  (i === mid ? ' entry' : '');
+        segs += '<span class="' + cls + '"></span>';
+      }
+
+      // Only alarm on a genuine stop breach — see .tile.danger in stream.css.
+      var breached = pc <= -stopPct;
 
       return '' +
-        '<div class="pos-row">' +
-          '<div class="pos-sym">' + p.sym + '</div>' +
-          '<div class="pos-qty">' + (p.qty || 0) + ' · ' + usd(p.value) + '</div>' +
-          '<div class="pos-bar">' +
-            '<i style="left:' + left + '%;width:' + w + '%;background:' + col + '"></i>' +
-            '<span class="tick" style="left:50%"></span>' +
+        '<div class="tile' + (breached ? ' danger' : '') + '" style="--tc:' + col + '">' +
+          '<div class="t-rank">' + (p.rank ? 'P' + p.rank : '--') + '</div>' +
+          '<div class="t-badge">' + (BADGES[p.strategy] || BADGES.momentum) + '</div>' +
+          '<div class="t-sym">' + p.sym + '</div>' +
+          '<div class="t-mid">' +
+            '<div class="t-line">' +
+              '<span>' + (p.qty || 0) + ' @ ' + usd(p.entry_price, 2) + '</span>' +
+              '<span class="t-hold">' + holdStr(p.days_held) + '</span>' +
+            '</div>' +
+            '<div class="t-meter">' + segs + '</div>' +
           '</div>' +
-          '<div class="pos-pct ' + dirClass(pc) + '">' + pct(pc) + '</div>' +
+          '<div class="t-val">' +
+            '<div class="t-pct">' + pct(pc, 1) + '</div>' +
+            '<div class="t-abs">' + signed(p.entry_pnl) + '</div>' +
+          '</div>' +
         '</div>';
     }).join('');
   }

@@ -411,11 +411,16 @@ def _load_chart_data() -> dict:
                 """), {"syms": syms}).fetchall()
                 prices_map = {r.symbol: float(r.adj_close) for r in price_rows}
 
-                # Entry fills — earliest BUY per symbol (full timestamp preserved)
+                # Entry fills — earliest opening fill per symbol (timestamp preserved).
+                # side is stored lowercase ('buy'/'sell' equity, 'entry'/'exit' crypto),
+                # so this MUST be case-insensitive: `side = 'BUY'` silently matched zero
+                # rows, which drove entry_price to 0 and made every position report
+                # +0.00% P&L on both the Command Center and the Stream page.
                 entry_rows = s.execute(text("""
                     SELECT DISTINCT ON (symbol) symbol, fill_price, filled_at,
                                                 filled_at::date as entry_date
-                    FROM fills WHERE side = 'BUY' AND symbol = ANY(:syms)
+                    FROM fills
+                    WHERE LOWER(side) IN ('buy', 'entry') AND symbol = ANY(:syms)
                     ORDER BY symbol, filled_at ASC
                 """), {"syms": syms}).fetchall()
                 entry_map = {

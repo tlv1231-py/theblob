@@ -78,6 +78,8 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
             "total_dd":  risk_limits.MAX_TOTAL_DRAWDOWN,
             "max_pos":   risk_limits.MAX_POSITION_SIZE,
             "max_gross": risk_limits.MAX_GROSS_EXPOSURE,
+            # Drives the tile meter's left wall and the stop-breach alarm.
+            "stop_loss": risk_limits.DEFAULT_STOP_LOSS_PCT,
         },
         "supa": {"url": _SUPA_URL, "key": _SUPA_KEY},
         "stage": {"w": _STAGE_W, "h": _STAGE_H},
@@ -94,7 +96,8 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
     # Not an f-string: the CSS/JS brace density makes escaping a liability.
     # Data crosses into JS through one payload object instead.
     return (
-        "<style>" + css + "</style>"
+        _FONTS
+        + "<style>" + css + "</style>"
         + _STAGE_HTML
         + "<script>window._TND_STREAM = "
         + json.dumps(payload, default=str)
@@ -149,7 +152,7 @@ _STAGE_HTML = """
 
       <div id="s-pos">
         <div class="pos-hdr">
-          <span class="pos-name">POSITIONS</span>
+          <span class="pos-name">HOLDINGS</span>
           <span class="pos-meta" id="pos-meta">&mdash;</span>
         </div>
         <div id="pos-list"></div>
@@ -159,6 +162,16 @@ _STAGE_HTML = """
   </div>
 </div>
 """
+
+# Arcade faces, same source the Command Center tiles use. Loaded inside the
+# component iframe because it has its own document. If these silently fall back
+# to monospace the tiles stop reading as 8-bit at all — that is the whole look.
+_FONTS = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P'
+    '&family=VT323&display=swap" rel="stylesheet">'
+)
 
 
 def render() -> None:

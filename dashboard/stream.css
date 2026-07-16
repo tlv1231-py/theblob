@@ -100,8 +100,10 @@ html, body {
   flex-direction: column;
 }
 
-/* 56 + 350 + 190 + 330 + 234 = 1160. Each band is fixed so the stack can
-   never reflow into the reserved zones. */
+/* 56 + 300 + 170 + 260 + 374 = 1160. Each band is fixed so the stack can
+   never reflow into the reserved zones. Holdings takes the largest share after
+   the Blob: the tiles are the gamified centrepiece, and 5 rows at 68px only
+   read as arcade cabinet if they get the height. */
 
 /* ── Status strip · 56 ────────────────────────────────────────────────── */
 #s-status {
@@ -146,7 +148,7 @@ html, body {
 /* He is the reason anyone watches, so he gets the single biggest block in the
    box and sits above centre where nothing competes. */
 #s-blob {
-  height: 350px; flex: none;
+  height: 300px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
@@ -161,7 +163,7 @@ html, body {
 }
 #blobCanvas {
   position: relative;
-  width: 336px; height: 336px;   /* 48 x 7 — integer scale, no resample */
+  width: 288px; height: 288px;   /* 48 x 6 — integer scale, no resample */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -174,7 +176,7 @@ html, body {
 
 /* ── NAV · 190 ────────────────────────────────────────────────────────── */
 #s-nav {
-  height: 190px; flex: none;
+  height: 170px; flex: none;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 4px;
 }
@@ -204,7 +206,7 @@ html, body {
 
 /* ── Chart · 330 ──────────────────────────────────────────────────────── */
 #s-chart {
-  height: 330px; flex: none;
+  height: 260px; flex: none;
   position: relative;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -220,60 +222,173 @@ html, body {
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
 
-/* ── Positions · 234 ──────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOLDINGS — arcade tiles · 374
+   Replicates the Command Center's canvas tile engine (home_nav.js _etPaintTile)
+   but rebuilt in DOM at ~5x the size, because here they are the centrepiece
+   rather than a dense sidebar. Kept off canvas deliberately: 5 tiles do not
+   need a 30fps repaint loop, and this page already runs two canvases for hours
+   unattended. CSS carries the arcade look at zero per-frame cost.
+
+   The 8-bit read comes from three things, same as the Blob:
+     1. NO border-radius, NO gradients on structure — hard pixel edges only.
+     2. Bevels are stepped box-shadows (light top-left, dark bottom-right),
+        the way a sprite fakes depth. Never a soft shadow.
+     3. The meter is DISCRETE SEGMENTS, not a smooth fill. A continuous bar
+        instantly reads as a modern web progress bar.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 #s-pos {
-  height: 234px; flex: none;
+  height: 374px; flex: none;
   display: flex; flex-direction: column;
 }
 .pos-hdr {
   height: 34px; flex: none;
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: baseline; justify-content: space-between;
 }
 .pos-name {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 11px; letter-spacing: 0.16em;
   color: var(--accent);
-  text-shadow: 0 0 12px rgba(255,0,204,0.5);
+  text-shadow: 0 0 14px rgba(255,0,204,0.7), 2px 2px 0 rgba(148,0,255,0.4);
 }
 .pos-meta {
-  font-size: 12px; font-weight: 700; color: var(--text-dim);
+  font-family: VT323, Consolas, monospace;
+  font-size: 19px; color: var(--text-mid);
+  letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
 }
-#pos-list { flex: 1; overflow: hidden; }
+#pos-list {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 5px;
+  overflow: hidden;
+}
 
-.pos-row {
-  display: flex; align-items: center; gap: 14px;
-  height: 40px;
-  border-bottom: 1px solid rgba(42,0,61,0.5);
+/* ── The tile ─────────────────────────────────────────────────────────── */
+.tile {
+  position: relative;
+  height: 63px; flex: none;
+  display: flex; align-items: center;
+  padding: 0 14px 0 0;
+  background: linear-gradient(90deg, rgba(20,0,28,0.96), rgba(10,0,16,0.9));
+  /* Stepped bevel — hard offsets only. --tc is the P&L tint, set inline. */
+  box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.07),
+    inset -2px -2px 0 rgba(0,0,0,0.65),
+    0 0 0 1px rgba(42,0,61,0.9),
+    0 0 18px -4px var(--tc, transparent);
+  overflow: hidden;
 }
-.pos-row:last-child { border-bottom: none; }
-.pos-sym {
-  font-size: 20px; font-weight: 700;
-  color: var(--text-hi); width: 92px; flex: none;
+/* Left accent slab — the tile's P&L identity, 8px of pure colour. */
+.tile::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 8px;
+  background: var(--tc, #8060a0);
+  box-shadow: 0 0 14px var(--tc, transparent);
 }
-.pos-qty {
-  font-size: 12px; color: var(--text-dim);
-  width: 118px; flex: none;
+/* Scanlines, per-tile so they ride the bevel. */
+.tile::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg, transparent 0 2px, rgba(0,0,0,0.28) 2px 3px);
 }
-.pos-bar {
-  flex: 1; height: 4px; background: var(--bg3);
-  position: relative; overflow: hidden;
+
+.t-rank {
+  width: 54px; flex: none;
+  margin-left: 14px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: var(--tc, #8060a0);
+  text-shadow: 0 0 10px var(--tc, transparent);
 }
-.pos-bar i { position: absolute; top: 0; bottom: 0; transition: all 0.6s ease; }
-.pos-bar .tick {
-  position: absolute; top: -2px; bottom: -2px;
-  width: 1px; background: var(--border2);
+.t-badge {
+  width: 26px; flex: none;
+  font-size: 15px; line-height: 1;
+  color: var(--accent2);
+  text-shadow: 0 0 8px currentColor;
+  opacity: 0.9;
 }
-.pos-pct {
-  font-size: 19px; font-weight: 700;
-  width: 96px; flex: none; text-align: right;
+.t-sym {
+  width: 128px; flex: none;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 16px;
+  color: var(--text-hi);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 12px var(--tc, transparent);
+}
+
+.t-mid { flex: 1; min-width: 0; padding: 0 12px; }
+.t-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-family: VT323, monospace;
+  font-size: 17px; line-height: 1;
+  color: var(--text-mid);
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
   font-variant-numeric: tabular-nums;
 }
-.up   { color: var(--ok); }
-.down { color: var(--danger); }
-.flat { color: var(--text-mid); }
+.t-line .t-hold { color: var(--text-dim); }
+
+/* ── Segmented meter ──────────────────────────────────────────────────── */
+/* Discrete LED blocks. The tick marks the entry (dead centre): left of it is
+   travel toward the -5% stop, right is toward the +10% target — the same band
+   risk_limits defines. This is the bar's whole job: how close to the stop. */
+.t-meter {
+  display: flex; gap: 2px; height: 10px;
+  position: relative;
+}
+.t-seg {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.04);
+}
+.t-seg.on {
+  background: var(--tc);
+  box-shadow: 0 0 8px var(--tc), inset 1px 1px 0 rgba(255,255,255,0.35);
+}
+/* Leading segment pulses — the cabinet tell that this is live, not a still. */
+.t-seg.tip { animation: seg-tip 0.75s steps(2, end) infinite; }
+@keyframes seg-tip { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.t-seg.entry {
+  background: rgba(255,255,255,0.5);
+  box-shadow: 0 0 6px rgba(255,255,255,0.6);
+}
+
+.t-val {
+  width: 168px; flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.t-pct {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 15px; line-height: 1.25;
+  color: var(--tc);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 16px var(--tc);
+}
+.t-abs {
+  font-family: VT323, monospace;
+  font-size: 17px; line-height: 1;
+  color: var(--text-mid);
+  margin-top: 4px;
+}
+
+/* Breach of the -5% stop: the cabinet alarms. Reserved for a real risk state,
+   never decoration — it must mean something every time it fires. */
+.tile.danger { animation: tile-alarm 0.9s steps(2, end) infinite; }
+@keyframes tile-alarm {
+  0%, 100% { box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
+    0 0 0 1px rgba(255,51,102,0.9), 0 0 26px -2px #ff3366; }
+  50%      { box-shadow:
+    inset 2px 2px 0 rgba(255,255,255,0.07), inset -2px -2px 0 rgba(0,0,0,0.65),
+    0 0 0 1px rgba(42,0,61,0.9), 0 0 10px -4px #ff3366; }
+}
 
 .pos-empty {
   display: flex; align-items: center; justify-content: center;
   height: 100%;
-  font-size: 14px; letter-spacing: 0.18em; color: var(--text-dim);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px; letter-spacing: 0.12em; color: var(--text-dim);
 }
