@@ -569,6 +569,35 @@ html, body {
   will-change: transform;
 }
 
+/* THE RESULT REPLACES THE NAME. On a sell the slot prints what the position
+   earned, in the same face and size the ticker used — the swap is the whole
+   message, so nothing else about the type may change or the eye reads it as a
+   different kind of thing rather than the same thing resolved.
+   Only the colour carries the verdict. The shadow stack restains to match, the
+   way the score's gain/loss does, so the number reads as lit from inside
+   rather than as white type with a coloured glow bolted on. */
+.t-sym.pnl-win, .t-sym.pnl-loss {
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+}
+.t-sym.pnl-win {
+  color: #b6ffdd;
+  text-shadow:
+    2px 2px 0 #006633,
+    3px 3px 0 #004d26,
+    4px 4px 0 #003319,
+    5px 5px 0 rgba(0,0,0,0.7),
+    0 0 22px rgba(0,255,157,0.75);
+}
+.t-sym.pnl-loss {
+  color: #ffb3c6;
+  text-shadow:
+    2px 2px 0 #880022,
+    3px 3px 0 #660019,
+    4px 4px 0 #440011,
+    5px 5px 0 rgba(0,0,0,0.7),
+    0 0 22px rgba(255,51,102,0.75);
+}
+
 /* No @keyframes here on purpose. The meter, sparks, fill flash and stop alarm
    came out with the panel — each painted a surface that no longer exists — and
    the two effects that remain (arcadeHit, flyIn) are driven from stream.js on

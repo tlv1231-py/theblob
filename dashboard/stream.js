@@ -433,10 +433,19 @@
     if (roster === _lastRoster) {
       ps.forEach(function(p) {
         var el = list.querySelector('.tile[data-sym="' + p.sym + '"]');
-        if (el) el.style.setProperty('--tc', tintOf(p));   // tint only; DOM survives
+        // Never re-tint a slot that is printing its exit P&L — boardExit owns
+        // --tc until the ghost expires.
+        if (el && !ghostT[p.sym]) el.style.setProperty('--tc', tintOf(p));
       });
       return;
     }
+
+    // A ghost is a slot still showing what it earned. Rebuilding would delete
+    // it mid-sentence, so defer — the ghost's own timer forces the rebuild the
+    // moment it expires. Without this, any background poll landing inside the
+    // 1600ms window silently eats the result.
+    if (Object.keys(ghostT).length) return;
+
     _lastRoster = roster;
 
     list.innerHTML = ps.map(function(p) {
@@ -1061,9 +1070,25 @@
   //   ✗ EXIT LONG LINK/USD @ $8.3882 · pnl -0.5926 · timeout   [detail: daily_pnl=-1.67]
   //   ▸ scan complete · NAV $22,202.35 · 9 open                [detail: positions=9]
 
-  function parseTrade(msg) {
+  // The TRADE message already carries everything the board needs, so the slot
+  // can react to the EVENT rather than waiting on a DB round trip:
+  //   ▲ ENTER LONG BCH/USD @ $222.4728 · stop $221.8053   [detail: qty=0.999025]
+  //   ✗ EXIT LONG LINK/USD @ $8.3882 · pnl -0.5926 · timeout
+  function num(s) { return parseFloat(String(s).replace(/,/g, '')); }
+
+  function parseTrade(msg, detail) {
     if (!msg) return null;
-    if (msg.indexOf('ENTER') >= 0) return { dir: 'ENTER', pnl: null };
+    if (msg.indexOf('ENTER') >= 0) {
+      var pm = msg.match(/@\s*\$([\d,]+\.?\d*)/);
+      var sm = msg.match(/stop\s+\$([\d,]+\.?\d*)/);
+      var qm = (detail || '').match(/qty=([\d.]+)/);
+      return {
+        dir: 'ENTER', pnl: null,
+        price: pm ? num(pm[1]) : 0,
+        stop:  sm ? num(sm[1]) : 0,
+        qty:   qm ? parseFloat(qm[1]) : 0
+      };
+    }
     if (msg.indexOf('EXIT') >= 0) {
       // [+-]? — a win reads "pnl +0.42". Without the plus this matched only
       // losses and silently dropped every profitable exit.
@@ -1131,12 +1156,87 @@
     // ── ...and the board answers ───────────────────────────────────────
     // 220ms is the whole illusion. Fire on the same frame and the eye reads two
     // simultaneous symptoms of an unseen cause; delay it and the Blob becomes
-    // the cause. Refresh FIRST, hit SECOND — a rebuild would throw away the
-    // node the hit is animating.
+    // the cause.
+    //
+    // This runs off the EVENT, not off a refetch. refreshCrypto() is a network
+    // round trip — hanging the animation on it meant the slot moved whenever
+    // the fetch happened to land, which is not the beat. The message already
+    // carries the symbol, price, qty and pnl, so the board can answer exactly
+    // on time and let the DB poll reconcile behind it.
     setTimeout(function() {
-      refreshCrypto();
-      hitTile(t.sym);
+      if (t.dir === 'ENTER') boardEnter(t);
+      else                   boardExit(t);
     }, 220);
+  }
+
+  // ── The board reacts ─────────────────────────────────────────────────────
+  function tileEl(sym) { return document.querySelector('.tile[data-sym="' + sym + '"]'); }
+
+  var ghostT = {};   // sym -> timer holding a spent slot on screen
+
+  function boardEnter(t) {
+    // The same symbol usually re-enters seconds after it exits, so its slot is
+    // often still on screen showing the ghosted P&L. Reclaim it rather than
+    // waiting for a rebuild.
+    clearTimeout(ghostT[t.sym]);
+    delete ghostT[t.sym];
+
+    var el = tileEl(t.sym);
+    if (!el) {
+      // Genuinely new symbol — build it from the event so the slot exists NOW.
+      // The poll will confirm it moments later with identical values.
+      var exists = (S.crypto || []).some(function(c) { return c.sym === t.sym; });
+      if (!exists) {
+        S.crypto = (S.crypto || []).concat([{
+          sym: t.sym, qty: t.qty || 0, entry_price: t.price || 0,
+          stop_price: t.stop || 0, target_price: 0,
+          entered_at: new Date().toISOString(), strategy: 'crypto', is_crypto: true
+        }]);
+      }
+      _lastRoster = null;        // force the rebuild
+      renderPositions();
+      spawnNewTiles();           // flies it in from him, on the beat
+      el = tileEl(t.sym);
+    } else {
+      // Reclaiming a ghosted slot. It still flies in: the slot never left the
+      // screen, but the POSITION is new, and the viewer should see him place it
+      // exactly as they would any other entry.
+      var sp = el.querySelector('.t-sym');
+      sp.textContent = t.sym.replace('/USD', '');
+      sp.className = 't-sym';
+      el.style.removeProperty('--tc');
+      var o = blobCenter(), r = el.getBoundingClientRect();
+      if (o) flyIn(el, o.x - (r.left + r.width / 2), o.y - (r.top + r.height / 2));
+    }
+    hitTile(t.sym);
+    refreshCrypto();             // reconcile quietly behind the animation
+  }
+
+  function boardExit(t) {
+    var el = tileEl(t.sym);
+    if (!el) { _lastRoster = null; refreshCrypto(); return; }
+
+    // THE RESULT REPLACES THE NAME. The slot's whole reason for existing was
+    // this number, so it says it — same face, same size, green won / red lost.
+    // A tile that just vanishes tells you a position closed; a tile that prints
+    // its P&L tells you whether it was worth having.
+    var sp = el.querySelector('.t-sym');
+    var v = Number(t.pnl || 0);
+    sp.textContent = (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2);
+    sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
+    el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
+    hitTile(t.sym);              // the result lands with the same arcade punch
+
+    // Hold the ghost, then let the board reconcile it away. 1600ms is long
+    // enough to read and short enough that a re-entry (which typically follows
+    // within ~2s) reclaims the slot instead of fighting it — boardEnter cancels
+    // this timer, so the two never race.
+    clearTimeout(ghostT[t.sym]);
+    ghostT[t.sym] = setTimeout(function() {
+      delete ghostT[t.sym];
+      _lastRoster = null;
+      refreshCrypto();
+    }, 1600);
   }
 
   function pollEvents() {
@@ -1207,7 +1307,7 @@
         // one at a time instead, so nothing is invented and nothing is lost.
         fresh.forEach(function(r) {
           if (r.event_type !== 'TRADE') return;
-          var t = parseTrade(r.message);
+          var t = parseTrade(r.message, r.detail);
           if (!t) return;
           t.sym = r.symbol || '';
           tradePush(t);
