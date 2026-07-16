@@ -4598,8 +4598,8 @@ gd.on('plotly_afterplot', function() {{ buildTargets(); applyPortfolioGlow(); }}
     var _idleMs = now_ms - (window._navLastInteractMs || 0);
     if (_idleMs > 3000) {{
       var _returnRate = 0.012;  // ~1.2% per frame — slow drift, not a snap
-      window._navTargetWindowMs += (_NAV_DEFAULT_WIN - window._navTargetWindowMs) * _returnRate;
-      window._navPanOffsetMs    += (0                - window._navPanOffsetMs)    * _returnRate;
+      // Only return pan to center — leave zoom where the user set it
+      window._navPanOffsetMs += (0 - window._navPanOffsetMs) * _returnRate;
     }}
 
     // ── Smooth zoom: lerp current window toward target each frame ─────────────
@@ -4907,25 +4907,18 @@ var _tradeEventIds = new Set(); // track seen event IDs to avoid re-adding
 var _tradeDropLines = []; // shapes for vertical drop lines
 
 function _navAtTime(isoTs) {{
-  var tsMs = new Date(isoTs).getTime();
-  // Check live intraday pts first (most precise — within seconds)
-  if (_intradayPts.length) {{
+  var tsMs = new Date(_fixTs(isoTs)).getTime();
+  // Use DB points (source of truth for the chart)
+  var dbPts = window._navDbPts || [];
+  if (dbPts.length) {{
     var closest = null, closestDiff = Infinity;
-    for (var j=0; j<_intradayPts.length; j++) {{
-      var diff = Math.abs(new Date(_intradayPts[j].t).getTime() - tsMs);
-      if (diff < closestDiff) {{ closestDiff = diff; closest = _intradayPts[j].v; }}
+    for (var j = 0; j < dbPts.length; j++) {{
+      var diff = Math.abs(new Date(_fixTs(dbPts[j].t)).getTime() - tsMs);
+      if (diff < closestDiff) {{ closestDiff = diff; closest = parseFloat(dbPts[j].v); }}
     }}
     if (closest !== null) return closest;
   }}
-  // Fall back to daily portfolio snapshots
-  if (!portDates.length) return window._lastKnownNav || null;
-  var best = null, bestDiff = Infinity;
-  for (var i=0; i<portDates.length; i++) {{
-    var d = Math.abs(new Date(portDates[i]).getTime() - tsMs);
-    if (d < bestDiff) {{ bestDiff = d; best = portValues[i]; }}
-  }}
-  if (window._lastKnownNav) best = window._lastKnownNav;
-  return best;
+  return window._lastKnownNav || null;
 }}
 
 function _spawnTradeChip(isoTs, sym, isEntry, price) {{
