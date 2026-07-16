@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import json
 import pathlib as _pl
+import re
 
 import streamlit as st
 import streamlit.components.v1 as components
+from sqlalchemy import text
 
 from config import risk_limits
+from dashboard.db import get_session
 from dashboard.views.home import _load_chart_data, _read_strategy_status
 
 _DASHBOARD = _pl.Path(__file__).resolve().parent.parent
@@ -43,16 +46,87 @@ _STAGE_W = 1080
 _STAGE_H = 1920
 
 
+_NAV_RE = re.compile(r"NAV \$([\d,]+\.?\d*)")
+
+
+def _load_live_nav() -> list[dict]:
+    """NAV series parsed from the engine's own UPDATE events.
+
+    NOT nav_snapshots. That table is written CLIENT-SIDE by home_nav.js using
+    whichever Alpaca wallet happens to be active in an open browser, and it has
+    no account column — so two books interleave into one series. Measured
+    2026-07-16: rows at ~$22.1k and ~$25.3k landing seconds apart, which renders
+    as a sawtooth between two portfolios.
+
+    The engine writes `▸ scan complete · NAV $22,162.23 · 9 open` every ~10s,
+    server-side, from one book. Measured over 5h: 2281/2281 rows parsed, zero
+    discontinuities >$500. That is the honest live number, and it agrees with
+    Alpaca's reported portfolio value.
+
+    Ordering note: this MUST order DESC then reverse. `ORDER BY ... ASC LIMIT n`
+    truncates from the WRONG END — with 4,325 rows in a 2-day window and a
+    limit of 3,000 the caller receives the OLDEST 3,000 and believes the newest
+    of those is "now". That is exactly why the page froze at a stale figure for
+    hours. The same asc+limit bug exists in home.py's seed and home_nav.js.
+    """
+    with get_session() as s:
+        rows = s.execute(text("""
+            SELECT message, recorded_at
+            FROM pipeline_events
+            WHERE event_type = 'UPDATE'
+              AND recorded_at >= NOW() - INTERVAL '8 hours'
+            ORDER BY recorded_at DESC
+            LIMIT 3000
+        """)).fetchall()
+
+    pts = []
+    for r in reversed(rows):          # DESC fetch, ASC series
+        m = _NAV_RE.search(r.message or "")
+        if m:
+            pts.append({"t": r.recorded_at.isoformat() + "Z",
+                        "v": float(m.group(1).replace(",", ""))})
+    return pts
+
+
+def _load_crypto_positions() -> list[dict]:
+    """Live crypto holdings — server-written, unlike the equity book."""
+    with get_session() as s:
+        rows = s.execute(text("""
+            SELECT symbol, qty, entry_price, stop_price, target_price,
+                   entered_at, strategy
+            FROM crypto_positions ORDER BY entered_at DESC
+        """)).fetchall()
+    return [{
+        "sym": r.symbol,
+        "qty": float(r.qty or 0),
+        "entry_price": float(r.entry_price or 0),
+        "stop_price": float(r.stop_price or 0),
+        "target_price": float(r.target_price or 0),
+        "entered_at": r.entered_at.isoformat() + "Z" if r.entered_at else None,
+        "strategy": r.strategy or "crypto",
+        "is_crypto": True,
+    } for r in rows]
+
+
 def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
     """Assemble the portrait stage: CSS, DOM skeleton, payload, renderers."""
-    nav_pts = data.get("nav_snap_pts") or []
+    # Live NAV from the engine's UPDATE stream — see _load_live_nav for why
+    # nav_snapshots is not trusted here. Falls back to the old series only if
+    # the engine has emitted nothing at all.
+    nav_pts = _load_live_nav() or data.get("nav_snap_pts") or []
     port = data.get("portfolio") or {}
     port_values = port.get("values") or []
 
     latest_nav = nav_pts[-1]["v"] if nav_pts else (
         port_values[-1] if port_values else _STARTING_CAPITAL
     )
+
+    # Day P&L rebased off the session's own opening point in the same series,
+    # so the number and its denominator always come from one book.
     day_pnl = float(data.get("day_pnl") or 0.0)
+    if nav_pts:
+        open_v = nav_pts[0]["v"]
+        day_pnl = latest_nav - open_v
     prev_nav = latest_nav - day_pnl
     day_pnl_pct = (day_pnl / prev_nav * 100.0) if prev_nav else 0.0
 
@@ -64,6 +138,7 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
         "cumulative_pnl": float(data.get("cumulative_pnl") or 0.0),
         "starting_capital": _STARTING_CAPITAL,
         "positions":      data.get("positions_data") or [],
+        "crypto":         _load_crypto_positions(),
         "events":         (data.get("term_events") or [])[:40],
         "queued":         data.get("queued_actions") or [],
         "sharpe":         data.get("sharpe"),

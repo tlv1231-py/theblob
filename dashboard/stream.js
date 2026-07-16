@@ -392,40 +392,14 @@
   // ── Live poll ────────────────────────────────────────────────────────────
   // Same 10s cadence and same table as home_nav.js. Streamlit is never asked
   // to rerun; the stage mutates in place.
-  function pollNav() {
-    var since = new Date(Date.now() - 2 * 24 * 3600000).toISOString();
-    fetch(S.supa.url + '/rest/v1/nav_snapshots?select=recorded_at,nav&recorded_at=gte.' +
-          since + '&order=recorded_at.asc&limit=3000',
-          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
-      .then(function(r) { return r.json(); })
-      .then(function(rows) {
-        if (!Array.isArray(rows) || !rows.length) return;
-        var pts = rows.map(function(r) {
-          var t = r.recorded_at;
-          if (t && t.slice(-1) !== 'Z' && t.indexOf('+') < 0) t += 'Z';
-          return { t: new Date(t).getTime(), v: Number(r.nav) };
-        }).filter(function(p) { return !isNaN(p.t) && !isNaN(p.v); });
-        if (!pts.length) return;
-
-        var prevNav = state.nav;
-        state.pts = pts;
-        state.nav = pts[pts.length - 1].v;
-
-        // Day P&L rebased off the session's first snapshot. Falls back to the
-        // server-rendered figure overnight, when there's no session to rebase.
-        var open = pts.find(function(p) { return isSameEtDay(p.t, Date.now()); });
-        if (open) {
-          state.dayPnl = state.nav - open.v;
-          state.dayPnlPct = open.v ? state.dayPnl / open.v * 100 : 0;
-        }
-
-        if (Math.abs(state.nav - prevNav) > 0.005) {
-          if (state.dayPnlPct >= 1.0 && state.nav > prevNav) blob.setMood('HAPPY', 14);
-        }
-        renderHero();
-      })
-      .catch(function() { /* stream stays up on a bad poll; next tick retries */ });
-  }
+  // pollNav() is GONE — deliberately. It read nav_snapshots with
+  // `order=recorded_at.asc&limit=3000`, which truncates from the WRONG END:
+  // 4,325 rows existed in its 2-day window, so it fetched the OLDEST 3,000 and
+  // treated the newest of those — a value hours old — as "now". That is why the
+  // headline NAV sat frozen. Rather than fix the ordering, the source itself is
+  // wrong: nav_snapshots is browser-written with no account column and two
+  // books interleave into it. NAV now rides the engine's UPDATE stream inside
+  // pollEvents, which is server-written, single-book, and already being fetched.
 
   function isSameEtDay(a, b) {
     var f = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York' });
@@ -467,6 +441,33 @@
         if (!Array.isArray(rows) || !rows.length) return;
 
         state.lastEventMs = Date.now();   // heartbeat regardless of type
+
+        // ── Live NAV — from the engine's own UPDATE stream ────────────────
+        // Deliberately NOT nav_snapshots. That table is browser-written with no
+        // account column, so two books interleave into it (~$22.1k and ~$25.3k
+        // rows seconds apart) and any chart of it sawtooths between portfolios.
+        // These UPDATE rows are server-written from one book, every ~10s.
+        var navPts = [];
+        for (var k = rows.length - 1; k >= 0; k--) {
+          if (rows[k].event_type !== 'UPDATE') continue;
+          var nm = (rows[k].message || '').match(/NAV \$([\d,]+\.?\d*)/);
+          if (!nm) continue;
+          var ts = rows[k].recorded_at;
+          if (ts && ts.slice(-1) !== 'Z' && ts.indexOf('+') < 0) ts += 'Z';
+          navPts.push({ t: new Date(ts).getTime(), v: parseFloat(nm[1].replace(/,/g, '')) });
+        }
+        if (navPts.length) {
+          // Merge into the seeded series, keeping it ascending and de-duped.
+          var cutoff = navPts[0].t;
+          state.pts = state.pts.filter(function(p) { return p.t < cutoff; }).concat(navPts);
+          state.nav = navPts[navPts.length - 1].v;
+          var openPt = state.pts.find(function(p) { return isSameEtDay(p.t, Date.now()); });
+          if (openPt) {
+            state.dayPnl = state.nav - openPt.v;
+            state.dayPnlPct = openPt.v ? state.dayPnl / openPt.v * 100 : 0;
+          }
+          renderHero();
+        }
 
         var newest = rows[0].recorded_at;
         var firstRun = !state.seenEvTs;
@@ -521,11 +522,10 @@
   // for a glow and keeps an unattended stream from cooking a CPU for hours.
   setInterval(drawChart, 50);
   setInterval(syncBlobMood, 1000);
-  setInterval(pollNav, 10000);
+  // One poll now carries both NAV and trade reactions — same rows, one request.
   // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
   // almost every one while still costing ~15 tiny requests/min.
   setInterval(pollEvents, 4000);
   window.addEventListener('resize', drawChart);
-  pollNav();
   pollEvents();
 })();
