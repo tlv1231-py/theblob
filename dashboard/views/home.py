@@ -9589,15 +9589,16 @@ setTimeout(function() {{
         _B2 = "// ── Gauge — avg trades per hour ───────────────────────────────────────────"
         _SC = "</script>"
 
-        # Replace block 1 content: from sentinel to the closing </script>
+        # Find ALL indices BEFORE any modification (so offsets don't shift)
         _i1s = _html.index(_B1)
         _i1e = _html.index(_SC, _i1s)
-        _html = _html[:_i1s] + _tnd_data + "\n" + _nav_js + "\n" + _html[_i1e:]
-
-        # Replace block 2 content: from sentinel to the closing </script>
         _i2s = _html.index(_B2)
         _i2e = _html.index(_SC, _i2s)
+
+        # Replace in reverse order (block 2 first — it's later in the string)
+        # so block 1 offsets remain valid when we apply that replacement
         _html = _html[:_i2s] + "// JS consolidated into block above (home_nav.js)\n" + _html[_i2e:]
+        _html = _html[:_i1s] + _tnd_data + "\n" + _nav_js + "\n" + _html[_i1e:]
 
     return _html
 
