@@ -162,18 +162,21 @@ html, body {
   flex-direction: column;
 }
 
-/* 44 + 288 + 576 + 108 + 144 = 1160. Each band is fixed so the stack can never
+/* 44 + 288 + 576 + 252 = 1160. Each band is fixed so the stack can never
    reflow into the reserved zones.
 
-   Order top-to-bottom: status / HOLDINGS / Blob / NAV / EVENTS.
+   Order top-to-bottom: status / HOLDINGS / Blob / NAV.
 
    The board sits ABOVE his head because it is the action and he is the one
-   working it — he reaches up into it. The event box sits at the BOTTOM growing
-   upward, which is where a Gameboy text box actually lives; it interrupts the
-   scene from below rather than hovering over the star.
+   working it — he reaches up into it.
 
-   The Blob gives up 672 -> 576 (48x12, still integer scale) to pay for bigger
-   slots. He is still 30% of the whole canvas and half the safe box. */
+   NOTHING sits below the NAV any more: the number owns everything from the
+   Blob's feet to the safe-box floor at y1540. The event box was taking 144px
+   of that to display an idle strip most of the time, which is a lot of the
+   most valuable real estate on the stage spent saying nothing. It is now an
+   OVERLAY — absolutely positioned, absent until an event fires, covering the
+   NAV while it speaks. Which is exactly what a Gameboy text box does: it does
+   not reserve a slot, it interrupts. */
 
 /* ── Status strip · 44 ────────────────────────────────────────────────── */
 #s-status {
@@ -229,11 +232,19 @@ html, body {
    Cyberpunk supplies only the palette. Swap the colours and it is still a DMG.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* An OVERLAY, not a band. It reserves no space in the stack — it is absent
+   until an event fires, then covers the NAV while it speaks and disappears
+   again. A Gameboy text box does not hold a slot open; it interrupts.
+   Absent rather than transparent: an idle strip was spending 144px of the most
+   valuable space on the stage to say nothing. */
 #s-events {
-  height: 144px; flex: none;
-  position: relative;
-  z-index: 20;                 /* the box expands over the NAV — it must win */
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 248px;
+  z-index: 20;                 /* covers the NAV — it must win */
+  display: none;
 }
+#s-events.showing { display: block; }
 
 /* Anchored to the BOTTOM so growth pushes the top edge UP over the NAV — the
    way a Gameboy text box rises from the floor of the screen to interrupt.
@@ -241,7 +252,7 @@ html, body {
 .ev-lcd {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 136px;
+  height: 248px;
   padding: 11px 14px;
   background: linear-gradient(180deg, #10001a, #06000c);
   /* Stepped bezel — outer frame, inner rule, hard shadow. No soft edges. */
@@ -266,9 +277,8 @@ html, body {
               box-shadow 0.25s steps(2, end);
   overflow: hidden;
 }
-/* Open — a viewer event. Grows UP over the NAV, exactly the way a Gameboy text
-   box covers the world it interrupts. */
-.ev-lcd.open { height: 248px; }
+/* The box is a fixed 248 now — the container is what appears and disappears,
+   so there is no idle-vs-open height to reconcile. */
 
 /* THE POKEMON TELL. A Gen-1 text box has NOTCHED corners — the frame steps in
    by one pixel block at each corner rather than mitring or rounding. This one
@@ -461,37 +471,39 @@ html, body {
   to   { transform: translateX(-50%) scale(1); }
 }
 
-/* ── NAV · 120 ────────────────────────────────────────────────────────── */
-/* One line now: the number and the day, on the same row. The Blob took the
-   height and the number is still the second thing you read. */
+/* ── NAV · 252 — his feet to the floor ───────────────────────────────── */
 #s-nav {
-  height: 108px; flex: none;
+  height: 252px; flex: none;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 2px;
+  justify-content: center; gap: 8px;
 }
 .nav-label {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.28em;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
   color: var(--text-dim);
 }
-/* Lifted verbatim from .ss-wallet-val on the Command Center (home.py ~1615)
-   and scaled up. The arcade-score read is the FOUR-LAYER STACKED HARD SHADOW —
-   1/2/3/4px offsets of pure black, no blur — which is how a cabinet fakes
-   extruded type. Scaled 2.6x here, so the offsets scale with it. A single soft
-   shadow in its place instantly reads as a web heading.
-   Gain/loss restain the whole stack, not just the fill. */
+/* Lifted from .ss-wallet-val on the Command Center (home.py ~1615). The
+   arcade-score read is the FOUR-LAYER STACKED HARD SHADOW — offsets of pure
+   black, no blur — which is how a cabinet fakes extruded type. A single soft
+   shadow in its place instantly reads as a web heading. Gain/loss restain the
+   whole stack, not just the fill.
+
+   68px is the ceiling, not a taste call: Press Start 2P is monospaced at ~1em
+   per glyph, and "$21,698.42" is 10 glyphs — 10 x 68 = 680px, plus the 10px
+   shadow throw, inside an 870px safe box. Any bigger and the number clips the
+   moment NAV crosses into six figures. */
 .nav-big {
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 34px; font-weight: 400; line-height: 1;
-  letter-spacing: 0.04em;
+  font-size: 68px; font-weight: 400; line-height: 1.1;
+  letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: #ffffff;
   -webkit-text-stroke: 1px rgba(0,0,0,0.5);
   text-shadow:
-    2px 2px 0 #222,
-    4px 4px 0 #111,
-    6px 6px 0 rgba(0,0,0,0.8),
-    8px 8px 0 rgba(0,0,0,0.5);
+    3px 3px 0 #222,
+    5px 5px 0 #111,
+    8px 8px 0 rgba(0,0,0,0.8),
+    10px 10px 0 rgba(0,0,0,0.5);
   transition: color 0.4s ease, text-shadow 0.4s ease;
 }
 .nav-big.gain {
@@ -517,8 +529,10 @@ html, body {
     0 0 12px rgba(255,51,102,0.4);
 }
 .nav-day {
-  font-size: 24px; font-weight: 700; line-height: 1.1;
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 22px; font-weight: 400; line-height: 1.3;
   font-variant-numeric: tabular-nums;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9);
 }
 .nav-day.up   { color: var(--ok);      text-shadow: 0 0 24px rgba(0,255,157,0.4); }
 .nav-day.down { color: var(--danger);  text-shadow: 0 0 24px rgba(255,51,102,0.4); }
@@ -574,12 +588,14 @@ html, body {
    like a party lineup, not a spreadsheet column. Each slot is ~120x128 — nearly
    4x the area of the old dense row, which is the entire point: these are the
    most interesting thing on the stage and they were previously a footnote. */
+/* gap 6 -> 2: the slots close ranks so each ticker can be bigger without the
+   longest one (GOOGL, 5 glyphs) clipping its cell. */
 #pos-list {
   flex: 1; min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   grid-template-rows: repeat(2, 1fr);
-  gap: 6px;
+  gap: 2px;
   overflow: hidden;
 }
 
@@ -601,10 +617,16 @@ html, body {
   overflow: visible;
 }
 
+/* 21px is the ceiling: Press Start 2P is ~1em per glyph, "GOOGL" is 5 glyphs,
+   and the cell is ~122px wide — 5 x 21 = 105 plus the shadow throw. Negative
+   tracking pulls the glyphs together so the word reads as one chunky block
+   rather than five spaced letters, which is what "bigger but closer" buys.
+   transform-origin centre: arcadeHit and flyIn scale this element, and a
+   default origin would make it grow off toward one corner. */
 .t-sym {
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 17px; line-height: 1;
-  letter-spacing: 0.02em;
+  font-size: 21px; line-height: 1;
+  letter-spacing: -0.04em;
   color: #ffffff;
   -webkit-text-stroke: 1px rgba(0,0,0,0.5);
   text-shadow:
@@ -613,22 +635,18 @@ html, body {
     4px 4px 0 rgba(0,0,0,0.8),
     5px 5px 0 rgba(0,0,0,0.5);
   white-space: nowrap;
+  display: inline-block;
+  transform-origin: center center;
+  will-change: transform;
 }
 
-/* The meter, the landing sparks, the fill acknowledgement and the stop alarm
-   all came out with the panel — every one of them painted a box-shadow or an
-   accent bar that no longer exists. They are not "temporarily disabled", they
-   are deleted; re-adding any of them means re-adding the surface it painted on.
-   The JS still applies .spawn / .hit and still computes the P&L tint into --tc,
-   so those hooks are live and inert rather than removed.
-
-   Only the fly-in survives, because it moves the whole slot rather than
-   decorating it — and the ticker is a slot. */
-.tile.spawn { animation: tile-spawn 0.16s steps(4, end); }
-@keyframes tile-spawn {
-  from { transform: translate(var(--fx, 0), var(--fy, 0)) scale(0.35); opacity: 0.55; }
-  to   { transform: none; opacity: 1; }
-}
+/* No @keyframes here on purpose. The meter, sparks, fill flash and stop alarm
+   came out with the panel — each painted a surface that no longer exists — and
+   the two effects that remain (arcadeHit, flyIn) are driven from stream.js on
+   setInterval, because the CSS animation clock does not advance in this iframe
+   at all. A @keyframes version of either renders as nothing. --tc still carries
+   the P&L tint and data-sym still anchors the hooks, so anything added back
+   inherits them. */
 
 .pos-empty {
   grid-column: 1 / -1; grid-row: 1 / -1;

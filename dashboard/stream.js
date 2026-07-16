@@ -420,13 +420,18 @@
   // or entry prices any more. They live on the Command Center, where someone is
   // reading rather than watching.
 
+  // The roster the board is currently showing. Rebuilding the DOM is reserved
+  // for when this actually changes — see renderPositions.
+  var _lastRoster = null;
+
   function renderPositions() {
     var list = $('pos-list');
-    var ps = book().slice(0, 14);   // 2 cols x 7 rows — the board's exact size
+    var ps = book().slice(0, 14);   // 7 cols x 2 rows — the board's exact size
 
     if (!ps.length) {
       list.innerHTML = '<div class="pos-empty">NO OPEN POSITIONS</div>';
       $('pos-meta').textContent = '—';
+      _lastRoster = '';
       return;
     }
 
@@ -438,19 +443,37 @@
     $('pos-meta').textContent = wins + '/' + known + ' UP  ·  ' +
                                 ps.length + ' OPEN  ·  ' + usd(gross) + ' GROSS';
 
-    list.innerHTML = ps.map(function(p) {
+    function tintOf(p) {
       var live = p.price > 0 && p.entry > 0;
-      var pc   = live ? (p.price - p.entry) / p.entry * 100 : 0;
-      var col  = !live ? '#8060a0'
-               : (pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0'));
+      if (!live) return '#8060a0';
+      var pc = (p.price - p.entry) / p.entry * 100;
+      return pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
+    }
 
-      // Just the ticker. Transparent slot, white name, nothing else — the
-      // simplest thing that still identifies the book, to build back up from.
+    // Rebuild ONLY when the roster changes. This is load-bearing, not an
+    // optimisation: innerHTML replaces every tile, and a replaced element
+    // takes its running animation with it. hitTile() would start the arcade
+    // frames on a span that refreshCrypto() then destroyed two lines later —
+    // the hit fired frame 0 and died, every time. Prices tick constantly and
+    // the roster changes only on a fill, so this also stops rebuilding 14
+    // nodes several times a minute for nothing.
+    var roster = ps.map(function(p) { return p.sym; }).join(',');
+    if (roster === _lastRoster) {
+      ps.forEach(function(p) {
+        var el = list.querySelector('.tile[data-sym="' + p.sym + '"]');
+        if (el) el.style.setProperty('--tc', tintOf(p));   // tint only; DOM survives
+      });
+      return;
+    }
+    _lastRoster = roster;
+
+    list.innerHTML = ps.map(function(p) {
+      // Just the ticker. Transparent slot, white name, nothing else.
       // --tc and data-sym stay even though nothing paints them yet: the P&L
       // tint and the per-symbol hooks that spawnNewTiles / hitTile / glanceAt
       // target are still wired, so whatever goes back in inherits them free.
       return '' +
-        '<div class="tile" data-sym="' + p.sym + '" style="--tc:' + col + '">' +
+        '<div class="tile" data-sym="' + p.sym + '" style="--tc:' + tintOf(p) + '">' +
           '<span class="t-sym">' + p.sym.replace('/USD', '') + '</span>' +
         '</div>';
     }).join('');
@@ -623,13 +646,11 @@
     if (!lcd) return;
     if (!annQ.length) {
       annBusy = false;
+      // The whole overlay leaves. It reserves no space, so the NAV gets the
+      // floor back the instant nobody is talking.
+      $('s-events').classList.remove('showing');
       lcd.classList.remove('open');
-      lcd.classList.add('idle');
       lcd.style.removeProperty('--ev-c');
-      $('ev-icon').textContent = '◈';
-      // Idle says something rather than sitting blank — an empty box reads as
-      // broken, a labelled one reads as waiting.
-      $('ev-head').textContent = 'THE BLOB IS TRADING';
       $('ev-more').className = 'ev-more';
       annBadge();
       return;
@@ -639,8 +660,9 @@
     annBadge();
 
     var cfg = ANN[ev.type];
+    $('s-events').classList.add('showing');   // the overlay arrives
     lcd.classList.remove('idle');
-    lcd.classList.add('open');            // snap the box open over his head
+    lcd.classList.add('open');
     lcd.style.setProperty('--ev-c', cfg.c);
     $('ev-bigicon').textContent = cfg.i;
     $('ev-more').className = 'ev-more';
@@ -845,15 +867,59 @@
     }).catch(function() {});
   }
 
-  // The slot that just traded acknowledges it, so a fill is legible on the
-  // board and not only on the Blob.
-  function hitTile(sym) {
+  // ── Arcade hit ───────────────────────────────────────────────────────────
+  // The slot reacts when its symbol trades. Driven by setInterval and NOT by a
+  // CSS animation: measured earlier, the animation clock does not advance in
+  // this iframe at all, so a @keyframes version renders as nothing. Everything
+  // that must move on this page is a timer.
+  //
+  // The arcade read is QUANTIZATION. Nine frames at 45ms, each snapping to a
+  // discrete scale/offset/colour — no interpolation between them. A sprite does
+  // not tween; it cuts. The sequence is the classic cabinet hit: overshoot huge
+  // and white, slam past the resting size, settle. Colour lands on the verdict
+  // (green/red) at the peak and decays back to white, so the flash carries the
+  // information and the motion carries the impact.
+  var HIT_FRAMES = [
+    { s: 2.20, y: -14, c: '#ffffff', b: 1 },
+    { s: 1.90, y: -10, c: '#ffffff', b: 1 },
+    { s: 1.55, y:  -5, c: 'tint',    b: 1 },
+    { s: 1.30, y:   0, c: 'tint',    b: 0 },
+    { s: 0.82, y:   3, c: 'tint',    b: 0 },
+    { s: 1.14, y:  -2, c: 'tint',    b: 0 },
+    { s: 0.94, y:   1, c: '#ffffff', b: 0 },
+    { s: 1.06, y:   0, c: '#ffffff', b: 0 },
+    { s: 1.00, y:   0, c: '#ffffff', b: 0 }
+  ];
+
+  function arcadeHit(sym) {
     var el = document.querySelector('.tile[data-sym="' + sym + '"]');
     if (!el) return;
-    el.classList.remove('hit');
-    void el.offsetWidth;          // reflow so the animation can retrigger
-    el.classList.add('hit');
+    var sp = el.querySelector('.t-sym');
+    if (!sp) return;
+    var tint = el.style.getPropertyValue('--tc') || '#ffffff';
+
+    clearInterval(sp._hit);
+    var i = 0;
+    sp._hit = setInterval(function() {
+      if (i >= HIT_FRAMES.length) {
+        clearInterval(sp._hit); sp._hit = null;
+        sp.style.transform = ''; sp.style.color = ''; sp.style.textShadow = '';
+        return;
+      }
+      var f = HIT_FRAMES[i++];
+      var col = f.c === 'tint' ? tint : f.c;
+      sp.style.transform = 'translateY(' + f.y + 'px) scale(' + f.s + ')';
+      sp.style.color = col;
+      // Bloom on the opening frames only — the hit should feel like it emits
+      // light for an instant, not like it is permanently glowing.
+      sp.style.textShadow = f.b
+        ? '0 0 26px ' + col + ', 0 0 10px ' + col + ', 3px 3px 0 rgba(0,0,0,0.9)'
+        : '0 0 14px ' + col + ', 3px 3px 0 #111, 5px 5px 0 rgba(0,0,0,0.8)';
+    }, 45);
   }
+
+  // Kept as the name the rest of the file calls.
+  function hitTile(sym) { arcadeHit(sym); }
 
   // ── Terminal strips ──────────────────────────────────────────────────────
   // A clone of the Command Center's feed, parked in the reserved bands where
@@ -927,7 +993,36 @@
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
 
-  // Fly every newly-arrived tile in from his position.
+  // Fly every newly-arrived tile in from his position. Timer-driven for the
+  // same reason as arcadeHit: a CSS @keyframes version never plays here.
+  // 5 frames, no interpolation — the slot jumps along the path the way a sprite
+  // does, which is what sells it as a placement rather than a transition.
+  function flyIn(el, dx, dy) {
+    var sp = el.querySelector('.t-sym');
+    if (!sp) return;
+    var steps = [
+      { t: 1.00, s: 0.35, o: 0.4 },
+      { t: 0.62, s: 0.60, o: 0.7 },
+      { t: 0.32, s: 0.85, o: 1 },
+      { t: 0.10, s: 1.25, o: 1 },   // overshoot on landing
+      { t: 0.00, s: 1.00, o: 1 }
+    ];
+    clearInterval(sp._fly);
+    var i = 0;
+    sp._fly = setInterval(function() {
+      if (i >= steps.length) {
+        clearInterval(sp._fly); sp._fly = null;
+        sp.style.transform = ''; sp.style.opacity = '';
+        return;
+      }
+      var f = steps[i++];
+      // Quantize to the 4px grid the rest of the art lives on.
+      var x = Math.round(dx * f.t / 4) * 4, y = Math.round(dy * f.t / 4) * 4;
+      sp.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + f.s + ')';
+      sp.style.opacity = f.o;
+    }, 40);
+  }
+
   function spawnNewTiles() {
     var origin = blobCenter();
     if (!origin) return;
@@ -936,15 +1031,7 @@
       if (!sym || seenSyms[sym]) return;
       seenSyms[sym] = true;
       var r = el.getBoundingClientRect();
-      // Offset from the tile's resting slot back to him — quantized to 4px so
-      // the flight lands on the same grid the rest of the art lives on.
-      var dx = Math.round((origin.x - (r.left + r.width / 2)) / 4) * 4;
-      var dy = Math.round((origin.y - (r.top + r.height / 2)) / 4) * 4;
-      el.style.setProperty('--fx', dx + 'px');
-      el.style.setProperty('--fy', dy + 'px');
-      el.classList.remove('spawn');
-      void el.offsetWidth;
-      el.classList.add('spawn');
+      flyIn(el, origin.x - (r.left + r.width / 2), origin.y - (r.top + r.height / 2));
     });
     // Forget symbols that left, so a re-entry flies in again rather than
     // silently appearing.
@@ -1115,8 +1202,11 @@
         // short enough to still feel connected.
         if (fresh.some(function(r) { return r.event_type === 'TRADE'; })) {
           setTimeout(function() {
-            hitTile(best.sym);
+            // Refresh FIRST, hit SECOND. If the roster changed this rebuilds
+            // the board, and hitting before that would animate a node that the
+            // rebuild is about to throw away.
             refreshCrypto();
+            hitTile(best.sym);
           }, 220);
         }
       })
