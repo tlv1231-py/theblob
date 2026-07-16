@@ -1,0 +1,15 @@
+[Unit]
+Description=Blob stream — watchdog (reloads Chromium when the render freezes)
+After=blob-chromium.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/blob-stream/.env
+ExecStart=/usr/bin/python3 /opt/blob-stream/watchdog.py
+Restart=always
+RestartSec=10
+# Needs to restart blob-chromium.service.
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=Blob stream — ffmpeg x11grab to YouTube RTMP
+After=blob-chromium.service
+Requires=blob-chromium.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/blob-stream/.env
+# Let the page actually paint before we start capturing, or the first seconds of
+# every reconnect are a blank stage.
+ExecStartPre=/bin/sleep 8
+ExecStart=/opt/blob-stream/stream.sh
+Restart=always
+RestartSec=5
+# YouTube drops idle/degraded ingests; assume reconnects are routine rather than
+# exceptional and never give up on them.
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Blob stream — Xvfb virtual display (1080x1920)
+After=network-online.target
+
+[Service]
+Type=simple
+# 1080x1920x24 EXACTLY. The page renders a fixed 1080x1920 stage and letterboxes
+# via CSS transform: at exactly this size the scale resolves to 1 and the Blob's
+# pixel art is unresampled. Any other geometry softens the entire 8-bit look.
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1080x1920x24 -nolisten tcp -dpi 96
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

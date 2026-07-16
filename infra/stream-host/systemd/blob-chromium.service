@@ -1,0 +1,19 @@
+[Unit]
+Description=Blob stream — Chromium rendering the Stream page
+After=blob-xvfb.service
+Requires=blob-xvfb.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/blob-stream/.env
+ExecStartPre=/bin/sleep 3
+ExecStart=/opt/blob-stream/chromium.sh
+Restart=always
+RestartSec=5
+
+# This is the unit the watchdog restarts. Reloading the BROWSER is the whole
+# point: when Streamlit drops its websocket the page freezes while ffmpeg
+# happily encodes the dead frame, and restarting the encoder against a frozen
+# Chromium just re-encodes the same still image.
+[Install]
+WantedBy=multi-user.target

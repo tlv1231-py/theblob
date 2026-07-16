@@ -1,0 +1,18 @@
+[Unit]
+Description=Blob stream — health agent (encoder + host -> stream_health)
+After=blob-ffmpeg.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/blob-stream/.env
+ExecStart=/usr/bin/python3 /opt/blob-stream/agent.py
+Restart=always
+RestartSec=10
+
+# Turns Stream HQ's ENCODER and HOST lights from BLACK/ABSENT to real. They are
+# absent by design until something on this side reports: ffmpeg throughput and
+# VM CPU cannot be observed from a Streamlit app, and a health light that isn't
+# measuring anything is worse than none — it reads "fine" during the outage it
+# exists to catch.
+[Install]
+WantedBy=multi-user.target
