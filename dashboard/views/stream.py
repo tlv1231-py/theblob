@@ -88,6 +88,16 @@ def _load_live_nav() -> list[dict]:
     return pts
 
 
+def _latest_stream_event_id() -> int:
+    """Newest stream_event id at render time — the page's starting high-water mark."""
+    try:
+        with get_session() as s:
+            return int(s.execute(text(
+                "SELECT COALESCE(MAX(id), 0) FROM stream_events")).scalar() or 0)
+    except Exception:
+        return 0
+
+
 def _load_crypto_positions() -> list[dict]:
     """Live crypto holdings — server-written, unlike the equity book."""
     with get_session() as s:
@@ -139,6 +149,9 @@ def _build_stream_html(data: dict, yt_overlay: bool = False) -> str:
         "starting_capital": _STARTING_CAPITAL,
         "positions":      data.get("positions_data") or [],
         "crypto":         _load_crypto_positions(),
+        # High-water mark: the page shows only events created after it loaded.
+        # Without this a fresh render would replay the entire backlog on boot.
+        "last_event_id":  _latest_stream_event_id(),
         "events":         (data.get("term_events") or [])[:40],
         "queued":         data.get("queued_actions") or [],
         "sharpe":         data.get("sharpe"),

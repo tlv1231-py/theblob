@@ -718,26 +718,51 @@
     $('blob-mood').textContent = blob.getMood();
   }
 
+  // BROADCAST, not a work queue. Every renderer shows every event.
+  //
+  // This used to claim rows (consumed_at IS NULL + PATCH to consumed), which
+  // made the first poller win and every other renderer see nothing. That is
+  // wrong for a stream: the encoder's headless Chromium and the operator's own
+  // browser are BOTH rendering this page, and they would race — each event
+  // landing on exactly one of them, at random. A stream event must go to air
+  // everywhere. Each renderer now tracks its own high-water mark instead.
+  //
+  // release_at is the gate, not the status: a queued event fires ON ITS OWN
+  // when the countdown expires. HQ's "Release" simply pulls release_at to now.
+  // Cancelled rows are excluded and never air.
+  var lastEvId = Number(S.last_event_id || 0);
+
   function pollStreamEvents() {
+    var now = new Date().toISOString();
     fetch(S.supa.url + '/rest/v1/stream_events?select=id,event_type,source,payload' +
-          '&status=eq.released&consumed_at=is.null&order=created_at.asc&limit=10',
+          '&status=in.(queued,released)' +
+          '&release_at=lte.' + encodeURIComponent(now) +
+          '&id=gt.' + lastEvId +
+          '&order=id.asc&limit=10',
           { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
       .then(function(r) { return r.json(); })
       .then(function(rows) {
         if (!Array.isArray(rows) || !rows.length) return;
         rows.forEach(function(ev, i) {
-          // Stagger a burst so ten queued events don't collapse into one frame.
-          setTimeout(function() { applyStreamEvent(ev); }, i * 1200);
-          // Claim it immediately — status flips to consumed so a second poll
-          // (or a second renderer) cannot replay the same event.
-          fetch(S.supa.url + '/rest/v1/stream_events?id=eq.' + ev.id, {
+          if (ev.id > lastEvId) lastEvId = ev.id;
+          // Stagger a burst so ten events don't collapse into one frame. The
+          // announcer queues them anyway; this keeps the Blob's moods readable.
+          setTimeout(function() { applyStreamEvent(ev); }, i * 900);
+
+          // Stamp delivery for HQ's benefit only — proof it aired, NOT a lock.
+          // consumed_at ONLY. Writing status here would be a claim in disguise:
+          // the read query filters on status, so flipping it to 'consumed'
+          // would yank the row out of every OTHER renderer's query and we would
+          // be right back to first-poller-wins. Status is intent (queued /
+          // cancelled); consumed_at is the fact that it reached air.
+          fetch(S.supa.url + '/rest/v1/stream_events?id=eq.' + ev.id +
+                '&consumed_at=is.null', {
             method: 'PATCH',
             headers: {
               apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key,
               'Content-Type': 'application/json', Prefer: 'return=minimal'
             },
-            body: JSON.stringify({ status: 'consumed',
-                                   consumed_at: new Date().toISOString() })
+            body: JSON.stringify({ consumed_at: new Date().toISOString() })
           }).catch(function() {});
         });
       })

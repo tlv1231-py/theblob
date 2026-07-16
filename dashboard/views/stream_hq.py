@@ -185,20 +185,28 @@ _EVENT_TYPES = {
 
 
 def _queue_event(event_type: str, payload: dict, delay_s: int, source: str = "simulated") -> None:
+    """Queue an event. `release_at` is the gate — the stream fires it on its own
+    when the countdown expires. Nothing has to be clicked; a delay of 0 means
+    release_at is now, so it airs on the stream's next poll (~2s)."""
     with get_session() as s:
         s.execute(text("""
             INSERT INTO stream_events
                 (event_type, source, payload, status, release_at, created_at)
             VALUES
-                (:t, :src, CAST(:p AS JSON), :st, :rel, :now)
+                (:t, :src, CAST(:p AS JSON), 'queued', :rel, :now)
         """), {
             "t": event_type, "src": source, "p": json.dumps(payload),
-            # A zero-delay event is released immediately; anything else holds
-            # until release_at so the operator can still cancel it.
-            "st": "released" if delay_s <= 0 else "queued",
             "rel": datetime.utcnow() + timedelta(seconds=max(0, delay_s)),
             "now": datetime.utcnow(),
         })
+        s.commit()
+
+
+def _release_now(event_id: int) -> None:
+    """Skip the countdown — pull release_at to now so the next poll airs it."""
+    with get_session() as s:
+        s.execute(text("UPDATE stream_events SET release_at = :n WHERE id = :i"),
+                  {"n": datetime.utcnow(), "i": event_id})
         s.commit()
 
 
@@ -234,20 +242,33 @@ def _render_bus() -> None:
         st.info("No events yet. Fire one from the simulator below.")
         return
 
-    pending = df[df["status"] == "queued"]
+    # Still counting down — the only window in which cancelling is possible.
+    pending = df[(df["status"] == "queued") & (df["countdown"].fillna(0) > 0)]
     if not pending.empty:
-        st.markdown("**Holding — release or cancel before these go out**")
+        st.markdown("**Counting down — fires automatically at T-0**")
+        st.caption("Cancel now or it airs on its own. Release skips the countdown.")
         for _, r in pending.iterrows():
             cd = int(r["countdown"] or 0)
             c1, c2, c3, c4 = st.columns([3, 4, 2, 2])
             c1.markdown(f"**{r['event_type']}**  \n`{r['source']}`")
             c2.code(json.dumps(r["payload"] or {}), language="json")
-            c3.metric("T-minus", f"{max(0, cd)}s" if cd > 0 else "DUE")
+            c3.metric("T-minus", f"{max(0, cd)}s")
             if c4.button("Release", key=f"rel{r['id']}", type="primary"):
-                _set_status(int(r["id"]), "released"); st.rerun()
+                _release_now(int(r["id"])); st.rerun()
             if c4.button("Cancel", key=f"can{r['id']}"):
                 _set_status(int(r["id"]), "cancelled"); st.rerun()
+        st.info("Countdowns tick in the database, not in this page — "
+                "the event fires whether or not HQ is open. Hit Refresh to update the clock.")
         st.divider()
+
+    # Due but not yet picked up. A row sitting here for more than a few seconds
+    # means no renderer is polling — that is the signal worth surfacing.
+    due = df[(df["status"] == "queued") & (df["countdown"].fillna(0) <= 0)]
+    if not due.empty:
+        st.warning(
+            f"**{len(due)} event(s) past T-0 but not yet aired.** They are eligible right now. "
+            "If they stay here, no Stream page is polling — check the Stream page heartbeat above."
+        )
 
     st.markdown("**Recent**")
     view = df[["id", "event_type", "source", "status", "created_at", "consumed_at"]].copy()
@@ -255,14 +276,11 @@ def _render_bus() -> None:
     view["consumed_at"] = pd.to_datetime(view["consumed_at"]).dt.strftime("%H:%M:%S")
     st.dataframe(view, use_container_width=True, hide_index=True, height=260)
 
-    consumed = int((df["status"] == "consumed").sum())
-    released = int((df["status"] == "released").sum())
-    if released and not consumed:
-        st.warning(
-            f"**{released} event(s) released but none consumed.** The Stream page has not "
-            "picked them up — it is either not open, not deployed with the consumer, or frozen. "
-            "`consumed_at` is stamped by the page itself, so an empty column proves nothing landed."
-        )
+    st.caption(
+        "`consumed_at` is stamped by the first renderer to air an event — it is proof of "
+        "delivery, not a lock. Events broadcast: every open Stream page shows every event. "
+        "Note this means any Stream page you leave open elsewhere also airs them."
+    )
 
 
 # ── Simulator ─────────────────────────────────────────────────────────────────
