@@ -101,14 +101,21 @@ html, body {
 .term-strip {
   position: absolute;
   left: 0; right: 0;
-  z-index: 2;
+  /* Above the vignette (88) so the feed is not fighting the very gradient that
+     is darkest exactly where the feed lives. Below the scanlines (92) so the
+     CRT still rides over it. It never overlaps #safe — the strips are in the
+     reserved bands, the safe box is between them — so being above it in the
+     stack costs nothing. */
+  z-index: 89;
   overflow: hidden;
   font-family: VT323, Consolas, monospace;
   font-size: 15px;
   line-height: 1.45;
   padding: 0 96px;
   pointer-events: none;
-  opacity: 0.5;
+  /* 0.5 -> 0.72. Legible now that the vignette is not also subtracting from it,
+     but still texture: it must never compete with the board or the score. */
+  opacity: 0.72;
 }
 #term-top { top: 0; height: 380px; }
 #term-bot { bottom: 0; height: 380px; }
@@ -139,15 +146,25 @@ html, body {
 .tl-loss  { color: var(--danger); }
 .tl-sys   { color: var(--accent3); }
 
+/* ── Stacking order ───────────────────────────────────────────────────────
+   ambient(auto) < bgCanvas(1) < safe(10) < vignette(88) < term(89) < scan(92)
+
+   The vignette sits BELOW the terminal strips on purpose. It darkens the stage
+   toward its edges — and the strips live in exactly those edges, so at z-index 2
+   they were eating up to 72% black on top of their own 0.5 opacity: about 0.14
+   effective. That is the "geometry in front of the feed". The vignette still
+   frames the Blob (it is transparent through the middle 40%, where he is), it
+   just no longer paints over the text.
+   Scanlines stay on top of everything — the CRT sits over the whole scene. */
 #scanlines {
-  position: absolute; inset: 0; z-index: 90; pointer-events: none;
+  position: absolute; inset: 0; z-index: 92; pointer-events: none;
   background: repeating-linear-gradient(
     0deg, transparent, transparent 3px,
     rgba(0,0,0,0.22) 3px, rgba(0,0,0,0.22) 4px);
 }
 
 #vignette {
-  position: absolute; inset: 0; z-index: 89; pointer-events: none;
+  position: absolute; inset: 0; z-index: 88; pointer-events: none;
   background: radial-gradient(ellipse 74% 46% at 50% 50%,
               transparent 40%, rgba(0,0,0,0.72) 100%);
 }

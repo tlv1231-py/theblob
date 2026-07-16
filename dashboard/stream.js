@@ -1246,7 +1246,14 @@
   // position earned, in the ticker's own face and size: green profit, red loss.
   // A tile that disappears tells you a position closed. A leavebehind tells you
   // whether it was worth having, which is the only part a viewer cares about.
-  var LEAVEBEHIND_MS = 2600;
+  //
+  // 4500ms is the requested "a little longer". Note the real ceiling is not this
+  // constant: the book re-enters the same symbol within ~1-2s of exiting it, and
+  // boardEnter reclaims the slot when it does — so most leavebehinds are cut
+  // short by their own symbol coming back, not by this timer. This value only
+  // governs the ones that DON'T immediately re-enter. Making them outlast a
+  // re-entry would mean showing two tiles for one symbol, which is worse.
+  var LEAVEBEHIND_MS = 4500;
 
   function boardExit(t) {
     var el = tileEl(t.sym);
@@ -1270,6 +1277,9 @@
       delete ghostT[t.sym];
       var live = tileEl(t.sym);
       if (live && live.querySelector('.t-sym.pnl-win, .t-sym.pnl-loss')) live.remove();
+      // The reorder countdown RESTARTS from here, not from the trade. Otherwise
+      // the board could reshuffle the instant the number cleared — which is the
+      // worst possible moment, since the eye is still on that slot.
       scheduleSettle();
     }, LEAVEBEHIND_MS);
   }
