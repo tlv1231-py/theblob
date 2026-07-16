@@ -1659,63 +1659,63 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     _resize();
     var ctx = _nc.getContext('2d');
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
-    ctx.clearRect(0, 0, W, H);
 
-    _ML = 8; _MR = 8; _MT = 28; _MB = 48;
+    // ── 8-BIT CYBERPUNK VAPORWAVE CHART ──────────────────────────────────────
+    // Dark background — stars (ambient-canvas z-10) bleed through the 30% gap
+    ctx.fillStyle = 'rgba(4,0,14,0.70)';
+    ctx.fillRect(0, 0, W, H);
 
-    // Prefer the most recent nav_snapshot value as the live price; fall back to _lastKnownNav
-    var pts0 = window._navDbPts || [];
-    var liveNav = pts0.length ? parseFloat(pts0[pts0.length-1].v) : parseFloat(window._lastKnownNav);
-    if (!liveNav || isNaN(liveNav)) { window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }
-
-    // ── Build point list ───────────────────────────────────────────────────
-    var now_ms = Date.now();
-    var pts = window._navDbPts || [];
+    // ── Data ─────────────────────────────────────────────────────────────────
+    var raw = window._navDbPts || [];
     var allPts = [];
-    for (var i = 0; i < pts.length; i++) {
-      var ms = new Date(pts[i].t).getTime();
-      if (!isNaN(ms)) allPts.push({ ms: ms, v: parseFloat(pts[i].v) });
+    for (var i = 0; i < raw.length; i++) {
+      var ms = new Date(raw[i].t).getTime();
+      var v  = parseFloat(raw[i].v);
+      if (!isNaN(ms) && !isNaN(v) && v > 100) allPts.push({ ms: ms, v: v });
     }
     allPts.sort(function(a,b){return a.ms-b.ms;});
 
-    // ── Auto-return: after 3s idle, gently pull zoom+pan back to default ──────
+    // Prefer the most recent nav_snapshot value as the live price; fall back to _lastKnownNav
+    var pts0 = window._navDbPts || [];
+    var liveNav = allPts.length ? allPts[allPts.length-1].v : parseFloat(window._lastKnownNav);
+    if (!liveNav || isNaN(liveNav)) { window._navOrbFracX=0.5; window._navOrbFracY=0.5; return; }
+
+    // ── Margins ────────────────────────────────────────────────────────────
+    var _ML = 8, _MR = 8, _MT = 52, _MB = 28;
+    var now_ms = Date.now();
+
+    // ── Auto-return pan (3s idle → drift back to center) ─────────────────
     var _idleMs = now_ms - (window._navLastInteractMs || 0);
     if (_idleMs > 3000) {
-      var _returnRate = 0.012;  // ~1.2% per frame — slow drift, not a snap
-      // Only return pan to center — leave zoom where the user set it
-      window._navPanOffsetMs += (0 - window._navPanOffsetMs) * _returnRate;
+      window._navPanOffsetMs += (0 - window._navPanOffsetMs) * 0.012;
     }
 
-    // ── Smooth zoom: lerp current window toward target each frame ─────────────
+    // ── Smooth zoom lerp ──────────────────────────────────────────────────
     var _tgt = window._navTargetWindowMs || window._navWindowMs || 4*3600*1000;
     window._navWindowMs += (_tgt - window._navWindowMs) * 0.10;
 
-    // ── Time window — center shifts with pan offset, last point default ───────
-    var winMs      = window._navWindowMs || 4 * 3600 * 1000;
-    var lastPtMs   = allPts.length ? allPts[allPts.length-1].ms : now_ms;
-    var dataStart  = allPts.length ? allPts[0].ms : now_ms - 30*60000;
-    var panOff     = window._navPanOffsetMs || 0;
-    // Clamp pan so we can't pan before the earliest data
+    // ── Time window ───────────────────────────────────────────────────────
+    var winMs     = window._navWindowMs || 4 * 3600 * 1000;
+    var lastPtMs  = allPts.length ? allPts[allPts.length-1].ms : now_ms;
+    var dataStart = allPts.length ? allPts[0].ms : now_ms - 30*60000;
+    var panOff    = window._navPanOffsetMs || 0;
     panOff = Math.max(dataStart - lastPtMs, Math.min(0, panOff));
     window._navPanOffsetMs = panOff;
-    // Anchor to now_ms — chart scrolls in real time.
-    // Center tip in the visible gap between the two overlay panels.
     var _feedEl = document.getElementById('feed-overlay');
     var _posEl  = document.getElementById('pos-overlay');
     var _feedW  = (_feedEl ? _feedEl.offsetWidth : 0);
     var _posW   = (_posEl  ? _posEl.offsetWidth  : 0);
-    // Fraction of canvas width where the visible center sits
     var _visCtr = W > 0 ? (_feedW + (W - _feedW - _posW) / 2) / W : 0.50;
     _visCtr = Math.max(0.20, Math.min(0.80, _visCtr));
     var centerMs = now_ms + panOff;
     var t0 = centerMs - _visCtr * winMs;
     var t1 = centerMs + (1 - _visCtr) * winMs;
 
-    // Filter to window (no synthetic live point — 100% DB-sourced)
+    // Filter to window
     allPts = allPts.filter(function(p) { return p.ms >= t0 && p.ms <= t1; });
     allPts.sort(function(a,b){return a.ms-b.ms;});
 
-    // ── Thin: one point per 30s bucket (last value wins) — kills vertical spikes ─
+    // Thin: one point per 30s bucket — kills vertical spikes
     var _bucket = 30000;
     var _thinned = {};
     for (var ti = 0; ti < allPts.length; ti++) {
@@ -1728,7 +1728,7 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     var cx0 = _ML, cx1 = W - _MR, cy0 = _MT, cy1 = H - _MB;
     var cW = cx1 - cx0, cH = cy1 - cy0;
 
-    // ── Y range — symmetric around last point so tip sits at vertical center ──
+    // ── Y range ────────────────────────────────────────────────────────────
     var midV = allPts.length ? allPts[allPts.length-1].v : liveNav;
     var _lo = midV, _hi = midV;
     for (var vi = 0; vi < allPts.length; vi++) {
@@ -1737,143 +1737,133 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     }
     var spread = _hi - _lo;
     if (spread < 20) spread = 20;
-    // Half-range is the greater of: distance from midV to extremes, or half of min spread
     var halfRange = Math.max(Math.abs(midV - _lo), Math.abs(_hi - midV), spread / 2);
-    halfRange *= 1.20;  // 20% padding so line never touches top/bottom edge
+    halfRange *= 1.20;
     var lo = midV - halfRange;
     var hi = midV + halfRange;
 
     function tx(ms) { return cx0 + (ms - t0) / (t1 - t0) * cW; }
     function ty(v)  { return cy1 - (v - lo) / (hi - lo) * cH; }
 
-    // ── Grid lines + Y-axis labels (right-anchored, inside chart) ──────────
+    // ── Grid: dashed horizontal lines + Y labels ───────────────────────────
     var nTicks = 5;
     ctx.font = '10px Consolas,monospace';
-    for (var ti = 0; ti <= nTicks; ti++) {
-      var yv = lo + (hi - lo) * ti / nTicks;
+    ctx.textAlign = 'left';
+    for (var gi = 0; gi <= nTicks; gi++) {
+      var yv = lo + (hi - lo) * gi / nTicks;
       var yy = ty(yv);
-      ctx.strokeStyle = 'rgba(140,60,200,0.2)';
-      ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
+      ctx.strokeStyle = 'rgba(140,60,200,0.20)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 5]);
       ctx.beginPath(); ctx.moveTo(cx0, yy); ctx.lineTo(cx1, yy); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(190,140,255,0.55)';
-      ctx.textAlign = 'left';
-      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 + 6, yy - 3);
+      ctx.fillStyle = 'rgba(190,140,255,0.50)';
+      ctx.fillText('$' + Math.round(yv).toLocaleString('en-US'), cx0 + 4, yy - 3);
     }
 
     // ── X-axis labels ──────────────────────────────────────────────────────
     var xTickCount = Math.min(8, Math.max(3, Math.floor(cW / 120)));
     ctx.textAlign = 'center';
+    ctx.font = '10px Consolas,monospace';
     for (var xi = 0; xi <= xTickCount; xi++) {
       var xms = t0 + (t1 - t0) * xi / xTickCount;
-      if (xms > now_ms + 60000) continue;  // don't label the future buffer
-      var xx  = tx(xms);
-      var xd  = new Date(xms);
-      var hh  = xd.getHours() % 12 || 12;
-      var mm  = ('0' + xd.getMinutes()).slice(-2);
-      var ap  = xd.getHours() < 12 ? 'a' : 'p';
-      ctx.fillStyle = 'rgba(170,120,255,0.55)';
+      if (xms > now_ms + 60000) continue;
+      var xx = tx(xms);
+      var xd = new Date(xms);
+      var hh = xd.getHours() % 12 || 12;
+      var mm = ('0' + xd.getMinutes()).slice(-2);
+      var ap = xd.getHours() < 12 ? 'a' : 'p';
+      ctx.fillStyle = 'rgba(170,120,255,0.50)';
       ctx.fillText(hh + ':' + mm + ap, xx, cy1 + 18);
     }
 
-    // ── Map points ─────────────────────────────────────────────────────────
-    var m = allPts.map(function(p) { return { x: tx(p.ms), y: ty(p.v) }; });
+    // ── Map points — quantize Y to 3px grid for 8-bit feel ────────────────
+    var m = allPts.map(function(p) {
+      return { x: Math.round(tx(p.ms)), y: Math.round(ty(p.v) / 3) * 3 };
+    });
     var n = m.length;
 
-    // Always draw a line — use flat placeholder if < 2 real points
     if (n < 2) {
-      var midY = ty(liveNav);
-      m = [{ x: cx0, y: midY }, { x: tx(lastPtMs), y: midY }];
+      var midY = Math.round(ty(liveNav) / 3) * 3;
+      m = [{ x: cx0, y: midY }, { x: Math.round(tx(lastPtMs)), y: midY }];
       n = 2;
     }
 
-    // ── Catmull-Rom path builder with clamped control points (no overshooting) ─
-    function _crPath(pts2) {
+    // ── 8-bit stepped path: horizontal then vertical (L-shaped segments) ──
+    function _stepPath(pts2) {
       ctx.beginPath();
       ctx.moveTo(pts2[0].x, pts2[0].y);
-      for (var ci = 0; ci < pts2.length - 1; ci++) {
-        var p0 = pts2[Math.max(ci-1,0)];
-        var p1 = pts2[ci];
-        var p2 = pts2[ci+1];
-        var p3 = pts2[Math.min(ci+2, pts2.length-1)];
-        var cp1x = p1.x + (p2.x - p0.x) / 6;
-        var cp1y = p1.y + (p2.y - p0.y) / 6;
-        var cp2x = p2.x - (p3.x - p1.x) / 6;
-        var cp2y = p2.y - (p3.y - p1.y) / 6;
-        // Clamp Y control points so curve can't overshoot segment bounds
-        var yLo = Math.min(p1.y, p2.y), yHi = Math.max(p1.y, p2.y);
-        cp1y = Math.max(yLo, Math.min(yHi, cp1y));
-        cp2y = Math.max(yLo, Math.min(yHi, cp2y));
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+      for (var si = 1; si < pts2.length; si++) {
+        ctx.lineTo(pts2[si].x, pts2[si-1].y);  // horizontal
+        ctx.lineTo(pts2[si].x, pts2[si].y);    // vertical
       }
     }
 
-    // ── Vaporwave under-fill ──────────────────────────────────────────────────
+    // ── Vaporwave under-fill ───────────────────────────────────────────────
     var breathe = 0.5 + 0.5 * Math.sin(Date.now() / 1800);
-    var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
-    fillGrad.addColorStop(0,   'rgba(255,0,200,' + (0.18 + breathe * 0.10) + ')');
-    fillGrad.addColorStop(0.4, 'rgba(120,0,255,' + (0.08 + breathe * 0.06) + ')');
-    fillGrad.addColorStop(1,   'rgba(0,240,255,0)');
-    _crPath(m);
+    _stepPath(m);
     ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
+    var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
+    fillGrad.addColorStop(0,   'rgba(255,0,204,' + (0.18 + breathe * 0.10) + ')');
+    fillGrad.addColorStop(0.4, 'rgba(100,0,255,' + (0.08 + breathe * 0.06) + ')');
+    fillGrad.addColorStop(1,   'rgba(0,240,255,0)');
     ctx.fillStyle = fillGrad; ctx.fill();
 
-    // ── Vaporwave glow passes — fat, 8-bit pixelized edges ───────────────────
-    // Quantize Y to 3px grid for the 8-bit feel
-    var mPx = m.map(function(p) { return { x: Math.round(p.x), y: Math.round(p.y / 3) * 3 }; });
+    // ── 8-bit glow passes ─────────────────────────────────────────────────
     var passes = [
-      { pts: mPx, w: 22, a: 0.07, rgb: '0,240,255'   },  // cyan outer halo
-      { pts: mPx, w: 14, a: 0.12, rgb: '255,0,200'   },  // hot-pink mid halo
-      { pts: m,   w: 8,  a: 0.22, rgb: '180,0,255'   },  // purple bloom
-      { pts: mPx, w: 4,  a: 0.85, rgb: '255,60,220'  },  // hot-pink core
-      { pts: mPx, w: 2,  a: 1.00, rgb: '0,255,255'   },  // cyan bright edge
+      { w: 20, a: 0.07, rgb: '0,240,255'  },  // cyan outer halo
+      { w: 12, a: 0.12, rgb: '255,0,200'  },  // pink mid halo
+      { w: 6,  a: 0.25, rgb: '180,0,255'  },  // purple bloom
+      { w: 3,  a: 0.90, rgb: '255,60,220' },  // hot-pink core
+      { w: 1,  a: 1.00, rgb: '0,255,255'  },  // cyan bright edge
     ];
     passes.forEach(function(pass) {
-      _crPath(pass.pts);
+      _stepPath(m);
       ctx.strokeStyle = 'rgba(' + pass.rgb + ',' + pass.a + ')';
-      ctx.lineWidth = pass.w; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
+      ctx.lineWidth = pass.w;
+      ctx.lineJoin = 'miter';
+      ctx.lineCap = 'square';
       ctx.stroke();
     });
 
-
-    // ── Orb tip: last real data point (tx(now_ms) is 90% width due to t1 pad) ──
-    var tipX = m[n-1].x;
-    var tipY = m[n-1].y;
-    // Store canvas-relative fractions (both canvases fill main-area identically)
+    // ── Pulsing orb at trail tip ───────────────────────────────────────────
+    var tipX = m[n-1].x, tipY = m[n-1].y;
     window._navOrbFracX = Math.max(0.05, Math.min(0.95, tipX / W));
     window._navOrbFracY = Math.max(0.05, Math.min(0.95, tipY / H));
 
-    // ── Breathing dot at trail tip ──────────────────────────────────────────
     var pulse = 0.5 + 0.5 * Math.sin(Date.now() / 400);
-    // Outer glow
     ctx.beginPath(); ctx.arc(tipX, tipY, 10 + pulse * 8, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(180,0,255,' + (0.12 + pulse * 0.18) + ')'; ctx.fill();
-    // Mid ring
     ctx.beginPath(); ctx.arc(tipX, tipY, 5 + pulse * 3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(220,100,255,' + (0.5 + pulse * 0.3) + ')'; ctx.fill();
-    // Core white dot
     ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
 
-    // ── Animated portfolio counter — lerps to real value each frame ───────────
+    // ── Big portfolio value — top-center of chart ──────────────────────────
     var _rawNav = window._lastKnownNav || (allPts.length ? allPts[allPts.length-1].v : liveNav);
     if (!window._navDispVal || Math.abs(window._navDispVal - _rawNav) > 5000) {
-      window._navDispVal = _rawNav;  // hard-set on first draw or big jump
+      window._navDispVal = _rawNav;
     } else {
-      window._navDispVal += (_rawNav - window._navDispVal) * 0.07;  // ease toward target
+      window._navDispVal += (_rawNav - window._navDispVal) * 0.07;
     }
     var valStr = '$' + window._navDispVal.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
-    ctx.font = 'bold 14px Consolas,monospace';
-    var tw = ctx.measureText(valStr).width;
-    var lx = tipX - tw / 2;
-    lx = Math.max(cx0 + 4, Math.min(cx1 - tw - 4, lx));
-    var ly = tipY + 92;  // below outer ring + orbital dots
-    ly = Math.min(cy1 - 4, ly);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.textAlign = 'left';
-    ctx.fillText(valStr, lx, ly);
+    var _sessionStart = allPts.length ? allPts[0].v : _rawNav;
+    var _pnlVal = _rawNav - _sessionStart;
+    var _pnlPct = _sessionStart > 0 ? (_pnlVal / _sessionStart * 100) : 0;
+    var _pnlStr = (_pnlVal >= 0 ? '+$' : '-$') + Math.abs(_pnlVal).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    _pnlStr += '  (' + (_pnlPct >= 0 ? '+' : '') + _pnlPct.toFixed(2) + '%)';
+    var _pnlColor = _pnlVal >= 0 ? 'rgba(0,255,140,0.9)' : 'rgba(255,60,100,0.9)';
 
-    // ── Hover crosshair + tooltip (black & white, Consolas) ──────────────────
+    var vcx = W / 2;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 16px Consolas,monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillText(valStr, vcx, cy0 - 22);
+    ctx.font = '10px Consolas,monospace';
+    ctx.fillStyle = _pnlColor;
+    ctx.fillText(_pnlStr, vcx, cy0 - 8);
+
+    // ── Hover crosshair + tooltip ──────────────────────────────────────────
     if (window._navHoverX !== null && allPts.length > 0) {
       var hoverMs = t0 + window._navHoverX * (t1 - t0);
       var hBest = allPts[0], hDist = Math.abs(allPts[0].ms - hoverMs);
@@ -1882,7 +1872,6 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
         if (d2 < hDist) { hDist = d2; hBest = allPts[hi2]; }
       }
       var hx = tx(hBest.ms), hy = ty(hBest.v);
-      // Check if a trade marker is near the hover point
       var _hoverTrade = null;
       var _tradeMarkersH = window._navTradeMarkers || [];
       for (var hti = 0; hti < _tradeMarkersH.length; hti++) {
@@ -1891,15 +1880,12 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
         if (Math.abs(htms - hoverMs) < winMs * 0.015) { _hoverTrade = htm; break; }
       }
       ctx.save();
-      // Crosshair
       ctx.setLineDash([3, 5]);
       ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(hx, cy0); ctx.lineTo(hx, cy1); ctx.stroke();
       ctx.setLineDash([]);
-      // Dot on line
       ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#fff'; ctx.fill();
-      // Build tooltip lines
       var hDate = new Date(hBest.ms);
       var hLine1 = hDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
                    + '  ' + hDate.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -1920,17 +1906,15 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
       ctx.fillRect(ttX, ttY, ttW, ttH);
       ctx.strokeRect(ttX, ttY, ttW, ttH);
       ttLines.forEach(function(line, li) {
-        var isVal = li === 1;
-        var isTrade = li === 2;
-        ctx.font = (isVal ? 'bold 13px' : '11px') + ' Consolas,monospace';
-        ctx.fillStyle = isTrade ? (_hoverTrade && _hoverTrade.side==='ENTER' ? '#00ff9d' : '#ff3366') : '#fff';
+        ctx.font = (li === 1 ? 'bold 13px' : '11px') + ' Consolas,monospace';
+        ctx.fillStyle = (li === 2 && _hoverTrade) ? (_hoverTrade.side==='ENTER' ? '#00ff9d' : '#ff3366') : '#fff';
         ctx.textAlign = 'left';
         ctx.fillText(line, ttX + 10, ttY + 14 + li * ttLineH);
       });
       ctx.restore();
     }
 
-    // ── Trade event orbs — animated pulsing indicators on the line ───────────
+    // ── Trade event orbs ────────────────────────────────────────────────────
     var _tradeMarkers = window._navTradeMarkers || [];
     for (var tmi = 0; tmi < _tradeMarkers.length; tmi++) {
       var tm = _tradeMarkers[tmi];
@@ -1939,24 +1923,16 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
       var tmx = tx(tmMs);
       var tmy = tm.nav ? ty(tm.nav) : cy1 / 2;
       var isEnter = tm.side === 'ENTER';
-      // Stagger pulse phase per marker so they don't all throb in sync
       var _tmPhase = (now_ms / 1200 + tmi * 1.3) % (Math.PI * 2);
       var _tmPulse = 0.5 + 0.5 * Math.sin(_tmPhase);
-      var _tmR     = 3.5 + _tmPulse * 2;
-      var _tmRing  = _tmR + 4 + _tmPulse * 5;
-      var _enterC  = [0, 255, 140];
-      var _exitC   = [255, 50, 100];
-      var _rgb     = isEnter ? _enterC : _exitC;
-      var _rgbStr  = _rgb[0]+','+_rgb[1]+','+_rgb[2];
-      // Outer ripple
+      var _tmR    = 3.5 + _tmPulse * 2;
+      var _tmRing = _tmR + 4 + _tmPulse * 5;
+      var _rgbStr = isEnter ? '0,255,140' : '255,50,100';
       ctx.beginPath(); ctx.arc(tmx, tmy, _tmRing, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(' + _rgbStr + ',' + (0.12 + _tmPulse * 0.12) + ')';
       ctx.lineWidth = 1; ctx.stroke();
-      // Core dot
       ctx.beginPath(); ctx.arc(tmx, tmy, _tmR, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(' + _rgbStr + ',' + (0.7 + _tmPulse * 0.25) + ')';
-      ctx.fill();
-      // White center pinpoint
+      ctx.fillStyle = 'rgba(' + _rgbStr + ',' + (0.7 + _tmPulse * 0.25) + ')'; ctx.fill();
       ctx.beginPath(); ctx.arc(tmx, tmy, 1.5, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
     }
