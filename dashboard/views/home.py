@@ -56,6 +56,16 @@ def _fetch_alpaca_account() -> dict:
         return {}
 
 
+def _get_alpaca_cached() -> dict:
+    """Return Alpaca account data; cache last good result so re-renders don't flash '—'."""
+    import streamlit as _st
+    fresh = _fetch_alpaca_account()
+    if fresh.get("portfolio_value", 0.0) > 0:
+        _st.session_state["_alpaca_cache"] = fresh
+        return fresh
+    return _st.session_state.get("_alpaca_cache", {})
+
+
 def _submit_alpaca_order(sym: str, side: str, notional: float, strategy: str = "user") -> None:
     """Submit a notional market order to Alpaca and write the fill to DB."""
     import os
@@ -603,7 +613,7 @@ def _load_chart_data() -> dict:
         "positions_data": positions_data,
         "queued_actions": queued_actions,
         "nav_snap_pts": nav_snap_pts,
-        "alpaca": _fetch_alpaca_account(),
+        "alpaca": _get_alpaca_cached(),
     }
 
 
@@ -1217,6 +1227,8 @@ def _build_daw_html(data: dict) -> str:
     _alpaca_portfolio  = _alpaca.get("portfolio_value",   0.0)
     _alpaca_exposure   = _alpaca.get("long_market_value", 0.0)
     _alpaca_cash       = _alpaca.get("cash",              0.0)
+    _alpaca_portfolio_disp = f"${_alpaca_portfolio:,.2f}" if _alpaca_portfolio > 0 else "—"
+    _alpaca_exposure_disp  = f"${_alpaca_exposure:,.0f}"  if _alpaca_exposure  > 0 else "—"
 
     # ── Strategy params from DB ─────────────────────────────────────────────────
     _strategy_params: dict[str, dict[str, str | None]] = {}
@@ -1354,7 +1366,7 @@ body::after {{
   position:relative;
 }}
 #tile-headings {{
-  position:absolute; top:0; left:0; pointer-events:none; z-index:10;
+  position:absolute; top:28px; left:0; pointer-events:none; z-index:10;
 }}
 .tile-group-hdr {{
   position:absolute; top:0; display:flex; align-items:center; gap:5px;
@@ -2354,47 +2366,51 @@ body::after {{
 .pos-hold.active  {{ color:#1a6a2a; }}
 .pos-hold.exiting {{ color:#7a3a0a; }}
 /* ── Buy console (bottom-right) ── */
-/* Buy console — single inline row in arcade font */
 #buy-console {{
   position:fixed; bottom:16px; right:16px; z-index:300;
   display:flex; align-items:center; gap:0;
-  font-family:'Press Start 2P',monospace; font-size:9px;
-  color:rgba(0,255,157,.55);
-  background:transparent;
+  font-family:Consolas,'Courier New',monospace; font-size:11px; font-weight:400;
+  color:rgba(210,210,210,0.60);
   white-space:nowrap;
 }}
-#buy-console .bc-lbl {{
-  letter-spacing:.04em; pointer-events:none; padding-right:6px;
+#buy-console .bc-lbl {{ pointer-events:none; }}
+.bc-edit-wrap {{
+  background:rgba(255,255,255,0.07); border-radius:2px;
+  padding:1px 6px; cursor:text; display:inline-flex; align-items:center;
+  transition:background .12s;
 }}
+.bc-edit-wrap:hover {{ background:rgba(255,255,255,0.12); }}
 #bc-amt {{
-  background:transparent; border:none; border-bottom:1px solid rgba(0,255,157,.25);
-  outline:none; width:64px; text-align:center;
-  font:inherit; font-size:9px; color:#00ff9d; padding:1px 2px;
-  text-shadow:0 0 8px rgba(0,255,157,.5);
+  background:transparent; border:none; outline:none;
+  width:54px; text-align:center;
+  font:inherit; font-weight:400; color:rgba(210,210,210,0.90); padding:0;
 }}
-#bc-amt::placeholder {{ color:rgba(0,255,157,.18); font-family:'Press Start 2P',monospace; font-size:9px; }}
-#bc-sym {{
-  background:transparent; border:none; border-bottom:1px solid rgba(64,196,255,.25);
-  outline:none; width:72px; text-align:center;
-  font:inherit; font-size:9px; color:#40c4ff; padding:1px 2px; text-transform:uppercase;
-  text-shadow:0 0 8px rgba(64,196,255,.4);
+#bc-amt::placeholder {{ color:rgba(210,210,210,0.25); }}
+#bc-ticker-wrap {{
+  cursor:pointer; min-width:58px; justify-content:center;
 }}
-#bc-sym::placeholder {{ color:rgba(64,196,255,.18); font-family:'Press Start 2P',monospace; font-size:9px; }}
+#bc-ticker-loop {{
+  color:rgba(210,210,210,0.90); letter-spacing:0.04em; text-transform:uppercase;
+  display:inline-block;
+}}
+#bc-ticker-input {{
+  background:transparent; border:none; outline:none;
+  width:58px; text-align:center;
+  font:inherit; font-weight:400; color:rgba(210,210,210,0.90); padding:0;
+  text-transform:uppercase; display:none;
+}}
 datalist {{ display:none; }}
 #bc-buy {{
   background:transparent; border:none; outline:none;
-  font:inherit; font-size:9px; color:#00ff9d; letter-spacing:.06em;
-  cursor:pointer; padding-left:8px;
-  text-shadow:0 0 10px rgba(0,255,157,.6);
-  transition:text-shadow .1s;
+  font:inherit; font-weight:400; color:rgba(210,210,210,0.50);
+  cursor:pointer; margin-left:8px;
+  transition:color .12s;
 }}
-#bc-buy:hover {{ text-shadow:0 0 18px rgba(0,255,157,1); }}
-#bc-buy:disabled {{ opacity:.3; cursor:default; }}
+#bc-buy:hover {{ color:rgba(255,255,255,0.90); }}
+#bc-buy:disabled {{ opacity:.25; cursor:default; }}
 #bc-status {{
-  font-family:'Press Start 2P',monospace; font-size:7px;
-  letter-spacing:.04em; padding-left:8px;
-  color:rgba(0,255,157,.4); transition:color .2s;
-  min-width:0;
+  font-size:9px; padding-left:8px;
+  color:rgba(210,210,210,0.35); transition:color .2s; min-width:0;
 }}
 /* Double-click hint on tiles */
 .tc-dblclick-hint {{
@@ -2878,7 +2894,7 @@ datalist {{ display:none; }}
     <div class="ss-name">ALPACA WALLET <span id="ss-alpaca-sync-cd" style="font-size:6px;color:rgba(148,0,255,.4);letter-spacing:.1em"></span></div>
     <div class="ss-trades-row">
       <div class="ss-trades-anchor">
-        <span class="ss-status" id="ss-runner-st" style="font-family:Consolas,monospace;font-size:11px">—</span>
+        <span class="ss-status" id="ss-runner-st" style="font-family:Consolas,monospace;font-size:11px">{_alpaca_portfolio_disp}</span>
         <span class="ss-trades-chip" id="ss-alpaca-chip"></span>
       </div>
     </div>
@@ -2907,7 +2923,7 @@ datalist {{ display:none; }}
     <div class="ss-name">LONG EXPOSURE</div>
     <div class="ss-trades-row">
       <div class="ss-trades-anchor">
-        <span class="ss-status" id="ss-pipeline-st" style="font-family:Consolas,monospace;font-size:11px">—</span>
+        <span class="ss-status" id="ss-pipeline-st" style="font-family:Consolas,monospace;font-size:11px">{_alpaca_exposure_disp}</span>
       </div>
     </div>
   </div>
@@ -5675,13 +5691,18 @@ setTimeout(function() {{
   <div id="pos-panel" style="display:none"></div>
 </div>
 
-<!-- Buy console — inline arcade row -->
+<!-- Buy console — inline Consolas row -->
 <div id="buy-console">
-  <span class="bc-lbl">BUY $</span>
-  <input id="bc-amt" type="number" placeholder="amt" min="0" step="1" autocomplete="off">
-  <span class="bc-lbl">&nbsp;OF&nbsp;</span>
-  <input id="bc-sym" type="text" placeholder="ticker" maxlength="12" list="bc-tickers"
-         autocomplete="off" spellcheck="false">
+  <span class="bc-lbl">Buy&nbsp;$</span>
+  <span class="bc-edit-wrap" onclick="document.getElementById('bc-amt').focus()">
+    <input id="bc-amt" type="number" placeholder="0" min="0" step="1" autocomplete="off">
+  </span>
+  <span class="bc-lbl">&nbsp;of&nbsp;</span>
+  <span id="bc-ticker-wrap" class="bc-edit-wrap" onclick="bcTickerClick()">
+    <span id="bc-ticker-loop">—</span>
+    <input id="bc-ticker-input" type="text" maxlength="12" list="bc-tickers"
+           autocomplete="off" spellcheck="false" onblur="bcTickerBlur()" oninput="bcTickerInput(this)">
+  </span>
   <datalist id="bc-tickers"></datalist>
   <button id="bc-buy" onclick="bcSubmit()">▶ BUY</button>
   <span id="bc-status"></span>
@@ -6356,7 +6377,6 @@ setTimeout(function() {{
   (function() {{
     var dl = document.getElementById('bc-tickers');
     if (!dl || !window._allTickers) return;
-    // Only show equity tickers during NYSE hours; crypto is 24/7
     if (_isNYSEOpen()) {{
       (_allTickers.equity || []).forEach(function(s) {{
         var o = document.createElement('option'); o.value = s; dl.appendChild(o);
@@ -6366,6 +6386,63 @@ setTimeout(function() {{
       var o = document.createElement('option'); o.value = s; dl.appendChild(o);
     }});
   }})();
+
+  // ── Ticker wildcard loop animation ──────────────────────────────────────────
+  var _bcLoopTickers = ['BTC/USD','AAPL','NVDA','ETH/USD','AMZN','GOOGL','SOL/USD','MSFT','META','TSLA'];
+  var _bcLoopIdx = 0;
+  var _bcLoopTimerId = null;
+  var _bcSelectedSym = '';
+  function _bcLoopStep() {{
+    var el = document.getElementById('bc-ticker-loop');
+    if (!el || _bcSelectedSym) return;
+    el.style.opacity = '0';
+    setTimeout(function() {{
+      if (_bcSelectedSym) return;
+      _bcLoopIdx = (_bcLoopIdx + 1) % _bcLoopTickers.length;
+      if (el) {{ el.textContent = _bcLoopTickers[_bcLoopIdx]; el.style.opacity = '1'; }}
+    }}, 140);
+  }}
+  function _bcStartLoop() {{
+    if (_bcLoopTimerId) return;
+    var el = document.getElementById('bc-ticker-loop');
+    if (el) {{ el.style.transition = 'opacity 0.12s'; el.textContent = _bcLoopTickers[0]; el.style.opacity='1'; }}
+    _bcLoopTimerId = setInterval(_bcLoopStep, 1400);
+  }}
+  function _bcStopLoop() {{
+    if (_bcLoopTimerId) {{ clearInterval(_bcLoopTimerId); _bcLoopTimerId = null; }}
+  }}
+  setTimeout(_bcStartLoop, 600);
+
+  function bcTickerClick() {{
+    _bcStopLoop();
+    var loop = document.getElementById('bc-ticker-loop');
+    var inp  = document.getElementById('bc-ticker-input');
+    if (!inp || !loop) return;
+    // Pre-fill with whatever ticker the loop was showing (or previously selected)
+    inp.value = _bcSelectedSym || loop.textContent || '';
+    loop.style.display = 'none';
+    inp.style.display  = 'inline-block';
+    inp.focus(); inp.select();
+  }}
+  function bcTickerInput(el) {{
+    _bcSelectedSym = (el.value || '').trim().toUpperCase();
+  }}
+  function bcTickerBlur() {{
+    var inp  = document.getElementById('bc-ticker-input');
+    var loop = document.getElementById('bc-ticker-loop');
+    if (!inp || !loop) return;
+    var v = (inp.value || '').trim().toUpperCase();
+    if (v) {{
+      _bcSelectedSym = v;
+      loop.textContent = v;
+      loop.style.opacity = '1';
+    }} else {{
+      _bcSelectedSym = '';
+    }}
+    inp.style.display  = 'none';
+    loop.style.display = 'inline-block';
+    if (!_bcSelectedSym) _bcStartLoop();
+  }}
 
   function bcStatus(msg, col) {{
     var el = document.getElementById('bc-status');
@@ -6398,9 +6475,11 @@ setTimeout(function() {{
   }}
 
   function bcSubmit() {{
-    var sym = (document.getElementById('bc-sym').value || '').trim().toUpperCase();
+    var _symInp = document.getElementById('bc-ticker-input');
+    var _symLoop = document.getElementById('bc-ticker-loop');
+    var sym = (_bcSelectedSym || (_symInp && _symInp.style.display!=='none' ? _symInp.value : '') || (_symLoop ? _symLoop.textContent : '') || '').trim().toUpperCase();
     var amt = parseFloat(document.getElementById('bc-amt').value || 0);
-    if (!sym) {{ bcStatus('⚠ enter a ticker', '#ff9900'); return; }}
+    if (!sym || sym === '—') {{ bcStatus('⚠ pick a ticker', '#ff9900'); return; }}
     if (!amt || amt <= 0) {{ bcStatus('⚠ enter dollar amount', '#ff9900'); return; }}
 
     // Block NYSE equities outside market hours
@@ -6434,7 +6513,10 @@ setTimeout(function() {{
 
     bcStatus('✓ BUY ' + sym + ' $' + amt.toLocaleString('en-US',{{maximumFractionDigits:0}}), '#00ff9d');
     document.getElementById('bc-amt').value = '';
-    document.getElementById('bc-sym').value = '';
+    _bcSelectedSym = '';
+    var _bcLoop = document.getElementById('bc-ticker-loop');
+    if (_bcLoop) {{ _bcLoop.textContent = _bcLoopTickers[0]; }}
+    _bcStartLoop();
     setTimeout(function() {{ bcStatus('dbl-click holding to sell', ''); if (btn) btn.disabled = false; }}, 3000);
   }}
 
@@ -9067,7 +9149,7 @@ setTimeout(function() {{
 
       function _fetchAlpacaBalance() {{
         var w = _alpacaWallets[_alpacaActiveIdx];
-        if (!w) {{ var el = document.getElementById('ss-runner-st'); if (el) el.textContent = '—'; return; }}
+        if (!w) return;  // no wallet — keep server-seeded value
         var base = w.type === 'live' ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets';
         fetch(base + '/v2/account', {{ headers: {{ 'APCA-API-KEY-ID': w.key, 'APCA-API-SECRET-KEY': w.secret }} }})
           .then(function(r) {{ return r.json(); }})
@@ -9075,6 +9157,8 @@ setTimeout(function() {{
             var val = parseFloat(data.portfolio_value || data.equity || 0);
             if (!val) return;
             _animateAlpacaVal(val);
+            var lmv = parseFloat(data.long_market_value || 0);
+            if (lmv >= 0) _animateLongExp(lmv);
             // Sync success flash
             var chip = document.getElementById('ss-alpaca-chip');
             if (chip) {{ chip.textContent = '✓ SYNCED'; chip.style.color = '#00ff9d'; chip.style.opacity = '1';

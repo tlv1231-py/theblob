@@ -156,6 +156,15 @@ Prerequisites before building:
   meets modern SaaS dashboard. In progress — font/CSS pass done, deeper layout
   work remaining.
 
+- [ ] The Blob — 8-bit pixel character that reacts to live trader state.
+  **Read `dashboard/BLOB.md` before touching `dashboard/blob.js`.** It is the
+  design contract: the 10fps tick, the Bayer dither, the locked palette and the
+  always-pink rule are deliberate and look like bugs if you don't know why.
+  Status: character built + standalone harness (`dashboard/blob_preview.html`);
+  **not yet wired to live state.** Wiring is a canvas inside the existing
+  `home_nav.js` iframe hanging off hooks that already exist (`_onLiveTrade`,
+  `_fetchNavDb`). Streamlit is deliberately not involved — see BLOB.md.
+
 - [ ] Feature queue — professional quant tooling (build in priority order):
   1. [ ] Correlation matrix — live heatmap of current position price correlations
   2. [ ] Alpha decay tracker — live Sharpe vs backtest Sharpe trend; early warning if edge degrades

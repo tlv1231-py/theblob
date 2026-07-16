@@ -1659,10 +1659,11 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     _resize();
     var ctx = _nc.getContext('2d');
     var W = _nc.width / _dpr, H = _nc.height / _dpr;
+    ctx.clearRect(0, 0, W, H);  // fresh each frame — no accumulation
 
     // ── 8-BIT CYBERPUNK VAPORWAVE CHART ──────────────────────────────────────
-    // No full-canvas fill — chart is confined to the bottom strip;
-    // feed/positions overlays cover the rest so only the strip is visible.
+    // Full-canvas: chart spans the main area. Overlays sit on top at z-index:15,
+    // but the massive glow bleeds through gaps between overlay rows.
 
     // ── Data ─────────────────────────────────────────────────────────────────
     var raw = window._navDbPts || [];
@@ -1721,15 +1722,11 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     }
     allPts = Object.keys(_thinned).sort().map(function(k) { return _thinned[k]; });
 
-    // ── Chart area: bottom strip only (visible below feed/pos overlays) ───
+    // ── Chart area: full canvas ────────────────────────────────────────────
     var cy1 = H - _MB;
-    var cy0 = Math.max(H - 110, 20);   // 110px strip from canvas bottom
+    var cy0 = _MT;
     var cx0 = _ML, cx1 = W - _MR;
     var cW  = cx1 - cx0, cH = Math.max(cy1 - cy0, 1);
-
-    // Fill just the strip so the rest lets stars/ambient bleed through
-    ctx.fillStyle = 'rgba(4,0,14,0.90)';
-    ctx.fillRect(0, cy0 - 20, W, H - (cy0 - 20));
 
     // ── Y range ────────────────────────────────────────────────────────────
     var midV = allPts.length ? allPts[allPts.length-1].v : liveNav;
@@ -1807,18 +1804,18 @@ gd.on('plotly_afterplot', function() { buildTargets(); applyPortfolioGlow(); });
     _stepPath(m);
     ctx.lineTo(m[n-1].x, cy1); ctx.lineTo(m[0].x, cy1); ctx.closePath();
     var fillGrad = ctx.createLinearGradient(0, cy0, 0, cy1);
-    fillGrad.addColorStop(0,   'rgba(255,0,204,' + (0.45 + breathe * 0.15) + ')');
-    fillGrad.addColorStop(0.4, 'rgba(100,0,255,' + (0.22 + breathe * 0.10) + ')');
-    fillGrad.addColorStop(1,   'rgba(0,240,255,0.02)');
+    fillGrad.addColorStop(0,   'rgba(255,0,204,' + (0.60 + breathe * 0.20) + ')');
+    fillGrad.addColorStop(0.3, 'rgba(100,0,255,' + (0.35 + breathe * 0.15) + ')');
+    fillGrad.addColorStop(1,   'rgba(0,240,255,0.04)');
     ctx.fillStyle = fillGrad; ctx.fill();
 
-    // ── 8-bit glow passes (boosted alphas compensate for canvas opacity:0.55)
+    // ── 8-bit glow passes — massive so they bleed through overlay gaps ───
     var passes = [
-      { w: 32, a: 0.22, rgb: '0,240,255'  },  // cyan outer halo
-      { w: 18, a: 0.55, rgb: '255,0,200'  },  // pink mid halo
-      { w: 9,  a: 0.80, rgb: '180,0,255'  },  // purple bloom
-      { w: 4,  a: 1.00, rgb: '255,60,220' },  // hot-pink core
-      { w: 2,  a: 1.00, rgb: '0,255,255'  },  // cyan bright edge
+      { w: 120, a: 0.12, rgb: '0,240,255'   },  // cyan outer halo
+      { w:  60, a: 0.30, rgb: '255,0,200'   },  // pink bloom
+      { w:  28, a: 0.65, rgb: '180,0,255'   },  // purple inner bloom
+      { w:  12, a: 1.00, rgb: '255,60,220'  },  // hot-pink core
+      { w:   5, a: 1.00, rgb: '0,255,255'   },  // cyan edge
     ];
     passes.forEach(function(pass) {
       _stepPath(m);
@@ -3228,8 +3225,59 @@ setTimeout(function() {
     var el = document.getElementById('bc-status');
     if (!el) return;
     el.textContent = msg;
-    el.style.color = col || '#0a2a1a';
+    el.style.color = col || 'rgba(210,210,210,0.35)';
   }
+
+  // ── Ticker wildcard loop ────────────────────────────────────────────────────
+  var _bcLoopTickers = ['BTC/USD','AAPL','NVDA','ETH/USD','AMZN','GOOGL','SOL/USD','MSFT','META','TSLA'];
+  var _bcLoopIdx = 0, _bcLoopTimerId = null;
+  var _bcSelectedSym = '';
+  function _bcLoopStep() {
+    var el = document.getElementById('bc-ticker-loop');
+    if (!el || _bcSelectedSym) return;
+    el.style.opacity = '0';
+    setTimeout(function() {
+      if (_bcSelectedSym) return;
+      _bcLoopIdx = (_bcLoopIdx + 1) % _bcLoopTickers.length;
+      var e2 = document.getElementById('bc-ticker-loop');
+      if (e2) { e2.textContent = _bcLoopTickers[_bcLoopIdx]; e2.style.opacity = '1'; }
+    }, 140);
+  }
+  function _bcStartLoop() {
+    if (_bcLoopTimerId) return;
+    var el = document.getElementById('bc-ticker-loop');
+    if (el) { el.style.transition = 'opacity 0.12s'; el.textContent = _bcLoopTickers[0]; el.style.opacity = '1'; }
+    _bcLoopTimerId = setInterval(_bcLoopStep, 1400);
+  }
+  function _bcStopLoop() {
+    if (_bcLoopTimerId) { clearInterval(_bcLoopTimerId); _bcLoopTimerId = null; }
+  }
+  setTimeout(_bcStartLoop, 600);
+
+  window.bcTickerClick = function() {
+    _bcStopLoop();
+    var loop = document.getElementById('bc-ticker-loop');
+    var inp  = document.getElementById('bc-ticker-input');
+    if (!inp || !loop) return;
+    inp.value = _bcSelectedSym || (loop.textContent !== '—' ? loop.textContent : '');
+    loop.style.display = 'none';
+    inp.style.display  = 'inline-block';
+    inp.focus(); inp.select();
+  };
+  window.bcTickerInput = function(el) {
+    _bcSelectedSym = (el.value || '').trim().toUpperCase();
+  };
+  window.bcTickerBlur = function() {
+    var inp  = document.getElementById('bc-ticker-input');
+    var loop = document.getElementById('bc-ticker-loop');
+    if (!inp || !loop) return;
+    var v = (inp.value || '').trim().toUpperCase();
+    if (v) { _bcSelectedSym = v; loop.textContent = v; loop.style.opacity = '1'; }
+    else    { _bcSelectedSym = ''; }
+    inp.style.display  = 'none';
+    loop.style.display = 'inline-block';
+    if (!_bcSelectedSym) _bcStartLoop();
+  };
 
   // Route buy/sell through postMessage → parent shim → Alpaca
   function _submitOrder(sym, side, dollarAmt, notional) {
@@ -3254,8 +3302,12 @@ setTimeout(function() {
     return mins >= 570 && mins < 960; // 9:30am–4:00pm ET
   }
 
-  function bcSubmit() {
-    var sym = (document.getElementById('bc-sym').value || '').trim().toUpperCase();
+  window.bcSubmit = function() {
+    var _symInp  = document.getElementById('bc-ticker-input');
+    var _symLoop = document.getElementById('bc-ticker-loop');
+    var sym = (_bcSelectedSym ||
+               (_symInp && _symInp.style.display !== 'none' ? (_symInp.value||'') : '') ||
+               (_symLoop && _symLoop.textContent !== '—' ? _symLoop.textContent : '') || '').trim().toUpperCase();
     var amt = parseFloat(document.getElementById('bc-amt').value || 0);
     if (!sym) { bcStatus('⚠ enter a ticker', '#ff9900'); return; }
     if (!amt || amt <= 0) { bcStatus('⚠ enter dollar amount', '#ff9900'); return; }
@@ -3291,9 +3343,12 @@ setTimeout(function() {
 
     bcStatus('✓ BUY ' + sym + ' $' + amt.toLocaleString('en-US',{maximumFractionDigits:0}), '#00ff9d');
     document.getElementById('bc-amt').value = '';
-    document.getElementById('bc-sym').value = '';
+    _bcSelectedSym = '';
+    var _loopEl = document.getElementById('bc-ticker-loop');
+    if (_loopEl) { _loopEl.textContent = _bcLoopTickers[0]; }
+    _bcStartLoop();
     setTimeout(function() { bcStatus('dbl-click holding to sell', ''); if (btn) btn.disabled = false; }, 3000);
-  }
+  };
 
   // ── Double-click tile → sell full position ────────────────────────────────────
   (function() {
@@ -3337,10 +3392,10 @@ setTimeout(function() {
     });
   })();
 
-  // Keyboard shortcut: B focuses buy console
+  // Keyboard shortcut: B focuses buy console amount
   document.addEventListener('keydown', function(e) {
     if (e.target.tagName === 'INPUT') return;
-    if (e.key === 'b' || e.key === 'B') document.getElementById('bc-amt').focus();
+    if (e.key === 'b' || e.key === 'B') { var a = document.getElementById('bc-amt'); if (a) a.focus(); }
   });
 
   // ── Live feed poller — Supabase REST, no page reload ────────────────────────
