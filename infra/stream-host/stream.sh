@@ -6,8 +6,13 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# -r, NOT -f — see the same guard in chromium.sh. This runs as `blob` and .env is
+# root:root 0600, so -f passes (stat works) and the source then dies on
+# permissions, which set -e turns into a restart loop. YOUTUBE_KEY still arrives:
+# systemd reads EnvironmentFile= as root before dropping privileges.
 # shellcheck source=/dev/null
-[[ -f "$HERE/.env" ]] && source "$HERE/.env"
+[[ -r "$HERE/.env" ]] && source "$HERE/.env"
 
 : "${YOUTUBE_KEY:?YOUTUBE_KEY missing — put it in infra/stream-host/.env}"
 DISPLAY_NUM="${DISPLAY_NUM:-:99}"

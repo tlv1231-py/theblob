@@ -5,8 +5,20 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# -r, NOT -f. Under systemd this runs as the unprivileged `blob` user while .env
+# is deliberately root:root 0600 — it holds YOUTUBE_KEY, and a browser rendering
+# a page all day has no business reading the credential that owns the channel.
+# The variables are already in the environment by the time this runs: systemd
+# reads EnvironmentFile= as root and then drops privileges. This source exists
+# only so the script still works when run by hand.
+#
+# -f asks "does it exist" — and it does; blob can stat it fine because
+# /opt/blob-stream is 0755. So the guard passed, the source then died with
+# "Permission denied", set -e turned that into exit 1, and the unit sat in a
+# restart loop. Ask whether we can READ it, which is the thing we're about to do.
 # shellcheck source=/dev/null
-[[ -f "$HERE/.env" ]] && source "$HERE/.env"
+[[ -r "$HERE/.env" ]] && source "$HERE/.env"
 
 DISPLAY_NUM="${DISPLAY_NUM:-:99}"
 export DISPLAY="$DISPLAY_NUM"
