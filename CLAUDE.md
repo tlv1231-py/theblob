@@ -312,19 +312,42 @@ Paper portfolio start date: **2026-05-29**
     in the Shorts feed, so Shorts safe zones apply: top 380 and bottom 380 are reserved
     (on a *live* stream the chat input is permanent down there), and the right ~120 is the
     action rail. Usable area is **870 × 1160 at (90, 380)** — ~49% of the canvas — declared
-    once as `--safe-*` in stream.css. Every informational element lives in `#safe`; the
-    reserved bands carry ambient glow only, because YouTube paints over them regardless.
-    Layout inside the box: status 56 / Blob 350 / NAV 190 / chart 330 / positions 234 = 1160.
-    Verified by measurement: zero elements breach the box, Blob is centred at x525.
+    once as `--safe-*` in stream.css.
+
+    **The safe box no longer contains everything, on purpose.** Inside `#safe`:
+    padding-top 220 / Blob 768 / score 172 = 1160. Above it, in the reserved top band,
+    sit the nameplate + status line (y12–112) and the tile board (y120–600) — so the
+    board straddles y380 and 8 of 14 tiles plus the whole `blob <x>` sentence are behind
+    YouTube's chrome. This was chosen deliberately (the tiles are the most interesting
+    thing on the stream and were wanted large); it is a **known cost, not an oversight**.
+    Revisit it the first time the page is seen on a real broadcast. Measured, not eyeballed:
+    nameplate y12–66 left x90, board y120–600 left x90, left-aligned to within 2px.
 
     Stage is fixed 1080×1920 and letterboxes via CSS transform — at a true 1080×1920
     capture the scale resolves to exactly 1 and the Blob's pixel art is unresampled
-    (he renders at 336px = 48×7, an integer scale — keep any resize on a 48px multiple).
+    (he renders at 768px = 48×16, an integer scale — keep any resize on a 48px multiple).
+
+    **`blob <x>` — the status line.** Reads as one sentence: `blob sold XTZ for −$0.54`.
+    Nameplate is static; `x` decodes between states (per-segment scramble, staggered 90ms,
+    `setInterval` because CSS animation is inert here). `setStatus()` fires from
+    `applyTrade()` so it lands with the sound and the tile — measured 0.5–3.4ms against a
+    `createOscillator` hook. Ticker colour comes from `ticker_colors` (set on the Command
+    Center, polled 30s, white if unassigned). **A buy shows qty × price, not the per-unit
+    price** — the template says "total P&L" but a buy has none, and the per-unit price
+    rendered "bought CRV for $0.2161" on a $204 position. Decays to `is trading` after 20s.
 
     Reuses `home._load_chart_data()` and `blob.js` verbatim; deliberately does NOT reuse
     `home_nav.js` (173 getElementById bindings to Command Center nodes, and margins tuned
     for a wide stage). No feed or footer ticker: both sat in the bottom 380 and no
-    arrangement saves them. `pollEvents()` still runs so fills drive the Blob's ALERT mood.
+    arrangement saves them. The NAV chart and the background terminal feed were both
+    **deleted** — he is the streamer, not the charts. Background is `stream_bg.js`:
+    purple cyberpunk stars rising bottom→top on a half-res 540×960 buffer, plus drones
+    and an LED rack, all reacting via `bg.pulse()`. `pollEvents()` drives the Blob's moods.
+
+    **Standing rule for this page: anything that must move uses `setInterval`.** `rAF`
+    never fires inside the component iframe and CSS transitions/animations share that same
+    clock, so they are all inert here. This is not a preference — a CSS animation written
+    on this page silently does nothing.
 
     `dashboard/yt_overlay.js` is a **TEMP** design aid drawing YouTube's chrome + safe
     zones over the stage. Geometry is sourced and exact; the chrome art is approximate and
