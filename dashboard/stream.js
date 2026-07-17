@@ -859,15 +859,21 @@
   // money, pink is identity, cyan is activity. A viewer who has learned the
   // tiles already knows how to read this.
   // ═══════════════════════════════════════════════════════════════════════
+  // ALL CYBERPUNK. The money events used to be #00ff9d — trading-terminal green,
+  // borrowed from the P&L language on the board. It was the one colour in the box
+  // that came from a spreadsheet rather than from an arcade, and it made a
+  // donation look like a winning trade. The palette is the house set now:
+  // pink is identity, cyan is money, purple is scale. Only risk_breach keeps its
+  // red, because that one IS an alarm.
   var ANN = {
-    donation:        { c: '#00ff9d', i: '♥', verb: 'DONATED' },
-    superchat:       { c: '#00ff9d', i: '♥', verb: 'SUPERCHATTED' },
-    supersticker:    { c: '#00ff9d', i: '♥', verb: 'SENT A STICKER' },
-    bits:            { c: '#00ff9d', i: '◆', verb: 'CHEERED' },
+    donation:        { c: '#00e5ff', i: '♥', verb: 'DONATED' },
+    superchat:       { c: '#00e5ff', i: '♥', verb: 'SUPERCHATTED' },
+    supersticker:    { c: '#9400ff', i: '♥', verb: 'SENT A STICKER' },
+    bits:            { c: '#00e5ff', i: '◆', verb: 'CHEERED' },
     membership_gift: { c: '#ff00cc', i: '♦', verb: 'GIFTED' },
     subscription:    { c: '#ff00cc', i: '★', verb: 'SUBSCRIBED' },
-    follow:          { c: '#00e5ff', i: '◈', verb: 'FOLLOWED' },
-    raid:            { c: '#9400ff', i: '⚡', verb: 'RAIDED' },
+    follow:          { c: '#9400ff', i: '◈', verb: 'FOLLOWED' },
+    raid:            { c: '#ff00cc', i: '⚡', verb: 'RAIDED' },
     chat:            { c: '#8060a0', i: '·', verb: '' },
     risk_breach:     { c: '#ff3366', i: '⚠', verb: '' }
   };
@@ -926,10 +932,12 @@
     if (type === 'risk_breach') return 'RISK BREACH';
     return (p.from || 'SOMEONE').toUpperCase().slice(0, 14);
   }
+  // The verb only. The AMOUNT has its own element now — it is the single most
+  // important fact in the box and it was set in 15px verb text, the same size as
+  // the grammar wrapped around it and half the size of the handle.
   function actOf(type, p) {
     if (type === 'risk_breach') return 'just BROKE ' + (p.limit || '') + ' !!!';
-    var amt = amountFor(type, p);
-    return 'just ' + (VERB[type] || 'DID SOMETHING') + (amt ? ' ' + amt : '') + ' !!!';
+    return 'just ' + (VERB[type] || 'DID SOMETHING') + ' !!!';
   }
 
   var annQ = [], annTypeT = null, annHoldT = null;
@@ -976,16 +984,25 @@
   // Both are setInterval. Standing rule, and this page's animation clock cannot
   // be trusted to run a CSS keyframe at all.
   // ═══════════════════════════════════════════════════════════════════════
+  // A hot slit that throws itself open, RIPS THROUGH THE PALETTE, glitches, and
+  // settles. `c` overrides the bezel per frame — cyan, magenta, purple, in the
+  // house set — then null hands it back to the event's own colour. `k` is a
+  // skewX glitch in degrees: hard, alternating, and only during the throw, so
+  // it reads as a signal punching in rather than as a wobble.
+  //
+  // The colour cycle is the cyberpunk part. A box that opens in one colour is a
+  // panel; a box that strobes through three on the way in is a machine coming
+  // online.
   var BOX_IN_STEP = 34;
   var BOX_IN = [
-    // scaleY, brightness — a hot slit that throws itself open and settles.
-    { y: 0.03, b: 3.2 },
-    { y: 0.17, b: 2.5 },
-    { y: 0.49, b: 1.9 },
-    { y: 0.83, b: 1.45 },
-    { y: 1.09, b: 1.2 },    // past the frame
-    { y: 0.96, b: 1.05 },   // and back
-    { y: 1.00, b: 1.0 }
+    // scaleY, brightness, bezel override, skewX
+    { y: 0.03, b: 3.4, c: '#00e5ff', k:  0 },
+    { y: 0.17, b: 2.6, c: '#ff00cc', k: -7 },
+    { y: 0.49, b: 2.0, c: '#9400ff', k:  5 },
+    { y: 0.83, b: 1.5, c: '#00e5ff', k: -3 },
+    { y: 1.09, b: 1.3, c: '#ff00cc', k:  2 },   // past the frame
+    { y: 0.96, b: 1.1, c: null,      k: -1 },   // and back
+    { y: 1.00, b: 1.0, c: null,      k:  0 }
   ];
 
   var BOX_OUT_STEP = 55, BOX_OUT_FRAMES = 16;
@@ -996,7 +1013,7 @@
                    0.46, 0.32, 0.32, 0.19, 0.11, 0.06, 0.02, 0];
   var _boxT = null;
 
-  function boxOpen() {
+  function boxOpen(settleColor) {
     var lcd = $('ev-lcd');
     if (!lcd) return;
     clearInterval(_boxT);
@@ -1007,11 +1024,17 @@
       if (i >= BOX_IN.length) {
         clearInterval(_boxT); _boxT = null;
         lcd.style.transform = ''; lcd.style.filter = '';
+        // Hand the bezel back to whatever the event actually is. Passed in
+        // rather than read back, because the strobe overwrote it and the frames
+        // above have no idea what they interrupted.
+        if (settleColor) lcd.style.setProperty('--ev-c', settleColor);
         return;
       }
       var f = BOX_IN[i++];
-      lcd.style.transform = 'scaleY(' + f.y + ')';
+      lcd.style.transform = 'scaleY(' + f.y + ') skewX(' + f.k + 'deg)';
       lcd.style.filter = 'brightness(' + f.b + ')';
+      if (f.c) lcd.style.setProperty('--ev-c', f.c);
+      else if (settleColor) lcd.style.setProperty('--ev-c', settleColor);
     }, BOX_IN_STEP);
   }
 
@@ -1083,6 +1106,7 @@
     lcd.classList.remove('pop');
     lcd.style.removeProperty('--ev-c');
     $('ev-more').className = 'ev-more';
+    startAmtRgb(false);        // the sweep must not outlive the box it lit
     annBadge();
   }
 
@@ -1092,6 +1116,37 @@
     var n = annQ.length;
     b.textContent = n > 0 ? '+' + n + ' MORE' : '';
     b.className = 'ev-badge' + (n > 0 ? ' on' : '');
+  }
+
+  // ── The amount's rainbow ─────────────────────────────────────────────────
+  // Same trick as a power-up's amount: three hues 120deg apart — an actual RGB
+  // triad — sweeping together, so several colours show at once. That
+  // simultaneity is what reads as a cheap LED sign rather than as a tasteful
+  // colour animation.
+  //
+  // Its own ticker rather than puTick's: the box comes and goes on the popup
+  // lane's clock, and borrowing a loop that only runs while power-ups exist
+  // would leave the number grey whenever the ring was empty.
+  var _amtT = null, _amtF = 0;
+
+  function startAmtRgb(on) {
+    clearInterval(_amtT); _amtT = null;
+    var el = $('ev-amt');
+    if (!el) return;
+    if (!on) {
+      el.style.removeProperty('--ev-a1');
+      el.style.removeProperty('--ev-a2');
+      el.style.removeProperty('--ev-a3');
+      return;
+    }
+    _amtF = 0;
+    _amtT = setInterval(function() {
+      _amtF++;
+      var h = (_amtF * 7) % 360;
+      el.style.setProperty('--ev-a1', 'hsl(' + h + ',100%,62%)');
+      el.style.setProperty('--ev-a2', 'hsl(' + ((h + 120) % 360) + ',100%,58%)');
+      el.style.setProperty('--ev-a3', 'hsl(' + ((h + 240) % 360) + ',100%,58%)');
+    }, 45);
   }
 
   function annNext() {
@@ -1124,16 +1179,27 @@
     // than as three people being thanked.
     var arriving = !$('s-events').classList.contains('showing');
     $('s-events').classList.add('showing');   // the overlay arrives
-    if (arriving) boxOpen();
     lcd.classList.remove('idle');
     lcd.classList.remove('speaking');
     lcd.classList.add('open');
     lcd.style.setProperty('--ev-c', cfg.c);
     $('ev-bigicon').textContent = cfg.i;
     $('ev-more').className = 'ev-more';
+    // AFTER --ev-c, and told what to settle on: the entry strobes the bezel
+    // through the palette and has to know what colour to hand back. Called
+    // before, its frames would fire after this line and the two would fight over
+    // the same property.
+    if (arriving) boxOpen(cfg.c);
 
     // Money hits the panel itself, not just the text.
-    if (cfg.c === '#00ff9d') {
+    //
+    // Asks what the event IS, not what colour it happens to be. This used to be
+    // `cfg.c === '#00ff9d'` — repainting the palette to cyberpunk silently broke
+    // it, because no colour is that green any more and every money event quietly
+    // stopped registering as money. A colour is a rendering decision; PU_TYPES is
+    // the fact.
+    var isMoney = !!PU_TYPES[ev.type];
+    if (isMoney) {
       lcd.classList.remove('pop'); void lcd.offsetWidth; lcd.classList.add('pop');
     }
 
@@ -1147,7 +1213,7 @@
       if (react.mood) blob.setMood(react.mood, react.mood === 'HAPPY' ? 26 : 18);
       showMood();
       // A viewer paying is the loudest thing that happens on this stream.
-      bg.pulse(cfg.c === '#00ff9d' ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
+      bg.pulse(isMoney ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
     }
     SFX.fanfare();
     // x celebrates on the same frame as the box and the fanfare, and holds for
@@ -1171,9 +1237,27 @@
 
     var name = nameOf(ev.type, ev.p);
     var act  = actOf(ev.type, ev.p);
+    var amt  = amountFor(ev.type, ev.p);
     var msg  = (ev.p.message || '').slice(0, 42);
-    var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg');
+    var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg'), amEl = $('ev-amt');
     nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
+
+    // THE AMOUNT — big, and rainbow if it is money.
+    //
+    // Text goes on AFTER the fit. fitNoWrap ends by clearing the element, which
+    // is right for the name and the comment (a typewriter fills those in a
+    // moment) and wrong for this one, which is never typed — it just appears.
+    // Measured: the amount rendered at a perfect 62px and completely blank.
+    if (amEl) {
+      amEl.className = 'ev-amt' + (amt ? ' on' : '') + (isMoney ? ' rgb' : '');
+      amEl.style.fontSize = '';
+      amEl.textContent = '';
+      if (amt) {
+        fitNoWrap(amEl, amt, 20, 62);
+        amEl.textContent = amt;
+      }
+    }
+    startAmtRgb(isMoney && !!amt);
 
     // BOTH lines are sized to fit before a glyph is typed.
     //
@@ -1188,6 +1272,15 @@
     // line is grammar around it and stays subordinate.
     fitNoWrap(nEl, name, 14, 56, true);   // stamped — the name renders as glyphs
     fitNoWrap(aEl, act, 11, 30);          // plain text
+    // THE COMMENT gets its own line and FILLS it. It was 21px of dim purple with
+    // text-overflow:ellipsis — the smallest thing in the box and the only part a
+    // viewer actually WROTE, quietly truncated. It is nowrap, so fitting to width
+    // is what "at least its own line" means: as big as the line will carry.
+    //
+    // Ceiling 52, not 40: at 40 a short comment stopped less than two-thirds
+    // across the box and still read as a footnote. The band budget takes it —
+    // nameline ~62 + verb ~45 + this ~57 + margins is ~190 against 220 usable.
+    if (msg) fitNoWrap(mEl, msg, 14, 52);
 
     clearInterval(annTypeT); clearTimeout(annHoldT);
 
@@ -1386,12 +1479,13 @@
     // line mid-burst replaces the contents of a box that is already open.
     var arriving = !$('s-events').classList.contains('showing');
     $('s-events').classList.add('showing');
-    if (arriving) boxOpen();
     lcd.classList.remove('idle');
     lcd.classList.remove('pop');            // a popup's money hit is not his
     lcd.classList.add('open');
     lcd.classList.add('speaking');          // his skin, not the announcer's
     lcd.style.setProperty('--ev-c', '#ff00cc');
+    startAmtRgb(false);                     // no amount in his box
+    if (arriving) boxOpen('#ff00cc');       // settles back to his pink
     $('ev-more').className = 'ev-more';
 
     // The header. Same slot and shape a viewer's handle uses, so the box reads

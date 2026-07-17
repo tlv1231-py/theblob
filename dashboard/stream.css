@@ -354,6 +354,42 @@ html, body {
   to   { transform: none; }
 }
 
+/* THE AMOUNT — the biggest, loudest thing in the box.
+
+   It used to live inside "just DONATED $5 !!!" as ordinary 15px verb text: the
+   single most important fact in the frame, set the same size as the grammar
+   around it and half the size of the handle. Now it is its own element on the
+   nameline, sized by fitNoWrap and swept through an RGB triad (--ev-a1/2/3,
+   driven by startAmtRgb) whenever it is money.
+
+   Right-aligned against the handle: the two headline facts of a donation are WHO
+   and HOW MUCH, so they take opposite ends of the same line and the verb becomes
+   the small print it always was. */
+.ev-amt {
+  display: none;
+  margin-left: auto;              /* shove it to the far edge of the nameline */
+  flex: none;
+  font-family: 'Press Start 2P', Consolas, monospace;
+  line-height: 1;
+  white-space: nowrap;
+  color: #ffffff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.9), 0 0 22px var(--ev-c);
+}
+.ev-amt.on { display: inline-block; }
+
+/* Money only. A raid's "+120" is a fact; a donation's "$50" is a party. */
+.ev-amt.rgb {
+  color: #ffffff;
+  text-shadow:
+    3px 3px 0 rgba(0,0,0,0.9),
+    0 0 8px  #ffffff,
+    0 0 20px var(--ev-a1, #ff00cc),
+    0 0 40px var(--ev-a2, #00e5ff),
+    0 0 68px var(--ev-a3, #9400ff);
+}
+
+/* The verb, demoted. It is grammar wrapped around the two facts above it. */
 .ev-act {
   font-family: 'Press Start 2P', Consolas, monospace;
   font-size: 15px; line-height: 1.5;
@@ -372,6 +408,8 @@ html, body {
    itself), and pink — he is the only pink thing on this stage, so the skin
    alone says it is him before a word is typed. */
 .ev-lcd.speaking .ev-msg      { display: none; }
+/* He has no amount — his box is dialogue, not a receipt. */
+.ev-lcd.speaking .ev-amt      { display: none; }
 /* No icon — the ♥/★ marks WHAT a viewer did, and he is not doing a thing to
    himself. Hidden rather than blanked so the nameline's 14px gap collapses and
    "blob" sits flush with the box edge, exactly where a handle starts. */
@@ -424,12 +462,21 @@ html, body {
   white-space: normal;
   text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 18px rgba(255,0,204,0.45);
 }
+/* THE COMMENT. It gets its own line and fills it.
+
+   It was 21px of --text-mid (dim purple) with text-overflow:ellipsis — the
+   smallest thing in the box, in the dimmest colour, and the only part a viewer
+   actually WROTE. Quietly truncated with a "…" if they had anything to say.
+
+   font-size is a FALLBACK — fitNoWrap sizes it per message (14-40) so it uses
+   the line it is given. Bright enough to read now: someone typed it. */
 .ev-msg {
   font-family: VT323, Consolas, monospace;
-  font-size: 21px; line-height: 1;
-  color: var(--text-mid);
+  font-size: 21px; line-height: 1.1;
+  color: var(--text-hi);
   margin-top: 12px; margin-left: 54px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 14px var(--ev-c);
 }
 
 /* Blinks only while a message is holding — the DMG "press A" tell. */

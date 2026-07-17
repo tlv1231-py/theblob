@@ -372,6 +372,11 @@ _STAGE_HTML = """
             <div class="ev-nameline">
               <span class="ev-bigicon" id="ev-bigicon">&#x2665;</span>
               <span class="ev-name" id="ev-name"></span>
+              <!-- The AMOUNT is its own element now. It used to be buried inside
+                   "just DONATED $5 !!!" as ordinary 15px verb text — the single
+                   most important fact in the box, set smaller than the handle
+                   and the same size as the grammar around it. -->
+              <span class="ev-amt" id="ev-amt"></span>
             </div>
             <div class="ev-act" id="ev-act"></div>
             <div class="ev-msg" id="ev-msg"></div>
