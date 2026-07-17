@@ -11,16 +11,51 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [[ $EUID -eq 0 ]] || { echo "run as root: sudo ./setup.sh" >&2; exit 1; }
 
+command -v apt-get >/dev/null 2>&1 || {
+  echo "This installer is apt-based (Debian/Ubuntu). On the EL family you would" >&2
+  echo "need EPEL for chromium and RPM Fusion for ffmpeg — not wired up here." >&2
+  exit 1
+}
+
 echo "==> packages"
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   xvfb chromium ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates
+
+# On Ubuntu `chromium` is a transitional package that installs the SNAP, and the
+# apt step above can "succeed" while the snap fetch is still settling or has
+# failed outright. Fail here, at install time, rather than at 3am in a restart
+# loop with a confusing message.
+if command -v chromium >/dev/null 2>&1; then CHROMIUM_FOUND=chromium
+elif command -v chromium-browser >/dev/null 2>&1; then CHROMIUM_FOUND=chromium-browser
+else
+  echo "!! chromium installed but no binary on PATH." >&2
+  echo "   On Ubuntu this is the snap not having landed. Try: snap install chromium" >&2
+  exit 1
+fi
+echo "    chromium binary: $CHROMIUM_FOUND ($(command -v "$CHROMIUM_FOUND"))"
+
+# ── The unprivileged user the browser runs as ────────────────────────────────
+# Not cosmetic. Chromium refuses to run as root outright, and on Ubuntu the snap
+# may only touch its own user's $HOME — which is why the profile lives in
+# /home/blob and not /run. A real home dir is therefore required, not optional.
+echo "==> user"
+if id blob >/dev/null 2>&1; then
+  echo "    user 'blob' already exists"
+else
+  useradd --system --create-home --home-dir /home/blob --shell /usr/sbin/nologin blob
+  echo "    created user 'blob' (home /home/blob)"
+fi
+install -d -o blob -g blob -m 755 /home/blob/chrome-profile
 
 echo "==> install to $DEST"
 mkdir -p "$DEST/music"
 install -m 755 "$HERE/chromium.sh" "$HERE/stream.sh" "$DEST/"
 install -m 755 "$HERE/agent.py" "$HERE/watchdog.py" "$DEST/"
 
+# Stays root:root 0600 on purpose. systemd reads EnvironmentFile= as root before
+# it drops to the 'blob' user, so the services still get YOUTUBE_KEY while the
+# browser's own user cannot read the credential that owns your channel.
 if [[ ! -f "$DEST/.env" ]]; then
   install -m 600 "$HERE/.env.example" "$DEST/.env"
   echo
@@ -62,12 +97,18 @@ Installed. Before starting, do these IN ORDER — each step proves the one befor
      One 3-minute loop repeats ~480x/day — the AFK audience is exactly the one
      that notices.
 
-  4. Start the stack:
+  4. Start the RENDER and look at it before you broadcast it:
        systemctl start blob-xvfb blob-chromium
-       # look at it before you broadcast it:
        x11vnc -display :99 -localhost -nopw -once &
        #   then from your machine:  ssh -L 5900:localhost:5900 <host>
        #   and point a VNC client at localhost:5900
+       #
+       #   Confirm with your eyes: is the Blob BREATHING and the starfield
+       #   DRIFTING? Everything on the page rides setInterval, so motion means
+       #   the timers survived the virtual display. A perfect still frame is the
+       #   one failure that looks identical to success from every other angle.
+
+     Then start the broadcast:
        systemctl start blob-ffmpeg blob-agent blob-watchdog
 
   5. Confirm on the Stream HQ page: ENCODER and HOST should turn green.

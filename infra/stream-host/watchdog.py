@@ -46,9 +46,27 @@ CHROMIUM_UNIT = os.environ.get("CHROMIUM_UNIT", "blob-chromium.service")
 
 
 def latest_page_beat() -> tuple[float | None, dict]:
-    """Age in seconds of the newest stream_page heartbeat, and its detail."""
+    """Age in seconds of the newest BROADCAST heartbeat, and its detail.
+
+    `detail->>live=eq.true` is load-bearing, not a nicety. Every open Stream page
+    beats as component='stream_page' every 15s — an operator's desktop tab, a
+    phone someone is demoing on, the other dev browser. Observed against live
+    Supabase: five distinct renders interleaving, 60% of them live=false. Taking
+    the newest row of ANY of them means a phone on a desk keeps the beat fresh
+    while the VM's Chromium is a frozen screenshot, and the watchdog reports
+    healthy through the entire outage it exists to catch.
+
+    ?live=1 marks the render the encoder captures, so only that one is evidence
+    about the broadcast.
+
+    Caveat worth knowing: this narrows the failure but does not close it. A
+    second render opened with ?live=1 (someone previewing what the broadcast
+    looks like) still masks a frozen VM. Closing it properly needs a per-render
+    instance id in the beat, which lives in dashboard/stream.js.
+    """
     url = (f"{SUPA_URL}/rest/v1/stream_health"
            "?component=eq.stream_page&select=recorded_at,detail"
+           "&detail-%3E%3Elive=eq.true"
            "&order=recorded_at.desc&limit=1")
     req = urllib.request.Request(url, headers={
         "apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"})
@@ -63,6 +81,9 @@ def latest_page_beat() -> tuple[float | None, dict]:
         print(f"[watchdog] cannot reach Supabase: {e}", flush=True)
         return None, {}
     if not rows:
+        # No broadcast render has EVER beaten. Also what you get if the deployed
+        # page predates the live flag. "No opinion" is right either way — there
+        # is nothing here to call frozen, and reloading on it would loop.
         return None, {}
 
     ts = rows[0]["recorded_at"]
@@ -85,7 +106,19 @@ def reload_browser() -> None:
 def main() -> None:
     print(f"[watchdog] stale>{STALE_SECONDS}s triggers reload of {CHROMIUM_UNIT}",
           flush=True)
-    last_reload = 0.0
+
+    # Start the grace clock NOW rather than at 0.0 — otherwise this reload-loops
+    # forever on boot and the stream never comes up at all.
+    #
+    # Why: latest_page_beat() reports the age of the newest stream_page row in
+    # the table, and at boot that row is whatever the last browser to have the
+    # page open left behind — routinely hours or days old. With last_reload=0.0
+    # the very first poll reads that ancient row as "stale", restarts a Chromium
+    # that is 20s into a cold Streamlit load, and repeats every GRACE seconds.
+    # The browser is killed before it can ever emit the beat that would prove it
+    # healthy. Treating startup as a reload gives it its boot window first.
+    last_reload = time.time()
+
     while True:
         age, detail = latest_page_beat()
 

@@ -3,8 +3,25 @@ Description=Blob stream — Chromium rendering the Stream page
 After=blob-xvfb.service
 Requires=blob-xvfb.service
 
+# A crash loop here must not become a permanent stop: this is the unit the
+# watchdog restarts, and if systemd's default start limit (5 starts / 10s) trips
+# during a rough patch, the watchdog's reloads silently stop working and the
+# stream freezes for good. See blob-ffmpeg.service for why this must be in
+# [Unit] and not [Service].
+StartLimitIntervalSec=0
+
 [Service]
 Type=simple
+
+# NOT root. Chromium hard-refuses to start as root ("Running as root without
+# --no-sandbox is not supported"), and on Ubuntu — where `chromium` is really
+# the snap — snap confinement additionally restricts the browser to this user's
+# $HOME, which is why the profile lives there and not under /run. Running the
+# browser unprivileged is the correct posture regardless.
+User=blob
+Group=blob
+Environment=HOME=/home/blob
+
 EnvironmentFile=/opt/blob-stream/.env
 ExecStartPre=/bin/sleep 3
 ExecStart=/opt/blob-stream/chromium.sh

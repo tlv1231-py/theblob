@@ -1,20 +1,50 @@
 [Unit]
 Description=Blob stream — ffmpeg x11grab to YouTube RTMP
-After=blob-chromium.service
-Requires=blob-chromium.service
+After=blob-xvfb.service blob-chromium.service
+
+# Requires the DISPLAY, only Wants the browser. This distinction is the whole
+# ballgame, and it used to read Requires=blob-chromium.service:
+#
+#   * Requires= propagates deactivation. `systemctl stop blob-chromium` — the
+#     freeze drill in the README — therefore stopped THIS unit too, and Restart=
+#     does not fire for a dependency-initiated stop. The watchdog would dutifully
+#     bring Chromium back while the encoder stayed dead and the broadcast stayed
+#     black. The drill would have "passed" while proving nothing.
+#   * It was also inconsistent: systemd does NOT propagate restarts, so the
+#     watchdog's own `systemctl restart` left ffmpeg alone. Only the manual stop
+#     behaved differently — the worst kind of surprise to meet at 3am.
+#
+# Wants= keeps the encoder up across a Chromium reload, which is what should
+# happen: ~20s of stale frame while the browser reboots beats dropping the
+# broadcast. Xvfb stays Requires= because x11grab has nothing to capture at all
+# without it.
+Requires=blob-xvfb.service
+Wants=blob-chromium.service
+
+# YouTube drops idle/degraded ingests; assume reconnects are routine rather than
+# exceptional and never give up on them. This belongs in [Unit], NOT [Service]:
+# the setting moved in systemd v230, and this newer *Sec= spelling is not honoured
+# in [Service] at all. Left there it silently does nothing and the default limit
+# (5 starts / 10s) gives up permanently on exactly the RTMP blip it should ride.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
+User=blob
+Group=blob
 EnvironmentFile=/opt/blob-stream/.env
+# Owns /run/blob-stream so the unprivileged user can write the progress file.
+# Preserve=yes keeps the dir across a restart, so agent.py reports the honest
+# "progress stale — ffmpeg stopped" rather than the vaguer "no progress file".
+RuntimeDirectory=blob-stream
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
 # Let the page actually paint before we start capturing, or the first seconds of
 # every reconnect are a blank stage.
 ExecStartPre=/bin/sleep 8
 ExecStart=/opt/blob-stream/stream.sh
 Restart=always
 RestartSec=5
-# YouTube drops idle/degraded ingests; assume reconnects are routine rather than
-# exceptional and never give up on them.
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target

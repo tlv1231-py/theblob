@@ -23,16 +23,25 @@ sudo ./setup.sh          # prints the ordered checklist — follow it
 
 `setup.sh` is idempotent. Re-run after editing any script.
 
-## The five things that will bite you
+## The six things that will bite you
 
 These cost real hours to find. None of them announce themselves.
 
-**1. `?yt=0` is mandatory.**
-The Stream page ships a temporary design overlay drawing YouTube's own chrome
-and safe zones on top of itself, and it **defaults ON**. Capture the default URL
-and you broadcast a mockup of YouTube inside YouTube. `chromium.sh` refuses to
-start without `yt=0` in the URL. The `YT FILTER` toggle on Stream HQ must also
-read OFF.
+**1. Both query params are mandatory — `?yt=0&live=1`.**
+`chromium.sh` refuses to start without each of them.
+
+`yt=0` — the Stream page ships a temporary design overlay drawing YouTube's own
+chrome and safe zones on top of itself, and it **defaults ON**. Capture the
+default URL and you broadcast a mockup of YouTube inside YouTube. The `YT FILTER`
+toggle on Stream HQ must also read OFF.
+
+`live=1` — marks this render as **the broadcast**, which is what makes it ignore
+Stream HQ's mute toggle. Without it the VM's browser is just another window that
+obeys the toggle, so muting the noise on your own desk silences the actual
+YouTube stream. **The watchdog cannot catch this one**: the heartbeat's `audio`
+field reports whether `AudioContext` is running, not whether the page is muted,
+so a muted broadcast still beats `audio=on`. The guard is the only thing in front
+of it.
 
 **2. Exactly 1080x1920 or the art softens.**
 The page renders a fixed 1080x1920 stage and letterboxes with a CSS transform.
@@ -63,6 +72,19 @@ stalls for viewers. It is the earliest warning the stack gives and nothing else
 surfaces it. The agent reports it; Stream HQ shows it under ENCODER.
 If it sags: drop `-framerate` to 20, or `-b:v` to 3500k, before anything else.
 
+**6. Chromium does not run as root, and on Ubuntu it is a snap.**
+Two failures with one fix. Chromium hard-refuses to start as root ("Running as
+root without --no-sandbox is not supported"), and Ubuntu's `chromium` deb is a
+transitional package that installs the **snap** — which is confined and may only
+touch its own user's `$HOME`, so a profile under `/run` is refused outright.
+Google ships no Chrome for linux-arm64, so on an Ampere box the snap is the only
+option on Ubuntu. Hence: the units run as the unprivileged `blob` user
+(`setup.sh` creates it) with the profile at `/home/blob/chrome-profile`, which
+satisfies snap and native alike. `.env` deliberately stays `root:root 0600` —
+systemd reads `EnvironmentFile=` as root before dropping privileges, so the
+services still get `YOUTUBE_KEY` while the browser's own user cannot read the
+credential that owns your channel.
+
 ## Verify
 
 ```bash
@@ -87,7 +109,18 @@ Do this once, deliberately, before trusting it:
 systemctl stop blob-chromium
 # Within ~75s the watchdog should notice the beat went stale and restart it.
 journalctl -u blob-watchdog -f
+# ffmpeg must still be running throughout — that is the point of the drill:
+systemctl is-active blob-ffmpeg    # -> active
 ```
+
+This drill only tells the truth because `blob-ffmpeg` **Wants** rather than
+**Requires** `blob-chromium`. It originally required it, and `Requires=`
+propagates deactivation — so `systemctl stop blob-chromium` also stopped the
+encoder, and `Restart=` does not fire for a dependency-initiated stop. The
+watchdog would bring the browser back while the broadcast stayed dead. Worse, it
+was inconsistent: systemd does not propagate *restarts*, so the watchdog's own
+`systemctl restart` never tripped it — only the manual drill did, which is the
+one place you would conclude everything was fine.
 
 ## Music
 
@@ -118,10 +151,24 @@ Everything above the agent is **written but not run** — there is no VM yet.
 green from a dev machine). The Xvfb/Chromium/ffmpeg chain, the watchdog's
 restart, and the RTMP push are all unexercised until a host exists.
 
-One genuinely open question: whether `requestAnimationFrame` and CSS animations
-run in the headless Chromium. Measured elsewhere, the animation clock stalls when
-a page isn't considered "visible", which is what a virtual display looks like.
-The page was deliberately built so everything essential runs on `setInterval`
-(immune), and the flags in `chromium.sh` should keep the renderer awake — but
-confirm on the VM: if the Blob is breathing and the starfield is drifting, the
-timers are running and you are fine.
+Verified on a dev machine since, without a VM:
+
+- `agent.py`'s **encoder parser**, against synthetic progress files. It was
+  broken: each ffmpeg block *ends* with `progress=continue`, so splitting on that
+  marker and taking the last chunk yielded the bare word `continue` and no keys
+  at all — a healthy 1.01x stream reported `speed=0` / `down`, permanently. Now
+  reads the tail and lets the last occurrence of each key win. Confirmed against
+  healthy, degraded, mid-write and 600KB-file cases.
+- `chromium.sh`'s URL guards, all four combinations of the two params.
+
+The `requestAnimationFrame` question is **narrower than it looks**: there is no
+`requestAnimationFrame` anywhere in `stream.js`, `blob.js` or `stream_bg.js` —
+zero call sites. The page already assumes the animation clock is dead, because it
+is: `stream.css` and `stream.js` both record that CSS animations never advance in
+Streamlit's iframe, which is why the Blob, the starfield, the meter and the
+arcade hit were all moved onto `setInterval`. The virtual display therefore
+introduces no *new* failure mode — the remaining risk is only whether
+`setInterval` itself gets throttled, which the flags in `chromium.sh` target.
+Confirm by eye over VNC: **if the Blob is breathing and the starfield is
+drifting, the timers are running and you are fine.** The 8 surviving `@keyframes`
+are decorative and are already inert in a normal browser today.

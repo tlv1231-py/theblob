@@ -38,6 +38,12 @@ SUPA_KEY = os.environ.get("SUPA_KEY", "sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K
 # ffmpeg -progress writes key=value lines here; see stream.sh.
 PROGRESS = Path(os.environ.get("FFMPEG_PROGRESS", "/run/blob-stream/progress"))
 
+# Only ever read this much of the tail. The file is append-only for the life of
+# the stream and sits on tmpfs, so reading it whole would mean pulling an
+# ever-growing blob of RAM through here every INTERVAL. A block is ~200 bytes;
+# 8 KiB is dozens of blocks, far more than the one we need.
+TAIL_BYTES = 8192
+
 INTERVAL = int(os.environ.get("AGENT_INTERVAL", "30"))
 
 # Stream HQ treats a heartbeat older than 90s as down, so report well inside it.
@@ -77,26 +83,36 @@ def post_health(component: str, status: str, detail: dict) -> bool:
 def read_encoder() -> tuple[str, dict]:
     """Parse ffmpeg's -progress file.
 
-    ffmpeg appends a block of key=value lines every second and ends each block
-    with `progress=continue` (or `=end`). Only the LAST block is current, so
-    read from the tail — the file grows for the life of the stream.
+    ffmpeg appends a block of key=value lines every stats period and TERMINATES
+    each block with `progress=continue` (or `=end`).
+
+    That terminator is the trap. Splitting on "progress=" and taking [-1] looks
+    like "the newest block" and is actually the bare word "continue" — every
+    real key lives BEFORE the marker, so the parse came back empty and a healthy
+    1.01x stream reported speed=0.0 -> "down", permanently. Reproduced against a
+    synthetic progress file before this was rewritten.
+
+    Instead: regex every key=value in the tail and let dict() keep the LAST
+    occurrence of each, which is by definition the newest block's value.
+
+    Read only the tail — this file grows for the life of the stream and lives on
+    tmpfs, i.e. in RAM.
     """
     if not PROGRESS.exists():
         return "down", {"error": "no progress file — ffmpeg not running"}
 
     try:
-        raw = PROGRESS.read_text(errors="ignore")
+        size = PROGRESS.stat().st_size
+        with PROGRESS.open("rb") as fh:
+            fh.seek(max(0, size - TAIL_BYTES))
+            raw = fh.read().decode("utf-8", errors="ignore")
     except Exception as e:
         return "unknown", {"error": str(e)[:80]}
 
-    # Last block only.
-    blocks = raw.strip().split("progress=")
-    if not blocks:
-        return "unknown", {"error": "empty progress file"}
-    tail = blocks[-1]
-    kv = dict(re.findall(r"^(\w+)=(\S+)$", tail, re.MULTILINE))
-    # The trailing token after the final split is the progress value itself.
-    running = tail.strip().startswith("continue") or "continue" in tail[:20]
+    # dict() keeps the last occurrence of each key = the newest reported value.
+    kv = dict(re.findall(r"^(\w+)=(\S+)$", raw, re.MULTILINE))
+    if not kv:
+        return "unknown", {"error": "no progress keys yet"}
 
     def f(key, default=0.0):
         try:

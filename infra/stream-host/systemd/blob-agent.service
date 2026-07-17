@@ -4,6 +4,9 @@ After=blob-ffmpeg.service
 
 [Service]
 Type=simple
+# Only reads the progress file and /proc. No reason to be root.
+User=blob
+Group=blob
 EnvironmentFile=/opt/blob-stream/.env
 ExecStart=/usr/bin/python3 /opt/blob-stream/agent.py
 Restart=always

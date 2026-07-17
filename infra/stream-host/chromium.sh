@@ -25,10 +25,67 @@ case "$STREAM_URL" in
      exit 1 ;;
 esac
 
-PROFILE="${CHROME_PROFILE:-/run/blob-stream/chrome}"
-mkdir -p "$PROFILE"
+# ?live=1 IS ALSO MANDATORY.
+# It marks this render as THE BROADCAST, which is what makes it ignore Stream
+# HQ's mute toggle. Without it the VM's browser is just another window obeying
+# that toggle: muting the noise on your own desk would silence the YouTube
+# stream, and nothing would report it — the heartbeat's audio field tracks
+# whether AudioContext is running, not whether the page is muted, so a muted
+# broadcast still beats audio=on and the watchdog stays happy. This guard is the
+# only thing in front of that failure, which is why it refuses rather than warns.
+case "$STREAM_URL" in
+  *live=1*) ;;
+  *) echo "[chromium] REFUSING TO START: STREAM_URL must contain live=1, else the" >&2
+     echo "           broadcast obeys Stream HQ's mute toggle and can go silently" >&2
+     echo "           mute with no health signal. Got: $STREAM_URL" >&2
+     exit 1 ;;
+esac
 
-exec chromium \
+# ── Which chromium binary? ───────────────────────────────────────────────────
+# Debian and the EL family ship a native `chromium`. Ubuntu's `chromium` deb is
+# a TRANSITIONAL PACKAGE that installs the snap instead, and older Ubuntu called
+# it `chromium-browser`. Google ships no Chrome for linux-arm64 at all, so on an
+# Ampere box the snap is genuinely the only option on Ubuntu.
+BIN="${CHROMIUM_BIN:-}"
+if [[ -z "$BIN" ]]; then
+  for c in chromium chromium-browser; do
+    command -v "$c" >/dev/null 2>&1 && { BIN="$c"; break; }
+  done
+fi
+[[ -n "$BIN" ]] || {
+  echo "[chromium] no chromium binary on PATH (looked for: chromium, chromium-browser)" >&2
+  exit 1
+}
+
+# ── Profile location is not a preference ─────────────────────────────────────
+# This used to default to /run/blob-stream/chrome, which cannot work under snap:
+# the snap is confined and may only touch the calling user's $HOME. A profile
+# anywhere else is refused and Chromium dies on startup. Keeping it under $HOME
+# satisfies snap and native alike, so there is no detection to get wrong.
+PROFILE="${CHROME_PROFILE:-${HOME:-/home/blob}/chrome-profile}"
+mkdir -p "$PROFILE" || {
+  echo "[chromium] cannot create profile dir $PROFILE" >&2
+  echo "           Under snap it MUST live under \$HOME (\$HOME=${HOME:-unset})." >&2
+  exit 1
+}
+
+# ── Sandbox / root ───────────────────────────────────────────────────────────
+# Chromium hard-refuses to start as root: "Running as root without --no-sandbox
+# is not supported." The units run this as the unprivileged `blob` user, which
+# is the right answer anyway — a browser rendering a page 24/7 has no business
+# being root, and snap will not run as root at all. If someone runs this by hand
+# as root, degrade loudly instead of dying with a confusing message.
+SANDBOX=()
+if [[ $EUID -eq 0 ]]; then
+  echo "[chromium] WARNING: running as root — adding --no-sandbox to start at all." >&2
+  echo "           blob-chromium.service runs as 'blob' and does not need this." >&2
+  SANDBOX=(--no-sandbox)
+fi
+
+echo "[chromium] $BIN  profile=$PROFILE  display=$DISPLAY"
+
+exec "$BIN" \
+  "${SANDBOX[@]}" \
   --user-data-dir="$PROFILE" \
   --window-position=0,0 \
   --window-size=1080,1920 \

@@ -23,11 +23,22 @@ mkdir -p "$(dirname "$PROGRESS")"
 # the AFK audience is precisely the one that notices. -stream_loop -1 loops the
 # PLAYLIST, so the rotation only repeats once every N tracks.
 PLAYLIST="/run/blob-stream/playlist.txt"
-if compgen -G "$MUSIC_DIR/*" > /dev/null; then
-  : > "$PLAYLIST"
-  for f in "$MUSIC_DIR"/*.{wav,flac,mp3,m4a}; do
-    [[ -e "$f" ]] && printf "file '%s'\n" "$f" >> "$PLAYLIST"
-  done
+
+# Build the playlist FIRST, then decide based on whether it actually has tracks.
+# The old order asked `compgen -G "$MUSIC_DIR/*"` — true for ANY file, including
+# a README or a stray .gitkeep — and only then filtered by extension. A music dir
+# holding one non-audio file therefore produced an EMPTY playlist that ffmpeg was
+# still told to read, which fails instantly and lands the unit in a restart loop.
+: > "$PLAYLIST"
+shopt -s nullglob nocaseglob
+for f in "$MUSIC_DIR"/*.{wav,flac,mp3,m4a}; do
+  # concat's parser treats ' as a quote. A track called "Don't Stop.wav" would
+  # otherwise truncate the playlist at that line.
+  printf "file '%s'\n" "${f//\'/\'\\\'\'}" >> "$PLAYLIST"
+done
+shopt -u nullglob nocaseglob
+
+if [[ -s "$PLAYLIST" ]]; then
   AUDIO_IN=(-f concat -safe 0 -stream_loop -1 -i "$PLAYLIST")
   # loudnorm: without it, volume jumps between tracks — the single most
   # amateur-sounding defect a music-bed stream can have.
@@ -61,6 +72,11 @@ exec ffmpeg -hide_banner -loglevel warning \
   -b:v 4500k -maxrate 4500k -bufsize 9000k \
   -g 48 -keyint_min 48 -sc_threshold 0 \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \
-  -shortest_buf_duration 0 \
+  `# -progress feeds agent.py, which is the ONLY thing that surfaces speed.` \
+  `# -stats_period throttles it to one block per 5s: the default is 0.5s, and` \
+  `# this file is append-only for the life of the stream on tmpfs — i.e. in RAM.` \
+  `# At the default cadence an uninterrupted week costs well over a gigabyte of` \
+  `# memory to report a number that changes slowly.` \
+  -stats_period 5 \
   -progress "$PROGRESS" \
   -f flv "$RTMP"
