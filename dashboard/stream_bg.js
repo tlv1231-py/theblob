@@ -51,14 +51,26 @@
     var HORIZON = 430;                 // camY moves this — see draw()
 
     // Sun slits. Widths are in ROWS (1 row = 2px) — see the loop in draw().
-    // Read these as "how much sun survives": LIT is held constant so the bands
-    // thicken toward the bottom without the sun thinning out under them. Dark
-    // coverage runs ~12% at the top of the zone to ~36% at the very bottom.
-    // Past roughly SUN_SLIT_MAX 6 it stops reading as a sun.
-    var SUN_SLIT_AT  = 0.5;            // no slits above the midline
+    //
+    // ⚠ THE BANDS ARE DIMMED SUN, NOT HOLES. They used to `continue`, skipping
+    // the row entirely — which does not darken the sun, it CUTS THROUGH it, and
+    // what shows through is the magenta sky behind (measured: the sun's own
+    // rgb(255,103,109) interrupted every 16px by rgb(164,26,137)). That is the
+    // "horizontal purple lines across the sun", and thinning the band only ever
+    // made them thinner purple lines. A band has to be made OF sun to read as a
+    // band. Do not "simplify" this back to a skip.
+    //
+    // LIT is held constant so bands thicken toward the bottom without the sun
+    // thinning out under them. Band coverage runs ~12% at the top of the zone to
+    // ~36% at the very bottom; past roughly SUN_SLIT_MAX 6 it stops reading as
+    // a sun. SUN_SLIT_MIN 0 disables the banding entirely.
+    var SUN_SLIT_AT  = 0.5;            // no bands above the midline
     var SUN_SLIT_MIN = 1;              // band rows at the top of the zone
     var SUN_SLIT_MAX = 4;              // band rows at the very bottom
-    var SUN_SLIT_LIT = 7;              // rows of SUN between bands — CONSTANT
+    var SUN_SLIT_LIT = 7;              // rows of full-bright sun between — CONSTANT
+    var SUN_SLIT_DIM = 0.55;           // how far a band drops toward its own
+                                       // shadow. Stays warm — a band that cools
+                                       // toward purple is the bug coming back.
 
     // ── Palette — vaporwave proper ──────────────────────────────────────────
     // The sky is a sunset ramp, the ground is a cyan grid, and the only warm
@@ -181,7 +193,7 @@
 
       // ── Sun ───────────────────────────────────────────────────────────────
       // Nearly fixed against the camera — it is infinitely far, and a sun that
-      // bobbed with the hills would collapse the depth. The horizontal slits are
+      // bobbed with the hills would collapse the depth. The horizontal bands are
       // the single most recognisable vaporwave tell; they thicken toward the
       // bottom so the sun appears to sink into its own bands.
       var sy = SUN_Y + camY * 0.12;    // a HINT of parallax, not none
@@ -189,6 +201,7 @@
         var half = Math.sqrt(Math.max(0, SUN_R * SUN_R - r * r));
         if (half < 1) continue;
         var f = (r + SUN_R) / (2 * SUN_R);          // 0 top .. 1 bottom
+        var banded = false;
         if (f > SUN_SLIT_AT) {
           // Rows are 2px and r steps by 2, so count in ROWS, not pixels —
           // a modulo in pixel-space against a 2-stepping r silently halves
@@ -197,14 +210,17 @@
           var z = (f - SUN_SLIT_AT) / (1 - SUN_SLIT_AT);        // 0..1 down the zone
           var band = Math.round(SUN_SLIT_MIN + (SUN_SLIT_MAX - SUN_SLIT_MIN) * z * z);
           // LIT is a CONSTANT, not band-relative. The old maths grew the period
-          // along with the band, so coverage compounded and the bottom of the sun
-          // came out 64% dark — bands with sun behind them, not the reverse.
-          if (row % (band + SUN_SLIT_LIT) < band) continue;
+          // along with the band, so coverage compounded down the disc.
+          banded = (row % (band + SUN_SLIT_LIT) < band);
         }
+        // The row is ALWAYS drawn. A band is this row's own colour dimmed toward
+        // its shadow — never a gap, or the sky behind becomes a purple line
+        // straight through the sun. See SUN_SLIT_DIM.
+        var k = banded ? SUN_SLIT_DIM : 1;
         px(SUN_X - half, sy + r, half * 2, 2, [
-          Math.round(C_SUN_TOP[0] + (C_SUN_BOT[0] - C_SUN_TOP[0]) * f),
-          Math.round(C_SUN_TOP[1] + (C_SUN_BOT[1] - C_SUN_TOP[1]) * f),
-          Math.round(C_SUN_TOP[2] + (C_SUN_BOT[2] - C_SUN_TOP[2]) * f)
+          Math.round((C_SUN_TOP[0] + (C_SUN_BOT[0] - C_SUN_TOP[0]) * f) * k),
+          Math.round((C_SUN_TOP[1] + (C_SUN_BOT[1] - C_SUN_TOP[1]) * f) * k),
+          Math.round((C_SUN_TOP[2] + (C_SUN_BOT[2] - C_SUN_TOP[2]) * f) * k)
         ], 1);
       }
 
