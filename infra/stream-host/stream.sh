@@ -69,8 +69,15 @@ fi
 # watching the agent's reported speed hold.
 #
 # -g 48 = 2s keyframe interval at 24fps, which is what YouTube wants for live.
+#
+# -draw_mouse 0 IS NOT COSMETIC. x11grab draws the pointer by default, and X
+# parks it dead centre of the screen (540,960) — which on a 1080x1920 stage is
+# exactly the Blob's face. Nobody will ever move it, because nobody is going to
+# touch a headless browser, so without this an arrow sits on his forehead for the
+# entire life of the stream. Caught by screenshotting the framebuffer; every
+# health signal reads green through it.
 exec ffmpeg -hide_banner -loglevel warning \
-  -f x11grab -framerate 24 -video_size 1080x1920 -i "${DISPLAY_NUM}.0+0,0" \
+  -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${AUDIO_FILTER[@]}" \
   -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
