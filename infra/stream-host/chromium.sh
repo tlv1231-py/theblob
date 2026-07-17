@@ -42,18 +42,26 @@ case "$STREAM_URL" in
 esac
 
 # ── Which chromium binary? ───────────────────────────────────────────────────
-# Debian and the EL family ship a native `chromium`. Ubuntu's `chromium` deb is
-# a TRANSITIONAL PACKAGE that installs the snap instead, and older Ubuntu called
-# it `chromium-browser`. Google ships no Chrome for linux-arm64 at all, so on an
-# Ampere box the snap is genuinely the only option on Ubuntu.
+# Debian and the EL family ship a native `chromium`. On Ubuntu there is no
+# `chromium` package at all — only `chromium-browser`, a transitional deb that
+# installs the SNAP. Google ships no Chrome for linux-arm64, so on an Ampere box
+# the snap is the only option.
+#
+# /snap/bin/chromium is checked BY ABSOLUTE PATH on purpose. systemd gives units
+# a minimal PATH (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
+# which does NOT include /snap/bin. So `command -v chromium` succeeds when you
+# test it in an interactive login shell and fails inside the unit — the script
+# works perfectly by hand and dies under systemd. Absolute path first, so the
+# thing that actually runs in production is the thing that resolves.
 BIN="${CHROMIUM_BIN:-}"
 if [[ -z "$BIN" ]]; then
-  for c in chromium chromium-browser; do
+  for c in /snap/bin/chromium chromium chromium-browser; do
     command -v "$c" >/dev/null 2>&1 && { BIN="$c"; break; }
   done
 fi
 [[ -n "$BIN" ]] || {
-  echo "[chromium] no chromium binary on PATH (looked for: chromium, chromium-browser)" >&2
+  echo "[chromium] no chromium binary found (looked for: /snap/bin/chromium," >&2
+  echo "           chromium, chromium-browser). Try: snap install chromium" >&2
   exit 1
 }
 

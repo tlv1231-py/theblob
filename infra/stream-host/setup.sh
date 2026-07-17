@@ -20,20 +20,31 @@ command -v apt-get >/dev/null 2>&1 || {
 echo "==> packages"
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  xvfb chromium ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates
+  xvfb ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates
 
-# On Ubuntu `chromium` is a transitional package that installs the SNAP, and the
-# apt step above can "succeed" while the snap fetch is still settling or has
-# failed outright. Fail here, at install time, rather than at 3am in a restart
-# loop with a confusing message.
-if command -v chromium >/dev/null 2>&1; then CHROMIUM_FOUND=chromium
-elif command -v chromium-browser >/dev/null 2>&1; then CHROMIUM_FOUND=chromium-browser
+# ── Chromium is not an apt package on Ubuntu ─────────────────────────────────
+# Verified on the host: `apt-cache policy chromium` returns Candidate: (none) —
+# that package name does not exist. Ubuntu ships `chromium-browser`, a
+# transitional deb (2:1snap1-0ubuntu2) whose entire job is to install the SNAP,
+# and Google publishes no Chrome for linux-arm64 at all. On an Ampere box the
+# snap is genuinely the only option, so install it directly rather than
+# laundering it through a transitional package that just calls snap anyway.
+echo "==> chromium (snap — the only option on Ubuntu/arm64)"
+if snap list chromium >/dev/null 2>&1; then
+  echo "    chromium snap already installed"
 else
-  echo "!! chromium installed but no binary on PATH." >&2
-  echo "   On Ubuntu this is the snap not having landed. Try: snap install chromium" >&2
+  snap install chromium
+fi
+
+# Fail here, at install time, rather than at 3am inside a restart loop.
+if [[ -x /snap/bin/chromium ]]; then CHROMIUM_FOUND=/snap/bin/chromium
+elif command -v chromium >/dev/null 2>&1; then CHROMIUM_FOUND=$(command -v chromium)
+elif command -v chromium-browser >/dev/null 2>&1; then CHROMIUM_FOUND=$(command -v chromium-browser)
+else
+  echo "!! no chromium binary after install. Try by hand: snap install chromium" >&2
   exit 1
 fi
-echo "    chromium binary: $CHROMIUM_FOUND ($(command -v "$CHROMIUM_FOUND"))"
+echo "    chromium binary: $CHROMIUM_FOUND"
 
 # ── The unprivileged user the browser runs as ────────────────────────────────
 # Not cosmetic. Chromium refuses to run as root outright, and on Ubuntu the snap
