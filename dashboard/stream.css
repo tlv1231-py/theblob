@@ -124,7 +124,9 @@ html, body {
 /* padding-top clears the board, which overhangs this box from above and ends at
    y600 — 220px past the safe ceiling at y380. box-sizing is border-box, so the
    padding eats into the 1160 rather than adding to it: content runs y600 ->
-   y1540 = 940 = title(132) + Blob(672) + score(136).
+   y1540 = 940 = Blob(768) + score(172).
+   The nameplate left this box (it is above the board now), so its 132px went to
+   the Blob: 672 -> 768, which is 48x16 and 40% of the whole canvas.
    CHANGE THE BOARD'S HEIGHT AND THIS MUST CHANGE WITH IT — they are the same
    number written twice, and nothing catches the drift but a measurement. */
 #safe {
@@ -357,15 +359,15 @@ html, body {
                      0 0 22px -6px var(--ev-c); }
 }
 
-/* ── Blob · 672 — THE STREAMER ────────────────────────────────────────── */
+/* ── Blob · 768 — THE STREAMER ────────────────────────────────────────── */
 #s-blob {
-  height: 672px; flex: none;
+  height: 768px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
 .blob-bloom {
   position: absolute; top: 50%; left: 50%;
-  width: 840px; height: 840px;
+  width: 900px; height: 900px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255,0,204,0.26), transparent 66%);
@@ -374,7 +376,7 @@ html, body {
 }
 #blobCanvas {
   position: relative;
-  width: 672px; height: 672px;   /* 48 x 14 — integer scale, no resample.
+  width: 768px; height: 768px;   /* 48 x 16 — integer scale, no resample.
                                     Any resize MUST stay on a 48px multiple or
                                     his pixels get resampled and the whole
                                     8-bit read collapses. */
@@ -395,17 +397,26 @@ html, body {
    prints its own P&L where the ticker was. A card in the middle of the stage
    repeating what the tile already said was covering his face to do it. */
 
-/* ── the blob <x> · 132 ───────────────────────────────────────────────── */
-/* The nameplate. It does not move, ever — everything else on this stage is
-   reacting to something, so the one fixed thing is what the reactions are
-   anchored to. No pulse, no animation, no tint change: it is a sign.
-   Left-justified to the same x90 column the board and the safe box share, so
-   the name, the grid and the score all hang off one edge.
-   x is a status feed, wired later. */
+/* ── blob <x> · y12-112 ───────────────────────────────────────────────── */
+/* Above the board, so OUTSIDE the safe box like the board itself.
+   NOTE: y12-112 is inside the reserved band (0-380) — on a real stream this
+   sits under YouTube's top chrome. See the board's comment; same trade.
+
+   The NAME does not move, ever. Everything else on this stage is reacting to
+   something, so the one fixed thing is what the reactions are anchored to.
+   x is the opposite: it is the most animated thing here.
+
+   Left-justified to the same x90 column the board, the safe box and the score
+   all hang off. */
 #s-title {
-  height: 132px; flex: none;
+  position: absolute;
+  top: 12px;
+  left: var(--safe-x);
+  right: 120px;
+  height: 100px;
+  z-index: 11;
   display: flex; align-items: baseline; justify-content: flex-start;
-  gap: 20px;
+  gap: 18px;
   overflow: hidden;
 }
 /* Big, pink, crisp. Press Start 2P HAS real lowercase — it is not a caps-only
@@ -428,24 +439,45 @@ html, body {
     0 0 34px rgba(255,0,204,0.45);
   white-space: nowrap;
 }
-/* x is the variable half — lighter and smaller so the phrase reads as one
-   sentence with the name carrying it, rather than two competing signs. */
+/* ── x — the status line ──────────────────────────────────────────────── */
+/* Reads as the back half of the sentence the name starts:
+       blob  sold BTC for -$0.39
+   Smaller than the name so the phrase has one subject, not two competing signs.
+   Every segment is its own span because they are coloured independently — the
+   ticker in the colour assigned on the Command Center, the P&L in green/red —
+   and because each one decodes on its own stagger. */
 .ttl-x {
   font-family: 'Press Start 2P', Consolas, monospace;
   font-size: 26px; line-height: 1;
-  text-transform: lowercase;
   letter-spacing: -0.02em;
-  color: #ff8ae0;
-  text-shadow:
-    2px 2px 0 #3a0030,
-    3px 3px 0 rgba(0,0,0,0.85),
-    0 0 20px rgba(255,0,204,0.4);
   white-space: nowrap;
+  display: flex; align-items: baseline; gap: 12px;
 }
+.ttl-x > span {
+  text-shadow:
+    2px 2px 0 #1a0016,
+    3px 3px 0 rgba(0,0,0,0.85);
+}
+/* The connective tissue stays quiet — "sold" and "for" are grammar, the ticker
+   and the number are the news. */
+.xs-verb, .xs-for {
+  color: #ff8ae0;
+  text-transform: lowercase;
+}
+/* Coloured inline from ticker_colors. Uppercase: a ticker is a ticker. */
+.xs-sym {
+  color: #ffffff;
+  text-shadow: 2px 2px 0 #1a0016, 3px 3px 0 rgba(0,0,0,0.9), 0 0 18px currentColor;
+}
+.xs-pnl { color: var(--text-hi); }
+.xs-pnl.win  { color: #00ff9d; text-shadow: 2px 2px 0 #003319, 3px 3px 0 rgba(0,0,0,0.9), 0 0 20px rgba(0,255,157,0.7); }
+.xs-pnl.loss { color: #ff3366; text-shadow: 2px 2px 0 #440011, 3px 3px 0 rgba(0,0,0,0.9), 0 0 20px rgba(255,51,102,0.7); }
+/* Idle copy — lowercase, quiet, same slot. */
+.ttl-x.idle { color: #ff8ae0; text-transform: lowercase; display: block; }
 
-/* ── SCORE · 136 — his feet to the floor ─────────────────────────────── */
+/* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
 #s-nav {
-  height: 136px; flex: none;
+  height: 172px; flex: none;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px;
 }

@@ -1215,6 +1215,149 @@
   // Every beat moves all three together — the slot, the Blob, and the score —
   // because they are three views of one event, and staggering them would read
   // as three unrelated things twitching.
+  // ═══════════════════════════════════════════════════════════════════════
+  // x — THE STATUS LINE
+  // Reads as the back half of the sentence the nameplate starts:
+  //     blob  sold BTC for -$0.39
+  //
+  // It DECODES between states rather than cutting: each segment scrambles
+  // through junk glyphs and resolves left-to-right, staggered so the sentence
+  // assembles word by word. A hard swap would be a label changing; this reads
+  // as the machine working it out, which is the only thing on the stage allowed
+  // to look computed — the nameplate beside it never moves at all, and the
+  // contrast is the point.
+  //
+  // Fires from applyTrade, on the same frame as the sound and the tile.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Junk to scramble through. Blocks and hex, so the noise reads as a machine
+  // resolving rather than as letters shuffling.
+  var SCRAM = '▓▒░█▄▀■◆◇01234567890ABCDEF#$%&*+=/\\|<>';
+  var DECODE_FRAMES = 9, DECODE_STEP = 34, SEG_STAGGER = 90;
+
+  // ticker_colors, seeded server-side and re-polled so an edit on the Command
+  // Center reaches the stream. Stored stripped ('CRV'), so normalise.
+  var tickerCols = S.ticker_colors || {};
+  function tickerColor(sym) {
+    var bare = sym.replace('/USD', '');
+    // No assigned colour is not an error — most tickers have none. Fall back to
+    // white and let the Command Center be the only place colours are decided.
+    return tickerCols[bare] || '#ffffff';
+  }
+
+  function pollTickerColors() {
+    fetch(S.supa.url + '/rest/v1/ticker_colors?select=ticker,color',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) return;
+        var next = {};
+        rows.forEach(function(r) { if (r.color) next[r.ticker] = r.color; });
+        tickerCols = next;
+      })
+      .catch(function() {});
+  }
+
+  // Decode one segment to its final text. Reveals left-to-right so the eye can
+  // start reading before it finishes.
+  function decodeTo(el, finalText, delay) {
+    clearInterval(el._dec);
+    clearTimeout(el._decT);
+    el.textContent = '';
+    el._decT = setTimeout(function() {
+      var i = 0;
+      el._dec = setInterval(function() {
+        if (i >= DECODE_FRAMES) {
+          clearInterval(el._dec); el._dec = null;
+          el.textContent = finalText;
+          return;
+        }
+        var shown = Math.floor(finalText.length * (i / (DECODE_FRAMES - 1)));
+        var out = finalText.slice(0, shown);
+        for (var k = shown; k < finalText.length; k++) {
+          // Spaces stay spaces or the word boundaries jitter and it reads as
+          // noise instead of as a sentence resolving.
+          out += finalText[k] === ' ' ? ' '
+               : SCRAM[Math.floor(Math.random() * SCRAM.length)];
+        }
+        el.textContent = out;
+        i++;
+      }, DECODE_STEP);
+    }, delay || 0);
+  }
+
+  function money2(v) {
+    var n = Math.abs(Number(v || 0));
+    return (Number(v) >= 0 ? '+$' : '−$') + n.toFixed(2);
+  }
+  function cost2(v) {
+    var n = Number(v || 0);
+    return '$' + (n >= 1000 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2));
+  }
+
+  // Back to "is trading" once the tape goes quiet. Trades land every ~7s and the
+  // beat is 1.6s, so 20s only ever fires when the engine has genuinely stopped —
+  // it is not a timeout on the animation, it is the difference between "blob
+  // sold BTC" being news and being a stale caption nobody cleared.
+  var IDLE_AFTER = 20000, _idleT = null;
+  function statusIdle() {
+    var el = $('blob-status');
+    if (!el) return;
+    el.className = 'ttl-x idle';
+    decodeTo(el, 'is trading', 0);
+  }
+
+  // The sentence. A BUY has no P&L yet, so "for" takes what the position COST —
+  // qty x price, not the per-unit price. That distinction is the whole point:
+  // "bought CRV for $0.22" reads as blob buying 22 cents of crypto, when he
+  // actually spent $204. Same template shape, honest number. (qty is on every
+  // ENTER's detail as qty=N; measured 20/20.)
+  function setStatus(t) {
+    var el = $('blob-status');
+    if (!el) return;
+    clearTimeout(_idleT);
+    _idleT = setTimeout(statusIdle, IDLE_AFTER);
+    var bare = t.sym.replace('/USD', '');
+    var isExit = t.dir === 'EXIT';
+
+    // statusIdle decodes the CONTAINER, so a decode may still be mid-flight on
+    // it. Left running it would keep writing textContent over the spans below
+    // and the sentence would dissolve back into junk a frame after it resolved.
+    clearInterval(el._dec); clearTimeout(el._decT); el._dec = null;
+
+    el.className = 'ttl-x';
+    el.innerHTML =
+      '<span class="xs-verb"></span>' +
+      '<span class="xs-sym"></span>' +
+      '<span class="xs-for"></span>' +
+      '<span class="xs-pnl"></span>';
+
+    var vEl = el.querySelector('.xs-verb'),
+        sEl = el.querySelector('.xs-sym'),
+        fEl = el.querySelector('.xs-for'),
+        pEl = el.querySelector('.xs-pnl');
+
+    sEl.style.color = tickerColor(t.sym);
+
+    var tail, cls = '';
+    if (isExit) {
+      var v = Number(t.pnl || 0);
+      tail = money2(v);
+      cls = v >= 0 ? 'win' : 'loss';
+    } else {
+      // Fall back to the per-unit price only if qty is missing — a wrong-looking
+      // number beats a blank one, and it has never actually been missing.
+      tail = cost2(t.qty ? t.qty * t.price : t.price);
+    }
+    pEl.className = 'xs-pnl ' + cls;
+
+    // Staggered so the sentence assembles word by word rather than all at once.
+    decodeTo(vEl, isExit ? 'sold' : 'bought', 0);
+    decodeTo(sEl, bare, SEG_STAGGER);
+    decodeTo(fEl, 'for', SEG_STAGGER * 2);
+    decodeTo(pEl, tail, SEG_STAGGER * 3);
+  }
+
   // ── The beat ─────────────────────────────────────────────────────────────
   // Three phases per trade, played in order, one trade at a time:
   //
@@ -1318,6 +1461,11 @@
     // Same frame as the sound.
     if (t.dir === 'ENTER') boardEnter(t);
     else                   boardExit(t);
+
+    // x speaks on the same frame too. The decode runs for ~400ms after this,
+    // but it STARTS here, which is what makes the sentence read as caused by the
+    // sound rather than as a caption that arrived late.
+    setStatus(t);
 
     // Any reordering waits — see scheduleSettle.
     scheduleSettle();
@@ -1511,6 +1659,9 @@
   // like a mute button rather than a setting.
   setInterval(pollMute, 3000);
   pollMute();
+  // Ticker colours change when someone edits them on the Command Center, which
+  // is a human action on a page nobody is watching the clock on. 30s.
+  setInterval(pollTickerColors, 30000);
   pollEvents();
   pollCryptoPrices();
   pollStreamEvents();

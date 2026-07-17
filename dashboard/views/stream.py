@@ -115,6 +115,21 @@ def _latest_stream_event_id() -> int:
         return 0
 
 
+def _load_ticker_colors() -> dict:
+    """Per-ticker colours, assigned and edited on the Command Center.
+
+    Stored stripped ('CRV', not 'CRV/USD'), so callers must normalise. Only a
+    few are assigned; anything unset falls back on the Stream page rather than
+    being invented here — the Command Center owns this and the stream reads it.
+    """
+    try:
+        with get_session() as s:
+            rows = s.execute(text("SELECT ticker, color FROM ticker_colors")).fetchall()
+        return {r.ticker: r.color for r in rows if r.color}
+    except Exception:
+        return {}
+
+
 def _load_crypto_positions() -> list[dict]:
     """Live crypto holdings — server-written, unlike the equity book."""
     with get_session() as s:
@@ -167,6 +182,7 @@ def _build_stream_html(data: dict, yt_overlay: bool = False,
         "starting_capital": _STARTING_CAPITAL,
         "positions":      data.get("positions_data") or [],
         "crypto":         _load_crypto_positions(),
+        "ticker_colors":  _load_ticker_colors(),
         # High-water mark: the page shows only events created after it loaded.
         # Without this a fresh render would replay the entire backlog on boot.
         "last_event_id":  _latest_stream_event_id(),
@@ -241,23 +257,22 @@ _STAGE_HTML = """
          of them was what anyone tuned in for, and every one was taxing the
          three that are. Those figures live on the Command Center, where
          someone is reading rather than watching. -->
-    <!-- The board is OUTSIDE the safe box: it now runs from y120 up top down to
-         y660, which is taller than the safe box's own ceiling at y380. It floats
-         over the stage; #safe pads its content down to clear it. -->
+    <!-- blob <x> — the nameplate and the status line, reading as one sentence:
+         "blob sold BTC for -$0.39". Above the board, which puts it at y12-112,
+         i.e. inside the reserved band. -->
+    <div id="s-title">
+      <span class="ttl-name">blob</span>
+      <span class="ttl-x idle" id="blob-status">is trading</span>
+    </div>
+
+    <!-- The board is OUTSIDE the safe box: it runs y120-600, above the safe
+         box's own ceiling at y380. It floats over the stage; #safe pads its
+         content down to clear it. -->
     <div id="s-pos">
       <div id="pos-list"></div>
     </div>
 
     <div id="safe">
-
-      <!-- the blob <x> — x is a status feed, wired later. Reserved here so the
-           layout is settled before the content exists. Sits below the board and
-           above him, inside the safe box, which is the only band on the stage
-           that is both legible and never covered. -->
-      <div id="s-title">
-        <span class="ttl-name">the blob</span>
-        <span class="ttl-x" id="blob-status">is trading</span>
-      </div>
 
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
