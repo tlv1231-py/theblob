@@ -122,6 +122,18 @@ Prerequisites before building:
 - **MomentumSignalGenerator params:** Now loads from `config/strategy_params/momentum.yaml` on init. Constructor kwargs override yaml values. Do not pass hardcoded params from run_pipeline.py.
 - **MAX_POSITION_SIZE:** Updated to 0.20 (20%) to match top-5 equal-weight configuration (5 × 20% = 100% gross exposure).
 
+- **Stream dono board — repeat donors merge, don't stack (2026-07-17):** a second
+  dono from a name already orbiting was opening a second row (board showed the
+  same donor twice). `puAddOne` in `stream.js` now folds it into the existing
+  entry — money and minutes add ($1:1min), `puSince` preserved so it keeps its
+  slot; legacy stacked rows fold into the survivor; idempotency extended to
+  merged donos via a `seen` id list.
+
+- **Stream sun — bands off (2026-07-17):** the thin horizontal lines across the
+  sun were unwanted. `SUN_SLIT_MIN/MAX = 0` in `stream_bg.js` makes `banded`
+  always false → clean glowing disc. Restore the vaporwave banding with MIN 1 /
+  MAX 4. The global `#scanlines` CRT overlay still crosses the sun, far fainter.
+
 ---
 
 ## What Has Been Built (V0)
@@ -181,14 +193,17 @@ Prerequisites before building:
   meets modern SaaS dashboard. In progress — font/CSS pass done, deeper layout
   work remaining.
 
-- [ ] The Blob — 8-bit pixel character that reacts to live trader state.
+- [~] The Blob — 8-bit pixel character that reacts to live trader state.
   **Read `dashboard/BLOB.md` before touching `dashboard/blob.js`.** It is the
-  design contract: the 10fps tick, the Bayer dither, the locked palette and the
-  always-pink rule are deliberate and look like bugs if you don't know why.
-  Status: character built + standalone harness (`dashboard/blob_preview.html`);
-  **not yet wired to live state.** Wiring is a canvas inside the existing
-  `home_nav.js` iframe hanging off hooks that already exist (`_onLiveTrade`,
-  `_fetchNavDb`). Streamlit is deliberately not involved — see BLOB.md.
+  design contract: the 10fps tick, the locked palette and the always-pink rule
+  are deliberate and look like bugs if you don't know why.
+  Status (2026-07-17): **now sprite-driven** — the goofy-slime redesign, two
+  48×48 sheets (`blob_body.png` + `blob_eyes.png`) blitted by blob.js, inlined
+  as base64. Shading is cel + gloss now, **not Bayer dither** (see BLOB.md's
+  STATUS banner). Regenerate with `scripts/gen_blobby_ref.py`, re-embed with
+  `scripts/embed_blob_sheets.py`. **Wired to live state on the Stream page**
+  (stream.js drives setMood/setPnl); Home (`home_nav.js`) not yet. Streamlit is
+  deliberately not involved — see BLOB.md.
 
 - [ ] Feature queue — professional quant tooling (build in priority order):
   1. [ ] Correlation matrix — live heatmap of current position price correlations

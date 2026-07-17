@@ -7,9 +7,34 @@ not accidents of implementation. Several of them look like bugs or missed
 optimizations if you don't know why they're there. Breaking any of them is a
 design decision, not a cleanup — make it on purpose.
 
+## STATUS — sprite-driven since 2026-07-17 (supersedes the procedural sections below)
+
+The body and face are now **hand-authored sprite sheets** (`blob_body.png` +
+`blob_eyes.png`, the goofy-slime redesign the operator picked from mockups), not
+computed procedurally. `blob.js` blits them. The sections below are kept as
+design history and are still the reference for the three constraints that make
+him read as 8-bit — **low logical resolution, locked palette, 10fps** all still
+hold — but two of the original arguments were overridden on purpose:
+
+- **"Why procedural and not sprite sheets" is reversed.** The art is a fixed
+  look now, and continuous PnL is **bucketed into the 7 mood rows** — exactly the
+  cost this file warned about. Accepted, eyes open.
+- **Shading is cel + glossy highlights, not Bayer dither.** The reference is flat
+  cartoon cells; dither fought it. The **always-pink rule and the locked
+  10-colour palette still hold** — MID is still the bulk of him in every mood.
+
+What did **not** change: the engine still applies bob, jitter, the eyes-only
+glance, the travelling blink, particles and the outer bloom, and the public API
+is byte-identical — so "Mood taxonomy", "The beat", and "Rules of the character"
+below are all still accurate. Regenerate the art with
+`scripts/gen_blobby_ref.py`, then re-embed it into blob.js (as base64 data URIs)
+with `scripts/embed_blob_sheets.py`.
+
 | File | Purpose |
 |---|---|
-| `dashboard/blob.js` | The character. Self-contained, no deps, no assets. |
+| `dashboard/blob.js` | The character. No deps; the two sheets are inlined as base64 data URIs. |
+| `dashboard/blob_body.png` / `blob_eyes.png` | The sprite sheets — 48×48 cells, 4 breath × 7 mood / 3 lid × 7 mood. |
+| `scripts/gen_blobby_ref.py` / `embed_blob_sheets.py` | Regenerate the sheets, then re-embed them into blob.js. |
 | `dashboard/blob_preview.html` | Standalone harness — look at him without Streamlit or the DB. |
 | `dashboard/home_nav.js` | Where he gets wired to live state (not yet done). |
 
