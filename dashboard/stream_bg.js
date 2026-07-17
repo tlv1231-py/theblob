@@ -50,6 +50,16 @@
     var SUN_X = W / 2, SUN_Y = 330, SUN_R = 168;
     var HORIZON = 430;                 // camY moves this — see draw()
 
+    // Sun slits. Widths are in ROWS (1 row = 2px) — see the loop in draw().
+    // Read these as "how much sun survives": LIT is held constant so the bands
+    // thicken toward the bottom without the sun thinning out under them. Dark
+    // coverage runs ~12% at the top of the zone to ~36% at the very bottom.
+    // Past roughly SUN_SLIT_MAX 6 it stops reading as a sun.
+    var SUN_SLIT_AT  = 0.5;            // no slits above the midline
+    var SUN_SLIT_MIN = 1;              // band rows at the top of the zone
+    var SUN_SLIT_MAX = 4;              // band rows at the very bottom
+    var SUN_SLIT_LIT = 7;              // rows of SUN between bands — CONSTANT
+
     // ── Palette — vaporwave proper ──────────────────────────────────────────
     // The sky is a sunset ramp, the ground is a cyan grid, and the only warm
     // colour in the frame is the sun. The pinks and purples are the dashboard's
@@ -179,9 +189,17 @@
         var half = Math.sqrt(Math.max(0, SUN_R * SUN_R - r * r));
         if (half < 1) continue;
         var f = (r + SUN_R) / (2 * SUN_R);          // 0 top .. 1 bottom
-        if (f > 0.45) {
-          var gap = 2 + Math.floor(((f - 0.45) * 30) / 3);
-          if ((r + SUN_R) % (gap + 4) < gap) continue;
+        if (f > SUN_SLIT_AT) {
+          // Rows are 2px and r steps by 2, so count in ROWS, not pixels —
+          // a modulo in pixel-space against a 2-stepping r silently halves
+          // whatever band width you think you asked for.
+          var row = (r + SUN_R) / 2;
+          var z = (f - SUN_SLIT_AT) / (1 - SUN_SLIT_AT);        // 0..1 down the zone
+          var band = Math.round(SUN_SLIT_MIN + (SUN_SLIT_MAX - SUN_SLIT_MIN) * z * z);
+          // LIT is a CONSTANT, not band-relative. The old maths grew the period
+          // along with the band, so coverage compounded and the bottom of the sun
+          // came out 64% dark — bands with sun behind them, not the reverse.
+          if (row % (band + SUN_SLIT_LIT) < band) continue;
         }
         px(SUN_X - half, sy + r, half * 2, 2, [
           Math.round(C_SUN_TOP[0] + (C_SUN_BOT[0] - C_SUN_TOP[0]) * f),
