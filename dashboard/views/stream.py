@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import pathlib as _pl
 import re
+from datetime import datetime, timezone
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -130,6 +131,64 @@ def _load_ticker_colors() -> dict:
         return {}
 
 
+def _load_afk_phrases() -> list | None:
+    """What x says when nothing is happening. Edited live in Stream HQ.
+
+    Seeded into the payload so the very first paint has the real list rather
+    than the JS fallback — the poll is 15s, and the nameplate is on screen
+    immediately. None means "use the fallback baked into stream.js".
+    """
+    try:
+        with get_session() as s:
+            r = s.execute(text(
+                "SELECT value FROM strategy_params "
+                "WHERE strategy = 'stream' AND param = 'afk_phrases'"
+            )).fetchone()
+        if not r or not r.value:
+            return None
+        v = json.loads(r.value)
+        return v if isinstance(v, list) and v else None
+    except Exception:
+        return None
+
+
+def _load_dono_powerups() -> list[dict]:
+    """Live donation power-ups orbiting the Blob.
+
+    Autofilled from real donations and editable in Stream HQ. Expired rows are
+    filtered HERE as well as on the page: a stale row must never orbit just
+    because a browser has been open since before it lapsed.
+    """
+    try:
+        with get_session() as s:
+            r = s.execute(text(
+                "SELECT value FROM strategy_params "
+                "WHERE strategy = 'stream' AND param = 'dono_powerups'"
+            )).fetchone()
+        if not r or not r.value:
+            return []
+        rows = json.loads(r.value)
+        if not isinstance(rows, list):
+            return []
+        now = datetime.now(timezone.utc)
+        out = []
+        for d in rows:
+            try:
+                until = datetime.fromisoformat(str(d["until"]).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if until <= now:
+                continue
+            out.append({
+                "name": str(d.get("name", ""))[:16],
+                "amount": float(d.get("amount") or 0),
+                "until": until.isoformat(),
+            })
+        return out
+    except Exception:
+        return []
+
+
 def _load_crypto_positions() -> list[dict]:
     """Live crypto holdings — server-written, unlike the equity book."""
     with get_session() as s:
@@ -183,6 +242,8 @@ def _build_stream_html(data: dict, yt_overlay: bool = False,
         "positions":      data.get("positions_data") or [],
         "crypto":         _load_crypto_positions(),
         "ticker_colors":  _load_ticker_colors(),
+        "afk_phrases":    _load_afk_phrases(),
+        "dono_powerups":  _load_dono_powerups(),
         # High-water mark: the page shows only events created after it loaded.
         # Without this a fresh render would replay the entire backlog on boot.
         "last_event_id":  _latest_stream_event_id(),
@@ -276,6 +337,11 @@ _STAGE_HTML = """
 
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
+        <!-- Donation power-ups orbit HERE, inside his box, so they track him
+             wherever the box goes rather than being positioned against the
+             stage. DOM, not canvas: a name is type, and type on a canvas at
+             this size means hand-kerning a bitmap font for no gain. -->
+        <div id="s-orbit"></div>
         <canvas id="blobCanvas"></canvas>
         <div class="blob-mood" id="blob-mood">IDLE</div>
       </div>

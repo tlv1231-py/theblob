@@ -22,7 +22,7 @@ wherever the operator is. Supabase is the only thing both can reach.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -279,6 +279,180 @@ def _set_policy(param: str, value: str, label: str) -> None:
             DO UPDATE SET value = :v, updated_at = :now
         """), {"p": param, "v": value, "l": label, "now": datetime.utcnow()})
         s.commit()
+
+
+# ── AFK phrases ───────────────────────────────────────────────────────────────
+# What x says when nothing is happening. The list is the Blob's whole idle
+# personality, so it belongs where you can rewrite it while watching him say it
+# — not in a JS array behind a deploy.
+#
+# 25 characters is a hard geometric fact, not a style rule: the nameplate leaves
+# 640px of runway at 25.5px/glyph and #s-title is overflow:hidden, so a 26th
+# character does not wrap or shrink, it silently disappears mid-word on air.
+# The stream re-checks this too — this editor is a courtesy, not the guard.
+_AFK_MAX = 25
+
+_AFK_DEFAULT = [
+    "is trading", "is watching the tape", "is doing numbers", "is up to something",
+    "is holding the line", "is thinking about it", "is reading the charts", "is vibing",
+    "is waiting for a sign", "is down bad", "is cooking", "is locked in",
+    "is calculating", "is fully committed", "is trusting the plan", "needs a minute",
+    "is running the numbers", "is feeling lucky", "has a good feeling",
+    "is staying humble", "is doing his best", "is monitoring", "is unbothered",
+    "is so back", "is never selling", "is in the trenches", "is chilling",
+    "is zoomed in", "is touching grass", "is diamond handing", "is not selling",
+    "is being patient",
+]
+
+
+def _get_afk() -> list[str]:
+    raw = _get_policy().get("afk_phrases")
+    if not raw:
+        return list(_AFK_DEFAULT)
+    try:
+        v = json.loads(raw)
+        return [str(x) for x in v] if isinstance(v, list) and v else list(_AFK_DEFAULT)
+    except (json.JSONDecodeError, TypeError):
+        return list(_AFK_DEFAULT)
+
+
+def _render_afk() -> None:
+    st.caption(
+        f"What **blob** says when nothing is happening — the nameplate reads "
+        f"“blob *is cooking*”. One per line, **max {_AFK_MAX} characters**, live on the "
+        "stream within ~15s. Longer lines are dropped, not truncated."
+    )
+    cur = _get_afk()
+    txt = st.text_area("AFK phrases", value="\n".join(cur), height=260,
+                       label_visibility="collapsed", key="afk_txt")
+
+    lines = [l.strip() for l in txt.splitlines() if l.strip()]
+    toolong = [l for l in lines if len(l) > _AFK_MAX]
+    ok = [l for l in lines if len(l) <= _AFK_MAX]
+
+    if toolong:
+        st.warning(
+            f"**{len(toolong)} line(s) over {_AFK_MAX} chars — these will NOT air:**\n\n"
+            + "\n".join(f"- `{l}` ({len(l)})" for l in toolong[:6])
+        )
+    if not ok:
+        st.error("At least one phrase under the limit is required — an empty list "
+                 "would leave him with nothing to say.")
+
+    c1, c2 = st.columns([1, 1])
+    if c1.button("SAVE PHRASES", type="primary", use_container_width=True, disabled=not ok):
+        _set_policy("afk_phrases", json.dumps(ok), "AFK phrases for x")
+        st.success(f"Saved {len(ok)} phrases — live within ~15s.")
+        st.rerun()
+    if c2.button("RESET TO DEFAULTS", use_container_width=True):
+        _set_policy("afk_phrases", json.dumps(_AFK_DEFAULT), "AFK phrases for x")
+        st.rerun()
+
+
+# ── Donation power-ups ────────────────────────────────────────────────────────
+# Autofilled by the stream when a paid event airs; editable here because the
+# autofill cannot know everything — a name may need cleaning up, a troll may
+# need revoking, and you may want to comp someone an orbit.
+#
+# $1 : 1 minute is the promise. `until` is an absolute timestamp rather than a
+# duration so it survives a page reload, a re-deploy, and the encoder restarting
+# — a countdown living in a browser tab would not.
+
+def _get_powerups() -> list[dict]:
+    raw = _get_policy().get("dono_powerups")
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(v, list):
+        return []
+    out = []
+    for d in v:
+        if not isinstance(d, dict):
+            continue
+        try:
+            until = datetime.fromisoformat(str(d.get("until", "")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        out.append({"id": str(d.get("id", "")), "name": str(d.get("name", "")),
+                    "amount": float(d.get("amount") or 0), "until": until})
+    return out
+
+
+def _put_powerups(rows: list[dict]) -> None:
+    _set_policy("dono_powerups", json.dumps([
+        {"id": r["id"], "name": r["name"], "amount": float(r["amount"]),
+         "until": r["until"].astimezone(timezone.utc).isoformat()}
+        for r in rows
+    ]), "Active donation power-ups")
+
+
+@st.fragment(run_every="5s")
+def _render_powerups() -> None:
+    st.caption(
+        "Names orbiting the Blob. **Autofilled** when a paid event airs; edit or revoke "
+        "here. Duration is **$1 = 1 minute** and size scales with the amount, so the ring "
+        "shows who paid and roughly how much without anyone reading a number."
+    )
+
+    now = datetime.now(timezone.utc)
+    rows = _get_powerups()
+    live = [r for r in rows if r["until"] > now]
+    # Expired rows are hidden here AND filtered by the stream, but they are only
+    # actually deleted on the next write — nothing on this page should be doing
+    # housekeeping on a 5s fragment.
+    lapsed = len(rows) - len(live)
+
+    if not live:
+        st.info("No power-ups in orbit." + (f"  ({lapsed} lapsed)" if lapsed else ""))
+    else:
+        df = pd.DataFrame([{
+            "name": r["name"],
+            "$": r["amount"],
+            "min left": max(0, round((r["until"] - now).total_seconds() / 60, 1)),
+        } for r in sorted(live, key=lambda x: x["until"], reverse=True)])
+        edited = st.data_editor(
+            df, use_container_width=True, hide_index=True, key="pu_edit",
+            num_rows="fixed",
+            column_config={
+                "name": st.column_config.TextColumn("Name", max_chars=16),
+                "$": st.column_config.NumberColumn("$", min_value=0.0, step=1.0, format="$%.2f"),
+                "min left": st.column_config.NumberColumn("Min left", min_value=0.0, step=1.0,
+                                                          help="Editing this re-dates the expiry "
+                                                               "from now."),
+            },
+        )
+        if st.button("APPLY EDITS", type="primary", use_container_width=True):
+            src = sorted(live, key=lambda x: x["until"], reverse=True)
+            out = []
+            for i, r in enumerate(src):
+                e = edited.iloc[i]
+                mins = float(e["min left"])
+                if mins <= 0 or not str(e["name"]).strip():
+                    continue          # zero minutes or a blank name revokes it
+                out.append({"id": r["id"], "name": str(e["name"]).strip()[:16],
+                            "amount": float(e["$"]),
+                            "until": now + timedelta(minutes=mins)})
+            _put_powerups(out)
+            st.success("Applied — the ring updates within ~10s.")
+            st.rerun()
+
+    with st.expander("comp a power-up", expanded=False):
+        c1, c2 = st.columns([2, 1])
+        nm = c1.text_input("Name", key="pu_new_nm", placeholder="viewer name",
+                           label_visibility="collapsed")
+        amt = c2.number_input("$", min_value=1.0, value=5.0, step=1.0, key="pu_new_amt",
+                              label_visibility="collapsed")
+        st.caption(f"→ orbits for **{amt:.0f} min**")
+        if st.button("ADD TO ORBIT", use_container_width=True, disabled=not nm.strip()):
+            rows = [r for r in _get_powerups() if r["until"] > now]
+            rows.append({"id": f"hq{int(now.timestamp())}", "name": nm.strip()[:16],
+                         "amount": float(amt),
+                         "until": now + timedelta(minutes=float(amt))})
+            _put_powerups(rows)
+            st.rerun()
 
 
 def _render_policy() -> None:
@@ -660,7 +834,12 @@ def render() -> None:
 
     _render_health()
 
-    tab_sim, tab_bus, tab_pol, tab_plan = st.tabs(["Simulate", "Bus", "Policy", "Plan"])
+    tab_sim, tab_bus, tab_pu, tab_afk, tab_pol, tab_plan = st.tabs(
+        ["Simulate", "Bus", "Orbit", "AFK", "Policy", "Plan"])
+    with tab_pu:
+        _render_powerups()
+    with tab_afk:
+        _render_afk()
     with tab_sim:
         _render_sim()
     with tab_bus:

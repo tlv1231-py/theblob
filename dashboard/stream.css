@@ -571,6 +571,68 @@ html, body {
   will-change: transform;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   DONATION POWER-UPS — a viewer's name in orbit
+   Someone paid, so their handle circles the Blob like a power-up they attached
+   to him. Duration is 1 minute per dollar, and size/intensity scale with the
+   amount, so a $50 name is unmistakably a bigger event than a $2 one without
+   anyone having to read the number.
+
+   Crisp, not soft: this is the ONE element allowed to look modern-videogame
+   rather than 8-bit — it is a HUD layer over the character, not part of his
+   world. It still uses the house pink/cyan and the same stacked extrude, so it
+   reads as ours and not as a stock plugin.
+
+   Layered UNDER the canvas (z-index 0 vs the Blob's own stacking) for the far
+   half of the orbit and over it for the near half — see orbit.js, which flips
+   z-index by phase. That is what makes it read as going AROUND him rather than
+   sliding across a flat plane.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#s-orbit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* No overflow:hidden — an orbit at full amplitude reaches outside his box and
+     clipping it would shear the name in half at the widest, most visible point
+     of its arc. */
+  overflow: visible;
+  z-index: 3;
+}
+
+.pu {
+  position: absolute;
+  left: 50%; top: 50%;
+  white-space: nowrap;
+  transform-origin: center center;
+  will-change: transform, opacity;
+  /* Sized inline per power-up by the dollar amount. */
+  font-family: 'Press Start 2P', Consolas, monospace;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* The name. White core with a coloured bloom — the same trick the score and
+   the tickers use, so a paid name sits in the same visual language as a P&L. */
+.pu-name {
+  color: #ffffff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.65);
+  text-shadow:
+    2px 2px 0 #1a0016,
+    4px 4px 0 rgba(0,0,0,0.85),
+    0 0 var(--pu-glow, 18px) var(--pu-c, #ff00cc),
+    0 0 calc(var(--pu-glow, 18px) * 2) var(--pu-c, #ff00cc);
+}
+
+/* The amount rides under the name, smaller and in the accent — money is the
+   reason it is on screen, but the PERSON is the headline. */
+.pu-amt {
+  display: block;
+  margin-top: 0.35em;
+  font-size: 0.5em;
+  color: var(--pu-c, #ff00cc);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 12px var(--pu-c, #ff00cc);
+}
+
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
 #s-nav {
   height: 172px; flex: none;

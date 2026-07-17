@@ -905,9 +905,9 @@
 
   var annQ = [], annTypeT = null, annHoldT = null;
 
-  function annPush(type, payload) {
+  function annPush(type, payload, id) {
     if (!ANN[type]) return;
-    annQ.push({ type: type, p: payload || {} });
+    annQ.push({ type: type, p: payload || {}, id: id });
     if (annQ.length > 6) annQ.splice(0, annQ.length - 6);  // drop the oldest
     annBadge();
     stagePump();          // takes the floor now, or the moment the beat ends
@@ -999,6 +999,11 @@
     // which hands the sentence back to the AFK cycle when the burst drains.
     if (VIEWER_EVENTS[ev.type]) {
       setStatusHappy();
+      // Money buys an orbit. Fired here, with the box, so the power-up appears
+      // on the same frame the viewer is thanked.
+      if (PU_TYPES[ev.type] && Number(ev.p.amount) > 0) {
+        puAdd(ev.id, ev.p.from || 'SOMEONE', Number(ev.p.amount));
+      }
     } else {
       // A non-viewer popup must actively CLEAR the celebration, not merely
       // decline to set one. Measured: a donation and a risk_breach in the same
@@ -1351,7 +1356,7 @@
       return;
     }
 
-    annPush(ev.event_type, p);
+    annPush(ev.event_type, p, ev.id);
   }
 
   // BROADCAST, not a work queue. Every renderer shows every event.
@@ -1820,6 +1825,240 @@
     return '$' + (n >= 1000 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2));
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // DONATION POWER-UPS — a viewer's name in orbit
+  //
+  // Someone paid, so their handle circles the Blob like a power-up they stuck
+  // on him. Two rules carry it:
+  //
+  //   DURATION = $1 : 1 MINUTE. A $5 dono orbits for 5 minutes; a $60 one for
+  //   an hour. Not a design flourish — it is the promise that what you paid for
+  //   stays on screen, and it is why the list has to be authoritative rather
+  //   than a fire-and-forget animation. It survives a page reload because the
+  //   expiry is a TIMESTAMP in the DB, not a countdown in a browser tab.
+  //
+  //   SIZE AND INTENSITY SCALE WITH THE AMOUNT, on a curve rather than a line.
+  //   Linear would make a $100 dono fifty times the size of a $2 one and cover
+  //   the character; a cube root keeps $2 legible and $100 enormous while both
+  //   stay on screen. sqrt was too flat at the top, log too flat at the bottom.
+  //
+  // DOM, not canvas: a name is type. Rendering type on a canvas at this size
+  // means hand-kerning a bitmap font to gain nothing.
+  //
+  // setInterval at 20fps — smoother than the Blob's 10, because this layer is
+  // deliberately NOT of his world: it is a HUD over him, the one place allowed
+  // to look modern-videogame rather than 8-bit.
+  // ═══════════════════════════════════════════════════════════════════════
+  var PU_FPS = 20;
+  var PU_BASE_R = 300;        // orbit radius at the smallest dono, px
+  var PU_R_GAIN = 46;         // radius added per unit of scale
+  var PU_BASE_FONT = 20;      // px at the smallest dono
+  var PU_FONT_GAIN = 13;      // px added per unit of scale
+  var PU_MIN_S = 1;           // $1 and under all look the same — the floor
+  var PU_REF = 5;             // the dono the curve is normalised around
+
+  // Cube root of the dollar amount, normalised so $5 == 1.0. Clamped at both
+  // ends: below $1 nothing shrinks further, and past ~$250 nothing grows —
+  // beyond that it would leave the stage rather than impress anyone.
+  function puScale(amount) {
+    var a = Math.max(PU_MIN_S, Number(amount) || 0);
+    return Math.min(3.4, Math.cbrt(a) / Math.cbrt(PU_REF));
+  }
+
+  // Only events that carry actual money buy an orbit. A follow is lovely and
+  // gets the box and the cheer; it does not get a power-up, or the ring fills
+  // with people who paid nothing and the whole signal is gone.
+  var PU_TYPES = { donation: 1, superchat: 1, supersticker: 1, bits: 1, membership_gift: 1 };
+
+  var puList = [];            // [{ id, name, amount, until, el, phase, r, speed }]
+
+  function puColor(amount) {
+    // Money is green everywhere else on this page, but a NAME is identity, and
+    // identity is pink here. The amount line carries the money colour instead.
+    return Number(amount) >= 25 ? '#00e5ff' : '#ff00cc';
+  }
+
+  function puRender(list) {
+    var host = $('s-orbit');
+    if (!host) return;
+    var seen = {};
+    list.forEach(function(d) { seen[d.name + '|' + d.until] = 1; });
+
+    // Drop anything no longer in the list (expired, or deleted from HQ).
+    for (var i = puList.length - 1; i >= 0; i--) {
+      if (seen[puList[i].name + '|' + puList[i].until]) continue;
+      if (puList[i].el && puList[i].el.parentNode) puList[i].el.remove();
+      puList.splice(i, 1);
+    }
+
+    list.forEach(function(d) {
+      var key = d.name + '|' + d.until;
+      for (var j = 0; j < puList.length; j++) {
+        if (puList[j].name + '|' + puList[j].until === key) return;   // already up
+      }
+      var s = puScale(d.amount);
+      var el = document.createElement('div');
+      el.className = 'pu';
+      el.style.setProperty('--pu-c', puColor(d.amount));
+      el.style.setProperty('--pu-glow', Math.round(14 + s * 12) + 'px');
+      el.style.fontSize = Math.round(PU_BASE_FONT + s * PU_FONT_GAIN) + 'px';
+      el.innerHTML = '<span class="pu-name"></span><span class="pu-amt"></span>';
+      el.querySelector('.pu-name').textContent = String(d.name || '').toUpperCase().slice(0, 16);
+      el.querySelector('.pu-amt').textContent = '$' + (Number(d.amount) % 1 === 0
+        ? Number(d.amount).toFixed(0) : Number(d.amount).toFixed(2));
+      host.appendChild(el);
+      puList.push({
+        name: d.name, until: d.until, amount: d.amount, el: el, scale: s,
+        // Spread them around the ring instead of stacking: a second dono must
+        // not land on top of the first.
+        phase: (puList.length * 2.399) % 6.283,
+        r: PU_BASE_R + s * PU_R_GAIN,
+        // Bigger donations orbit SLOWER. A large name whipping round is
+        // unreadable, and the point of paying more is to be read for longer.
+        speed: 0.9 / (0.6 + s * 0.7)
+      });
+    });
+  }
+
+  function puTick() {
+    if (!puList.length) return;
+    var now = Date.now();
+    for (var i = puList.length - 1; i >= 0; i--) {
+      var p = puList[i];
+      if (new Date(p.until).getTime() <= now) {   // lapsed mid-orbit
+        if (p.el && p.el.parentNode) p.el.remove();
+        puList.splice(i, 1);
+        continue;
+      }
+      p.phase += p.speed / PU_FPS;
+      var x = Math.cos(p.phase) * p.r;
+      // A squashed ring, not a circle: seen from the front an orbit is an
+      // ellipse, and a true circle reads as a name sliding around a flat disc
+      // pasted over him.
+      var y = Math.sin(p.phase) * p.r * 0.30;
+      // Perspective. The far half is smaller, dimmer and BEHIND the canvas;
+      // the near half is bigger, brighter and in front. The z-index flip is what
+      // sells the orbit — without it the name never goes behind him and the
+      // whole thing collapses into a 2D loop.
+      var depth = (Math.sin(p.phase) + 1) / 2;          // 0 far .. 1 near
+      var sc = 0.62 + depth * 0.55;
+      p.el.style.transform = 'translate(-50%,-50%) translate(' + Math.round(x) + 'px,' +
+                             Math.round(y) + 'px) scale(' + sc.toFixed(3) + ')';
+      p.el.style.opacity = (0.45 + depth * 0.55).toFixed(3);
+      p.el.style.zIndex = depth > 0.5 ? 4 : 0;
+    }
+  }
+
+  // $1 : 1 minute. The whole promise of the feature, so it is derived here once
+  // and nowhere else: HQ shows this same arithmetic back to you before you save.
+  function puUntil(amount, fromMs) {
+    return new Date((fromMs || Date.now()) + Math.max(1, Number(amount) || 0) * 60000).toISOString();
+  }
+
+  // Autofill. EVERY renderer airs every event (it is a broadcast, not a work
+  // queue), so every renderer reaches this — the stream event's own id is what
+  // makes the write idempotent. Without it, the operator's preview window and
+  // the encoder would each append the same donation and the name would orbit
+  // twice.
+  //
+  // SERIALISED, because read-modify-write on a JSON blob is not atomic and two
+  // donations in one burst race each other. This is not hypothetical: the first
+  // test fired $3 and $50 1.8s apart, both read the blob before either wrote,
+  // and the $50 vanished — a paying viewer silently got nothing. The announcer
+  // chains popups 1.8s apart, so a dono train hits this every time.
+  //
+  // A chain fixes the same-renderer case, which is all of them in practice: two
+  // renderers writing in the same instant is still possible and still costs one
+  // lost ring. The real fix is a table with a unique key and an upsert, which is
+  // a migration.
+  var _puChain = Promise.resolve();
+
+  function puAdd(id, name, amount) {
+    _puChain = _puChain.then(function() { return puAddOne(id, name, amount); })
+                       .catch(function() {});   // one failure must not break the chain
+  }
+
+  function puAddOne(id, name, amount) {
+    var key = 'ev' + (id != null ? id : Date.now());
+    return fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=eq.dono_powerups&select=value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        var list = [];
+        if (Array.isArray(rows) && rows.length) {
+          try { list = JSON.parse(rows[0].value) || []; } catch (e) { list = []; }
+        }
+        if (!Array.isArray(list)) list = [];
+        if (list.some(function(d) { return d && d.id === key; })) return;   // beaten to it
+        // Returned so the chain waits for the write, not just the read — the
+        // whole point of serialising.
+
+        var now = Date.now();
+        // Drop the lapsed while we are here — otherwise the blob grows forever
+        // and nothing else ever prunes it.
+        list = list.filter(function(d) {
+          return d && d.until && new Date(d.until).getTime() > now;
+        });
+        list.push({ id: key, name: String(name).slice(0, 16), amount: Number(amount),
+                    until: puUntil(amount, now) });
+
+        // unit and label are NOT NULL on strategy_params — omitting them fails
+        // the insert with a 23502 and, because the catch below was silent, the
+        // autofill looked like it simply never ran. Mirrors _set_policy()'s
+        // INSERT in stream_hq.py; the two must agree on the columns.
+        var body = JSON.stringify({
+          strategy: 'stream', param: 'dono_powerups',
+          value: JSON.stringify(list), unit: '',
+          label: 'Active donation power-ups',
+          updated_at: new Date().toISOString()
+        });
+        // on_conflict MUST name (strategy,param). PostgREST infers the conflict
+        // target from the PRIMARY KEY otherwise — here that is `id`, so
+        // merge-duplicates targeted the wrong column entirely: the first write
+        // inserted and every one after it 409'd against uq_strategy_param.
+        // Which is precisely one power-up surviving per burst.
+        return fetch(S.supa.url + '/rest/v1/strategy_params?on_conflict=strategy,param', {
+          method: 'POST',
+          headers: {
+            apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal'
+          },
+          body: body
+        }).then(function(r) {
+          // Not silent. A rejected write here means a viewer paid and got no
+          // orbit — the one failure on this page with a customer on the other
+          // end of it. A silent catch hid exactly this for its first outing.
+          if (!r.ok) {
+            return r.text().then(function(tx) {
+              console.error('[stream] power-up write rejected (' + r.status + '):', tx);
+            });
+          }
+          pollPowerups();
+        }).catch(function(e) { console.error('[stream] power-up write failed:', e); });
+      })
+      .catch(function(e) { console.error('[stream] power-up read failed:', e); });
+  }
+
+  function pollPowerups() {
+    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=eq.dono_powerups&select=value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || !rows.length) { puRender([]); return; }
+        var list;
+        try { list = JSON.parse(rows[0].value); } catch (e) { return; }
+        if (!Array.isArray(list)) return;
+        var now = Date.now();
+        puRender(list.filter(function(d) {
+          return d && d.name && new Date(d.until).getTime() > now;
+        }));
+      })
+      .catch(function() {});
+  }
+
   // ── AFK ──────────────────────────────────────────────────────────────────
   // He is on 24/7 and the book is quiet ~20s between rolls. A single frozen
   // line across that gap reads as a dead page — the stream's own liveness is
@@ -1830,7 +2069,11 @@
   // nameplate at 25.5px/glyph, and #s-title is overflow:hidden — a 26th
   // character does not wrap or shrink, it silently disappears. There is an
   // assertion below that drops anything too long rather than letting it clip.
-  var AFK = [
+  // Editable live from Stream HQ (strategy_params.afk_phrases, polled below).
+  // This array is the FALLBACK, not the source: it is what he says before the
+  // first poll lands and if the row is ever empty or unparseable, because a
+  // silent nameplate is worse than a stale joke.
+  var AFK_FALLBACK = [
     'is trading',              'is watching the tape',
     'is doing numbers',        'is up to something',
     'is holding the line',     'is thinking about it',
@@ -1847,7 +2090,41 @@
     'is chilling',             'is zoomed in',
     'is touching grass',       'is diamond handing',
     'is not selling',          'is being patient'
-  ].filter(function(m) { return m.length <= 25; });
+  ];
+
+  // The live list. Sanitised on every load rather than trusted: HQ writes free
+  // text, and the 25-char ceiling is a hard geometric fact (640px of runway at
+  // 25.5px/glyph, and #s-title is overflow:hidden — a 26th character does not
+  // wrap or shrink, it silently vanishes). Enforcing it HERE rather than only in
+  // HQ means a row written by anything else still cannot break the nameplate.
+  var AFK_MAX_CHARS = 25;
+
+  function sanitizeAfk(list) {
+    if (!Array.isArray(list)) return null;
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var s = String(list[i] || '').trim();
+      if (s && s.length <= AFK_MAX_CHARS) out.push(s);
+    }
+    return out.length ? out : null;
+  }
+
+  var AFK = sanitizeAfk(S.afk_phrases) || sanitizeAfk(AFK_FALLBACK);
+
+  function pollAfkPhrases() {
+    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=eq.afk_phrases&select=value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || !rows.length) return;
+        var next;
+        try { next = sanitizeAfk(JSON.parse(rows[0].value)); } catch (e) { return; }
+        // Never swap in an empty list — that would leave x with nothing to say.
+        if (next) AFK = next;
+      })
+      .catch(function() {});
+  }
 
   var AFK_AFTER = 2000;     // quiet for this long and he starts talking
   var AFK_HOLD  = 4200;     // per message — long enough to read, short enough
@@ -2582,6 +2859,16 @@
   // like a mute button rather than a setting.
   setInterval(pollMute, 3000);
   pollMute();
+  // AFK copy is edited by a human in HQ, so it changes at human speed. 15s is
+  // fast enough to see your own edit land while you are still looking at it.
+  setInterval(pollAfkPhrases, 15000);
+  pollAfkPhrases();
+  // Power-ups: the ring animates locally at 20fps, but the LIST is polled — HQ
+  // may add, edit or revoke one at any time, and a dono may land on a different
+  // renderer than the one that aired it.
+  puRender(S.dono_powerups || []);
+  setInterval(puTick, 1000 / PU_FPS);
+  setInterval(pollPowerups, 10000);
   // Ticker colours change when someone edits them on the Command Center, which
   // is a human action on a page nobody is watching the clock on. 30s.
   setInterval(pollTickerColors, 30000);
