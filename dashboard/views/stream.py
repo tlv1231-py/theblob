@@ -250,13 +250,13 @@ _STAGE_HTML = """
 
     <div id="safe">
 
-      <!-- THE BLOB <x> — x is a status feed, wired later. Reserved here so the
+      <!-- the blob <x> — x is a status feed, wired later. Reserved here so the
            layout is settled before the content exists. Sits below the board and
            above him, inside the safe box, which is the only band on the stage
            that is both legible and never covered. -->
       <div id="s-title">
-        <span class="ttl-name">THE BLOB</span>
-        <span class="ttl-x" id="blob-status">IS TRADING</span>
+        <span class="ttl-name">the blob</span>
+        <span class="ttl-x" id="blob-status">is trading</span>
       </div>
 
       <div id="s-blob">

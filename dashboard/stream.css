@@ -122,16 +122,16 @@ html, body {
 
 /* ── The safe box ─────────────────────────────────────────────────────── */
 /* padding-top clears the board, which overhangs this box from above and ends at
-   y620 — 240px past the safe ceiling at y380. box-sizing is border-box, so the
-   padding eats into the 1160 rather than adding to it: content runs y620 ->
-   y1540 = 920 = title(80) + Blob(672) + score(168).
+   y600 — 220px past the safe ceiling at y380. box-sizing is border-box, so the
+   padding eats into the 1160 rather than adding to it: content runs y600 ->
+   y1540 = 940 = title(132) + Blob(672) + score(136).
    CHANGE THE BOARD'S HEIGHT AND THIS MUST CHANGE WITH IT — they are the same
    number written twice, and nothing catches the drift but a measurement. */
 #safe {
   position: absolute;
   left: var(--safe-x); top: var(--safe-y);
   width: var(--safe-w); height: var(--safe-h);
-  padding-top: 240px;
+  padding-top: 220px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -395,37 +395,57 @@ html, body {
    prints its own P&L where the ticker was. A card in the middle of the stage
    repeating what the tile already said was covering his face to do it. */
 
-/* ── THE BLOB <x> · 80 ────────────────────────────────────────────────── */
-/* Reserved space. x is a status feed, wired later — the point of building it
-   now is that the layout stops moving before the content arrives. */
+/* ── the blob <x> · 132 ───────────────────────────────────────────────── */
+/* The nameplate. It does not move, ever — everything else on this stage is
+   reacting to something, so the one fixed thing is what the reactions are
+   anchored to. No pulse, no animation, no tint change: it is a sign.
+   Left-justified to the same x90 column the board and the safe box share, so
+   the name, the grid and the score all hang off one edge.
+   x is a status feed, wired later. */
 #s-title {
-  height: 80px; flex: none;
-  display: flex; align-items: center; justify-content: center;
-  gap: 14px;
+  height: 132px; flex: none;
+  display: flex; align-items: baseline; justify-content: flex-start;
+  gap: 20px;
+  overflow: hidden;
 }
+/* Big, pink, crisp. Press Start 2P HAS real lowercase — it is not a caps-only
+   face — and lowercase gives it the toybox read the all-caps version never had.
+   The shadow stack is magenta-into-black rather than straight black: a pure
+   black extrude under a pink fill reads as dirty, a darkened version of the
+   fill itself reads as extruded. Hard offsets, no blur — the glow is one
+   separate soft layer sitting behind, so the edges stay crisp. */
 .ttl-name {
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 20px; line-height: 1;
-  color: #ffffff;
-  -webkit-text-stroke: 1px rgba(0,0,0,0.5);
+  font-size: 54px; line-height: 1;
+  text-transform: lowercase;
+  letter-spacing: -0.02em;
+  color: #ff00cc;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.55);
   text-shadow:
-    2px 2px 0 #222,
-    3px 3px 0 #111,
-    4px 4px 0 rgba(0,0,0,0.8);
+    3px 3px 0 #6b0057,
+    5px 5px 0 #3a0030,
+    7px 7px 0 rgba(0,0,0,0.9),
+    0 0 34px rgba(255,0,204,0.45);
+  white-space: nowrap;
 }
-/* x is the variable half, so it is tinted rather than white — the name is the
-   constant and reads as the label; the status reads as the value. */
+/* x is the variable half — lighter and smaller so the phrase reads as one
+   sentence with the name carrying it, rather than two competing signs. */
 .ttl-x {
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 20px; line-height: 1;
-  color: var(--accent);
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 18px rgba(255,0,204,0.65);
+  font-size: 26px; line-height: 1;
+  text-transform: lowercase;
+  letter-spacing: -0.02em;
+  color: #ff8ae0;
+  text-shadow:
+    2px 2px 0 #3a0030,
+    3px 3px 0 rgba(0,0,0,0.85),
+    0 0 20px rgba(255,0,204,0.4);
   white-space: nowrap;
 }
 
-/* ── SCORE · 168 — his feet to the floor ─────────────────────────────── */
+/* ── SCORE · 136 — his feet to the floor ─────────────────────────────── */
 #s-nav {
-  height: 168px; flex: none;
+  height: 136px; flex: none;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px;
 }
@@ -506,7 +526,7 @@ html, body {
   top: 120px;
   left: var(--safe-x);          /* same 90 -> 960 column as the safe box */
   right: 120px;
-  height: 500px;                /* y120 -> y620; #safe pads 240 to clear it */
+  height: 480px;                /* y120 -> y600; #safe pads 220 to clear it */
   z-index: 11;                  /* above #safe, whose content it overhangs */
   display: flex; flex-direction: column;
 }
