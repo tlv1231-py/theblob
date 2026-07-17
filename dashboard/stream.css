@@ -850,13 +850,32 @@ html, body {
    how tall the board gets. Four columns gives each cell 214px, which is what
    actually buys a bigger ticker. The extra vertical space then goes to the
    fly-in and the hit having somewhere to travel. */
+/* FLEX, not grid — and the reason is the last row.
+   Grid cannot centre a partial final row: every item lands in a column track, so
+   14 tiles fill 4/4/4 and then park the last two hard against the left edge,
+   which reads as the board having been cut off rather than finished.
+   Wrapping flex with justify-content:center costs nothing on the full rows — 4 x
+   214.5 + 3 x 4 = 870 fills the width exactly, so there is no slack to centre —
+   and the short row centres for free. It is the one layout where "centre
+   everything" and "left-align the grid" are the same instruction for every row
+   but the last.
+   align-content:stretch reproduces what grid-template-rows: repeat(4, 1fr) was
+   doing: the lines share the height and each tile stretches to its line. */
 #pos-list {
   flex: 1; min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  align-content: stretch;
+  justify-content: center;
   gap: 4px;
   overflow: hidden;
+}
+
+/* Four to a row. The 12px is the three 4px gaps between them — get this wrong
+   and the row silently wraps to three, which looks like a spacing bug rather
+   than an arithmetic one. */
+.tile {
+  flex: 0 0 calc((100% - 12px) / 4);
 }
 
 /* ── The tile ─────────────────────────────────────────────────────────── */
