@@ -516,9 +516,11 @@
   // frames — no interpolation, because a sprite cuts rather than tweens — and
   // staggered so the board resolves as a wave instead of a single lurch.
   //
-  // It OWNS THE STAGE while it runs: tradeNext refuses to start a beat until
-  // reordering is false, so a trade can never land mid-shuffle. It gets to
-  // finish. That is the whole reason it can afford to take this long.
+  // It OWNS THE STAGE while it runs: stagePump refuses to hand the floor to ANY
+  // lane until reordering is false, so nothing can land mid-shuffle. It gets to
+  // finish. That is the whole reason it can afford to take this long — and it is
+  // the one thing a popup cannot jump ahead of, because FLIP parks tiles on a
+  // transform and killing it mid-play strands them at the wrong coordinates.
   var reordering = false;
   var FLIP_STEP = 55;        // ms per frame
   var FLIP_STAGGER = 55;     // ms between tiles starting — the wave
@@ -601,9 +603,10 @@
     _settleT = setTimeout(function() {
       _settleT = null;
       // Never settle over a leavebehind (it would delete the number
-      // mid-sentence) and never mid-beat (the shuffle would yank the slot out
-      // from under an animation that is still playing on it). Re-arm and wait.
-      if (Object.keys(ghostT).length || tradeBusy) { scheduleSettle(); return; }
+      // mid-sentence) and never while any lane holds the stage — the shuffle
+      // would yank a slot out from under an animation still playing on it, and
+      // it would step on a popup or a line of dialogue. Re-arm and wait.
+      if (Object.keys(ghostT).length || stage.owner) { scheduleSettle(); return; }
       refreshCrypto();      // re-reads the DB, then rebuilds in canonical order
     }, SETTLE_DELAY);
   }
@@ -668,6 +671,58 @@
   // Each row is claimed by stamping consumed_at, which is also what lets HQ
   // prove an event actually landed rather than assuming it did.
   // ═══════════════════════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // THE STAGE — one lane owns it at a time
+  //
+  // Every animated thing on this page belongs to exactly one of three classes,
+  // and they are ranked:
+  //
+  //   1. POPUP   The Gameboy window. A VIEWER did something — donated, subbed,
+  //              followed, raided. A person spent money or showed up, which
+  //              outranks anything the machine is doing on its own.
+  //   2. SPEAKS  The same window, but it is Blobby talking — his voice,
+  //              scrolling by, Gameboy-style. He is the streamer, so his line
+  //              outranks his own book.
+  //   3. TRADE   The beat. ~9/min, all day, and the only thing here that
+  //              repeats — which is exactly why it is the one that yields.
+  //
+  // Popups and speaks PAUSE trades. Before this arbiter existed the lanes did
+  // not interact at all: annNext and tradeNext were independent state machines
+  // writing to the same stage, so a donation fanfare fired on top of a loss
+  // sting and the viewer heard both at once with no way to tell which was which.
+  //
+  // ── PAUSE MEANS THE QUEUE PAUSES, NOT THE FRAME ─────────────────────────
+  // A beat already in flight has fired its sound and has a tile mid-animation.
+  // Killing it would strand the tile and leave a sound with no picture. So the
+  // UNIT of work is atomic and the ladder only decides who goes NEXT. Worst
+  // case a donation waits out one beat (~1.6s). That is the price of never
+  // showing a broken frame, and it is cheap.
+  //
+  // Each lane holds the floor for its whole BURST, not one item: a popup queue
+  // drains before the box closes, because closing and reopening the window
+  // between two donations reads as a glitch rather than as two events.
+  // ═══════════════════════════════════════════════════════════════════════
+  var stage = { owner: null };        // null | 'popup' | 'speaks' | 'trade'
+
+  function stageTake(lane) { stage.owner = lane; }
+
+  function stageDone() {
+    stage.owner = null;
+    stagePump();
+  }
+
+  function stagePump() {
+    if (stage.owner) return;
+    // The shuffle is atomic for a harder reason than the rest: FLIP parks each
+    // tile at its old position with a transform and walks it home, so a reorder
+    // killed mid-play leaves tiles permanently at the wrong coordinates. It
+    // cannot be preempted, only waited out (~1s worst case).
+    if (reordering) { setTimeout(stagePump, 120); return; }
+    if (popupStart()) return;
+    if (speakStart()) return;
+    if (tradeStart()) return;
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   // THE ANNOUNCER — Gameboy dialogue box above the Blob's head
@@ -755,13 +810,40 @@
     return 'just ' + (VERB[type] || 'DID SOMETHING') + (amt ? ' ' + amt : '') + ' !!!';
   }
 
-  var annQ = [], annBusy = false, annTypeT = null, annHoldT = null;
+  var annQ = [], annTypeT = null, annHoldT = null;
 
   function annPush(type, payload) {
     if (!ANN[type]) return;
     annQ.push({ type: type, p: payload || {} });
     if (annQ.length > 6) annQ.splice(0, annQ.length - 6);  // drop the oldest
-    if (!annBusy) annNext();
+    annBadge();
+    stagePump();          // takes the floor now, or the moment the beat ends
+  }
+
+  // Returns true if it took the floor. The ladder in stagePump calls these in
+  // priority order and stops at the first one that says yes.
+  function popupStart() {
+    if (!annQ.length) return false;
+    stageTake('popup');
+    annNext();
+    return true;
+  }
+
+  // Shared by both window lanes — the box leaves entirely so the score gets its
+  // floor back the instant nobody is talking.
+  function annClose() {
+    var lcd = $('ev-lcd');
+    if (!lcd) return;
+    $('s-events').classList.remove('showing');
+    lcd.classList.remove('open');
+    lcd.classList.remove('speaking');
+    // `pop` is the money hit. It is inert today (CSS animations don't run in
+    // this iframe) but it is a one-shot, so leaving it stuck on means it can
+    // never fire again if the clock ever does run — on a different host, or if
+    // this gets ported off the iframe. Clear it with the rest of the state.
+    lcd.classList.remove('pop');
+    lcd.style.removeProperty('--ev-c');
+    $('ev-more').className = 'ev-more';
     annBadge();
   }
 
@@ -777,23 +859,19 @@
     var lcd = $('ev-lcd');
     if (!lcd) return;
     if (!annQ.length) {
-      annBusy = false;
-      // The whole overlay leaves. It reserves no space, so the NAV gets the
-      // floor back the instant nobody is talking.
-      $('s-events').classList.remove('showing');
-      lcd.classList.remove('open');
-      lcd.style.removeProperty('--ev-c');
-      $('ev-more').className = 'ev-more';
-      annBadge();
+      annClose();
+      // Guarded because boot calls annNext() once to settle the panel into its
+      // idle state, and that call holds no floor to give back.
+      if (stage.owner === 'popup') stageDone();
       return;
     }
-    annBusy = true;
     var ev = annQ.shift();
     annBadge();
 
     var cfg = ANN[ev.type];
     $('s-events').classList.add('showing');   // the overlay arrives
     lcd.classList.remove('idle');
+    lcd.classList.remove('speaking');
     lcd.classList.add('open');
     lcd.style.setProperty('--ev-c', cfg.c);
     $('ev-bigicon').textContent = cfg.i;
@@ -804,7 +882,18 @@
       lcd.classList.remove('pop'); void lcd.offsetWidth; lcd.classList.add('pop');
     }
 
-    // The fanfare fires with the box, not after it — the sound IS the event.
+    // THE REACTION FIRES HERE, WITH THE BOX — not when the event was received.
+    // It used to fire in applyStreamEvent on arrival, which meant an event that
+    // queued behind another played its mood and sound seconds before its own
+    // window appeared, and then the box fired a fanfare on top. Same rule as the
+    // trade beat: one event, one frame.
+    var react = EVENT_MOOD[ev.type];
+    if (react) {
+      if (react.mood) blob.setMood(react.mood, react.mood === 'HAPPY' ? 26 : 18);
+      $('blob-mood').textContent = blob.getMood();
+      // A viewer paying is the loudest thing that happens on this stream.
+      bg.pulse(cfg.c === '#00ff9d' ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
+    }
     SFX.fanfare();
 
     var name = nameOf(ev.type, ev.p);
@@ -851,6 +940,90 @@
     }, 52);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // BLOBBY SPEAKS — the same window, his voice
+  //
+  // Deliberately the SAME box as the announcer, not a second one. A Gameboy has
+  // exactly one text box; who is talking is carried by how it looks and what it
+  // says, never by where it is. Two boxes would be two UIs.
+  //
+  // What separates it from a popup: no name stamp, no !!!, no fanfare. A popup
+  // is an ANNOUNCEMENT about a viewer and lands like one. This is dialogue — it
+  // opens quietly, types at a reading pace, and the blips are his voice. The
+  // pink `speaking` skin is the tell, matching his body, because he is the only
+  // pink thing on this stage.
+  // ═══════════════════════════════════════════════════════════════════════
+  var speakQ = [], speakTypeT = null, speakHoldT = null;
+  var SPEAK_STEP = 30;      // ms/glyph — a hair slower than the announcer's
+                            // body text; this is meant to be read, not clocked.
+  var SPEAK_HOLD = 2400;    // after the last glyph, before he yields the floor
+
+  // The only way to make him talk. Text only — he has no name line, because a
+  // character's own dialogue box does not caption itself.
+  function blobSpeak(text, opts) {
+    if (!text) return;
+    speakQ.push({
+      text: String(text).slice(0, 90),
+      mood: (opts && opts.mood) || null
+    });
+    // Shorter cap than the popup queue: stale chatter is worse than no chatter,
+    // and unlike a donation nobody paid for it.
+    if (speakQ.length > 3) speakQ.splice(0, speakQ.length - 3);
+    stagePump();
+  }
+
+  function speakStart() {
+    if (!speakQ.length) return false;
+    stageTake('speaks');
+    speakNext();
+    return true;
+  }
+
+  function speakNext() {
+    var lcd = $('ev-lcd');
+    if (!lcd) return;
+    if (!speakQ.length) {
+      annClose();
+      if (stage.owner === 'speaks') stageDone();
+      return;
+    }
+    var s = speakQ.shift();
+
+    $('s-events').classList.add('showing');
+    lcd.classList.remove('idle');
+    lcd.classList.remove('pop');            // a popup's money hit is not his
+    lcd.classList.add('open');
+    lcd.classList.add('speaking');          // his skin, not the announcer's
+    lcd.style.setProperty('--ev-c', '#ff00cc');
+    $('ev-more').className = 'ev-more';
+
+    // No name stamp and no icon — the box is his, so it needs no attribution.
+    var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg');
+    nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
+    $('ev-bigicon').textContent = '';
+
+    if (s.mood) { blob.setMood(s.mood, 30); $('blob-mood').textContent = blob.getMood(); }
+
+    clearInterval(speakTypeT); clearTimeout(speakHoldT);
+
+    // One glyph at a time with a blip — the Gameboy convention, and the reason
+    // it reads as a voice rather than as a label that appeared.
+    var i = 0;
+    speakTypeT = setInterval(function() {
+      if (i < s.text.length) {
+        aEl.textContent += s.text[i];
+        // Blip on non-spaces only, or the gaps between words click.
+        if (s.text[i] !== ' ') SFX.blip();
+        i++;
+        return;
+      }
+      clearInterval(speakTypeT);
+      $('ev-more').className = 'ev-more on';
+      // Shorter hold during a burst so a queued line isn't left waiting.
+      speakHoldT = setTimeout(speakNext, speakQ.length ? 900 : SPEAK_HOLD);
+    }, SPEAK_STEP);
+  }
+
   // Money reads as a win regardless of size; the Blob's amplitude carries the
   // size. Non-money social events are ALERT — real, but not a verdict.
   var EVENT_MOOD = {
@@ -868,34 +1041,39 @@
     risk_breach:     { mood: 'SCARED', sfx: 'loss', label: '⚠ RISK' }
   };
 
+  // Routes an inbound event into its LANE. It no longer reacts here — mood,
+  // sound and pulse now fire from the lane at the moment the thing is actually
+  // shown. Reacting on arrival meant an event queued behind another played its
+  // sound seconds before its own window opened.
   function applyStreamEvent(ev) {
     var p = ev.payload || {};
-    var cfg = EVENT_MOOD[ev.event_type];
-    if (!cfg) return;
 
-    // trade_exit's verdict comes from its pnl, not its type.
-    var mood = cfg.mood, sfx = cfg.sfx;
-    if (ev.event_type === 'trade_exit') {
-      var win = Number(p.pnl || 0) > 0;
-      mood = win ? 'HAPPY' : 'ALERT';
-      sfx  = win ? 'win' : 'loss';
+    // Blobby's own voice — the speaks lane.
+    if (ev.event_type === 'blob_speak') {
+      blobSpeak(p.message || p.text, { mood: p.mood || null });
+      return;
     }
 
-    if (mood) blob.setMood(mood, mood === 'HAPPY' ? 26 : 18);
-    if (sfx && SFX[sfx]) SFX[sfx]();
-    // Money gets a bigger, brighter wave than a trade — a viewer paying is the
-    // loudest thing that happens on this stream.
-    bg.pulse(cfg.c === '#00ff9d' ? 'money' : (sfx === 'loss' ? 'loss' : 'enter'), 0.30);
+    if (!EVENT_MOOD[ev.event_type]) return;
 
     // A simulated trade speaks through the BOARD; a viewer event gets the
     // announcer. Keeping the two channels separate is what lets a viewer tell
     // "the bot did something" from "a person did something".
     if (ev.event_type === 'trade_enter' || ev.event_type === 'trade_exit') {
+      // Still immediate: a simulated trade is a board poke, not a stage event,
+      // and it has no window to stay in sync with.
+      var win = Number(p.pnl || 0) > 0;
+      var mood = ev.event_type === 'trade_exit' ? (win ? 'HAPPY' : 'ALERT') : 'ALERT';
+      var sfx  = ev.event_type === 'trade_exit' ? (win ? 'win' : 'loss') : 'entry';
+      blob.setMood(mood, mood === 'HAPPY' ? 26 : 18);
+      if (SFX[sfx]) SFX[sfx]();
+      bg.pulse(sfx === 'loss' ? 'loss' : 'enter', 0.30);
       if (p.symbol) hitTile(p.symbol);
-    } else {
-      annPush(ev.event_type, p);
+      $('blob-mood').textContent = blob.getMood();
+      return;
     }
-    $('blob-mood').textContent = blob.getMood();
+
+    annPush(ev.event_type, p);
   }
 
   // BROADCAST, not a work queue. Every renderer shows every event.
@@ -1379,7 +1557,7 @@
   var PRE_TICKS = Math.round(PRE_MS / 100);
   var POST_TICKS = Math.round(POST_MS / 100);
 
-  var tradeQ = [], tradeBusy = false;
+  var tradeQ = [];
 
   function tradePush(t) {
     tradeQ.push(t);
@@ -1388,16 +1566,17 @@
     // 6 queued is ~10s of backlog, which is about as late as a "live" reaction
     // can honestly claim to be.
     if (tradeQ.length > 6) tradeQ.splice(0, tradeQ.length - 6);
-    if (!tradeBusy) tradeNext();
+    stagePump();
   }
 
-  function tradeNext() {
-    if (!tradeQ.length) { tradeBusy = false; return; }
-    // The shuffle gets to finish. Stay busy and re-check rather than clearing
-    // the flag — dropping it here would let a second caller start a beat on top
-    // of the one that is waiting.
-    if (reordering) { setTimeout(tradeNext, 120); return; }
-    tradeBusy = true;
+  // The bottom of the ladder: only runs when no viewer event and no line of
+  // dialogue is waiting. ONE beat per acquire, not the whole queue — that is
+  // what makes "popups pause trades" true in practice, because a donation that
+  // lands mid-burst only ever waits out the single beat already in flight
+  // instead of the entire backlog.
+  function tradeStart() {
+    if (!tradeQ.length) return false;
+    stageTake('trade');
     var t = tradeQ.shift();
 
     // ── PRE ────────────────────────────────────────────────────────────
@@ -1417,9 +1596,13 @@
         // The verdict mood set at the impact is still decaying — this is its
         // window. Nothing to fire; the beat just isn't over yet, and the next
         // wind-up must not start on top of the follow-through.
-        setTimeout(tradeNext, GAP_MS);
+        //
+        // Then the floor goes back to the ladder rather than straight to the
+        // next trade: anything that queued during this beat gets its turn here.
+        setTimeout(stageDone, GAP_MS);
       }, POST_MS);
     }, PRE_MS + EVENT_MS);
+    return true;
   }
 
   // ONE MOMENT. Sound, text and entry animation all land on the same frame.

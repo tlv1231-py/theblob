@@ -322,6 +322,30 @@ html, body {
   white-space: nowrap; overflow: hidden;
   margin-left: 54px;
 }
+
+/* ── BLOBBY SPEAKS — the same box, his voice ─────────────────────────────
+   The SAME window as the announcer, deliberately. A Gameboy has exactly one
+   text box; who is talking is carried by how it looks, never by moving it
+   somewhere else. Two boxes would be two UIs.
+
+   What changes: no name stamp (a character's own dialogue box does not caption
+   itself), and pink — he is the only pink thing on this stage, so the skin
+   alone says it is him before a word is typed. */
+.ev-lcd.speaking .ev-nameline { display: none; }
+.ev-lcd.speaking .ev-msg      { display: none; }
+.ev-lcd.speaking .ev-act {
+  /* Dialogue, not a caption. It wraps, it starts at the box edge because
+     nothing is stamped to its left, and it is sized to be read across a room
+     rather than to fit a verb. VT323 over Press Start here: at this length the
+     arcade face stops being legible and starts being a texture. */
+  font-family: VT323, Consolas, monospace;
+  font-size: 34px; line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: #ffdff7;
+  margin-left: 0;
+  white-space: normal;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 18px rgba(255,0,204,0.45);
+}
 .ev-msg {
   font-family: VT323, Consolas, monospace;
   font-size: 21px; line-height: 1;

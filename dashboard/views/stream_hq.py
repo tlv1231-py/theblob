@@ -196,6 +196,10 @@ _EVENT_TYPES = {
     "trade_enter":     {"symbol": "BTC/USD", "price": 64200.0},
     "trade_exit":      {"symbol": "BTC/USD", "price": 64250.0, "pnl": 12.40},
     "risk_breach":     {"limit": "daily_drawdown", "value": -9.2},
+    # Blobby's own voice — the speaks lane. Same Gameboy window as a popup, but
+    # it is him talking, so it outranks trades and yields to viewer events.
+    # `mood` is optional and takes any name from BLOB.md's taxonomy.
+    "blob_speak":      {"message": "that one hurt.", "mood": "SCARED"},
 }
 
 
@@ -279,6 +283,11 @@ _VERB = {
 def _headline_preview(event_type: str, p: dict) -> str:
     if event_type == "risk_breach":
         return f"RISK BREACH — {p.get('limit', '')} !!!"
+    # The speaks lane has no actor and no house format — it is him talking, so
+    # the preview is just the line. Falling through to the {WHO} just {VERB}
+    # template below would render it as "SOMEONE just DID SOMETHING !!!".
+    if event_type == "blob_speak":
+        return f"blob: “{p.get('message', '')}”"
     who = str(p.get("from", "SOMEONE")).upper()
     verb = _VERB.get(event_type, "DID SOMETHING")
 
