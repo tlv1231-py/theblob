@@ -412,6 +412,30 @@ Paper portfolio start date: **2026-05-29**
     **System text is white** (`.xs-verb`, `.xs-for`, `.ttl-x.idle`). Only the two things
     carrying information get colour: the ticker (its assigned hue) and the P&L (green/red).
 
+    **A roll narrates in TWO moments inside its ONE beat** — `sold X for −$0.16` then, after
+    `ROLL_HOLD_MS`, `bought X for $195.13`. Entry text was previously *unreachable*: every
+    ENTER paired away into a ROLL, so `bought` could never fire. Still one beat per round
+    trip, so the pairing (and the no-drop guarantee) holds. `ROLL_HOLD_MS` is **derived**
+    (`SEG_STAGGER*3 + DECODE_FRAMES*DECODE_STEP + 800`) because x needs ~576ms just to
+    decode and the entry moment rebuilds the spans — a guessed 650ms left the finished sell
+    readable for 74ms. `ROLL_WAIT` is likewise derived from `POLL_MS` (2 polls + 1s): a
+    straddled batch pairs across polls, so anything under one interval cannot pair at all.
+
+    **Tickers are per-glyph** (`setSym()`, one `<i>` per character) so a 1px wave ripples
+    through each word — one interval for the whole board at 10fps. **Never set
+    `.t-sym.textContent` directly**; it drops the glyphs and kills the wave on that tile only.
+
+    **The stage is a LEASE, not a lock.** `stageWatchdog` force-releases any lane held
+    >45s — a lane that never calls `stageDone` would otherwise freeze the broadcast to a
+    still frame forever, with nobody there to reload it.
+
+    **⚠ Timing cannot be measured from an automated browser.** Its tab is always
+    `document.hidden`, and Chrome throttles background timers hard — a 3s beat straddles a
+    minute and is indistinguishable from a deadlock. This produced hours of phantom bugs
+    this session: a "wedged trade lane", a "frozen x", a 53s watchdog trip, all artifacts.
+    `stageWatchdog` skips while `document.hidden` for exactly this reason. **Verify timing
+    from a real foreground window, or via `_TND_DBG.q().beat` — not by sampling the DOM.**
+
     `dashboard/yt_overlay.js` is a **TEMP** design aid drawing YouTube's chrome + safe
     zones over the stage. Geometry is sourced and exact; the chrome art is approximate and
     per-element placement is reconstructed (no published pixel map exists). **Defaults ON
