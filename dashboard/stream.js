@@ -1963,8 +1963,7 @@
     var bare = t.sym.replace('/USD', '');
     // A roll realised a P&L exactly like a sale did, so it reads like one — the
     // only difference is the verb, because he still holds it.
-    var isRoll = t.dir === 'ROLL';
-    var hasPnl = isRoll || t.dir === 'EXIT';
+    var hasPnl = t.dir === 'EXIT';
 
     // afkNext decodes the CONTAINER, so an AFK decode may still be mid-flight
     // on it. Left running it would keep writing textContent over the spans below
@@ -1997,7 +1996,7 @@
     }
     pEl.className = 'xs-pnl ' + cls;
 
-    var verb = isRoll ? 'rolled' : (t.dir === 'EXIT' ? 'sold' : 'bought');
+    var verb = t.dir === 'EXIT' ? 'sold' : 'bought';
     _beat('x: "' + verb + ' ' + bare + ' for ' + tail + '"');
 
     // Staggered so the sentence assembles word by word rather than all at once.
@@ -2086,9 +2085,33 @@
     if (_beatLog.length > 40) _beatLog.shift();
   }
 
+  // ── Program order ────────────────────────────────────────────────────────
+  // A batch is not a bag of trades, it is a SENTENCE with a shape:
+  //
+  //     every exit, one at a time   ->   the numbers fade together   ->
+  //     every entry, one at a time  ->   settle and reshuffle
+  //
+  // The exits are a paragraph, the fade is the full stop, and the entries are
+  // the next paragraph. Interleaving them (which is what pairing each roll into
+  // a single sell-then-buy beat did) means the board is being written and
+  // erased in the same breath and there is nothing a viewer can actually follow.
+  // Separating them costs ~27s for a 16-leg batch against a ~2min cadence, and
+  // buys a sequence you can watch.
+  //
+  // Each step stays its OWN beat rather than the batch holding the floor for the
+  // whole 27s: the ladder must still be able to slot a donation in between two
+  // exits. The order survives the interruption because it is baked into the
+  // queue, not into who holds the stage.
+  var _rollSeq = 0;
   function mkRoll(ex, en) {
-    return { dir: 'ROLL', sym: ex.sym, pnl: ex.pnl,
-             price: en.price, stop: en.stop, qty: en.qty };
+    // Kept as a pair so the exit and its entry can be matched by eye in the
+    // trace, and so a future change can collapse them again without re-deriving
+    // which entry belonged to which exit.
+    var id = ++_rollSeq;
+    return {
+      exit:  { dir: 'EXIT',  sym: ex.sym, pnl: ex.pnl, roll: id },
+      entry: { dir: 'ENTER', sym: en.sym, price: en.price, stop: en.stop, qty: en.qty, roll: id }
+    };
   }
 
   // Hold an unpaired exit briefly. If its re-entry never comes it really was a
@@ -2108,39 +2131,53 @@
   function tradeIngest(list) {
     _dbgIngest.push(list.map(function(t) { return t.dir + ':' + t.sym; }).join(','));
     if (_dbgIngest.length > 6) _dbgIngest.shift();
-    var open = {}, out = [];
+    var open = {}, exits = [], entries = [];
 
     list.forEach(function(t) {
       if (t.dir === 'EXIT') { open[t.sym] = t; return; }
       // ENTER — does it close a roll opened in this poll, or a staged one from
       // the previous poll (the straddle case)?
-      if (open[t.sym]) { out.push(mkRoll(open[t.sym], t)); delete open[t.sym]; return; }
-      var staged = pendExit[t.sym];
-      if (staged) {
-        clearTimeout(staged.timer); delete pendExit[t.sym];
-        out.push(mkRoll(staged.t, t));
-        return;
+      var pair = null;
+      if (open[t.sym]) { pair = mkRoll(open[t.sym], t); delete open[t.sym]; }
+      else {
+        var staged = pendExit[t.sym];
+        if (staged) { clearTimeout(staged.timer); delete pendExit[t.sym]; pair = mkRoll(staged.t, t); }
       }
-      out.push(t);          // a genuinely new position
+      if (pair) { exits.push(pair.exit); entries.push(pair.entry); return; }
+      entries.push(t);      // a genuinely new position — nothing to sell first
     });
 
     // Exits with no re-entry in this poll — the batch may have straddled.
     Object.keys(open).forEach(function(sym) { stageExit(open[sym]); });
 
-    out.forEach(tradePush);
+    // THE PROGRAM. Exits, then the full stop, then entries.
+    var program = exits.slice();
+    // The fade only earns its beat if there is actually something to fade AND
+    // something coming after it. A batch of pure entries has no numbers on the
+    // board and no reason to pause.
+    if (exits.length) program.push({ dir: 'FADE' });
+    program = program.concat(entries);
+    program.forEach(tradePush);
   }
 
   var tradeQ = [];
 
+  // The cap must hold a WHOLE batch now, not a handful of beats: the largest
+  // observed batch is 16 legs = 8 exits + a fade + 8 entries = 17 items. A cap
+  // below that decapitates the program — it drops the oldest, which are the
+  // exits, and the board would show 8 unexplained purchases. That is the same
+  // buying-spree fiction the pairing was written to kill, arriving by a
+  // different door.
+  //
+  // 20 at ~1.6s is ~32s of backlog against a ~2min batch cadence, so the queue
+  // drains long before the next one lands and the cap should never actually
+  // fire. It is a bound, not a policy.
+  var TRADE_CAP = 20;
+
   function tradePush(t) {
     _dbgPush++;
     tradeQ.push(t);
-    // A long backlog is stale by the time it plays — better to drop the oldest
-    // than to narrate a minute-old fill as if it just happened. 8, not 6:
-    // the largest observed batch is 16 legs = 8 rolls, and a cap below that
-    // culls part of a roll, which is what produced the buying-spree fiction.
-    // At 1.6s a beat, 8 queued is ~13s and the big batches are ~2min apart.
-    if (tradeQ.length > 8) tradeQ.splice(0, tradeQ.length - 8);
+    if (tradeQ.length > TRADE_CAP) tradeQ.splice(0, tradeQ.length - TRADE_CAP);
     stagePump();
   }
 
@@ -2149,11 +2186,56 @@
   // what makes "popups pause trades" true in practice, because a donation that
   // lands mid-burst only ever waits out the single beat already in flight
   // instead of the entire backlog.
+  // ── The fade ─────────────────────────────────────────────────────────────
+  // Every leavebehind on the board goes transparent TOGETHER, and only when the
+  // last one is gone may an entry start. This beat is the full stop between the
+  // two paragraphs. Without it the first entry lands while seven numbers are
+  // still on screen, and the eye has nowhere to rest — which is the difference
+  // between watching a sequence and watching a board flicker.
+  //
+  // setInterval, not a CSS transition: standing rule for this page.
+  var FADE_MS = 1000, FADE_STEP = 50, FADE_SETTLE = 260;
+
+  function fadeLeavebehinds(done) {
+    var els = [].slice.call(
+      document.querySelectorAll('#pos-list .t-sym.pnl-win, #pos-list .t-sym.pnl-loss'));
+    if (!els.length) { done(); return; }
+    var steps = Math.max(1, Math.round(FADE_MS / FADE_STEP)), i = 0;
+    var iv = setInterval(function() {
+      i++;
+      var o = Math.max(0, 1 - i / steps);
+      for (var k = 0; k < els.length; k++) els[k].style.opacity = o;
+      if (i < steps) return;
+      clearInterval(iv);
+      // The slots keep their (now invisible) numbers. An entry reclaims one and
+      // pulls it back to opacity 1; a slot with no entry was a real sale and the
+      // settle removes it, because by then it is gone from S.crypto.
+      for (var j = 0; j < els.length; j++) els[j].style.opacity = 0;
+      // The numbers are spent — release the tiles the tint pass and the settle
+      // were both told to leave alone.
+      Object.keys(ghostT).forEach(function(sym) {
+        clearTimeout(ghostT[sym]); delete ghostT[sym];
+      });
+      done();
+    }, FADE_STEP);
+  }
+
   function tradeStart() {
     if (!tradeQ.length) return false;
     stageTake('trade');
     var t = tradeQ.shift();
-    _beat('take ' + t.dir + ' ' + t.sym);
+    _beat('take ' + t.dir + (t.sym ? ' ' + t.sym : ''));
+
+    // ── FADE ───────────────────────────────────────────────────────────
+    // Its own beat, so it cannot overlap either paragraph. No blob reaction and
+    // no sound: nothing HAPPENED here, which is exactly what it is for.
+    if (t.dir === 'FADE') {
+      fadeLeavebehinds(function() {
+        _beat('faded');
+        setTimeout(function() { _beat('release'); stageDone(); }, FADE_SETTLE);
+      });
+      return true;
+    }
 
     // ── PRE ────────────────────────────────────────────────────────────
     // He looks at the slot and braces. Nothing else moves yet: no sound, no
@@ -2164,20 +2246,12 @@
     // The cursor names the target while he winds up. His glance already aims at
     // the slot, but a 768px blob looking 8px left is not something a viewer can
     // actually read — the pointer is what makes the aim legible.
-    if (t.dir === 'EXIT' || t.dir === 'ROLL') pointAt(t.sym);
+    if (t.dir === 'EXIT') pointAt(t.sym);
     $('blob-mood').textContent = blob.getMood();
 
     setTimeout(function() {
       // ── EVENT ────────────────────────────────────────────────────────
       applyTrade(t);
-
-      // ── ENTRY (rolls only) ───────────────────────────────────────────
-      // A round trip is two fills, so it gets two moments inside its one beat:
-      // the sell lands, its P&L is read, THEN he re-places the position. The
-      // beat grows to ~2.25s; a 16-leg batch is 8 of them = ~18s against a
-      // ~2min cadence, so there is room for the story.
-      var tail = t.dir === 'ROLL' ? ROLL_HOLD_MS : 0;
-      if (tail) setTimeout(function() { applyEntry(t); }, tail);
 
       setTimeout(function() {
         // ── POST ───────────────────────────────────────────────────────
@@ -2188,7 +2262,7 @@
         // Then the floor goes back to the ladder rather than straight to the
         // next trade: anything that queued during this beat gets its turn here.
         setTimeout(function() { _beat('release'); stageDone(); }, GAP_MS);
-      }, tail + POST_MS);
+      }, POST_MS);
     }, PRE_MS + EVENT_MS);
     return true;
   }
@@ -2224,7 +2298,7 @@
     // reacts now rather than waiting up to 10s for the next engine UPDATE. The
     // UPDATE still lands and corrects — a prediction the authoritative feed
     // confirms, not a second source of truth.
-    if ((t.dir === 'EXIT' || t.dir === 'ROLL') && t.pnl != null) {
+    if (t.dir === 'EXIT' && t.pnl != null) {
       state.nav += t.pnl;
       updateNav(state.nav);
     }
@@ -2234,19 +2308,14 @@
     clearPointer();
 
     // Same frame as the sound.
-    if (t.dir === 'ENTER')      boardEnter(t);
-    else if (t.dir === 'ROLL')  boardRoll(t);
-    else                        boardExit(t);
+    if (t.dir === 'ENTER') boardEnter(t);
+    else                   boardExit(t);
 
     // x speaks on the same frame too. The decode runs for ~400ms after this,
     // but it STARTS here, which is what makes the sentence read as caused by the
     // sound rather than as a caption that arrived late.
     //
-    // A roll's sell half narrates AS a sell — because that is literally what
-    // just happened — and its buy half gets its own sentence from applyEntry.
-    // "rolled" was a compression of the pair into one line; now that both halves
-    // are shown there is nothing left to compress.
-    setStatus(t.dir === 'ROLL' ? { dir: 'EXIT', sym: t.sym, pnl: t.pnl } : t);
+    setStatus(t);
 
     // Any reordering waits — see scheduleSettle.
     scheduleSettle();
@@ -2279,9 +2348,13 @@
       el = makeTile(t.sym, '#8060a0');
       $('pos-list').appendChild(el);       // wherever there's room; settle sorts it
     } else {
+      // Reclaiming a slot the fade left at opacity 0 — pull it back or the
+      // ticker types itself onto an invisible element and the tile reads as
+      // permanently empty.
       var sp0 = el.querySelector('.t-sym');
       setSym(sp0, t.sym.replace('/USD', ''));
       sp0.className = 't-sym';
+      sp0.style.opacity = '';
       el.style.removeProperty('--tc');
     }
 
@@ -2292,79 +2365,6 @@
     if (o) flyIn(el, o.x - (r.left + r.width / 2), o.y - (r.top + r.height / 2));
     hitTile(t.sym);
     enterSym(el.querySelector('.t-sym'));
-  }
-
-  // ── The roll ─────────────────────────────────────────────────────────────
-  // A roll is NOT an exit: the position never leaves the board. It shows what
-  // the round trip earned, in the leavebehind's own face, then hands the ticker
-  // back. Deliberately NOT a leavebehind + fly-in pair — that would claim the
-  // slot died and a new one was placed, when in truth nothing about the board
-  // changed at all. Nothing is removed, nothing flies in, nothing reorders.
-  var ROLL_SHOW_MS = 4000;   // safety-net only — the entry moment normally takes
-                             // the ticker back long before this.
-  // sell -> buy. This MUST clear the decode or the sell sentence never gets to
-  // exist: x takes SEG_STAGGER*3 + DECODE_FRAMES*DECODE_STEP = ~576ms just to
-  // finish resolving, and the entry moment REBUILDS the spans. At 650ms the
-  // finished sentence was readable for 74ms — measured as four empty spans,
-  // which is a sell that technically aired and nobody could ever read.
-  // Derived, not typed: the decode plus a beat to actually read it.
-  var ROLL_HOLD_MS = SEG_STAGGER * 3 + DECODE_FRAMES * DECODE_STEP + 800;   // ~1376ms
-
-  function boardRoll(t) {
-    var el = tileEl(t.sym);
-    if (!el) { boardEnter(t); return; }   // never had the slot — treat as new
-
-    // Keep local state honest: same symbol, but the new leg's numbers.
-    (S.crypto || []).forEach(function(c) {
-      if (c.sym !== t.sym) return;
-      if (t.qty)   c.qty = t.qty;
-      if (t.price) c.entry_price = t.price;
-      if (t.stop)  c.stop_price = t.stop;
-    });
-
-    var sp = el.querySelector('.t-sym');
-    var v = Number(t.pnl || 0);
-    setSym(sp, (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2));
-    sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
-    el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
-    hitTile(t.sym);
-
-    // The ticker comes back on the ENTRY MOMENT (see tradeStart), not on this
-    // timer. This is a safety net only: if a beat is ever cut short before its
-    // entry fires, a slot must never be left stranded showing a number instead
-    // of its name. ROLL_SHOW_MS is far longer than ROLL_HOLD_MS so the entry
-    // wins every time in practice, and boardEnter clears this on arrival.
-    clearTimeout(ghostT[t.sym]);
-    ghostT[t.sym] = setTimeout(function() {
-      delete ghostT[t.sym];
-      var live = tileEl(t.sym);
-      var s2 = live && live.querySelector('.t-sym');
-      if (!s2) return;
-      setSym(s2, t.sym.replace('/USD', ''));
-      s2.className = 't-sym';
-      live.style.removeProperty('--tc');
-      scheduleSettle();
-    }, ROLL_SHOW_MS);
-  }
-
-  // ── The entry moment ─────────────────────────────────────────────────────
-  // The BUY half of a roll, given its own beat ~650ms after the sell.
-  //
-  // Until now an entry was NEVER narrated. 100% of batches are rolls, so every
-  // ENTER paired away into a ROLL and x could only ever say "rolled" — "bought"
-  // was unreachable code. But the buy is real: he re-places the position at a
-  // new price, and that is half of what he actually did.
-  //
-  // Still ONE stage-beat per round trip, so this does not undo the pairing —
-  // the batch is 8 beats, not 16, and nothing is dropped. It just stops the
-  // beat from telling only half its story.
-  function applyEntry(t) {
-    blob.setMood('ALERT', POST_TICKS);
-    $('blob-mood').textContent = blob.getMood();
-    SFX.entry();
-    bg.pulse('enter', 0.42);
-    boardEnter(t);                 // ticker returns, flies in, assembles
-    setStatus({ dir: 'ENTER', sym: t.sym, price: t.price, qty: t.qty });
   }
 
   // ── The pointer ──────────────────────────────────────────────────────────
@@ -2410,14 +2410,15 @@
   // A tile that disappears tells you a position closed. A leavebehind tells you
   // whether it was worth having, which is the only part a viewer cares about.
   //
-  // 4500ms is the requested "a little longer". Note the real ceiling is not this
-  // constant: the book re-enters the same symbol within ~1-2s of exiting it, and
-  // boardEnter reclaims the slot when it does — so most leavebehinds are cut
-  // short by their own symbol coming back, not by this timer. This value only
-  // governs the ones that DON'T immediately re-enter. Making them outlast a
-  // re-entry would mean showing two tiles for one symbol, which is worse.
-  var LEAVEBEHIND_MS = 4500;
-
+  // NO TIMER. The number STAYS until the fade beat takes it, which is what lets
+  // every exit in a batch sit on the board together and be read as a set before
+  // anything replaces them. It used to expire on its own 4.5s clock, which meant
+  // the first exits of a 16-leg batch had faded before the last ones landed —
+  // the board was being written and erased in the same breath.
+  //
+  // The fade owns the ending now; boardExit only owns the impact. ghostT still
+  // marks "this slot is showing a number, leave it alone" for the tint pass and
+  // the settle, and fadeLeavebehinds clears it.
   function boardExit(t) {
     var el = tileEl(t.sym);
     if (!el) return;
@@ -2426,6 +2427,7 @@
     var v = Number(t.pnl || 0);
     setSym(sp, (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2));
     sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
+    sp.style.opacity = '';       // a reclaimed slot may still carry the last fade
     el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
     hitTile(t.sym);              // the number lands with the same arcade punch
 
@@ -2433,18 +2435,10 @@
     // the slot — but leave the ELEMENT on screen holding its number.
     S.crypto = (S.crypto || []).filter(function(c) { return c.sym !== t.sym; });
 
-    // Hold, then remove. boardEnter cancels this if the symbol re-enters first,
-    // so a re-entry reclaims the slot instead of racing a pending removal.
+    // A marker, not a countdown: nothing fires when this is set, it only tells
+    // the tint pass and the settle that this slot is spoken for.
     clearTimeout(ghostT[t.sym]);
-    ghostT[t.sym] = setTimeout(function() {
-      delete ghostT[t.sym];
-      var live = tileEl(t.sym);
-      if (live && live.querySelector('.t-sym.pnl-win, .t-sym.pnl-loss')) live.remove();
-      // The reorder countdown RESTARTS from here, not from the trade. Otherwise
-      // the board could reshuffle the instant the number cleared — which is the
-      // worst possible moment, since the eye is still on that slot.
-      scheduleSettle();
-    }, LEAVEBEHIND_MS);
+    ghostT[t.sym] = true;
   }
 
   function pollEvents() {
