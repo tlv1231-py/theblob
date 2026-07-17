@@ -52,6 +52,15 @@ CHANNEL_ID = os.environ.get("YOUTUBE_CHANNEL_ID", "").strip()
 # An AFK stream is empty almost all the time, so this buys ~5s reactions during
 # the exact minutes a human is there to see them, and costs nearly nothing the
 # rest of the day. That is the whole trick.
+# The RESOURCE is liveChatMessages; the URL PATH is liveChat/messages. Getting
+# that wrong returns 404 with an EMPTY BODY — no error, no reason, no hint — and
+# it returns exactly the same 404 for a valid chat id as for a deliberately bogus
+# one, because the path is never reached. That is indistinguishable from "this
+# broadcast has no chat" and reads like an auth problem. Found by asking for a
+# nonsense id and noticing the failures were identical. Same shape for
+# liveChat/bans and liveChat/moderators.
+PATH_CHAT = "liveChat/messages"
+
 COST = {"liveChatMessages.list": 5, "videos.list": 1, "search.list": 100}
 DAILY_BUDGET = int(os.environ.get("YT_QUOTA_BUDGET", "10000"))
 POLL_FAST = int(os.environ.get("CHAT_POLL_FAST", "5"))
@@ -308,7 +317,7 @@ def main() -> None:
             params = dict(part="snippet,authorDetails", liveChatId=chat_id, maxResults=200)
             if page:
                 params["pageToken"] = page
-            r = api("liveChatMessages.list", "liveChatMessages", quota, **params)
+            r = api("liveChatMessages.list", PATH_CHAT, quota, **params)
         except urllib.error.HTTPError as e:
             raw = e.read()[:200].decode(errors="ignore")
             print(f"[chat] poll failed: {e.code} {raw}", flush=True)
