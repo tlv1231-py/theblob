@@ -1984,10 +1984,10 @@
   // to look modern-videogame rather than 8-bit.
   // ═══════════════════════════════════════════════════════════════════════
   var PU_FPS = 20;
-  var PU_BASE_R = 300;        // orbit radius at the smallest dono, px
-  var PU_R_GAIN = 46;         // radius added per unit of scale
   var PU_BASE_FONT = 20;      // px at the smallest dono
   var PU_FONT_GAIN = 13;      // px added per unit of scale
+  var PU_BASE_AMP = 3;        // hover amplitude in px at the smallest dono
+  var PU_AMP_GAIN = 5;        // px added per unit of scale — the "intensity"
   var PU_MIN_S = 1;           // $1 and under all look the same — the floor
   var PU_REF = 5;             // the dono the curve is normalised around
 
@@ -2040,16 +2040,23 @@
       el.querySelector('.pu-name').textContent = String(d.name || '').toUpperCase().slice(0, 16);
       el.querySelector('.pu-amt').textContent = '$' + (Number(d.amount) % 1 === 0
         ? Number(d.amount).toFixed(0) : Number(d.amount).toFixed(2));
-      host.appendChild(el);
+      // Newest at the top of the stack — a fresh dono should not have to be
+      // hunted for at the bottom of a list.
+      if (host.firstChild) host.insertBefore(el, host.firstChild);
+      else host.appendChild(el);
       puList.push({
         name: d.name, until: d.until, amount: d.amount, el: el, scale: s,
-        // Spread them around the ring instead of stacking: a second dono must
-        // not land on top of the first.
+        // Each name bobs on its OWN phase. In lockstep the stack reads as one
+        // rigid block sliding up and down; offset, it reads as several things
+        // independently hanging there.
         phase: (puList.length * 2.399) % 6.283,
-        r: PU_BASE_R + s * PU_R_GAIN,
-        // Bigger donations orbit SLOWER. A large name whipping round is
-        // unreadable, and the point of paying more is to be read for longer.
-        speed: 0.9 / (0.6 + s * 0.7)
+        // THE INTENSITY. A $50 name hovers with visibly more travel than a $2
+        // one — the second axis (with size) that carries the amount without
+        // anyone reading the number.
+        amp: PU_BASE_AMP + s * PU_AMP_GAIN,
+        // Bigger donations hover SLOWER and wider — a large name twitching
+        // quickly reads as agitated, not as expensive.
+        speed: 1.5 / (0.7 + s * 0.6)
       });
     });
   }
@@ -2065,21 +2072,18 @@
         continue;
       }
       p.phase += p.speed / PU_FPS;
-      var x = Math.cos(p.phase) * p.r;
-      // A squashed ring, not a circle: seen from the front an orbit is an
-      // ellipse, and a true circle reads as a name sliding around a flat disc
-      // pasted over him.
-      var y = Math.sin(p.phase) * p.r * 0.30;
-      // Perspective. The far half is smaller, dimmer and BEHIND the canvas;
-      // the near half is bigger, brighter and in front. The z-index flip is what
-      // sells the orbit — without it the name never goes behind him and the
-      // whole thing collapses into a 2D loop.
-      var depth = (Math.sin(p.phase) + 1) / 2;          // 0 far .. 1 near
-      var sc = 0.62 + depth * 0.55;
-      p.el.style.transform = 'translate(-50%,-50%) translate(' + Math.round(x) + 'px,' +
-                             Math.round(y) + 'px) scale(' + sc.toFixed(3) + ')';
-      p.el.style.opacity = (0.45 + depth * 0.55).toFixed(3);
-      p.el.style.zIndex = depth > 0.5 ? 4 : 0;
+      // Hover. Whole pixels — subpixel drift is the thing that breaks pixel art
+      // (BLOB.md), and these hang in the same room as a 48x48 sprite.
+      var y = Math.round(Math.sin(p.phase) * p.amp);
+      // A touch of horizontal sway, a third of the vertical: enough that it
+      // floats rather than slides on a rail, not enough to read as drifting.
+      var x = Math.round(Math.cos(p.phase * 0.7) * p.amp * 0.33);
+      p.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+
+      // The last 20s fades out, so a lapse is a decision rather than a name
+      // that was simply there and then was not.
+      var left = new Date(p.until).getTime() - now;
+      p.el.style.opacity = left < 20000 ? (0.15 + 0.85 * (left / 20000)).toFixed(2) : '';
     }
   }
 
@@ -2624,9 +2628,7 @@
       for (var j = 0; j < els.length; j++) els[j].style.opacity = 0;
       // The numbers are spent — release the tiles the tint pass and the settle
       // were both told to leave alone.
-      Object.keys(ghostT).forEach(function(sym) {
-        clearTimeout(ghostT[sym]); delete ghostT[sym];
-      });
+      Object.keys(ghostT).forEach(function(sym) { delete ghostT[sym]; });
       done();
     }, FADE_STEP);
   }
@@ -2735,12 +2737,22 @@
   // ── The board reacts ─────────────────────────────────────────────────────
   function tileEl(sym) { return document.querySelector('.tile[data-sym="' + sym + '"]'); }
 
-  var ghostT = {};   // sym -> timer holding a spent slot on screen
+  // sym -> true. A MARKER, not a timer: "this slot is showing a P&L, leave it
+  // alone" for the tint pass and the settle. The fade clears it.
+  //
+  // It USED to hold a setTimeout id, and three call sites still clearTimeout'd
+  // it after it became a boolean. `clearTimeout(true)` coerces to
+  // `clearTimeout(1)` — a silent, valid call that cancels whatever owns timer
+  // ID 1. On this page that is the Blob's 10fps loop, because he is started
+  // before almost anything else. He ran for ~30s and then died on the first
+  // exit batch, with no error, while every other interval kept going.
+  //
+  // NEVER clearTimeout this. If it goes back to holding a timer, guard the type.
+  var ghostT = {};
 
   function boardEnter(t) {
     // The same symbol usually re-enters seconds after it exits, so its slot is
     // often still on screen holding the leavebehind. Reclaim it.
-    clearTimeout(ghostT[t.sym]);
     delete ghostT[t.sym];
 
     var el = tileEl(t.sym);
@@ -2848,7 +2860,6 @@
 
     // A marker, not a countdown: nothing fires when this is set, it only tells
     // the tint pass and the settle that this slot is spoken for.
-    clearTimeout(ghostT[t.sym]);
     ghostT[t.sym] = true;
   }
 
@@ -2962,7 +2973,8 @@
                              ingested: _dbgIngest, pushed: _dbgPush,
                              beat: _beatLog }; },
     speak: blobSpeak,
-    fit: fitSpeak      // pure (element, text) -> px; testable without the lane
+    fit: fitSpeak,     // pure (element, text) -> px; testable without the lane
+    blob: blob         // .getTick() / .isRunning() — is the star actually alive?
   };
 
   setInterval(syncBlobMood, 1000);

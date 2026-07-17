@@ -584,43 +584,57 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DONATION POWER-UPS — a viewer's name in orbit
-   Someone paid, so their handle circles the Blob like a power-up they attached
-   to him. Duration is 1 minute per dollar, and size/intensity scale with the
-   amount, so a $50 name is unmistakably a bigger event than a $2 one without
-   anyone having to read the number.
+   DONATION POWER-UPS — paid names hanging behind the streamer
 
-   Crisp, not soft: this is the ONE element allowed to look modern-videogame
-   rather than 8-bit — it is a HUD layer over the character, not part of his
-   world. It still uses the house pink/cyan and the same stacked extrude, so it
-   reads as ours and not as a stock plugin.
+   A sponsor board, not a HUD. They hover right-aligned just under the holdings
+   board and BEHIND the Blob, so he passes in front of them as he moves and
+   they never compete with him for the centre of the frame. Duration is 1 minute
+   per dollar and size/intensity scale with the amount, so a $50 name is
+   unmistakably a bigger event than a $2 one without anyone reading a number.
 
-   Layered UNDER the canvas (z-index 0 vs the Blob's own stacking) for the far
-   half of the orbit and over it for the near half — see orbit.js, which flips
-   z-index by phase. That is what makes it read as going AROUND him rather than
-   sliding across a flat plane.
+   RIGHT-aligned deliberately: the board above is left-aligned to x90 with the
+   nameplate, so hanging these off the opposite edge keeps them from reading as
+   another row of tiles.
+
+   z-index 5 — above the vignette (2) and the starfield (1), below #safe (10)
+   and therefore below the Blob. His canvas is transparent except where he is,
+   so a name shows through the gaps and is eaten where he overlaps it. That
+   occlusion is the whole effect: it puts them in the room with him rather than
+   pasted on the lens.
+
+   Crisp, not soft: the one element allowed to look modern-videogame rather than
+   8-bit. It still uses the house pink/cyan and the same stacked extrude, so it
+   reads as ours and not as a stock alert plugin.
    ═══════════════════════════════════════════════════════════════════════════ */
 #s-orbit {
   position: absolute;
-  inset: 0;
+  /* Just under the board's y600 floor. */
+  top: 612px;
+  left: var(--safe-x);
+  right: 120px;              /* the action rail, same as the board */
   pointer-events: none;
-  /* No overflow:hidden — an orbit at full amplitude reaches outside his box and
-     clipping it would shear the name in half at the widest, most visible point
-     of its arc. */
-  overflow: visible;
-  z-index: 3;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;     /* right-oriented */
+  gap: 14px;
+  /* Never push into the Blob's face: the newest names sit at the top and the
+     stack simply runs out of room rather than growing over him. */
+  max-height: 420px;
+  overflow: hidden;
 }
 
 .pu {
-  position: absolute;
-  left: 50%; top: 50%;
+  position: relative;
   white-space: nowrap;
-  transform-origin: center center;
-  will-change: transform, opacity;
+  text-align: right;
+  transform-origin: right center;
+  will-change: transform;
   /* Sized inline per power-up by the dollar amount. */
   font-family: 'Press Start 2P', Consolas, monospace;
   letter-spacing: -0.02em;
   line-height: 1;
+  flex: none;
 }
 
 /* The name. White core with a coloured bloom — the same trick the score and

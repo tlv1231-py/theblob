@@ -269,6 +269,11 @@
       },
 
       getMood:  function()    { return self.mood; },
+      // His heartbeat, exposed. On a headless box "is he animating?" cannot be
+      // answered by looking, and hashing the canvas cannot tell a frozen loop
+      // from a loop drawing an identical frame. This can.
+      getTick:  function()    { return self.tick; },
+      isRunning: function()   { return !!self.timer; },
       MOODS: MOODS
     };
     return api;

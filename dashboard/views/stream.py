@@ -333,15 +333,17 @@ _STAGE_HTML = """
       <div id="pos-list"></div>
     </div>
 
+    <!-- Donation power-ups. Stage-level and BEHIND the Blob (z-index under
+         #safe), tucked right-aligned under the board. Not inside #s-blob any
+         more: they are not his, they are the room's — paid names hanging in the
+         space behind the streamer, which is where a sponsor board belongs. He
+         occludes them as he moves, and that is the point. -->
+    <div id="s-orbit"></div>
+
     <div id="safe">
 
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
-        <!-- Donation power-ups orbit HERE, inside his box, so they track him
-             wherever the box goes rather than being positioned against the
-             stage. DOM, not canvas: a name is type, and type on a canvas at
-             this size means hand-kerning a bitmap font for no gain. -->
-        <div id="s-orbit"></div>
         <canvas id="blobCanvas"></canvas>
         <div class="blob-mood" id="blob-mood">IDLE</div>
       </div>
