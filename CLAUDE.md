@@ -349,6 +349,29 @@ Paper portfolio start date: **2026-05-29**
     clock, so they are all inert here. This is not a preference — a CSS animation written
     on this page silently does nothing.
 
+    **Event lanes.** Everything animated belongs to one of three, ranked — `stagePump()`
+    is the single arbiter and one lane owns the floor at a time:
+    1. **popup** — the Gameboy window (`annQ`); a *viewer* did something (dono/sub/raid).
+    2. **speaks** — the same window, Blobby's voice (`speakQ`, `blobSpeak()`, `blob_speak`
+       event type). Same box on purpose: a Gameboy has one text box, so who is talking is
+       carried by the `speaking` skin, never by position.
+    3. **trade** — the beat (`tradeQ`).
+
+    Popups and speaks **pause trades**. Pause means *the queue* pauses, not the frame: a
+    beat in flight has fired its sound and has a tile mid-animation, so the unit of work is
+    atomic and only the order is arbitrated. The trade lane takes **one beat per acquire**
+    (not its whole queue) — that is what bounds a donation's wait to ~1.6s. The reorder is
+    atomic for a harder reason: FLIP parks tiles on a transform, so killing it mid-play
+    strands them permanently; it can only be waited out.
+
+    Each lane holds the floor for its whole **burst** — the popup queue drains before the
+    box closes, because closing and reopening between two donations reads as a glitch.
+
+    **Reactions fire from the lane, not on arrival.** `applyStreamEvent` used to set mood
+    and play sound the moment a row was polled, then queue the box separately — so an event
+    behind another sounded seconds before its window opened. Mood/sfx/pulse now fire inside
+    `annNext()` with the box.
+
     `dashboard/yt_overlay.js` is a **TEMP** design aid drawing YouTube's chrome + safe
     zones over the stage. Geometry is sourced and exact; the chrome art is approximate and
     per-element placement is reconstructed (no published pixel map exists). **Defaults ON
