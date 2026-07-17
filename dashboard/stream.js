@@ -1371,6 +1371,11 @@
       if (PU_TYPES[ev.type] && Number(ev.p.amount) > 0) {
         puAdd(ev.id, ev.p.from || 'SOMEONE', Number(ev.p.amount));
         thankThem(ev.p.from || 'SOMEONE', Number(ev.p.amount));
+      } else if (ev.type === 'follow') {
+        // A follow buys no orbit, but it is still a person arriving and being
+        // named is the entire reward. Queued on the speaks lane like the dono
+        // thank-you, so it lands AFTER its own popup rather than over it.
+        thankFollow(ev.p.from || 'SOMEONE');
       }
     } else {
       // A non-viewer popup must actively CLEAR the celebration, not merely
@@ -1486,11 +1491,17 @@
 
   // The only way to make him talk. Text only — he has no name line, because a
   // character's own dialogue box does not caption itself.
+  //
+  // opts.name marks a VIEWER's handle for the magic treatment. The template keeps
+  // its {n} slot all the way to render time on purpose: substituting here would
+  // leave nothing to mark, and hunting for the name in a finished string would
+  // also strike it inside an ordinary word ("welcome in ben" -> "b<ben>t"...).
   function blobSpeak(text, opts) {
     if (!text) return;
     speakQ.push({
       text: String(text).slice(0, 90),
-      mood: (opts && opts.mood) || null
+      mood: (opts && opts.mood) || null,
+      name: (opts && opts.name) || null
     });
     // Shorter cap than the popup queue: stale chatter is worse than no chatter,
     // and unlike a donation nobody paid for it.
@@ -1563,7 +1574,103 @@
     return best;
   }
 
-  function fitSpeak(aEl, text) {
+  // ── Magic names ──────────────────────────────────────────────────────────
+  // A viewer's handle inside SPOKEN text is the one thing in the box that
+  // belongs to them, so it is rendered like treasure: a gold sweep travelling
+  // through the glyphs with a lift behind it.
+  //
+  // SPEECH ONLY. The handle in a popup's HEADER stays plain — up there the name
+  // is a label telling you who this is, and a label that shimmers is noise. The
+  // difference is not cosmetic: the header says who, the speech is him TALKING
+  // TO THEM, and only the second one is a gift.
+  //
+  // Driven by setInterval, like everything that moves on this page. A CSS
+  // animation or gradient keyframe here renders exactly nothing (standing rule).
+  var MG_SPEED  = 0.34;                 // glyphs/tick the highlight travels
+  var MG_SPREAD = 2.4;                  // glyphs of falloff either side of it
+  var MG_GAP    = 5;                    // dark glyphs between passes, so it reads
+                                        // as a sweep and not a strobe
+  var MG_BASE   = [178, 122, 20];       // deep gold at rest
+  var MG_HOT    = [255, 250, 224];      // near-white at the head
+
+  // Names arrive from Streamlabs/YouTube — untrusted. Everything that reaches
+  // innerHTML goes through here. A donor called <img onerror> is a joke someone
+  // WILL make, and this page renders whatever it is handed.
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function speakSegs(text, name) {
+    var t = String(text == null ? '' : text);
+    if (!name) return [{ t: t, mg: false }];
+    var out = [], i = 0, k;
+    while ((k = t.indexOf('{n}', i)) !== -1) {
+      if (k > i) out.push({ t: t.slice(i, k), mg: false });
+      out.push({ t: String(name), mg: true });
+      i = k + 3;
+    }
+    if (i < t.length) out.push({ t: t.slice(i), mg: false });
+    return out.length ? out : [{ t: t, mg: false }];
+  }
+
+  function segChars(segs) {
+    var out = [];
+    segs.forEach(function(s) {
+      for (var i = 0; i < s.t.length; i++) out.push({ c: s.t[i], mg: s.mg });
+    });
+    return out;
+  }
+
+  // ONE builder for BOTH the fit and the typewriter. Measuring plain text while
+  // rendering inline-block glyphs is a known trap on this page — they round per
+  // box (528px stamped vs 514px plain) — and it would silently oversize every
+  // line carrying a name, which is exactly the lines that matter here.
+  function speakRender(el, chars, upto) {
+    var html = '', plain = '';
+    for (var i = 0; i < upto && i < chars.length; i++) {
+      if (chars[i].mg) {
+        if (plain) { html += esc(plain); plain = ''; }
+        // A space inside a name would collapse as an inline-block, so it is
+        // carried as a hard space rather than dropped.
+        html += '<i class="mg">' + esc(chars[i].c === ' ' ? ' ' : chars[i].c) + '</i>';
+      } else {
+        plain += chars[i].c;
+      }
+    }
+    if (plain) html += esc(plain);
+    el.innerHTML = html;
+  }
+
+  var mgT = null, mgPhase = 0;
+  function mgTick() {
+    var gl = document.querySelectorAll('#ev-act .mg');
+    if (!gl.length) return;             // nothing named on screen — idle, cheap
+    mgPhase += MG_SPEED;
+    var span = gl.length + MG_GAP + MG_SPREAD * 2;
+    var head = (mgPhase % span) - MG_SPREAD;
+    for (var i = 0; i < gl.length; i++) {
+      var w = Math.max(0, 1 - Math.abs(i - head) / MG_SPREAD);
+      w = w * w * (3 - 2 * w);          // smoothstep — a linear ramp wipes, this glows
+      var c = 'rgb(' + [0, 1, 2].map(function(k) {
+        return Math.round(MG_BASE[k] + (MG_HOT[k] - MG_BASE[k]) * w);
+      }).join(',') + ')';
+      var g = gl[i];
+      g.style.color = c;
+      g.style.transform = 'translateY(' + (-2.6 * w).toFixed(2) + 'px)';
+      // Gold core, violet fringe — the fringe is what makes it read as mystical
+      // rather than merely bright. It only exists near the head, so the name is
+      // legible gold at rest and jewelled as the sweep passes.
+      g.style.textShadow = w > 0.02
+        ? '0 0 ' + (2 + 11 * w).toFixed(1) + 'px rgba(255,203,70,' + (0.35 + 0.5 * w).toFixed(2) + ')'
+          + ',0 0 ' + (16 * w).toFixed(1) + 'px rgba(186,124,255,' + (0.55 * w).toFixed(2) + ')'
+        : '0 0 3px rgba(255,193,64,0.35)';
+    }
+  }
+  function mgStart() { if (!mgT) mgT = setInterval(mgTick, 100); }
+
+  function fitSpeak(aEl, chars) {
     var lcd = $('ev-lcd'), body = $('ev-body');
     if (!lcd || !body) return;
     var lcs = getComputedStyle(lcd), bcs = getComputedStyle(body);
@@ -1587,7 +1694,10 @@
       availH -= nl.offsetHeight + (parseFloat(getComputedStyle(nl).marginBottom) || 0);
     }
 
-    aEl.textContent = text;
+    // Measured AS RENDERED — the finished line, glyph markup and all. Stamping
+    // plain text here and typing <i> glyphs later measures a narrower line than
+    // the one that arrives, and the name is what pushes it over.
+    speakRender(aEl, chars, chars.length);
     var lo = SPEAK_MIN, hi = SPEAK_MAX, best = SPEAK_MIN;
     while (lo <= hi) {
       var mid = (lo + hi) >> 1;
@@ -1598,7 +1708,7 @@
       else hi = mid - 1;
     }
     aEl.style.fontSize = best + 'px';
-    aEl.textContent = '';        // typing begins from empty, at the settled size
+    aEl.innerHTML = '';          // typing begins from empty, at the settled size
     return best;
   }
 
@@ -1649,7 +1759,9 @@
 
     // Size to the box now — after the classes are on (a display:none element
     // measures as 0) and before the first glyph.
-    fitSpeak(aEl, s.text);
+    var chars = segChars(speakSegs(s.text, s.name));
+    fitSpeak(aEl, chars);
+    if (s.name) mgStart();
 
     if (s.mood) { blob.setMood(s.mood, 30); showMood(); }
 
@@ -1668,15 +1780,17 @@
       // word with the lane still holding the floor — the exact deadlock observed.
       // A voice is not worth wedging the broadcast: on failure, finish the line.
       try {
-        if (i < s.text.length) {
-          aEl.textContent += s.text[i];
-          if (s.text[i] !== ' ') SFX.blip();   // blip on non-spaces, or word gaps click
+        if (i < chars.length) {
+          // Rebuilt to i+1 rather than appended: a magic glyph is an element, and
+          // there is no "+=" that adds one without re-parsing the string anyway.
           i++;
+          speakRender(aEl, chars, i);
+          if (chars[i - 1].c !== ' ') SFX.blip();  // blip on non-spaces, or word gaps click
           return;
         }
       } catch (err) {
         console.warn('[stream] speak typewriter failed at glyph ' + i + ':', err);
-        try { aEl.textContent = s.text; } catch (e2) {}
+        try { speakRender(aEl, chars, chars.length); } catch (e2) {}
       }
       clearInterval(h);
       if (speakTypeT === h) speakTypeT = null;
@@ -2316,13 +2430,34 @@
   ];
   var THANKS_BIG_AT = 20;     // dollars — above this he loses it
 
+  // A follow is not money and must not borrow money's copy — "YOU ABSOLUTE
+  // LEGEND" for a free click is how a channel reads as desperate. Same shape,
+  // humbler register: they showed up, so he greets them. No power-up either,
+  // for the reason PU_TYPES gives.
+  var THANKS_FOLLOW = [
+    'welcome in {n}', '{n} welcome!!', 'hey {n} <3', '{n} good to see you',
+    'yooo {n}', '{n} welcome aboard', 'new friend: {n}', 'oh hey {n}'
+  ];
+
+  // 16 chars is the box's practical limit for a handle; lowercased because his
+  // whole voice is lowercase and a SHOUTING handle would read as him shouting.
+  function cleanName(name) {
+    return String(name || 'you').toLowerCase().slice(0, 16);
+  }
+
+  function pick(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
+
   function thankThem(name, amount) {
-    var pool = Number(amount) >= THANKS_BIG_AT ? THANKS_BIG : THANKS_SMALL;
-    var line = pool[Math.floor(Math.random() * pool.length)]
-      .replace('{n}', String(name || 'you').toLowerCase().slice(0, 16));
+    // The line keeps its {n} — the name travels separately so the renderer knows
+    // which glyphs are theirs. See blobSpeak.
     // HAPPY, not ALERT: someone gave him money, and the face should agree with
     // the words. The box autoscales the line, so length is not a constraint.
-    blobSpeak(line, { mood: 'HAPPY' });
+    blobSpeak(pick(Number(amount) >= THANKS_BIG_AT ? THANKS_BIG : THANKS_SMALL),
+              { mood: 'HAPPY', name: cleanName(name) });
+  }
+
+  function thankFollow(name) {
+    blobSpeak(pick(THANKS_FOLLOW), { mood: 'HAPPY', name: cleanName(name) });
   }
 
   // Cube root of the dollar amount, normalised so $5 == 1.0. Clamped at both
@@ -3469,6 +3604,22 @@
       return pool.map(function(l) {
         return l.replace('{n}', String(name || 'you').toLowerCase().slice(0, 16));
       });
+    },
+    // The follow greeting, and the magic-name pipeline — inspectable without
+    // waiting for a real follow to cross two lanes at a typewriter's pace.
+    followFor: function(name) {
+      return THANKS_FOLLOW.map(function(l) { return l.replace('{n}', cleanName(name)); });
+    },
+    thankFollow: thankFollow,
+    segs: function(text, name) { return speakSegs(text, name); },
+    mg: function() {
+      var gl = document.querySelectorAll('#ev-act .mg');
+      return {
+        glyphs: gl.length,
+        text: [].map.call(gl, function(g) { return g.textContent; }).join(''),
+        colors: [].map.call(gl, function(g) { return g.style.color; }),
+        running: !!mgT
+      };
     }
   };
 
