@@ -336,14 +336,23 @@ def main() -> None:
         items = r.get("items") or []
 
         if not seeded:
-            # DISCARD THE FIRST BATCH. A cold liveChatMessages.list returns the
+            # DISCARD THE FIRST BATCH. A cold liveChat/messages returns the
             # chat's recent backlog, not just what is new — so every restart
             # (and the watchdog does restart things) would replay a pile of old
             # messages and the Blob would react to a conversation that finished
-            # an hour ago. Take the page token, drop the messages.
+            # an hour ago. Measured against a real broadcast: 75 of them. Take
+            # the page token, drop the messages.
             seeded = True
             print(f"[chat] seeded past {len(items)} backlog message(s)", flush=True)
             items = []
+            # Start HOT, do not fall straight to a 5-minute sleep. last_msg=0.0
+            # means (now - last_msg) is ~1.7e9, which is never < HOT_WINDOW — so
+            # a freshly started listener seeded the backlog and then went deaf for
+            # five minutes, on a chat with a message every few seconds. Anyone
+            # talking at startup got silence. Being attentive for the first
+            # HOT_WINDOW costs ~24 polls (120 units) per restart and buys the
+            # thing the listener exists for.
+            last_msg = time.time()
 
         for it in items:
             mapped = to_event(it)
