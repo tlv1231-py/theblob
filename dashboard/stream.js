@@ -2748,7 +2748,13 @@
           try { list = JSON.parse(rows[0].value) || []; } catch (e) { list = []; }
         }
         if (!Array.isArray(list)) list = [];
-        if (list.some(function(d) { return d && d.id === key; })) return;   // beaten to it
+        // Idempotent by event id — every renderer airs every event, so the same
+        // donation arrives here from each open tab. A row carries the id that
+        // created it; a donation MERGED into an existing row records the id in
+        // `seen`, so a duplicate delivery of a merged dono cannot add twice.
+        if (list.some(function(d) {
+          return d && (d.id === key || (d.seen && d.seen.indexOf(key) >= 0));
+        })) return;   // beaten to it
         // Returned so the chain waits for the write, not just the read — the
         // whole point of serialising.
 
@@ -2758,8 +2764,38 @@
         list = list.filter(function(d) {
           return d && d.until && new Date(d.until).getTime() > now;
         });
-        list.push({ id: key, name: String(name).slice(0, 16), amount: Number(amount),
-                    until: puUntil(amount, now) });
+        // MERGE, don't STACK. A second dono from a name already orbiting adds
+        // its money and its minutes to that one entry instead of opening a
+        // second row — the board was showing "BIB PEE PEE MAN $5" twice. $1:1min
+        // holds, so `add` dollars is `add` minutes: `until` moves out by
+        // add*60000 and the shown total grows. puSince rises by the same minutes
+        // as `until`, so the entry keeps its arrival slot rather than jumping the
+        // queue; the name|until key changes, so puRender re-slams it at the new
+        // total. Older stacked rows for the same name (from before this fix, or
+        // from HQ) fold into the survivor, so the store self-heals on the next
+        // dono from that donor.
+        var nm = String(name).slice(0, 16), NM = nm.toUpperCase();
+        var add = Math.max(0, Number(amount) || 0);
+        var same = null;
+        for (var mi = list.length - 1; mi >= 0; mi--) {
+          if (!list[mi] || String(list[mi].name).toUpperCase() !== NM) continue;
+          if (!same) { same = list[mi]; continue; }
+          same.amount = (Number(same.amount) || 0) + (Number(list[mi].amount) || 0);
+          same.until = new Date(new Date(same.until).getTime() +
+                       Math.max(1, Number(list[mi].amount) || 0) * 60000).toISOString();
+          same.seen = (same.seen || []).concat(list[mi].seen || [],
+                       list[mi].id ? [list[mi].id] : []);
+          list.splice(mi, 1);
+        }
+        if (same) {
+          same.amount = (Number(same.amount) || 0) + add;
+          same.until = new Date(new Date(same.until).getTime() +
+                       Math.max(1, add) * 60000).toISOString();
+          (same.seen = same.seen || []).push(key);
+        } else {
+          list.push({ id: key, name: nm, amount: Number(amount),
+                      until: puUntil(amount, now) });
+        }
 
         // unit and label are NOT NULL on strategy_params — omitting them fails
         // the insert with a 23502 and, because the catch below was silent, the
