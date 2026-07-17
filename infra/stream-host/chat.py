@@ -262,8 +262,16 @@ def post_health(status: str, detail: dict) -> None:
 
 def main() -> None:
     if not API_KEY:
-        print("[chat] YOUTUBE_API_KEY missing — put it in /opt/blob-stream/.env", flush=True)
-        raise SystemExit(1)
+        # Idle, do NOT exit. Restart=always would turn a missing key into a crash
+        # loop that fills the journal forever and drowns real errors. Report
+        # degraded instead and say why — an unconfigured listener should look
+        # unconfigured on Stream HQ, not dead, and not absent.
+        print("[chat] YOUTUBE_API_KEY missing — idling. Add it to "
+              "/opt/blob-stream/.env and: systemctl restart blob-chat", flush=True)
+        while True:
+            post_health("degraded", {"reason": "YOUTUBE_API_KEY not set — viewer "
+                                               "events are not being read"})
+            time.sleep(300)
 
     quota = Quota()
     chat_id: str | None = None
