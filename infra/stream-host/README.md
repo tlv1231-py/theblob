@@ -86,6 +86,19 @@ systemd reads `EnvironmentFile=` as root before dropping privileges, so the
 services still get `YOUTUBE_KEY` while the browser's own user cannot read the
 credential that owns your channel.
 
+**7. The fonts come from Google, at load time.**
+The page requests Press Start 2P and VT323 from `fonts.googleapis.com`. Neither is
+packaged in apt, and with nothing local `fc-match` resolves **both to DejaVu
+Sans** — not even a monospace. One Google Fonts blip during a watchdog reload and
+the whole pixel-art stream renders in generic sans while every light stays green:
+the page beats, ffmpeg holds speed, RTMP is connected. `setup.sh` installs both
+locally (SIL Open Font License, redistribution permitted, licences alongside), so
+the fetch is an optimisation and not a dependency. Check it:
+
+```bash
+fc-match 'Press Start 2P'   # must NOT say DejaVu
+```
+
 ## The START/STOP button
 
 Stream HQ starts and stops the broadcast by writing one row:
@@ -125,19 +138,6 @@ with `reason: broadcast switch is off`. A red light for a system doing exactly
 what it was told is how you learn to ignore red lights. (`off` is deliberately
 not used — HQ's `_DOT` maps only ok/degraded/down/absent/unknown and would
 KeyError on anything else.)
-
-**7. The fonts come from Google, at load time.**
-The page requests Press Start 2P and VT323 from `fonts.googleapis.com`. Neither is
-packaged in apt, and with nothing local `fc-match` resolves **both to DejaVu
-Sans** — not even a monospace. One Google Fonts blip during a watchdog reload and
-the whole pixel-art stream renders in generic sans while every light stays green:
-the page beats, ffmpeg holds speed, RTMP is connected. `setup.sh` installs both
-locally (SIL Open Font License, redistribution permitted, licences alongside), so
-the fetch is an optimisation and not a dependency. Check it:
-
-```bash
-fc-match 'Press Start 2P'   # must NOT say DejaVu
-```
 
 ## Verify
 
