@@ -65,8 +65,13 @@
     // ~36% at the very bottom; past roughly SUN_SLIT_MAX 6 it stops reading as
     // a sun. SUN_SLIT_MIN 0 disables the banding entirely.
     var SUN_SLIT_AT  = 0.5;            // no bands above the midline
-    var SUN_SLIT_MIN = 1;              // band rows at the top of the zone
-    var SUN_SLIT_MAX = 4;              // band rows at the very bottom
+    // Bands OFF per request — the thin horizontal lines rendering across the sun
+    // were not wanted. band = 0 everywhere makes `banded` always false, so the
+    // sun is a clean glowing disc. Restore the vaporwave banding with MIN 1 /
+    // MAX 4. (The global #scanlines CRT overlay in stream.css still crosses the
+    // whole scene, the sun included, but far more faintly than these bands did.)
+    var SUN_SLIT_MIN = 0;              // band rows at the top of the zone
+    var SUN_SLIT_MAX = 0;              // band rows at the very bottom
     var SUN_SLIT_LIT = 7;              // rows of full-bright sun between — CONSTANT
     var SUN_SLIT_DIM = 0.55;           // how far a band drops toward its own
                                        // shadow. Stays warm — a band that cools
