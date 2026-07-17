@@ -232,8 +232,6 @@ _STAGE_HTML = """
          everything here is decoration, so losing it to chrome costs nothing. -->
     <div id="ambient"></div>
     <canvas id="bgCanvas"></canvas>
-    <div id="term-top" class="term-strip"></div>
-    <div id="term-bot" class="term-strip"></div>
     <div id="scanlines"></div>
     <div id="vignette"></div>
 
@@ -243,13 +241,14 @@ _STAGE_HTML = """
          of them was what anyone tuned in for, and every one was taxing the
          three that are. Those figures live on the Command Center, where
          someone is reading rather than watching. -->
-    <div id="safe">
+    <!-- The board is OUTSIDE the safe box: it now runs from y120 up top down to
+         y660, which is taller than the safe box's own ceiling at y380. It floats
+         over the stage; #safe pads its content down to clear it. -->
+    <div id="s-pos">
+      <div id="pos-list"></div>
+    </div>
 
-      <!-- The board. It sits above his head because it is the action and he is
-           the one working it. Two rows of seven slots, no header. -->
-      <div id="s-pos">
-        <div id="pos-list"></div>
-      </div>
+    <div id="safe">
 
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>

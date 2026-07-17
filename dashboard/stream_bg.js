@@ -36,10 +36,13 @@
 
     // ── Stars — three depth layers, ported from home_nav.js but quantized ────
     // Palette is the dashboard's: purple near, cyan mid, blue-white far.
+    // Speeds are nudged up from the horizontal tuning: the buffer is 960 tall
+    // against 540 wide, so an unchanged rate would take nearly twice as long to
+    // cross and read as stalled.
     var LAYERS = [
-      { count: 90, speed: 0.06, size: 1, a: 0.30, c: [200, 200, 255] },  // far
-      { count: 34, speed: 0.16, size: 1, a: 0.42, c: [0, 229, 255] },    // mid
-      { count: 16, speed: 0.34, size: 2, a: 0.55, c: [180, 0, 255] },    // near
+      { count: 110, speed: 0.10, size: 1, a: 0.30, c: [200, 200, 255] },  // far
+      { count: 40,  speed: 0.26, size: 1, a: 0.42, c: [0, 229, 255] },    // mid
+      { count: 18,  speed: 0.52, size: 2, a: 0.58, c: [180, 0, 255] },    // near
     ];
     var stars = [];
     LAYERS.forEach(function(l) {
@@ -144,10 +147,13 @@
         }
       });
 
-      // Stars — squares, drifting, twinkling.
+      // Stars — squares, drifting BOTTOM TO TOP, twinkling. Rising rather than
+      // sideways: on a 9:16 stage the long axis is vertical, so upward travel
+      // gives each star three times the screen time and reads as the scene
+      // descending through space rather than panning across it.
       stars.forEach(function(s) {
-        s.x -= s.sp;
-        if (s.x < -2) { s.x = W + 2; s.y = Math.random() * H; }
+        s.y -= s.sp;
+        if (s.y < -2) { s.y = H + 2; s.x = Math.random() * W; }
         var tw = 0.75 + 0.25 * Math.sin(t * 2 + s.tw);
         px(s.x, s.y, s.size, s.size, s.c, s.a * tw);
       });

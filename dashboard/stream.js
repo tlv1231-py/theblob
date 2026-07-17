@@ -995,62 +995,9 @@
   // Kept as the name the rest of the file calls.
   function hitTile(sym) { arcadeHit(sym); }
 
-  // ── Terminal strips ──────────────────────────────────────────────────────
-  // A clone of the Command Center's feed, parked in the reserved bands where
-  // YouTube will cover half of it. That is fine and intended: this is texture,
-  // not a readout. It is fed from the pipeline_events poll that already runs
-  // for the Blob's moods, so it adds zero queries.
-  var termSeen = null, termLines = [];
-  var TERM_MAX = 9;
-
-  function termClass(msg, type) {
-    if (type !== 'TRADE') return 'tl-sys';
-    if ((msg || '').indexOf('ENTER') >= 0) return 'tl-enter';
-    var m = (msg || '').match(/pnl\s+([+-]?[\d.]+)/);
-    return (m && parseFloat(m[1]) > 0) ? 'tl-win' : 'tl-loss';
-  }
-
-  // Strip the engine's own glyphs and padding — at this size and opacity the
-  // line has to survive being read in peripheral vision.
-  function termText(r) {
-    var m = (r.message || '').replace(/^[▲✗✓▸]\s*/, '');
-    return m.length > 62 ? m.slice(0, 62) + '…' : m;
-  }
-
-  function pushTerm(rows) {
-    rows.forEach(function(r) {
-      termLines.unshift({
-        t: new Date(r.recorded_at + (r.recorded_at.slice(-1) === 'Z' ? '' : 'Z')),
-        cls: termClass(r.message, r.event_type),
-        tag: r.event_type === 'TRADE' ? 'TRD' : 'SYS',
-        sym: r.symbol || '',
-        msg: termText(r)
-      });
-    });
-    if (termLines.length > TERM_MAX * 2) termLines.length = TERM_MAX * 2;
-    renderTerm();
-  }
-
-  function renderTerm() {
-    var hhmm = function(d) {
-      return isNaN(d.getTime()) ? '--:--:--' : new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York', hour12: false,
-        hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(d);
-    };
-    var html = function(list) {
-      return list.map(function(l) {
-        return '<div class="term-line"><span class="tl-t">' + hhmm(l.t) + '</span>' +
-               '<span class="tl-tag ' + l.cls + '">' + l.tag + '</span>' +
-               (l.sym ? '<span class="tl-sym">' + l.sym + '</span>' : '') +
-               '<span class="' + l.cls + '">' + l.msg + '</span></div>';
-      }).join('');
-    };
-    // Two strips, different slices — top and bottom are never the same text,
-    // so a viewer who notices both sees a feed, not a mirror.
-    var top = $('term-top'), bot = $('term-bot');
-    if (top) top.innerHTML = html(termLines.slice(0, TERM_MAX));
-    if (bot) bot.innerHTML = html(termLines.slice(TERM_MAX, TERM_MAX * 2));
-  }
+  // The terminal feed is DELETED — markup, CSS and renderer. It was texture in
+  // the reserved bands; the background is the starfield now. pollEvents still
+  // fetches the same rows, which the Blob's moods and the board both need.
 
   // ── Agency ───────────────────────────────────────────────────────────────
   // Making the Blob look like he is DOING this rather than reacting to it.
@@ -1425,10 +1372,6 @@
         })).reverse();
         state.seenEvTs = newest;
 
-        // Terminal strips take everything, trades and scans alike — they are
-        // the room's ambient chatter, not a curated highlight reel.
-        if (firstRun) pushTerm(rows.slice(0, TERM_MAX * 2).reverse());
-        else if (fresh.length) pushTerm(fresh);
 
         // daily_pnl rides on every EXIT detail — a far fresher continuous
         // signal than the 10s nav_snapshots poll, so feed it to his shape.

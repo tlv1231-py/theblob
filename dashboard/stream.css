@@ -92,69 +92,20 @@ html, body {
   z-index: 1;
 }
 
-/* ── Terminal strips ──────────────────────────────────────────────────────
-   A clone of the Command Center's feed, living in the reserved bands. It is a
-   DETAIL, not a readout: dim, masked at both edges, and deliberately parked
-   where YouTube will cover half of it. If a viewer reads it, good; if the
-   chrome eats it, nothing was lost. Fed from the same pipeline_events poll the
-   Blob already runs, so it costs no extra queries. */
-.term-strip {
-  position: absolute;
-  left: 0; right: 0;
-  /* Above the vignette (88) so the feed is not fighting the very gradient that
-     is darkest exactly where the feed lives. Below the scanlines (92) so the
-     CRT still rides over it. It never overlaps #safe — the strips are in the
-     reserved bands, the safe box is between them — so being above it in the
-     stack costs nothing. */
-  z-index: 89;
-  overflow: hidden;
-  font-family: VT323, Consolas, monospace;
-  font-size: 15px;
-  line-height: 1.45;
-  padding: 0 96px;
-  pointer-events: none;
-  /* 0.5 -> 0.72. Legible now that the vignette is not also subtracting from it,
-     but still texture: it must never compete with the board or the score. */
-  opacity: 0.72;
-}
-#term-top { top: 0; height: 380px; }
-#term-bot { bottom: 0; height: 380px; }
-/* Dissolve toward the safe box so the strips never compete with it, and toward
-   the stage edge so they don't end in a hard cut. */
-#term-top {
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 62%, transparent 100%);
-          mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 62%, transparent 100%);
-}
-#term-bot {
-  -webkit-mask-image: linear-gradient(0deg, transparent 4%, #000 34%, #000 70%, transparent 100%);
-          mask-image: linear-gradient(0deg, transparent 4%, #000 34%, #000 70%, transparent 100%);
-}
-.term-line {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  color: var(--text-dim);
-  animation: term-in 0.4s steps(3, end) both;
-}
-.term-line .tl-t   { color: #2a1048; margin-right: 8px; }
-.term-line .tl-tag { margin-right: 8px; letter-spacing: 0.1em; font-size: 12px; }
-.term-line .tl-sym { color: var(--text-mid); margin-right: 8px; }
-@keyframes term-in {
-  from { opacity: 0; transform: translateX(-10px); }
-  to   { opacity: 1; transform: none; }
-}
-.tl-enter { color: var(--accent2); }
-.tl-win   { color: var(--ok); }
-.tl-loss  { color: var(--danger); }
-.tl-sys   { color: var(--accent3); }
+/* The terminal strips are DELETED — markup, styles and renderer. They were
+   texture parked in the reserved bands, and they were the only reason the
+   vignette had to be stacked above the content at all. The background is the
+   starfield now and nothing else. */
 
 /* ── Stacking order ───────────────────────────────────────────────────────
-   ambient(auto) < bgCanvas(1) < safe(10) < vignette(88) < term(89) < scan(92)
+   ambient(auto) < bgCanvas(1) < vignette(2) < safe(10) < s-pos(11) < scan(92)
 
-   The vignette sits BELOW the terminal strips on purpose. It darkens the stage
-   toward its edges — and the strips live in exactly those edges, so at z-index 2
-   they were eating up to 72% black on top of their own 0.5 opacity: about 0.14
-   effective. That is the "geometry in front of the feed". The vignette still
-   frames the Blob (it is transparent through the middle 40%, where he is), it
-   just no longer paints over the text.
+   The vignette drops to 2 — it is part of the BACKGROUND now, darkening the
+   starfield toward the edges and nothing else. It used to sit at 88, above
+   every piece of content, which is what was dimming the terminal feed into
+   near-invisibility. With the feed gone the fix is simpler: the vignette
+   belongs with the atmosphere it is atmospheric for.
+
    Scanlines stay on top of everything — the CRT sits over the whole scene. */
 #scanlines {
   position: absolute; inset: 0; z-index: 92; pointer-events: none;
@@ -164,16 +115,22 @@ html, body {
 }
 
 #vignette {
-  position: absolute; inset: 0; z-index: 88; pointer-events: none;
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background: radial-gradient(ellipse 74% 46% at 50% 50%,
               transparent 40%, rgba(0,0,0,0.72) 100%);
 }
 
 /* ── The safe box ─────────────────────────────────────────────────────── */
+/* padding-top clears the board, which now overhangs this box from above and
+   ends at y660 — 280px past the safe ceiling at y380. box-sizing is border-box,
+   so the padding eats into the 1160 rather than adding to it: content runs
+   y660 -> y1540, which is exactly Blob(720) + score(160). Change the board's
+   height and this must change with it. */
 #safe {
   position: absolute;
   left: var(--safe-x); top: var(--safe-y);
   width: var(--safe-w); height: var(--safe-h);
+  padding-top: 280px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -525,8 +482,22 @@ html, body {
    and costing the slots height.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* OUTSIDE the safe box, on purpose and at a cost.
+   The board now runs y120 -> y660: 540px instead of 280, so the slots are ~2.5x
+   the area and the tickers roughly double.
+   THE COST: the safe box starts at y380. Rows 1 and 2 sit at y120-390, i.e.
+   inside the band YouTube paints its own chrome over — so on a real stream the
+   TOP HALF OF THE BOARD (8 of 14 tiles) is behind the close button, the cast
+   icon, the LIVE badge and the viewer count. This is what "all the way to the
+   top" costs, and it is one number to undo: set top:380px and height:280px to
+   pull the whole board back inside the safe box. */
 #s-pos {
-  height: 280px; flex: none;
+  position: absolute;
+  top: 120px;
+  left: var(--safe-x);          /* same 90 -> 960 column as the safe box */
+  right: 120px;
+  height: 540px;
+  z-index: 11;                  /* above #safe, whose content it overhangs */
   display: flex; flex-direction: column;
 }
 
@@ -534,14 +505,18 @@ html, body {
    like a party lineup, not a spreadsheet column. Each slot is ~120x128 — nearly
    4x the area of the old dense row, which is the entire point: these are the
    most interesting thing on the stage and they were previously a footnote. */
-/* gap 6 -> 2: the slots close ranks so each ticker can be bigger without the
-   longest one (GOOGL, 5 glyphs) clipping its cell. */
+/* 4 x 4 = 16 slots for a 14-position book, replacing 7 x 2.
+   Rows were never the constraint — WIDTH was. At 7 columns each cell is 124px
+   and "GOOGL" (5 glyphs of a monospaced face) caps the ticker at ~21px no matter
+   how tall the board gets. Four columns gives each cell 214px, which is what
+   actually buys a bigger ticker. The extra vertical space then goes to the
+   fly-in and the hit having somewhere to travel. */
 #pos-list {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 2px;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 4px;
   overflow: hidden;
 }
 
@@ -569,9 +544,12 @@ html, body {
    rather than five spaced letters, which is what "bigger but closer" buys.
    transform-origin centre: arcadeHit and flyIn scale this element, and a
    default origin would make it grow off toward one corner. */
+/* 21 -> 38. Press Start 2P is ~1em per glyph and "GOOGL" is 5 of them, so the
+   ceiling is cellWidth/5 = 214/5 ≈ 42. 38 leaves room for the shadow throw and
+   the 2.2x overshoot the arcade hit scales to. */
 .t-sym {
   font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 21px; line-height: 1;
+  font-size: 38px; line-height: 1;
   letter-spacing: -0.04em;
   color: #ffffff;
   -webkit-text-stroke: 1px rgba(0,0,0,0.5);
