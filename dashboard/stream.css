@@ -633,12 +633,15 @@ html, body {
   overflow: visible;
 }
 
+/* .pu is the STACK SLOT and never transforms — it only reserves the box. All
+   the motion lives on .pu-live, and the trail ghosts hang off it absolutely.
+   Keeping the slot still is what lets the ghosts sit at stale poses: a trail
+   that inherits the live transform is the same glyph drawn five times in one
+   place. */
 .pu {
   position: relative;
   white-space: nowrap;
   text-align: right;
-  transform-origin: right center;
-  will-change: transform;
   /* Sized inline per power-up by the dollar amount. */
   font-family: 'Press Start 2P', Consolas, monospace;
   letter-spacing: -0.02em;
@@ -646,11 +649,34 @@ html, body {
   flex: none;
 }
 
-/* The name. A white core inside a rainbow bloom that never settles on one
-   colour: --pu-c and --pu-c2 are swept 90deg apart by puTick, so the halo is
-   always a gradient sliding through itself rather than a tint.
+/* The live face. In flow, so it defines the slot's box. */
+.pu-live {
+  display: block;
+  transform-origin: right center;
+  will-change: transform;
+}
 
-   FIVE shadow layers, and that is the point — someone paid, and this is the one
+/* THE TRAIL. Ghost copies of the name at poses it held a few frames ago, each
+   lit by the hue of THAT moment — so the streak is a smear of the rainbow it
+   has been sweeping through rather than a monochrome blur. Behind the live face
+   and out of flow, so they cannot disturb the stack. */
+.pu-g {
+  position: absolute;
+  right: 0; top: 0;
+  transform-origin: right center;
+  will-change: transform, opacity;
+  pointer-events: none;
+  z-index: -1;
+  -webkit-text-stroke: 0;
+}
+
+/* The name. A white core inside a TACKY BOARDWALK RGB halo — three hues 120deg
+   apart (an actual RGB triad) sweeping together, so several colours are visible
+   at once. That simultaneity is the whole difference: one hue sliding through
+   the spectrum reads as a designer's colour animation; three at once reads as a
+   cheap LED strip on a pier, which is the brief.
+
+   SEVEN shadow layers, and that is the point — someone paid, and this is the one
    element on the stage allowed to be obnoxious. The hard extrude stays
    underneath all of it so the glyphs keep their arcade weight instead of
    dissolving into their own light. */
@@ -660,11 +686,12 @@ html, body {
   text-shadow:
     2px 2px 0 #1a0016,
     4px 4px 0 rgba(0,0,0,0.85),
-    0 0 calc(var(--pu-glow, 18px) * 0.5) #ffffff,
+    0 0 calc(var(--pu-glow, 18px) * 0.4) #ffffff,
     0 0 var(--pu-glow, 18px)             var(--pu-c,  #ff00cc),
-    0 0 calc(var(--pu-glow, 18px) * 2)   var(--pu-c,  #ff00cc),
-    0 0 calc(var(--pu-glow, 18px) * 3.2) var(--pu-c2, #00e5ff),
-    0 0 calc(var(--pu-glow, 18px) * 5)   var(--pu-c2, #00e5ff);
+    0 0 calc(var(--pu-glow, 18px) * 1.8) var(--pu-c,  #ff00cc),
+    0 0 calc(var(--pu-glow, 18px) * 2.8) var(--pu-c2, #00e5ff),
+    0 0 calc(var(--pu-glow, 18px) * 4.2) var(--pu-c3, #ffee00),
+    0 0 calc(var(--pu-glow, 18px) * 6)   var(--pu-c3, #ffee00);
 }
 
 /* The amount rides under the name, smaller and in the accent — money is the

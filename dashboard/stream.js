@@ -1155,10 +1155,10 @@
     // which hands the sentence back to the AFK cycle when the burst drains.
     if (VIEWER_EVENTS[ev.type]) {
       setStatusHappy();
-      // Money buys an orbit. Fired here, with the box, so the power-up appears
-      // on the same frame the viewer is thanked.
+      // Money buys an orbit AND a thank-you. Both fire here, with the box.
       if (PU_TYPES[ev.type] && Number(ev.p.amount) > 0) {
         puAdd(ev.id, ev.p.from || 'SOMEONE', Number(ev.p.amount));
+        thankThem(ev.p.from || 'SOMEONE', Number(ev.p.amount));
       }
     } else {
       // A non-viewer popup must actively CLEAR the celebration, not merely
@@ -2017,6 +2017,8 @@
   var PU_FONT_GAIN = 13;      // px added per unit of scale
   var PU_BASE_AMP = 3;        // hover amplitude in px at the smallest dono
   var PU_AMP_GAIN = 5;        // px added per unit of scale — the "intensity"
+  var PU_TRAIL = 4;           // ghost copies behind the live name
+  var PU_TRAIL_EVERY = 2;     // frames between trail samples — see puTick
   var PU_MIN_S = 1;           // $1 and under all look the same — the floor
   var PU_REF = 5;             // the dono the curve is normalised around
   // Bounds the stack in the LIST rather than by clipping the container. The box
@@ -2024,6 +2026,37 @@
   // against a line level with the bottom of the tiles. Newest 5 orbit; the rest
   // are still live in the DB and still visible in HQ, they just wait their turn.
   var PU_MAX = 5;
+
+  // ── The thank-you ────────────────────────────────────────────────────────
+  // He says their NAME. That is the whole feature: an alert box with your
+  // handle in it is a notification, but the character turning round and thanking
+  // you by name is the reason you paid.
+  //
+  // It queues on the SPEAKS lane, so it lands AFTER the popup rather than over
+  // it — the box announces what happened, then he responds to it. That ordering
+  // is free: the ladder already makes speaks wait for popups, so the sequence
+  // falls out of the lanes without anyone scheduling it.
+  //
+  // Tiered by amount, because "ty" for $100 is an insult and a scream for $2 is
+  // noise. Several per tier so a dono train does not repeat itself word for word.
+  var THANKS_SMALL = [
+    'thanks {n}!', 'ty {n} <3', '{n} you legend', 'appreciate you {n}',
+    '{n} thank you!!', 'love you {n}'
+  ];
+  var THANKS_BIG = [
+    '{n} YOU ABSOLUTE LEGEND', '{n} WHAT!! thank you!!', 'OH MY GOD. thank you {n}',
+    '{n} you are insane. thank you', 'I LOVE YOU {n}', '{n} just made my whole week'
+  ];
+  var THANKS_BIG_AT = 20;     // dollars — above this he loses it
+
+  function thankThem(name, amount) {
+    var pool = Number(amount) >= THANKS_BIG_AT ? THANKS_BIG : THANKS_SMALL;
+    var line = pool[Math.floor(Math.random() * pool.length)]
+      .replace('{n}', String(name || 'you').toLowerCase().slice(0, 16));
+    // HAPPY, not ALERT: someone gave him money, and the face should agree with
+    // the words. The box autoscales the line, so length is not a constraint.
+    blobSpeak(line, { mood: 'HAPPY' });
+  }
 
   // Cube root of the dollar amount, normalised so $5 == 1.0. Clamped at both
   // ends: below $1 nothing shrinks further, and past ~$250 nothing grows —
@@ -2074,14 +2107,27 @@
       var el = document.createElement('div');
       el.className = 'pu';
       el.style.fontSize = Math.round(PU_BASE_FONT + s * PU_FONT_GAIN) + 'px';
-      el.innerHTML = '<span class="pu-name"></span><span class="pu-amt"></span>';
-      el.querySelector('.pu-name').textContent = String(d.name || '').toUpperCase().slice(0, 16);
+      // THE TRAIL is ghost copies of the name parked at where it USED to be.
+      // They must sit outside .pu-live, because a trail that inherits the live
+      // transform is not a trail — it is the same glyph drawn five times in the
+      // same place. .pu itself never transforms; it only holds the stack slot.
+      var nm = String(d.name || '').toUpperCase().slice(0, 16);
+      var ghosts = '';
+      for (var t = 0; t < PU_TRAIL; t++) ghosts += '<span class="pu-g"></span>';
+      el.innerHTML = ghosts +
+        '<span class="pu-live"><span class="pu-name"></span><span class="pu-amt"></span></span>';
+      el.querySelector('.pu-name').textContent = nm;
       el.querySelector('.pu-amt').textContent = '$' + (Number(d.amount) % 1 === 0
         ? Number(d.amount).toFixed(0) : Number(d.amount).toFixed(2));
+      var gEls = [].slice.call(el.querySelectorAll('.pu-g'));
+      gEls.forEach(function(g) { g.textContent = nm; });
       host.appendChild(el);
       puList.push({
         name: d.name, until: d.until, amount: d.amount, el: el, scale: s,
         nameEl: el.querySelector('.pu-name'),
+        liveEl: el.querySelector('.pu-live'),
+        gEls: gEls,
+        hist: [],                 // recent poses, newest first — the trail reads this
         // Each name bobs on its OWN phase. In lockstep the stack reads as one
         // rigid block sliding up and down; offset, it reads as several things
         // independently hanging there.
@@ -2141,22 +2187,40 @@
       // A touch of horizontal sway, a third of the vertical: enough that it
       // floats rather than slides on a rail, not enough to read as drifting.
       var x = Math.round(Math.cos(p.phase * 0.7) * p.amp * 0.33);
-      p.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+
+      // ── 3D ────────────────────────────────────────────────────────────────
+      // It TURNS. A name that only bobs is a sticker; a name that swings through
+      // its own thickness is an object hanging in the room with him. rotateY is
+      // the whole trick — the glyphs foreshorten toward one edge as it comes
+      // round, which is depth you cannot fake with scale.
+      //
+      // rotateX is a third of it: a little tumble so it is not a flat spinner on
+      // a rail. Both scale with the amount, like everything else here.
+      var swing = 16 + p.scale * 12;                       // degrees either way
+      var ry = Math.sin(p.phase * 0.8) * swing;
+      var rx = Math.cos(p.phase * 0.53) * swing * 0.3;
+      var pose = 'perspective(700px) translate(' + x + 'px,' + y + 'px)' +
+                 ' rotateY(' + ry.toFixed(1) + 'deg) rotateX(' + rx.toFixed(1) + 'deg)';
+      if (p.liveEl) p.liveEl.style.transform = pose;
 
       // ── THE HYPE ──────────────────────────────────────────────────────────
       // Someone paid. This is the one thing on the stage allowed to be
       // obnoxious, and restraint here would be a bug: a donation alert that
       // whispers is a donation alert nobody sends twice.
       //
-      // Rainbow: the hue is SWEPT rather than cycled through fixed steps, and
-      // the second colour trails 90deg behind, so the halo is never one colour —
-      // it is always a gradient sliding through itself. Scaled by the amount
-      // like everything else, so a $75 rips through the spectrum and a $2
-      // ambles.
-      var hue  = (p.hue + p.f * (2.2 + p.scale * 2.6)) % 360;
-      var hue2 = (hue + 90) % 360;
-      p.el.style.setProperty('--pu-c',  'hsl(' + hue.toFixed(0) + ',100%,62%)');
-      p.el.style.setProperty('--pu-c2', 'hsl(' + hue2.toFixed(0) + ',100%,58%)');
+      // TACKY BOARDWALK RGB, not a tasteful gradient. The difference is that a
+      // glowstick shows you SEVERAL colours at once — the halo is three hues
+      // 120deg apart, i.e. an actual RGB triad, sweeping together. One hue
+      // sliding through the spectrum reads as a designer's colour animation;
+      // three at once reads as a cheap LED strip, which is the brief.
+      //
+      // Saturation is pinned at 100% and lightness runs hot: no muted steps, no
+      // easing, nothing that suggests anyone tasteful was involved.
+      var spin = 3.4 + p.scale * 4.2;                      // hue degrees per frame
+      var hue  = (p.hue + p.f * spin) % 360;
+      p.el.style.setProperty('--pu-c',  'hsl(' + hue.toFixed(0) + ',100%,60%)');
+      p.el.style.setProperty('--pu-c2', 'hsl(' + ((hue + 120) % 360).toFixed(0) + ',100%,58%)');
+      p.el.style.setProperty('--pu-c3', 'hsl(' + ((hue + 240) % 360).toFixed(0) + ',100%,58%)');
 
       // The glow BREATHES on its own faster clock, so the light pulses against
       // the hue sweep instead of with it. Two rhythms beating is what makes it
@@ -2164,6 +2228,29 @@
       var pulse = 1 + Math.sin(p.f * 0.22) * 0.45;
       p.el.style.setProperty('--pu-glow',
         Math.round((13 + p.scale * 11) * pulse) + 'px');
+
+      // ── Glow trails ───────────────────────────────────────────────────────
+      // Ghosts of where it just WAS, each one older and dimmer, lit by the hue
+      // of that moment rather than of now — so the trail is a smear of the
+      // rainbow it has been sweeping through, not a monochrome blur.
+      //
+      // Sampled every PU_TRAIL_EVERY frames rather than every frame: at 20fps a
+      // per-frame trail sits on top of itself and reads as a fat blur. Spacing
+      // the samples is what makes it a streak.
+      if (p.f % PU_TRAIL_EVERY === 0) {
+        p.hist.unshift({ pose: pose, hue: hue });
+        if (p.hist.length > PU_TRAIL) p.hist.pop();
+      }
+      for (var t = 0; t < p.gEls.length; t++) {
+        var h = p.hist[t];
+        if (!h) { p.gEls[t].style.opacity = 0; continue; }
+        var fade = 1 - (t + 1) / (PU_TRAIL + 1);
+        p.gEls[t].style.transform = h.pose;
+        p.gEls[t].style.color = 'hsl(' + h.hue.toFixed(0) + ',100%,62%)';
+        p.gEls[t].style.opacity = (fade * 0.5).toFixed(2);
+        p.gEls[t].style.textShadow = '0 0 ' + Math.round(10 + fade * 22) + 'px hsl(' +
+          h.hue.toFixed(0) + ',100%,60%)';
+      }
 
       // Strobe: a hard white frame on a beat. Two frames on, the rest off — any
       // longer and it stops being a flash and starts being a colour.
@@ -3072,7 +3159,15 @@
     fit: fitSpeak,     // pure (element, text) -> px; testable without the lane
     blob: blob,        // .getTick() / .isRunning() — is the star actually alive?
     mood: function() { return _mood; },  // no longer on the stage; still knowable
-    bg: bg             // .getCam() — the horizon IS the P&L, so it is worth reading
+    bg: bg,            // .getCam() — the horizon IS the P&L, so it is worth reading
+    // "what would he say for a $50?" — answerable without waiting for a
+    // donation to work its way through two lanes at a typewriter's pace.
+    thanksFor: function(name, amount) {
+      var pool = Number(amount) >= THANKS_BIG_AT ? THANKS_BIG : THANKS_SMALL;
+      return pool.map(function(l) {
+        return l.replace('{n}', String(name || 'you').toLowerCase().slice(0, 16));
+      });
+    }
   };
 
   setInterval(syncBlobMood, 1000);
