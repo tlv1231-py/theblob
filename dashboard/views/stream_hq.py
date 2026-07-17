@@ -408,15 +408,23 @@ def _render_powerups() -> None:
     if not live:
         st.info("No power-ups in orbit." + (f"  ({lapsed} lapsed)" if lapsed else ""))
     else:
+        src = sorted(live, key=lambda x: x["until"], reverse=True)
+        # An explicit KILL column. Revoking used to mean zeroing the minutes or
+        # blanking the name — a side effect of editing, which is not something
+        # anyone should have to discover when a troll's handle is on the stream
+        # and they want it gone NOW.
         df = pd.DataFrame([{
+            "kill": False,
             "name": r["name"],
             "$": r["amount"],
             "min left": max(0, round((r["until"] - now).total_seconds() / 60, 1)),
-        } for r in sorted(live, key=lambda x: x["until"], reverse=True)])
+        } for r in src])
         edited = st.data_editor(
             df, use_container_width=True, hide_index=True, key="pu_edit",
             num_rows="fixed",
             column_config={
+                "kill": st.column_config.CheckboxColumn(
+                    "✕", help="Tick and APPLY to remove them from orbit.", width="small"),
                 "name": st.column_config.TextColumn("Name", max_chars=16),
                 "$": st.column_config.NumberColumn("$", min_value=0.0, step=1.0, format="$%.2f"),
                 "min left": st.column_config.NumberColumn("Min left", min_value=0.0, step=1.0,
@@ -424,19 +432,35 @@ def _render_powerups() -> None:
                                                                "from now."),
             },
         )
-        if st.button("APPLY EDITS", type="primary", use_container_width=True):
-            src = sorted(live, key=lambda x: x["until"], reverse=True)
+
+        marked = [src[i]["name"] for i in range(len(src)) if bool(edited.iloc[i]["kill"])]
+        c1, c2 = st.columns([3, 2])
+        if c1.button(
+            ("REMOVE " + str(len(marked)) + " + APPLY EDITS") if marked else "APPLY EDITS",
+            type="primary", use_container_width=True,
+        ):
             out = []
             for i, r in enumerate(src):
                 e = edited.iloc[i]
+                if bool(e["kill"]):
+                    continue                     # ✕ ticked — gone
                 mins = float(e["min left"])
                 if mins <= 0 or not str(e["name"]).strip():
-                    continue          # zero minutes or a blank name revokes it
+                    continue                     # still honoured: 0 min or no name revokes
                 out.append({"id": r["id"], "name": str(e["name"]).strip()[:16],
                             "amount": float(e["$"]),
                             "until": now + timedelta(minutes=mins)})
             _put_powerups(out)
-            st.success("Applied — the ring updates within ~10s.")
+            st.success(
+                ("Removed " + ", ".join(marked) + " — " if marked else "Applied — ")
+                + "the ring updates within ~10s.")
+            st.rerun()
+
+        # The panic button. A single tick-every-box-and-apply is too many actions
+        # when something is on the broadcast that should not be.
+        if c2.button("CLEAR ALL", use_container_width=True,
+                     help="Removes every power-up from orbit immediately."):
+            _put_powerups([])
             st.rerun()
 
     with st.expander("comp a power-up", expanded=False):
@@ -785,8 +809,10 @@ def render() -> None:
     if c3.button("MUTED" if muted else "SOUND",
                  use_container_width=True,
                  type="secondary" if muted else "primary",
-                 help="Silences every Stream page EXCEPT the live broadcast "
-                      "(?live=1), which never mutes. Applies in ~3s, no reload."):
+                 help="Silences EVERY Stream page you have open — this laptop, your "
+                      "phone, a spare tab — except the live broadcast (?live=1), which "
+                      "never mutes. Applies in ~3s, no reload. If a device has no sound, "
+                      "check this first."):
         _set_policy("preview_muted", "0" if muted else "1", "Mute non-broadcast renders")
         st.rerun()
 
@@ -831,6 +857,13 @@ def render() -> None:
     if yt_on:
         st.caption("⚠︎ **YT filter is ON** — the Stream page is showing the design overlay, "
                    "not a clean capture.")
+
+    # Say it out loud. This was a trap: the state lived only in a button LABEL,
+    # so "no sound on my phone" reads as a bug in the phone rather than as a
+    # setting on this page doing exactly what it was told.
+    if muted:
+        st.caption("🔇 **Previews are MUTED** — every Stream page you have open is silent, "
+                   "including your phone. The live broadcast is unaffected.")
 
     _render_health()
 
