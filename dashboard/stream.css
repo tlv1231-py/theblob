@@ -650,6 +650,25 @@ html, body {
   will-change: transform;
 }
 
+/* THE POINTER. The Gen-1 menu cursor, parked against the slot he is about to
+   sell during the wind-up. Same character Pokemon points at MENU items with,
+   doing the same job: this one, next.
+
+   Pink, because it is HIM choosing — it is the only element on the board in his
+   body colour, and that is what makes the cursor read as the Blob's attention
+   rather than as another status light. Absolutely positioned so it cannot push
+   the ticker off-centre: the tile is a flex centre box, and a pointer in the
+   flow would shunt every glyph 26px left for the 500ms it exists. */
+.t-point {
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translate(0, -50%);
+  font-size: 24px; line-height: 1;
+  color: #ff00cc;
+  text-shadow: 2px 2px 0 #1a0016, 0 0 14px currentColor;
+  pointer-events: none;
+}
+
 /* THE RESULT REPLACES THE NAME. On a sell the slot prints what the position
    earned, in the same face and size the ticker used — the swap is the whole
    message, so nothing else about the type may change or the eye reads it as a

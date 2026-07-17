@@ -1496,7 +1496,10 @@
     clearTimeout(_idleT);
     _idleT = setTimeout(statusIdle, IDLE_AFTER);
     var bare = t.sym.replace('/USD', '');
-    var isExit = t.dir === 'EXIT';
+    // A roll realised a P&L exactly like a sale did, so it reads like one — the
+    // only difference is the verb, because he still holds it.
+    var isRoll = t.dir === 'ROLL';
+    var hasPnl = isRoll || t.dir === 'EXIT';
 
     // statusIdle decodes the CONTAINER, so a decode may still be mid-flight on
     // it. Left running it would keep writing textContent over the spans below
@@ -1518,7 +1521,7 @@
     sEl.style.color = tickerColor(t.sym);
 
     var tail, cls = '';
-    if (isExit) {
+    if (hasPnl) {
       var v = Number(t.pnl || 0);
       tail = money2(v);
       cls = v >= 0 ? 'win' : 'loss';
@@ -1530,7 +1533,7 @@
     pEl.className = 'xs-pnl ' + cls;
 
     // Staggered so the sentence assembles word by word rather than all at once.
-    decodeTo(vEl, isExit ? 'sold' : 'bought', 0);
+    decodeTo(vEl, isRoll ? 'rolled' : (t.dir === 'EXIT' ? 'sold' : 'bought'), 0);
     decodeTo(sEl, bare, SEG_STAGGER);
     decodeTo(fEl, 'for', SEG_STAGGER * 2);
     decodeTo(pEl, tail, SEG_STAGGER * 3);
@@ -1557,15 +1560,87 @@
   var PRE_TICKS = Math.round(PRE_MS / 100);
   var POST_TICKS = Math.round(POST_MS / 100);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // BATCHING — the book does not trade, it ROLLS
+  //
+  // Measured over 6h / 3,210 fills: 798 of 799 batches are PURE ROLLS. The
+  // engine exits a set of symbols on `timeout` and re-enters the identical set
+  // within ~1.5s. The board is unchanged before and after. Batch sizes are
+  // always even (2,4,6...16) for exactly that reason — every fill is one half
+  // of a round trip.
+  //
+  // Narrating the legs separately was not just badly paced, it was FALSE. A
+  // 16-batch is 8 positions rolled. The queue capped at 6 and kept the NEWEST
+  // six, which are the last six ENTERs — so the stream played "bought SOL,
+  // bought AVAX, bought LINK..." and threw away all 8 exits along with their
+  // P&L. A roll rendered as a buying spree that never happened, with 62% of the
+  // batch dropped on the floor.
+  //
+  // So a round trip is ONE event: `rolled BTC for −$0.38`. The tile stays where
+  // it is (the position never left), the realised P&L is the news, and 16 legs
+  // become 8 beats that are each true. 8 beats is 12.8s against a ~2min cadence
+  // for the big batches, so the whole roll now plays instead of being culled.
+  //
+  // PAIRING. Both legs land inside one poll ~63% of the time and pair for free.
+  // The batch spans ~1.5s against a 4s poll, so the boundary splits it the other
+  // ~37%: those exits wait one poll cycle for their re-entry rather than being
+  // announced as a sale that didn't happen.
+  // ═══════════════════════════════════════════════════════════════════════
+  var pendExit = {};        // sym -> { t, timer } — an exit awaiting its re-entry
+  var ROLL_WAIT = 5000;     // > one poll interval, so a straddled batch reunites
+
+  function mkRoll(ex, en) {
+    return { dir: 'ROLL', sym: ex.sym, pnl: ex.pnl,
+             price: en.price, stop: en.stop, qty: en.qty };
+  }
+
+  // Hold an unpaired exit briefly. If its re-entry never comes it really was a
+  // sale, and it plays as one — just one poll late.
+  function stageExit(t) {
+    var prev = pendExit[t.sym];
+    if (prev) { clearTimeout(prev.timer); tradePush(prev.t); }
+    pendExit[t.sym] = { t: t, timer: setTimeout(function() {
+      delete pendExit[t.sym];
+      tradePush(t);
+    }, ROLL_WAIT) };
+  }
+
+  // Walks one poll's fresh trades IN ARRIVAL ORDER, pairing exit→re-entry.
+  // Order matters: within a batch every exit precedes every entry, so pairing
+  // forward is what distinguishes a roll from a genuine sell-then-rebuy.
+  function tradeIngest(list) {
+    var open = {}, out = [];
+
+    list.forEach(function(t) {
+      if (t.dir === 'EXIT') { open[t.sym] = t; return; }
+      // ENTER — does it close a roll opened in this poll, or a staged one from
+      // the previous poll (the straddle case)?
+      if (open[t.sym]) { out.push(mkRoll(open[t.sym], t)); delete open[t.sym]; return; }
+      var staged = pendExit[t.sym];
+      if (staged) {
+        clearTimeout(staged.timer); delete pendExit[t.sym];
+        out.push(mkRoll(staged.t, t));
+        return;
+      }
+      out.push(t);          // a genuinely new position
+    });
+
+    // Exits with no re-entry in this poll — the batch may have straddled.
+    Object.keys(open).forEach(function(sym) { stageExit(open[sym]); });
+
+    out.forEach(tradePush);
+  }
+
   var tradeQ = [];
 
   function tradePush(t) {
     tradeQ.push(t);
     // A long backlog is stale by the time it plays — better to drop the oldest
-    // than to narrate a minute-old fill as if it just happened. At 1.6s a beat,
-    // 6 queued is ~10s of backlog, which is about as late as a "live" reaction
-    // can honestly claim to be.
-    if (tradeQ.length > 6) tradeQ.splice(0, tradeQ.length - 6);
+    // than to narrate a minute-old fill as if it just happened. 8, not 6:
+    // the largest observed batch is 16 legs = 8 rolls, and a cap below that
+    // culls part of a roll, which is what produced the buying-spree fiction.
+    // At 1.6s a beat, 8 queued is ~13s and the big batches are ~2min apart.
+    if (tradeQ.length > 8) tradeQ.splice(0, tradeQ.length - 8);
     stagePump();
   }
 
@@ -1585,6 +1660,10 @@
     // and it is what makes the impact feel caused rather than random.
     blob.setMood('BRACE', PRE_TICKS + 2);   // +2 so it holds through the handoff
     glanceAt(t.sym);
+    // The cursor names the target while he winds up. His glance already aims at
+    // the slot, but a 768px blob looking 8px left is not something a viewer can
+    // actually read — the pointer is what makes the aim legible.
+    if (t.dir === 'EXIT' || t.dir === 'ROLL') pointAt(t.sym);
     $('blob-mood').textContent = blob.getMood();
 
     setTimeout(function() {
@@ -1636,14 +1715,19 @@
     // reacts now rather than waiting up to 10s for the next engine UPDATE. The
     // UPDATE still lands and corrects — a prediction the authoritative feed
     // confirms, not a second source of truth.
-    if (t.dir === 'EXIT' && t.pnl != null) {
+    if ((t.dir === 'EXIT' || t.dir === 'ROLL') && t.pnl != null) {
       state.nav += t.pnl;
       updateNav(state.nav);
     }
 
+    // The pointer's job is done the instant the impact lands — from here the
+    // hit animation is saying "this one" far louder than a cursor could.
+    clearPointer();
+
     // Same frame as the sound.
-    if (t.dir === 'ENTER') boardEnter(t);
-    else                   boardExit(t);
+    if (t.dir === 'ENTER')      boardEnter(t);
+    else if (t.dir === 'ROLL')  boardRoll(t);
+    else                        boardExit(t);
 
     // x speaks on the same frame too. The decode runs for ~400ms after this,
     // but it STARTS here, which is what makes the sentence read as caused by the
@@ -1693,6 +1777,87 @@
     var o = blobCenter(), r = el.getBoundingClientRect();
     if (o) flyIn(el, o.x - (r.left + r.width / 2), o.y - (r.top + r.height / 2));
     hitTile(t.sym);
+  }
+
+  // ── The roll ─────────────────────────────────────────────────────────────
+  // A roll is NOT an exit: the position never leaves the board. It shows what
+  // the round trip earned, in the leavebehind's own face, then hands the ticker
+  // back. Deliberately NOT a leavebehind + fly-in pair — that would claim the
+  // slot died and a new one was placed, when in truth nothing about the board
+  // changed at all. Nothing is removed, nothing flies in, nothing reorders.
+  var ROLL_SHOW_MS = 2600;   // shorter than a leavebehind: a leavebehind marks a
+                             // slot that is GONE, and lingering that long here
+                             // would imply this one is too.
+
+  function boardRoll(t) {
+    var el = tileEl(t.sym);
+    if (!el) { boardEnter(t); return; }   // never had the slot — treat as new
+
+    // Keep local state honest: same symbol, but the new leg's numbers.
+    (S.crypto || []).forEach(function(c) {
+      if (c.sym !== t.sym) return;
+      if (t.qty)   c.qty = t.qty;
+      if (t.price) c.entry_price = t.price;
+      if (t.stop)  c.stop_price = t.stop;
+    });
+
+    var sp = el.querySelector('.t-sym');
+    var v = Number(t.pnl || 0);
+    sp.textContent = (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2);
+    sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
+    el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
+    hitTile(t.sym);
+
+    // Hand the ticker back. Shares ghostT so the settle waits for it, same as a
+    // leavebehind — but this timer restores the slot instead of removing it.
+    clearTimeout(ghostT[t.sym]);
+    ghostT[t.sym] = setTimeout(function() {
+      delete ghostT[t.sym];
+      var live = tileEl(t.sym);
+      var s2 = live && live.querySelector('.t-sym');
+      if (!s2) return;
+      s2.textContent = t.sym.replace('/USD', '');
+      s2.className = 't-sym';
+      live.style.removeProperty('--tc');
+      scheduleSettle();
+    }, ROLL_SHOW_MS);
+  }
+
+  // ── The pointer ──────────────────────────────────────────────────────────
+  // The Gen-1 menu cursor. During the wind-up it parks against the slot he is
+  // about to sell: BRACE says "something is coming", the pointer says "to THAT
+  // one". Without it the 500ms of anticipation has no target and the impact
+  // still arrives from nowhere.
+  //
+  // Sells only — and that is a constraint, not a preference. Only a sale has a
+  // tile to point AT; an entry's slot does not exist until the impact creates
+  // it, so there is nothing on the board to aim at during its wind-up.
+  //
+  // It nudges on a 2-frame cycle, setInterval — a CSS animation here would be
+  // inert like every other one on this page.
+  var POINT_NUDGE = [0, 3];
+  var _pointEl = null, _pointT = null;
+
+  function pointAt(sym) {
+    clearPointer();
+    var el = tileEl(sym);
+    if (!el) return;
+    var p = document.createElement('span');
+    p.className = 't-point';
+    p.textContent = '▶';
+    el.appendChild(p);
+    _pointEl = p;
+    var i = 0;
+    _pointT = setInterval(function() {
+      i = (i + 1) % POINT_NUDGE.length;
+      p.style.transform = 'translate(' + (-POINT_NUDGE[i]) + 'px, -50%)';
+    }, 150);
+  }
+
+  function clearPointer() {
+    clearInterval(_pointT); _pointT = null;
+    if (_pointEl && _pointEl.parentNode) _pointEl.parentNode.removeChild(_pointEl);
+    _pointEl = null;
   }
 
   // ── The leavebehind ──────────────────────────────────────────────────────
@@ -1800,13 +1965,18 @@
         // drop the rest, which meant a burst of four fills showed as one — the
         // stream silently under-reported its own activity. The queue plays them
         // one at a time instead, so nothing is invented and nothing is lost.
+        // Collected first, then ingested as a SET — the batch has to be visible
+        // as a batch for its legs to pair. Pushing each row as it is read is
+        // what made a roll look like eight sales and eight purchases.
+        var trades = [];
         fresh.forEach(function(r) {
           if (r.event_type !== 'TRADE') return;
           var t = parseTrade(r.message, r.detail);
           if (!t) return;
           t.sym = r.symbol || '';
-          tradePush(t);
+          trades.push(t);
         });
+        if (trades.length) tradeIngest(trades);
       })
       .catch(function() {});
   }
