@@ -254,16 +254,21 @@
   var SFX = (function() {
     var ctx = null, ready = false;
 
-    // ── Mute ────────────────────────────────────────────────────────────
-    // THE BROADCAST IS NEVER MUTED. ?live=1 marks the render the encoder is
-    // capturing, and it ignores this entirely. Every other window — yours, a
-    // spare tab — obeys Stream HQ's toggle.
+    // ── Sound is ALWAYS ON ──────────────────────────────────────────────
+    // The mute is gone. There used to be a preview_muted policy that silenced
+    // every render except ?live=1, so the operator could kill the noise on their
+    // desk without touching the broadcast. It worked exactly as designed and
+    // that was the problem: it sat at 1 for hours, and a silent phone reads as a
+    // broken phone, not as a setting on another page doing its job. It cost more
+    // debugging than it ever saved.
     //
-    // This split is the whole point. A naive global mute would be read by the
-    // VM's browser too, so silencing the noise on your desk would silence the
-    // actual YouTube stream, and nothing on the page would say so. The one
-    // render that must stay audible is the one nobody is sitting in front of.
-    var muted = false;
+    // Removed rather than defaulted to 0, and the HQ button removed with it. A
+    // toggle that no longer toggles anything is a placebo, and this page already
+    // has one hard rule about those.
+    //
+    // If the noise ever needs killing again: mute the TAB (every browser has
+    // that), or close it. Neither can reach the broadcast, which is the property
+    // the old split existed to protect.
     var isLive = !!window._TND_LIVE;
     function init() {
       if (ctx) return;
@@ -287,12 +292,16 @@
       if (ctx && ctx.state === 'suspended') ctx.resume();
       ready = true;
     }
+    // NOT `once`. A gesture that fails to unlock — the context not yet built, a
+    // resume() rejected, iOS in one of its moods — used to consume the listener
+    // and there was no second chance however many times you tapped. Every
+    // gesture now retries; resume() on a running context is free.
     var GESTURES = ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'];
     GESTURES.forEach(function(ev) {
-      window.addEventListener(ev, unlock, { once: true, passive: true });
+      window.addEventListener(ev, unlock, { passive: true });
       try {
         if (window.parent && window.parent !== window && window.parent.document) {
-          window.parent.document.addEventListener(ev, unlock, { once: true, passive: true });
+          window.parent.document.addEventListener(ev, unlock, { passive: true });
         }
       } catch (e) {}
     });
@@ -300,7 +309,10 @@
 
     // One gate for every sound on the page: play() and note() are the only two
     // places an oscillator is ever created, so nothing can slip past this.
-    function silent() { return muted && !isLive; }
+    // Kept as a named no-op so the two call sites below still read as gates —
+    // they are the ONLY places an oscillator is ever created, and that
+    // chokepoint is worth preserving even now that nothing closes it.
+    function silent() { return false; }
 
     function play(notes, vol, lowpass) {
       if (!ctx || silent()) return;
@@ -360,6 +372,46 @@
       // game: an ascending G-major arpeggio (G5 B5 D6) with a triplet pickup,
       // resolving to a held G6 over a root-fifth bass, then two sparkle notes.
       // Original melody — no copyrighted jingle is reproduced here.
+      // ── JACKPOT — money, and only money ─────────────────────────────────
+      // The fanfare is a fanfare: a triplet and a held note, the sound of an
+      // event. This is the sound of a PAYOUT, and it has to be a different
+      // animal or a $50 lands with the same weight as a follow.
+      //
+      // Three parts, straight off a cabinet:
+      //   1. A rising run. Not a chord — a RUN, because a jackpot climbs. It is
+      //      the major pentatonic, which is the scale that cannot sound wrong,
+      //      which is why every arcade in history is built on it.
+      //   2. The hit: a fat octave-stacked chord over a triangle bass.
+      //   3. The COIN CASCADE — a scatter of short high blips at irregular
+      //      spacing. Regular spacing reads as a melody; irregular reads as
+      //      coins hitting a tray, and that is the whole illusion.
+      //
+      // ~1.6s total, which is longer than anything else on the page makes. It
+      // is allowed: somebody paid.
+      jackpot: function() {
+        if (!ctx) return;
+        if (ctx.state === 'suspended') { ctx.resume(); return; }
+        var V = 0.05;
+        // 1. the climb — C major pentatonic, two octaves
+        var run = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760];
+        for (var i = 0; i < run.length; i++) {
+          note(run[i], i * 0.045, 0.05, V * 0.8);
+        }
+        // 2. the hit — root, fifth, octave, plus the octave above
+        var t = run.length * 0.045;
+        note(1047, t, 0.55, V * 1.3);          // C6
+        note(1568, t, 0.55, V * 0.8);          // G6
+        note(2093, t, 0.55, V * 0.6);          // C7
+        note(131,  t, 0.30, V * 1.1, 'triangle');   // C3 — the thump
+        note(262,  t, 0.55, V * 0.9, 'triangle');   // C4
+        // 3. the coin cascade — irregular on purpose
+        var coins = [0.10, 0.17, 0.21, 0.30, 0.34, 0.45, 0.52, 0.56, 0.68, 0.79, 0.86, 0.98];
+        for (var c = 0; c < coins.length; c++) {
+          var pitch = 2093 + Math.round(Math.random() * 3) * 220;
+          note(pitch, t + 0.18 + coins[c], 0.035, V * 0.42);
+        }
+      },
+
       fanfare: function() {
         if (!ctx) return;
         if (ctx.state === 'suspended') { ctx.resume(); return; }
@@ -387,8 +439,7 @@
         note(880 + Math.random() * 80, 0, 0.02, 0.016);
       },
 
-      setMuted: function(m) { muted = !!m; return muted; },
-      isMuted:  function() { return silent(); },
+
       isLive:   function() { return isLive; },
       isReady:  function() { return ready && ctx && ctx.state === 'running'; }
     };
@@ -1215,8 +1266,10 @@
       // A viewer paying is the loudest thing that happens on this stream.
       bg.pulse(isMoney ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
     }
-    SFX.fanfare();
-    // x celebrates on the same frame as the box and the fanfare, and holds for
+    // Money gets the jackpot; everything else gets the fanfare. A follow and a
+    // $50 must not sound the same.
+    if (isMoney) SFX.jackpot(); else SFX.fanfare();
+    // x celebrates on the same frame as the box and the sound, and holds for
     // as long as the popup lane owns the stage — see the empty branch above,
     // which hands the sentence back to the AFK cycle when the burst drains.
     if (VIEWER_EVENTS[ev.type]) {
@@ -1693,18 +1746,6 @@
   //
   // The BROADCAST short-circuits this — ?live=1 never even polls, so no setting,
   // no outage and no bad row can ever silence the actual stream.
-  function pollMute() {
-    if (SFX.isLive()) return;
-    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
-          '&param=eq.preview_muted&select=value',
-          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
-      .then(function(r) { return r.json(); })
-      .then(function(rows) {
-        if (!Array.isArray(rows) || !rows.length) return;   // never set — stay audible
-        SFX.setMuted(rows[0].value === '1');
-      })
-      .catch(function() {});
-  }
 
   // Heartbeat. This is the ONLY way to catch the failure that kills this setup:
   // Streamlit drops the idle websocket, the page freezes, and the encoder keeps
@@ -1731,7 +1772,7 @@
           // is missing and the render CANNOT make sound; muted means someone
           // chose it. The watchdog alarms on the first and not the second, so
           // they must not collapse into one value.
-          audio: SFX.isMuted() ? 'muted' : (SFX.isReady() ? 'on' : 'blocked'),
+          audio: SFX.isReady() ? 'on' : 'blocked',
           live: SFX.isLive()
         },
         recorded_at: new Date().toISOString()
@@ -2123,6 +2164,35 @@
   var PU_WAVE_GAIN = 5;       // px added per unit of scale — intensity by amount
   var PU_WAVE_SPREAD = 0.8;   // radians of phase per glyph — the wavelength
   var PU_WAVE_SPEED = 0.34;   // radians per frame
+
+  // ── The arrival ──────────────────────────────────────────────────────────
+  // A new name does not fade in, it SLAMS in — on the dono event, alongside the
+  // jackpot and the box. It is the only moment this element gets to be
+  // flamboyant; after ~1.2s it settles into the ambient wave and behaves.
+  //
+  // Per-glyph and staggered: the whole name arriving as one block is a label
+  // appearing, whereas letters landing in series is a name being PLACED. Same
+  // reasoning as the board's tiles.
+  //
+  // Frames, not eases. Every one is a hard cut on the 20fps clock.
+  var PU_IN_FRAMES = [
+    // scale, y offset, rotation, brightness
+    { s: 0.00, y: -70, r: -25, b: 4.0 },
+    { s: 2.60, y: -34, r:  16, b: 3.4 },   // overshoot enormously
+    { s: 0.55, y:  18, r: -11, b: 2.6 },   // undershoot past the mark
+    { s: 1.75, y:  -9, r:   7, b: 2.0 },
+    { s: 0.82, y:   5, r:  -4, b: 1.6 },
+    { s: 1.28, y:  -3, r:   2, b: 1.3 },
+    { s: 0.94, y:   1, r:  -1, b: 1.15 },
+    { s: 1.08, y:   0, r:   0, b: 1.05 },
+    { s: 1.00, y:   0, r:   0, b: 1.00 }
+  ];
+  var PU_IN_STEP = 42;        // ms per frame
+  var PU_IN_STAGGER = 2;      // frames of delay per glyph
+  // Mirrors .pu's opacity in stream.css. The lapse fade writes opacity inline,
+  // which beats the stylesheet, so it has to scale by this or an expiring name
+  // ends up brighter than a live one. CHANGE BOTH — they are one decision.
+  var PU_REST_OPACITY = 0.78;
   var PU_MIN_S = 1;           // $1 and under all look the same — the floor
   var PU_REF = 5;             // the dono the curve is normalised around
   // Bounds the stack in the LIST rather than by clipping the container. The box
@@ -2248,8 +2318,13 @@
         // THE STROBE, on the AMOUNT only. Bigger donations flash harder and more
         // often — a $2 blinks rarely, a $75 is a lightning storm.
         strobeEvery: Math.max(4, Math.round(26 - s * 6)),
-        f: 0
+        f: 0,
+        // Frames of arrival left to play. While this is running the glyphs
+        // belong to puEnter, not to the wave — two things writing one transform
+        // would fight and the loser would win at random.
+        entering: PU_IN_FRAMES.length + nm.length * PU_IN_STAGGER
       });
+      puEnter(puList[puList.length - 1]);
     });
 
     // Put the DOM in the sorted order — biggest/newest on top, because a fresh
@@ -2272,6 +2347,38 @@
     });
   }
 
+  // The slam. Runs on its own interval so it lands on the DONO EVENT rather than
+  // on puTick's next turn — the arrival has to share a frame with the jackpot and
+  // the box, and waiting up to 50ms for the shared loop would break that.
+  function puEnter(p) {
+    if (!p || !p.glyphs.length) return;
+    var f = 0, total = PU_IN_FRAMES.length + p.glyphs.length * PU_IN_STAGGER;
+    clearInterval(p._inT);
+    p._inT = setInterval(function() {
+      if (f >= total) {
+        clearInterval(p._inT); p._inT = null;
+        p.entering = 0;
+        for (var q = 0; q < p.glyphs.length; q++) {
+          p.glyphs[q].style.opacity = '';
+          p.glyphs[q].style.filter = '';
+        }
+        p.el.style.filter = '';
+        return;
+      }
+      for (var g = 0; g < p.glyphs.length; g++) {
+        var k = f - g * PU_IN_STAGGER;
+        var el = p.glyphs[g];
+        if (k < 0) { el.style.opacity = '0'; continue; }
+        el.style.opacity = '1';
+        var fr = PU_IN_FRAMES[Math.min(k, PU_IN_FRAMES.length - 1)];
+        el.style.transform = 'translateY(' + fr.y + 'px) scale(' + fr.s + ') rotate(' + fr.r + 'deg)';
+        el.style.filter = fr.b > 1.02 ? 'brightness(' + fr.b + ')' : '';
+      }
+      p.entering = total - f;
+      f++;
+    }, PU_IN_STEP);
+  }
+
   function puTick() {
     if (!puList.length) return;
     var now = Date.now();
@@ -2279,6 +2386,7 @@
       var p = puList[i];
       if (new Date(p.until).getTime() <= now) {   // lapsed mid-orbit
         if (p.el && p.el.parentNode) p.el.remove();
+        clearInterval(p._inT);
         puList.splice(i, 1);
         continue;
       }
@@ -2294,10 +2402,15 @@
       // this hangs in the same room as a 48x48 sprite. The name holds still
       // otherwise: it has to be READ, and a word that will not sit still is a
       // word nobody reads.
-      for (var g = 0; g < p.glyphs.length; g++) {
-        var gy = -Math.round(
-          (Math.sin(p.phase + p.f * PU_WAVE_SPEED - g * PU_WAVE_SPREAD) * 0.5 + 0.5) * p.waveAmp);
-        p.glyphs[g].style.transform = gy ? 'translateY(' + gy + 'px)' : '';
+      // The arrival owns the glyphs while it plays. Both write the same
+      // transform, so without this they trade frames and the slam comes out as a
+      // stutter — whichever interval fired last wins, at random.
+      if (!p.entering) {
+        for (var g = 0; g < p.glyphs.length; g++) {
+          var gy = -Math.round(
+            (Math.sin(p.phase + p.f * PU_WAVE_SPEED - g * PU_WAVE_SPREAD) * 0.5 + 0.5) * p.waveAmp);
+          p.glyphs[g].style.transform = gy ? 'translateY(' + gy + 'px)' : '';
+        }
       }
 
       // ── The amount: absurd RGB, and ONLY the amount ───────────────────────
@@ -2336,10 +2449,16 @@
         }
       }
 
-      // The last 20s fades out, so a lapse is a decision rather than a name
-      // that was simply there and then was not.
+      // The last 20s fades out, so a lapse is a decision rather than a name that
+      // was simply there and then was not.
+      //
+      // Scaled by PU_REST_OPACITY, not written raw: an inline opacity overrides
+      // the stylesheet's 0.78, so a raw ramp would make an EXPIRING power-up
+      // brighter than a live one on its way out. Blank hands it back to the CSS.
       var left = new Date(p.until).getTime() - now;
-      p.el.style.opacity = left < 20000 ? (0.15 + 0.85 * (left / 20000)).toFixed(2) : '';
+      p.el.style.opacity = left < 20000
+        ? (PU_REST_OPACITY * (0.15 + 0.85 * (left / 20000))).toFixed(3)
+        : '';
     }
   }
 
@@ -3269,8 +3388,6 @@
   pollYtOverlay();
   // Mute lands within ~3s of hitting the button — fast enough that it feels
   // like a mute button rather than a setting.
-  setInterval(pollMute, 3000);
-  pollMute();
   // AFK copy is edited by a human in HQ, so it changes at human speed. 15s is
   // fast enough to see your own edit land while you are still looking at it.
   setInterval(pollAfkPhrases, 15000);

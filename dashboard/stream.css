@@ -689,6 +689,14 @@ html, body {
   letter-spacing: -0.02em;
   line-height: 1;
   flex: none;
+  /* Knocked back so the sidescroller reads THROUGH them. These hang in the room
+     behind the streamer — at full strength they were a solid wall of type in
+     front of the world instead of signage hanging in it, and the Blob has to
+     stay the brightest thing on the stage.
+     On the element, not on the colours: it takes the name, the amount, the glow
+     and the strobe together, so nothing shifts relative to anything else.
+     puTick overrides this inline during the last 20s to fade a lapse out. */
+  opacity: 0.78;
 }
 
 /* THE NAME. ONE colour, hashed into the house palette exactly like a ticker

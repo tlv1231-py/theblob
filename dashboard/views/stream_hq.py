@@ -788,8 +788,11 @@ def render() -> None:
     # TEMP: the YouTube filter switch. Lives in the header, not behind a tab —
     # it must be visible at a glance, because leaving it on during a real
     # capture puts fake YouTube chrome on the actual broadcast.
+    # c3, not c2 — ON AIR already owns c2, and the two had been stacking in one
+    # column ever since ON AIR was added. The freed SOUND slot is where this
+    # belongs.
     yt_on = pol.get("yt_overlay", "1") != "0"
-    if c2.button("YT FILTER: " + ("ON" if yt_on else "OFF"),
+    if c3.button("YT FILTER: " + ("ON" if yt_on else "OFF"),
                  use_container_width=True,
                  type="primary" if yt_on else "secondary",
                  help="Overlays YouTube's vertical-live chrome and safe zones on the "
@@ -798,23 +801,16 @@ def render() -> None:
         _set_policy("yt_overlay", "0" if yt_on else "1", "Temp YouTube safe-zone filter")
         st.rerun()
 
-    # Mutes YOUR Stream windows — never the broadcast. HQ itself has no audio at
-    # all: the noise is coming from a Stream page you have open in another
-    # window, and this is what reaches across to it (different browsers, so the
-    # DB is the only channel).
+    # The SOUND/MUTED button is GONE, and so is preview_muted.
     #
-    # The render the encoder captures runs with ?live=1 and does not even poll
-    # this, so no setting and no outage can silence the actual stream.
-    muted = pol.get("preview_muted", "0") == "1"
-    if c3.button("MUTED" if muted else "SOUND",
-                 use_container_width=True,
-                 type="secondary" if muted else "primary",
-                 help="Silences EVERY Stream page you have open — this laptop, your "
-                      "phone, a spare tab — except the live broadcast (?live=1), which "
-                      "never mutes. Applies in ~3s, no reload. If a device has no sound, "
-                      "check this first."):
-        _set_policy("preview_muted", "0" if muted else "1", "Mute non-broadcast renders")
-        st.rerun()
+    # It worked exactly as designed, and that was the problem: it sat at 1 for
+    # hours while a phone was reported as having no sound. A silent device reads
+    # as a broken device, not as a toggle on another page doing its job. It cost
+    # more debugging than it ever saved.
+    #
+    # Removed rather than left defaulting to 0: a toggle the Stream page no
+    # longer reads is a placebo, and this console already refuses to ship one of
+    # those (see ON AIR). To kill the noise: mute the browser tab.
 
     # Health and the bus refresh themselves (fragments, 3s / 1s). This is only
     # for the parts that don't — the plan text and the policy row.
@@ -857,13 +853,6 @@ def render() -> None:
     if yt_on:
         st.caption("⚠︎ **YT filter is ON** — the Stream page is showing the design overlay, "
                    "not a clean capture.")
-
-    # Say it out loud. This was a trap: the state lived only in a button LABEL,
-    # so "no sound on my phone" reads as a bug in the phone rather than as a
-    # setting on this page doing exactly what it was told.
-    if muted:
-        st.caption("🔇 **Previews are MUTED** — every Stream page you have open is silent, "
-                   "including your phone. The live broadcast is unaffected.")
 
     _render_health()
 
