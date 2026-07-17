@@ -35,8 +35,9 @@ from dashboard.db import get_session
 # outage — but tight enough that a frozen render is caught in ~1 minute.
 _STALE = {
     "stream_page": 60,    # page beats every ~15s
-    "encoder":     90,    # agent would beat every ~30s
-    "host":        90,
+    "encoder":     90,    # agent beats every ~30s (measured)
+    "host":        90,    # measured: 30s
+    "switch":      90,    # measured: 30s — see _check_switch
     "engine":     120,    # pipeline UPDATE lands every ~10s
 }
 
@@ -92,6 +93,45 @@ def _check_heartbeat(component: str) -> dict:
         return {"status": "unknown", "detail": str(e)[:80]}
 
 
+def _switch_state() -> dict:
+    """The ON AIR button's conscience.
+
+    The button writes `broadcast_enabled` to a table. Nothing else. A daemon on
+    the VM polls that every 5s and starts/stops ffmpeg — so if the daemon is
+    dead, the click still writes the row, the button still flips, and NOTHING
+    HAPPENS. That is a placebo, and the dangerous direction is not the one you
+    would guess: pressing OFF AIR while the daemon is dead leaves ffmpeg running
+    and you believe you are off the air while still broadcasting.
+
+    So the button is only trustworthy if `switch` is beating. It reports both
+    `desired` (what it read from the policy) and `encoder` (what systemd actually
+    says the unit is doing), which lets HQ catch the disagreement rather than
+    merely proving something is alive.
+
+    Returns the raw facts; the caller decides how loud to be.
+    """
+    out = {"alive": False, "desired": None, "encoder": None, "unit": None, "age": None}
+    try:
+        with get_session() as s:
+            r = s.execute(text("""
+                SELECT status, detail, EXTRACT(EPOCH FROM (NOW() - recorded_at)) AS age
+                FROM stream_health WHERE component = 'switch'
+                ORDER BY recorded_at DESC LIMIT 1
+            """)).fetchone()
+        if not r:
+            return out
+        age = int(r.age)
+        out["age"] = age
+        out["alive"] = age <= _STALE["switch"]
+        d = r.detail if isinstance(r.detail, dict) else {}
+        out["desired"] = d.get("desired")
+        out["encoder"] = d.get("encoder")
+        out["unit"] = d.get("unit")
+        return out
+    except Exception:
+        return out
+
+
 _DOT = {"ok": "🟢", "degraded": "🟡", "down": "🔴", "absent": "⚫", "unknown": "⚪"}
 
 
@@ -109,6 +149,7 @@ def _render_health() -> None:
         ("DB",      _check_db(),                     "Supabase — the channel everything rides on"),
         ("ENGINE",  _check_engine(),                 "pipeline_events still flowing"),
         ("PAGE",    _check_heartbeat("stream_page"), "the render itself — catches a frozen page"),
+        ("SWITCH",  _check_heartbeat("switch"),      "the daemon that obeys ON AIR — dead means the button lies"),
         ("ENCODER", _check_heartbeat("encoder"),     "ffmpeg speed / fps — needs a host agent"),
         ("HOST",    _check_heartbeat("host"),        "Oracle VM CPU / mem — needs a host agent"),
     ]
@@ -512,10 +553,39 @@ def render() -> None:
     </style>
     """, unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns([4, 3, 2, 1])
+    c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
     c1.markdown("#### ◉ Stream HQ")
 
     pol = _get_policy()
+
+    # ── ON AIR ────────────────────────────────────────────────────────────
+    # The only control here that reaches the outside world. Everything else on
+    # this page changes what YOU see; this one starts and stops a public
+    # broadcast, so it is the one that must never lie about its own state.
+    #
+    # It writes `broadcast_enabled` and nothing more. switch.py on the VM polls
+    # that every 5s and runs systemctl start|stop blob-ffmpeg (the host has no
+    # inbound ports — it pulls). Resting state is '0': nothing airs until pressed.
+    sw = _switch_state()
+    on_air = pol.get("broadcast_enabled", "0") == "1"
+
+    # A dead daemon makes this a placebo, so say so IN THE LABEL rather than
+    # rendering a confident ON AIR that controls nothing.
+    if sw["alive"]:
+        label = "◉ ON AIR" if on_air else "○ OFF AIR"
+        btn_help = ("Starts/stops the YouTube encoder on the stream host. Applies in ~5s. "
+                    "The render keeps running either way.")
+    else:
+        label = "⚠ NO SWITCH"
+        btn_help = ("The switch daemon on the host is not reporting, so this button would "
+                    "write the flag and nothing would obey it. Fix the host before trusting it.")
+
+    if c2.button(label, use_container_width=True,
+                 type="primary" if (on_air and sw["alive"]) else "secondary",
+                 disabled=not sw["alive"],
+                 help=btn_help):
+        _set_policy("broadcast_enabled", "0" if on_air else "1", "Broadcast to YouTube")
+        st.rerun()
 
     # TEMP: the YouTube filter switch. Lives in the header, not behind a tab —
     # it must be visible at a glance, because leaving it on during a real
@@ -550,6 +620,39 @@ def render() -> None:
     # for the parts that don't — the plan text and the policy row.
     if c4.button("↻", use_container_width=True, help="Force a full reload"):
         st.rerun()
+
+    # ── Does the encoder agree with the button? ───────────────────────────
+    # The switch reports `desired` (what it read) alongside `encoder` (what
+    # systemd actually says). Comparing them is the difference between "the
+    # button works" and "the button wrote a row". A green light only proves the
+    # daemon is alive; this proves it did the thing.
+    if not sw["alive"]:
+        st.error(
+            f"**The switch daemon is not reporting"
+            + (f" (last beat {sw['age']}s ago)" if sw["age"] is not None else " — it never has")
+            + ".** ON AIR is disabled because it would be a placebo: the click writes a "
+            "flag, and nothing on the host is listening. If the encoder was already "
+            "running when the daemon died, **it is still broadcasting** — this app cannot "
+            "stop it. Fix the host."
+        )
+    else:
+        enc = (sw["encoder"] or "unknown").lower()
+        want_on = on_air
+        # 'active' is the only state that means it is really pushing frames.
+        if want_on and enc != "active":
+            st.error(
+                f"**ON AIR is set, but `{sw['unit'] or 'the encoder unit'}` is `{enc}`.** "
+                "Nothing is reaching YouTube. The switch is alive and saw the flag, so this "
+                "is the encoder itself failing — check its journal on the host."
+            )
+        elif not want_on and enc == "active":
+            st.error(
+                f"**OFF AIR is set, but `{sw['unit'] or 'the encoder unit'}` is still `active` "
+                "— YOU ARE PROBABLY STILL BROADCASTING.** The switch has seen the flag; if this "
+                "does not clear within ~5s, stop the unit on the host directly."
+            )
+        elif want_on and enc == "active":
+            st.success("**◉ LIVE** — the encoder is active and pushing to YouTube.")
 
     if yt_on:
         st.caption("⚠︎ **YT filter is ON** — the Stream page is showing the design overlay, "
