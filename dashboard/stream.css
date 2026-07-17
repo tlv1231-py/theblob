@@ -477,13 +477,10 @@ html, body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
-.blob-mood {
-  position: absolute; bottom: 2px; left: 50%;
-  transform: translateX(-50%);
-  font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 8px; letter-spacing: 0.16em;
-  color: var(--text-dim);
-}
+/* .blob-mood and .nav-label are DELETED, not hidden. Both lived in the single
+   gap between the Blob and his score, and both were captions: one naming the
+   mood he was already acting out, the other introducing a six-figure number in
+   an arcade face under a trading blob. The gap is worth more empty. */
 
 /* The trade-flash callout is DELETED. It existed to name what he reacted to
    back when the board was a dense footnote and a mood change was otherwise
@@ -663,12 +660,10 @@ html, body {
 #s-nav {
   height: 172px; flex: none;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 10px;
+  justify-content: center;
+  /* gap dropped with .nav-label — there is only the number now. */
 }
-.nav-label {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.28em;
-  color: var(--text-dim);
-}
+
 /* Lifted from .ss-wallet-val on the Command Center (home.py ~1615). The
    arcade-score read is the FOUR-LAYER STACKED HARD SHADOW — offsets of pure
    black, no blur — which is how a cabinet fakes extruded type. A single soft

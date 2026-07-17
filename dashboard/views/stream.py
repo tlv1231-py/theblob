@@ -345,12 +345,16 @@ _STAGE_HTML = """
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
         <canvas id="blobCanvas"></canvas>
-        <div class="blob-mood" id="blob-mood">IDLE</div>
+<!-- The mood readout is GONE. It named what the character was already showing
+             you — a caption on a performance — and it sat in the one gap between him
+             and his score. If you want to know he is scared, look at him. -->
       </div>
 
       <!-- THE SCORE. -->
       <div id="s-nav">
-        <div class="nav-label">PORTFOLIO VALUE</div>
+<!-- "PORTFOLIO VALUE" is GONE too. A six-figure number in an arcade face
+             under a trading blob does not need to introduce itself, and it was the
+             other half of the clutter in this gap. -->
         <div class="nav-big" id="hero-nav">$&mdash;</div>
       </div>
 

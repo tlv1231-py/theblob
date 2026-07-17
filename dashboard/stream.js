@@ -88,6 +88,19 @@
   var bg = TNDBg.create($('bgCanvas'), { fps: 24 });
   bg.start();
 
+  // The mood readout is gone from the stage — it captioned a performance the
+  // character was already giving, in the one gap between him and his score.
+  // The call sites stay and route through here rather than being deleted: mood
+  // is still the most useful single fact about him on a headless box, so it
+  // goes to _TND_DBG instead of to the viewer. Put the element back and it
+  // lights up again.
+  var _mood = 'IDLE';
+  function showMood() {
+    _mood = blob.getMood();
+    var el = $('blob-mood');
+    if (el) el.textContent = _mood;
+  }
+
   function syncBlobMood() {
     // Transient moods own the character until they decay; don't stomp them.
     // BRACE is in this list for a reason that is easy to miss: this runs every
@@ -216,7 +229,7 @@
   function renderHero() {
     updateNav(state.nav);
     blob.setPnl(state.dayPnlPct);
-    $('blob-mood').textContent = blob.getMood();
+    showMood();
   }
 
   // The NAV chart is GONE — "he's the streamer, not the charts". It also
@@ -1116,7 +1129,7 @@
     var react = EVENT_MOOD[ev.type];
     if (react) {
       if (react.mood) blob.setMood(react.mood, react.mood === 'HAPPY' ? 26 : 18);
-      $('blob-mood').textContent = blob.getMood();
+      showMood();
       // A viewer paying is the loudest thing that happens on this stream.
       bg.pulse(cfg.c === '#00ff9d' ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
     }
@@ -1382,7 +1395,7 @@
     // measures as 0) and before the first glyph.
     fitSpeak(aEl, s.text);
 
-    if (s.mood) { blob.setMood(s.mood, 30); $('blob-mood').textContent = blob.getMood(); }
+    if (s.mood) { blob.setMood(s.mood, 30); showMood(); }
 
     clearInterval(speakTypeT); clearTimeout(speakHoldT);
 
@@ -1486,7 +1499,7 @@
       if (SFX[sfx]) SFX[sfx]();
       bg.pulse(sfx === 'loss' ? 'loss' : 'enter', 0.30);
       if (p.symbol) hitTile(p.symbol);
-      $('blob-mood').textContent = blob.getMood();
+      showMood();
       return;
     }
 
@@ -2660,7 +2673,7 @@
     // the slot, but a 768px blob looking 8px left is not something a viewer can
     // actually read — the pointer is what makes the aim legible.
     if (t.dir === 'EXIT') pointAt(t.sym);
-    $('blob-mood').textContent = blob.getMood();
+    showMood();
 
     setTimeout(function() {
       // ── EVENT ────────────────────────────────────────────────────────
@@ -2698,7 +2711,7 @@
     else if (verdict === 'enter') blob.setMood('ALERT', POST_TICKS);
     else                          blob.setMood('ALERT', POST_TICKS - 2);
     glanceAt(t.sym);
-    $('blob-mood').textContent = blob.getMood();
+    showMood();
 
     // Sound follows the verdict: acquisitions are neutral because buying is
     // not yet good or bad news.
@@ -2974,7 +2987,9 @@
                              beat: _beatLog }; },
     speak: blobSpeak,
     fit: fitSpeak,     // pure (element, text) -> px; testable without the lane
-    blob: blob         // .getTick() / .isRunning() — is the star actually alive?
+    blob: blob,        // .getTick() / .isRunning() — is the star actually alive?
+    mood: function() { return _mood; },  // no longer on the stage; still knowable
+    bg: bg             // .getCam() — the horizon IS the P&L, so it is worth reading
   };
 
   setInterval(syncBlobMood, 1000);
