@@ -119,7 +119,34 @@ if [[ ! -f "$DEST/.env" ]]; then
   echo "  !!     nano $DEST/.env"
   echo
 else
-  echo "    .env already exists — left untouched"
+  # Merge in any keys the example has gained since this .env was written.
+  #
+  # "Never overwrite .env" is right — it holds YOUTUBE_KEY. But left at that, the
+  # example grows a key, every existing host silently never receives it, and the
+  # failure is invisible: a script quietly falls back to a default, or dies on a
+  # variable that is demonstrably "in the example". Exactly what happened with
+  # YOUTUBE_API_KEY, which sat in .env.example while chat.py idled on the host for
+  # want of it.
+  #
+  # Only missing KEYS are appended. Existing values are never touched, so your
+  # stream key and anything you have tuned survive untouched.
+  added=0
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]] || continue
+    k="${BASH_REMATCH[1]}"
+    grep -q "^${k}=" "$DEST/.env" && continue
+    if [[ $added -eq 0 ]]; then
+      printf '\n# ── merged from .env.example by setup.sh ──\n' >> "$DEST/.env"
+    fi
+    printf '%s\n' "$line" >> "$DEST/.env"
+    added=$((added + 1))
+    echo "    + $k"
+  done < "$HERE/.env.example"
+  if [[ $added -gt 0 ]]; then
+    echo "    .env kept; merged $added new key(s) — fill in any blanks"
+  else
+    echo "    .env already has every key from the example"
+  fi
 fi
 
 echo "==> systemd units"
