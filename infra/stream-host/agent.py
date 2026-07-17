@@ -145,6 +145,27 @@ def read_encoder() -> tuple[str, dict]:
     return "ok", detail
 
 
+def broadcast_switched_off() -> bool:
+    """True only when the switch row explicitly says off.
+
+    Unreachable returns False on purpose: if we cannot tell, do NOT explain away
+    a dead encoder as intentional. A light reading "off on purpose" during a real
+    outage is the worst failure this dashboard has — worse than no light.
+    """
+    url = (f"{SUPA_URL}/rest/v1/strategy_params"
+           "?strategy=eq.stream&param=eq.broadcast_enabled&select=value&limit=1")
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+    except Exception:
+        return False
+    if not rows:
+        return True                      # never configured = never asked to air
+    return str(rows[0].get("value", "0")) != "1"
+
+
 # ── host ──────────────────────────────────────────────────────────────────────
 
 def read_host() -> tuple[str, dict]:
@@ -188,6 +209,19 @@ def main() -> None:
     print(f"[agent] reading ffmpeg progress from {PROGRESS}", flush=True)
     while True:
         e_status, e_detail = read_encoder()
+
+        # A stopped encoder is only an outage if nobody asked for it. When the
+        # Stream HQ switch is off, ffmpeg is SUPPOSED to be down — reporting that
+        # as "down" puts a red light on HQ for a system doing exactly what it was
+        # told, and a red light that means "fine" trains you to ignore red
+        # lights. Degraded, and say why.
+        #
+        # 'off' is not a status HQ knows: _DOT maps ok/degraded/down/absent/
+        # unknown and would KeyError on anything else.
+        if e_status == "down" and broadcast_switched_off():
+            e_status = "degraded"
+            e_detail = {"off": True, "reason": "broadcast switch is off — not an outage"}
+
         h_status, h_detail = read_host()
         post_health("encoder", e_status, e_detail)
         post_health("host", h_status, h_detail)

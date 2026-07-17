@@ -1,0 +1,25 @@
+[Unit]
+Description=Blob stream — broadcast switch (Stream HQ start/stop -> ffmpeg)
+After=network-online.target
+
+# Never give up. If this dies for good, the button on Stream HQ silently becomes
+# a placebo: the click still writes the row, the DB still accepts it, and nothing
+# on the host is listening. See blob-ffmpeg.service for why this must be in
+# [Unit] rather than [Service].
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# Root, because it runs `systemctl start|stop blob-ffmpeg`. Same reason as the
+# watchdog. It opens no ports and only ever reads one row from Supabase.
+User=root
+EnvironmentFile=/opt/blob-stream/.env
+ExecStart=/usr/bin/python3 /opt/blob-stream/switch.py
+Restart=always
+RestartSec=10
+
+# Deliberately NOT Requires=/After=blob-ffmpeg. This unit's entire job is to
+# decide whether that one runs; binding their lifecycles together would mean the
+# switch dies with the thing it is supposed to be able to turn back on.
+[Install]
+WantedBy=multi-user.target

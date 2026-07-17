@@ -8,7 +8,8 @@ Oracle ARM VM
       └─ Chromium kiosk         blob-chromium.service  ← the watchdog reloads THIS
           └─ ffmpeg x11grab     blob-ffmpeg.service    → YouTube RTMP
   ├─ agent.py                   blob-agent.service     → stream_health
-  └─ watchdog.py                blob-watchdog.service  ← reads stream_health
+  ├─ watchdog.py                blob-watchdog.service  ← reads stream_health
+  └─ switch.py                  blob-switch.service    ← Stream HQ START/STOP
 ```
 
 Nothing here touches `dashboard/`. It only reads the deployed page and writes
@@ -84,6 +85,46 @@ satisfies snap and native alike. `.env` deliberately stays `root:root 0600` —
 systemd reads `EnvironmentFile=` as root before dropping privileges, so the
 services still get `YOUTUBE_KEY` while the browser's own user cannot read the
 credential that owns your channel.
+
+## The START/STOP button
+
+Stream HQ starts and stops the broadcast by writing one row:
+
+```
+strategy_params (strategy='stream', param='broadcast_enabled', value='1'|'0')
+```
+
+`switch.py` polls it every 5s and runs `systemctl start|stop blob-ffmpeg`. Same
+mechanism as the existing `preview_muted` and `yt_overlay` toggles.
+
+**It polls; it does not listen.** The VM has no inbound ports and is not getting
+any. The alternative is a control endpoint on a public IP that can start and stop
+a broadcast — worth authenticating, rate-limiting and patching forever, to save
+five seconds. `watchdog.py` already works this way.
+
+Four decisions worth knowing:
+
+- **It switches the encoder, not the browser.** Off means "not broadcasting", not
+  "everything is dead". Stopping the render too would save little on an idle box
+  and cost a 60–90s Streamlit cold start on every flick, while blinding the
+  watchdog and freezing the Blob on Stream HQ.
+- **Unreachable Supabase means no opinion.** A network blip is not a request to
+  stop; it is evidence we cannot tell what was requested. A running broadcast is
+  left alone.
+- **No row means off.** A host that has just been handed a stream key should not
+  start broadcasting because nobody told it not to. That is only true before the
+  first click — afterwards the row persists, so a reboot resumes whatever you
+  last chose rather than coming back dark.
+- **`switch.py` reports its own heartbeat** (`component='switch'`). This is the
+  difference between a button and a placebo: if the daemon dies, HQ's click still
+  writes the row and still looks like it worked, while nothing on the host is
+  listening.
+
+When the switch is off, `agent.py` reports the encoder as **degraded**, not down,
+with `reason: broadcast switch is off`. A red light for a system doing exactly
+what it was told is how you learn to ignore red lights. (`off` is deliberately
+not used — HQ's `_DOT` maps only ok/degraded/down/absent/unknown and would
+KeyError on anything else.)
 
 ## Verify
 

@@ -73,7 +73,7 @@ echo "    linger enabled for 'blob' (snap needs the session bus)"
 echo "==> install to $DEST"
 mkdir -p "$DEST/music"
 install -m 755 "$HERE/chromium.sh" "$HERE/stream.sh" "$DEST/"
-install -m 755 "$HERE/agent.py" "$HERE/watchdog.py" "$DEST/"
+install -m 755 "$HERE/agent.py" "$HERE/watchdog.py" "$HERE/switch.py" "$DEST/"
 
 # Stays root:root 0600 on purpose. systemd reads EnvironmentFile= as root before
 # it drops to the 'blob' user, so the services still get YOUTUBE_KEY while the
@@ -94,7 +94,9 @@ install -m 644 "$HERE"/systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
 
 echo "==> enable"
-systemctl enable blob-xvfb blob-chromium blob-ffmpeg blob-agent blob-watchdog
+# blob-ffmpeg is enabled but NOT started by the switch's design — blob-switch
+# owns whether the encoder runs, driven by the button on Stream HQ.
+systemctl enable blob-xvfb blob-chromium blob-ffmpeg blob-agent blob-watchdog blob-switch
 
 cat <<'EOF'
 
