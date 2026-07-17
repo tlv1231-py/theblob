@@ -90,6 +90,14 @@ html, body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   z-index: 1;
+  /* Knocked back so the near-black stage (--bg) reads through it. The scene is
+     the ROOM, not the subject — at full strength a vaporwave sunset out-shouts
+     a pink blob, and the tickers have to sit legibly on top of it too.
+     Opacity rather than darker palette values on purpose: one number, tunable
+     without re-balancing five colour ramps against each other, and it dims the
+     sun and grid by the same amount so nothing in the scene shifts relative to
+     anything else. */
+  opacity: 0.68;
 }
 
 /* The terminal strips are DELETED — markup, styles and renderer. They were

@@ -88,6 +88,11 @@
     // neither legible.
     var scrollX = 0;
     var SCROLL = 0.55;
+    // The floor's sweep multiplier. It is the nearest surface in the frame, so
+    // it moves hardest — at the hills' rate the ground would look painted on.
+    // 2.4 wraps the 46px lattice about every 1.6s: fast enough to read as travel
+    // at a glance, slow enough not to strobe against the 3px scanlines.
+    var GRID_SWEEP = 2.4;
 
     // ── The hills ───────────────────────────────────────────────────────────
     // Three sine harmonics per column, rounded to the 2px grid.
@@ -193,22 +198,36 @@
       px(0, hz - 1, W, 2, [255, 140, 220], 0.75);
       px(0, hz - 4, W, 3, [255, 0, 204], 0.16);
 
-      // ── Grid floor ────────────────────────────────────────────────────────
-      // The horizontal rules are born at the horizon and ACCELERATE away, which
-      // is what makes a flat grid read as ground rushing past instead of
-      // wallpaper. The verticals converge on the vanishing point and slide with
-      // scrollX, so both axes agree about which way the world is moving.
+      // ── Grid floor — a SIDESCROLLER, so it moves sideways and only sideways ──
+      // The two axes have to agree about which way the world is going. The
+      // horizontal rules used to roll toward the viewer, which says "flying
+      // forward", while the verticals swept across, which says "travelling
+      // sideways" — together they said neither, and the floor read as a shimmer.
+      //
+      // So: the horizontals are STATIC. They are depth markers, not motion. All
+      // the travel lives in the verticals sweeping past, which is what a
+      // sidescroller's ground actually does.
       var depth = H - hz;
-      for (var i = 0; i < 22; i++) {
-        var z = ((i + (t * 0.45) % 1) / 22);
+      for (var i = 1; i <= 22; i++) {
+        var z = i / 22;
         var yy = hz + Math.pow(z, 2.4) * depth;
         if (yy < hz || yy > H) continue;
         px(0, Math.round(yy / 2) * 2, W, 2, C_GRID, Math.min(0.55, Math.pow(z, 0.7) * 0.6));
       }
 
+      // The verticals carry the whole sidescroll. FASTEST layer in the scene by
+      // far (hills run 0.18/0.36/0.62) because this is the ground directly under
+      // him — parallax says the nearest thing moves most, and if the floor
+      // crawled at the hills' rate the world would look like it was on rails
+      // rather than moving.
+      //
+      // The fan does the perspective for free: each line runs from just off the
+      // vanishing point to 3.4x out at the bottom of the frame, so its near end
+      // sweeps 3.4x faster than its far end. That single ratio is what makes a
+      // flat set of lines read as a plane rushing past underneath.
       ctx.beginPath();
       for (var g = -14; g <= 14; g++) {
-        var gx = W / 2 + g * 46 - (scrollX * 0.9) % 46;
+        var gx = W / 2 + g * 46 - (scrollX * GRID_SWEEP) % 46;
         ctx.moveTo(W / 2 + (gx - W / 2) * 0.06, hz);
         ctx.lineTo(W / 2 + (gx - W / 2) * 3.4, H);
       }
