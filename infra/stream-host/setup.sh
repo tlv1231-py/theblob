@@ -20,7 +20,40 @@ command -v apt-get >/dev/null 2>&1 || {
 echo "==> packages"
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  xvfb ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates
+  xvfb ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates curl fontconfig
+
+# ── Fonts are a dependency, not a download ───────────────────────────────────
+# The page asks fonts.googleapis.com for Press Start 2P and VT323 at load time.
+# Neither is packaged in apt, and without them present fc-match resolves BOTH to
+# DejaVu Sans — not even a monospace. So a Google Fonts blip during a watchdog
+# reload renders the entire pixel-art stream in generic sans, and not one health
+# signal notices: the page still beats, ffmpeg still holds speed, RTMP stays
+# connected, every light stays green.
+#
+# Installing them locally demotes that fetch from dependency to optimisation.
+# Both are SIL Open Font License, which explicitly permits redistribution; the
+# licences are installed alongside them.
+#
+# Verified by blackholing fonts.googleapis.com in /etc/hosts and confirming the
+# render came back pixel-identical.
+echo "==> fonts (local fallback for Press Start 2P / VT323)"
+FONTDIR=/usr/local/share/fonts/blob
+if [[ -f "$FONTDIR/PressStart2P-Regular.ttf" && -f "$FONTDIR/VT323-Regular.ttf" ]]; then
+  echo "    already installed"
+else
+  mkdir -p "$FONTDIR"
+  GF=https://raw.githubusercontent.com/google/fonts/main
+  curl -fsSL -o "$FONTDIR/PressStart2P-Regular.ttf" "$GF/ofl/pressstart2p/PressStart2P-Regular.ttf"
+  curl -fsSL -o "$FONTDIR/VT323-Regular.ttf"        "$GF/ofl/vt323/VT323-Regular.ttf"
+  curl -fsSL -o "$FONTDIR/OFL-PressStart2P.txt"     "$GF/ofl/pressstart2p/OFL.txt"
+  curl -fsSL -o "$FONTDIR/OFL-VT323.txt"            "$GF/ofl/vt323/OFL.txt"
+  fc-cache -f >/dev/null 2>&1
+  echo "    installed to $FONTDIR"
+fi
+fc-match 'Press Start 2P' | grep -q PressStart2P \
+  || echo "    !! Press Start 2P does not resolve — the stream will render in DejaVu"
+fc-match 'VT323' | grep -q VT323 \
+  || echo "    !! VT323 does not resolve — the stream will render in DejaVu"
 
 # ── Chromium is not an apt package on Ubuntu ─────────────────────────────────
 # Verified on the host: `apt-cache policy chromium` returns Candidate: (none) —
