@@ -61,7 +61,12 @@ CHANNEL_ID = os.environ.get("YOUTUBE_CHANNEL_ID", "").strip()
 # liveChat/bans and liveChat/moderators.
 PATH_CHAT = "liveChat/messages"
 
-COST = {"liveChatMessages.list": 5, "videos.list": 1, "search.list": 100}
+COST = {"liveChatMessages.list": 5, "videos.list": 1, "search.list": 100,
+        "channels.list": 1, "playlistItems.list": 1}
+
+# How often to go looking for a broadcast when we do not have one. Discovery is
+# cheap now (3 units) but it is still pure overhead while the channel is dark.
+DISCOVER_SECONDS = int(os.environ.get("CHAT_DISCOVER", "300"))
 DAILY_BUDGET = int(os.environ.get("YT_QUOTA_BUDGET", "10000"))
 POLL_FAST = int(os.environ.get("CHAT_POLL_FAST", "5"))
 POLL_IDLE = int(os.environ.get("CHAT_POLL_IDLE", "300"))
@@ -118,29 +123,61 @@ def api(method: str, path: str, quota: Quota, **params) -> dict:
 
 # ── Finding the broadcast ────────────────────────────────────────────────────
 
-def resolve_chat_id(quota: Quota) -> tuple[str | None, str | None]:
-    """(liveChatId, videoId). Cheap when VIDEO_ID is pinned, expensive when not.
+def discover_video(quota: Quota) -> str | None:
+    """The channel's currently-live video, WITHOUT search.list.
 
-    search.list costs 100 units — 2% of the day's entire budget per call — so it
-    is only ever used to FIND a broadcast we do not have, never on a schedule.
-    Pin YOUTUBE_VIDEO_ID in .env and this stays at 1 unit.
+    search.list is the obvious way to do this and it costs 100 units — 1% of the
+    entire day per call. Asking "are we live yet?" every 5 minutes while the
+    channel is dark would cost 28,800 units/day against a 10,000 budget: the
+    quota would be gone before lunch, every day, having read no chat at all.
+
+    This route costs 3, by walking the channel's own uploads instead — a live
+    broadcast is a video in that playlist like any other:
+
+        channels.list      (1)  -> the uploads playlist id
+        playlistItems.list (1)  -> the most recent uploads
+        videos.list        (1)  -> which of those is live right now
+
+    3 units per check at 300s is 864/day. Affordable. 100 was not.
     """
-    vid = VIDEO_ID
-    if not vid:
-        if not CHANNEL_ID:
-            print("[chat] no YOUTUBE_VIDEO_ID and no YOUTUBE_CHANNEL_ID — nothing to watch",
-                  flush=True)
-            return None, None
-        try:
-            r = api("search.list", "search", quota, part="id", channelId=CHANNEL_ID,
-                    eventType="live", type="video", maxResults=1)
-        except urllib.error.HTTPError as e:
-            print(f"[chat] search failed: {e.code} {e.read()[:160]!r}", flush=True)
-            return None, None
+    try:
+        r = api("channels.list", "channels", quota, part="contentDetails", id=CHANNEL_ID)
         items = r.get("items") or []
         if not items:
-            return None, None
-        vid = items[0]["id"]["videoId"]
+            print(f"[chat] channel {CHANNEL_ID} not found", flush=True)
+            return None
+        uploads = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+        r = api("playlistItems.list", "playlistItems", quota, part="contentDetails",
+                playlistId=uploads, maxResults=5)
+        ids = [i["contentDetails"]["videoId"] for i in (r.get("items") or [])]
+        if not ids:
+            return None
+
+        # One call for all of them — videos.list takes a comma-separated id list
+        # and still costs 1 unit.
+        r = api("videos.list", "videos", quota, part="snippet", id=",".join(ids))
+        for it in r.get("items") or []:
+            if it["snippet"].get("liveBroadcastContent") == "live":
+                return it["id"]
+    except urllib.error.HTTPError as e:
+        print(f"[chat] discovery failed: {e.code} {e.read()[:160]!r}", flush=True)
+    return None
+
+
+def resolve_chat_id(quota: Quota) -> tuple[str | None, str | None]:
+    """(liveChatId, videoId).
+
+    Pinning YOUTUBE_VIDEO_ID keeps this at 1 unit and is worth doing: a 24/7
+    broadcast reusing one stream key keeps the same video id, so there is usually
+    nothing to discover.
+    """
+    vid = VIDEO_ID or (discover_video(quota) if CHANNEL_ID else None)
+    if not vid:
+        if not VIDEO_ID and not CHANNEL_ID:
+            print("[chat] no YOUTUBE_VIDEO_ID and no YOUTUBE_CHANNEL_ID — nothing to watch",
+                  flush=True)
+        return None, None
 
     try:
         r = api("videos.list", "videos", quota, part="liveStreamingDetails", id=vid)
@@ -294,24 +331,31 @@ def main() -> None:
           flush=True)
 
     while True:
+        # FIRST, before anything spends. This used to sit below the discovery
+        # branch, which meant a dark channel looped through resolve_chat_id
+        # forever and never once reached the guard meant to stop it.
+        #
+        # Never blow the free quota. Going over costs no money — it returns 403
+        # quotaExceeded and the listener is simply deaf until midnight Pacific,
+        # which is worse than being slow.
+        if quota.exhausted:
+            print(f"[chat] quota {quota.spent}/{DAILY_BUDGET} — idling", flush=True)
+            post_health("degraded", {"reason": "daily quota nearly spent",
+                                     "quota_spent": quota.spent})
+            time.sleep(POLL_IDLE)
+            continue
+
         if not chat_id:
             chat_id, video_id = resolve_chat_id(quota)
             if not chat_id:
-                print("[chat] no active broadcast — waiting", flush=True)
+                print(f"[chat] no active broadcast — retry in {DISCOVER_SECONDS}s "
+                      f"(quota {quota.spent}/{DAILY_BUDGET})", flush=True)
                 post_health("degraded", {"reason": "no active broadcast",
                                          "quota_spent": quota.spent})
-                time.sleep(POLL_IDLE)
+                time.sleep(DISCOVER_SECONDS)
                 continue
             print(f"[chat] watching video={video_id} chat={chat_id[:24]}...", flush=True)
             page, seeded = None, False
-
-        if quota.exhausted:
-            # Never blow the free quota. Going over does not cost money — it
-            # returns 403 quotaExceeded and the listener is simply deaf until
-            # midnight Pacific, which is worse than being slow.
-            print(f"[chat] quota {quota.spent}/{DAILY_BUDGET} — idling", flush=True)
-            time.sleep(POLL_IDLE)
-            continue
 
         try:
             params = dict(part="snippet,authorDetails", liveChatId=chat_id, maxResults=200)
