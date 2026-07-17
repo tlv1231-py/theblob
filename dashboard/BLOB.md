@@ -65,6 +65,31 @@ survives only as long as all three hold:
   sampled against the pixel grid. The jaggies are the point. Do not anti-alias.
 - **Eyes carry the comedy.** ~90% of personality is in the eyes and the
   specular glint. Spend detail budget there before anywhere else.
+- **Brows are the opinion.** An eye is a shape; a brow is a *stance*. Anger is
+  not a rounder eye, it is a brow driven down and in. Before they existed every
+  mood had to be carried by swapping the whole eye for a preset, which made the
+  eye do a job that was never its own. `BROWS` in `blob.js` is the table.
+  - `tilt` drives the **inner** end: `+` down (anger, focus), `-` up (worry).
+    Inner is the right end of the left brow and the left end of the right brow,
+    so the right brow takes the **negated** slope and starts where the left one
+    ended. Mirroring the *number*, not the geometry, is what keeps them reading
+    as one pair rather than two independent marks.
+  - **They do not track `look`.** Brows sit on the head, not the eyeball. The
+    eye sliding *under* a held brow is most of what makes a glance read as one.
+  - **Drawn after the eyes, and allowed to overlap them.** That overlap is what
+    a scowl *is* — `BRACE`'s brow descends as a wedge into the narrowed eye, and
+    the glint is what keeps the eye legible inside the mass. Verified, not
+    assumed: it reads as a scowl and not a blob.
+  - `SMUG` lifts **only the right brow**. A symmetric smirk is just a face; the
+    asymmetry *is* the smugness, and it costs one number.
+- **Two glints, not one.** The key sits upper-left (matching `LX`/`LY`); a
+  dimmer `HI` bounce sits lower-right. One glint reads as a dot painted *on* the
+  eye, two read as light wrapping a sphere. The bounce is `HI` and not `WHT` on
+  purpose — a second full white competes with the key and flattens both.
+- **The blink travels.** Three ticks: half, shut, half. It used to hard-cut from
+  a full eye to a 1px line, which at 10fps reads as the eye *vanishing* for two
+  frames rather than as a blink. At this framerate those in-between frames are
+  the only ones a blink has.
 
 ## Mood taxonomy
 

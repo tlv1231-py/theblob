@@ -44,6 +44,31 @@
   // from nothing and reads as a flinch.
   var MOODS = ['IDLE','HAPPY','SCARED','ALERT','SLEEP','SMUG','BRACE'];
 
+  // ── Brows ──────────────────────────────────────────────────────────────────
+  // He had eyes and a mouth and NO BROWS, which is why every mood had to be
+  // carried by swapping the whole eye for a preset shape — the eye was doing
+  // work that isn't its job. An eye is a shape; a brow is an OPINION. Angle
+  // carries more emotion than size ever will: anger is not a rounder eye, it is
+  // a brow driven down and in. Two pixels of slope out-act a whole redesign.
+  //
+  // `tilt` drives the INNER end: + is down (anger, focus), - is up (worry).
+  // Inner means the right end of the left brow and the left end of the right
+  // brow, so the right brow takes the negated slope and starts where the left
+  // one ended. Mirroring the NUMBER rather than the geometry is what keeps them
+  // reading as one pair of brows instead of two independent marks.
+  //
+  // Brows do NOT track `look`. They sit on the head, not the eyeball — the eye
+  // sliding under a held brow is most of what makes a glance read as a glance.
+  var BROWS = {
+    IDLE:   { drop:  0, tilt:  0.00, th: 1, on: true  },
+    HAPPY:  { drop: -2, tilt: -0.15, th: 1, on: true  },  // lifted, relaxed
+    SCARED: { drop: -3, tilt: -0.55, th: 1, on: true  },  // inner ends UP — worry
+    ALERT:  { drop: -3, tilt:  0.00, th: 2, on: true  },  // high and hard
+    SMUG:   { drop:  0, tilt:  0.15, th: 1, on: true  },  // ONE lifts — see draw()
+    BRACE:  { drop:  1, tilt:  0.55, th: 2, on: true  },  // down and in — focus
+    SLEEP:  { drop:  2, tilt:  0.00, th: 1, on: false }   // a sleeping face is slack
+  };
+
   function create(canvas, opts) {
     opts = opts || {};
     var W = opts.grid || 48;
@@ -76,6 +101,12 @@
     }
     function rect(x, y, w, h, c) {
       for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) px(x+i, y+j, c);
+    }
+    // A brow is a run of 1px columns stepped by `slope` — NOT a rotated line.
+    // Rounding each column to a whole pixel is what keeps it on the grid and
+    // jagged; a real diagonal here would anti-alias and stop reading as 8-bit.
+    function brow(x0, y0, w, slope, th) {
+      for (var i = 0; i < w; i++) rect(x0 + i, y0 + Math.round(i * slope), 1, th, P.EYE);
     }
 
     function draw() {
@@ -151,7 +182,15 @@
       // ── Face ──────────────────────────────────────────────────────────────
       var fy = Math.round(cy) - 2;
       var CX = Math.round(cx);
-      var blinking = self.tick < blinkUntil;
+      // A lid that TRAVELS. It was a hard cut — full eye, 1px line, full eye —
+      // which at 10fps reads as the eye vanishing for two frames rather than as
+      // a blink. Half-closed on the way down and again on the way up is the
+      // entire difference, and at this framerate those are the only frames a
+      // blink even has. 3 ticks = 300ms, the whole gesture.
+      var blinkLeft = blinkUntil - self.tick;      // 3 closing, 2 shut, 1 opening
+      var blinking = blinkLeft > 0;
+      var lidShut = blinkLeft === 2;
+      var lidHalf = blinking && !lidShut;
       // Eyes drift toward the move — unless he is deliberately looking at
       // something, in which case the glance wins until it decays.
       var look = Math.round(p * 1.6);
@@ -166,8 +205,13 @@
           rect(CX+i, fy-1, 1, 3, Math.abs(i - sweep) < 2 ? P.WHT : vc);
         }
         if (mood === 'SLEEP') rect(CX-9, fy-2, 18, 5, P.LO);
-      } else if (blinking || mood === 'SLEEP') {
+      } else if (lidShut || mood === 'SLEEP') {
         rect(CX-7+look, fy+1, 5, 1, P.EYE); rect(CX+3+look, fy+1, 5, 1, P.EYE);
+      } else if (lidHalf) {
+        // Bottom half of the open eye. The glint survives the half-lid — losing
+        // it would blank the eye and put us back at the hard cut.
+        rect(CX-7+look, fy+1, 5, 3, P.EYE); rect(CX+3+look, fy+1, 5, 3, P.EYE);
+        px(CX-6+look, fy+1, P.WHT); px(CX+4+look, fy+1, P.WHT);
       } else if (mood === 'HAPPY') {
         [-7, 3].forEach(function(ox) {
           px(CX+ox, fy+1, P.EYE); px(CX+ox+1, fy, P.EYE);
@@ -188,7 +232,29 @@
         rect(CX-7+look, fy-1, ew, ew, P.EYE); rect(CX+3+look, fy-1, ew, ew, P.EYE);
         var gx = mood === 'SCARED' ? 1 : 0;
         px(CX-6+look+gx, fy, P.WHT); px(CX+4+look+gx, fy, P.WHT);
+        // BOUNCE LIGHT, lower-right — opposite the key, which is upper-left
+        // (see LX/LY). One glint reads as a dot painted ON the eye; two read as
+        // light wrapping a sphere. Cheapest depth in the whole face, 2 pixels.
+        // P.HI not P.WHT: a second full-white would compete with the key and
+        // flatten both back into dots.
+        px(CX-7+look+ew-2, fy+2, P.HI); px(CX+3+look+ew-2, fy+2, P.HI);
         if (mood === 'ALERT') { px(CX-5+look, fy+1, P.CYN); px(CX+5+look, fy+1, P.CYN); }
+      }
+
+      // ── Brows ─────────────────────────────────────────────────────────────
+      // Drawn AFTER the eyes so a heavy brow can overlap the eye's top row —
+      // that overlap is what a scowl IS. Suppressed under the visor, which
+      // already owns the whole brow line.
+      var B = BROWS[mood] || BROWS.IDLE;
+      if (B.on && !self.visor) {
+        // fy already carries the bob (it derives from cy), so brows ride the
+        // face for free — no separate offset.
+        var by = fy - 4 + B.drop;
+        var inner = Math.round(5 * B.tilt);   // where the left brow's inner end lands
+        brow(CX-8, by, 6, B.tilt, B.th);
+        // SMUG lifts ONLY the right one. A symmetric smirk is just a face; the
+        // asymmetry IS the smugness, and it costs one number.
+        brow(CX+3, by + inner - (mood === 'SMUG' ? 3 : 0), 6, -B.tilt, B.th);
       }
 
       var my = fy + 8;
@@ -226,7 +292,7 @@
       self.tick++;
       if (moodUntil > 0 && self.tick > moodUntil) { self.mood = 'IDLE'; moodUntil = -1; }
       if (self.tick > nextBlink) {
-        blinkUntil = self.tick + 2;
+        blinkUntil = self.tick + 3;    // 3 ticks = closing / shut / opening
         nextBlink = self.tick + 30 + Math.random() * 50;
       }
       draw();
