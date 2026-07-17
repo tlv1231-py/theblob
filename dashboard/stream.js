@@ -272,13 +272,29 @@
         ctx.resume().then(function() { ready = true; }).catch(function() {});
       } catch (e) {}
     }
-    // Any gesture unlocks. Harmless if it never comes (OBS won't need it).
-    ['pointerdown', 'keydown', 'touchstart'].forEach(function(ev) {
-      window.addEventListener(ev, function once() {
-        init();
-        if (ctx && ctx.state === 'suspended') ctx.resume();
-        ready = true;
-      }, { once: true });
+    // Any gesture unlocks. Harmless if it never comes (the encoder's headless
+    // Chromium runs with no-user-gesture-required and never needs it).
+    //
+    // Listened for on the PARENT document as well as this one. This page is an
+    // iframe inside Streamlit, and a tap only reaches the window it lands in —
+    // on a phone almost every tap lands on the parent chrome, not on the stage,
+    // so the iframe's context stayed suspended no matter how much you prodded
+    // it. Same-origin, so reaching up is allowed; wrapped anyway because if it
+    // ever isn't, a thrown SecurityError here would take the whole page down
+    // over a sound effect.
+    function unlock() {
+      init();
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+      ready = true;
+    }
+    var GESTURES = ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'];
+    GESTURES.forEach(function(ev) {
+      window.addEventListener(ev, unlock, { once: true, passive: true });
+      try {
+        if (window.parent && window.parent !== window && window.parent.document) {
+          window.parent.document.addEventListener(ev, unlock, { once: true, passive: true });
+        }
+      } catch (e) {}
     });
     init();
 
@@ -2003,6 +2019,11 @@
   var PU_AMP_GAIN = 5;        // px added per unit of scale — the "intensity"
   var PU_MIN_S = 1;           // $1 and under all look the same — the floor
   var PU_REF = 5;             // the dono the curve is normalised around
+  // Bounds the stack in the LIST rather than by clipping the container. The box
+  // used to be overflow:hidden, which sheared the top name's hover and glow off
+  // against a line level with the bottom of the tiles. Newest 5 orbit; the rest
+  // are still live in the DB and still visible in HQ, they just wait their turn.
+  var PU_MAX = 5;
 
   // Cube root of the dollar amount, normalised so $5 == 1.0. Clamped at both
   // ends: below $1 nothing shrinks further, and past ~$250 nothing grows —
@@ -2025,9 +2046,15 @@
     return Number(amount) >= 25 ? '#00e5ff' : '#ff00cc';
   }
 
-  function puRender(list) {
+  function puRender(full) {
     var host = $('s-orbit');
     if (!host) return;
+    // Newest first, capped. Bounding the LIST is what lets the container stop
+    // clipping — see PU_MAX.
+    var list = full.slice().sort(function(a, b) {
+      return new Date(b.until).getTime() - new Date(a.until).getTime();
+    }).slice(0, PU_MAX);
+
     var seen = {};
     list.forEach(function(d) { seen[d.name + '|' + d.until] = 1; });
 
@@ -2046,19 +2073,15 @@
       var s = puScale(d.amount);
       var el = document.createElement('div');
       el.className = 'pu';
-      el.style.setProperty('--pu-c', puColor(d.amount));
-      el.style.setProperty('--pu-glow', Math.round(14 + s * 12) + 'px');
       el.style.fontSize = Math.round(PU_BASE_FONT + s * PU_FONT_GAIN) + 'px';
       el.innerHTML = '<span class="pu-name"></span><span class="pu-amt"></span>';
       el.querySelector('.pu-name').textContent = String(d.name || '').toUpperCase().slice(0, 16);
       el.querySelector('.pu-amt').textContent = '$' + (Number(d.amount) % 1 === 0
         ? Number(d.amount).toFixed(0) : Number(d.amount).toFixed(2));
-      // Newest at the top of the stack — a fresh dono should not have to be
-      // hunted for at the bottom of a list.
-      if (host.firstChild) host.insertBefore(el, host.firstChild);
-      else host.appendChild(el);
+      host.appendChild(el);
       puList.push({
         name: d.name, until: d.until, amount: d.amount, el: el, scale: s,
+        nameEl: el.querySelector('.pu-name'),
         // Each name bobs on its OWN phase. In lockstep the stack reads as one
         // rigid block sliding up and down; offset, it reads as several things
         // independently hanging there.
@@ -2069,8 +2092,33 @@
         amp: PU_BASE_AMP + s * PU_AMP_GAIN,
         // Bigger donations hover SLOWER and wider — a large name twitching
         // quickly reads as agitated, not as expensive.
-        speed: 1.5 / (0.7 + s * 0.6)
+        speed: 1.5 / (0.7 + s * 0.6),
+        // Hue offset so two names are never the same colour at the same moment.
+        hue: Math.random() * 360,
+        // THE STROBE. Bigger donations flash harder and more often. Frames
+        // between flashes — a $2 blinks rarely, a $75 is a lightning storm.
+        strobeEvery: Math.max(4, Math.round(26 - s * 6)),
+        f: 0
       });
+    });
+
+    // Put the DOM in the sorted order — biggest/newest on top, because a fresh
+    // whale should not have to be hunted for at the bottom of the stack.
+    //
+    // Done as a REORDER pass rather than by inserting each new node at the top:
+    // that reversed the sort (last inserted wins the top slot), so the stack
+    // came out smallest-first — measured, the $6 was above the $75. appendChild
+    // on an element already in the DOM MOVES it, so walking the sorted list is
+    // all it takes, and it is correct no matter what order they arrived in
+    // across polls.
+    list.forEach(function(d) {
+      var key = d.name + '|' + d.until;
+      for (var j = 0; j < puList.length; j++) {
+        if (puList[j].name + '|' + puList[j].until === key) {
+          host.appendChild(puList[j].el);
+          break;
+        }
+      }
     });
   }
 
@@ -2085,6 +2133,8 @@
         continue;
       }
       p.phase += p.speed / PU_FPS;
+      p.f++;
+
       // Hover. Whole pixels — subpixel drift is the thing that breaks pixel art
       // (BLOB.md), and these hang in the same room as a 48x48 sprite.
       var y = Math.round(Math.sin(p.phase) * p.amp);
@@ -2092,6 +2142,39 @@
       // floats rather than slides on a rail, not enough to read as drifting.
       var x = Math.round(Math.cos(p.phase * 0.7) * p.amp * 0.33);
       p.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+
+      // ── THE HYPE ──────────────────────────────────────────────────────────
+      // Someone paid. This is the one thing on the stage allowed to be
+      // obnoxious, and restraint here would be a bug: a donation alert that
+      // whispers is a donation alert nobody sends twice.
+      //
+      // Rainbow: the hue is SWEPT rather than cycled through fixed steps, and
+      // the second colour trails 90deg behind, so the halo is never one colour —
+      // it is always a gradient sliding through itself. Scaled by the amount
+      // like everything else, so a $75 rips through the spectrum and a $2
+      // ambles.
+      var hue  = (p.hue + p.f * (2.2 + p.scale * 2.6)) % 360;
+      var hue2 = (hue + 90) % 360;
+      p.el.style.setProperty('--pu-c',  'hsl(' + hue.toFixed(0) + ',100%,62%)');
+      p.el.style.setProperty('--pu-c2', 'hsl(' + hue2.toFixed(0) + ',100%,58%)');
+
+      // The glow BREATHES on its own faster clock, so the light pulses against
+      // the hue sweep instead of with it. Two rhythms beating is what makes it
+      // read as alive rather than as a looping asset.
+      var pulse = 1 + Math.sin(p.f * 0.22) * 0.45;
+      p.el.style.setProperty('--pu-glow',
+        Math.round((13 + p.scale * 11) * pulse) + 'px');
+
+      // Strobe: a hard white frame on a beat. Two frames on, the rest off — any
+      // longer and it stops being a flash and starts being a colour.
+      var strobe = (p.f % p.strobeEvery) < 2;
+      if (strobe !== p.wasStrobe) {
+        p.wasStrobe = strobe;
+        if (p.nameEl) p.nameEl.style.color = strobe ? '#ffffff' : '';
+        p.el.style.filter = strobe
+          ? 'brightness(' + (1.5 + p.scale * 0.7).toFixed(2) + ')'
+          : '';
+      }
 
       // The last 20s fades out, so a lapse is a decision rather than a name
       // that was simply there and then was not.

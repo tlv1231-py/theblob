@@ -623,10 +623,14 @@ html, body {
   flex-direction: column;
   align-items: flex-end;     /* right-oriented */
   gap: 14px;
-  /* Never push into the Blob's face: the newest names sit at the top and the
-     stack simply runs out of room rather than growing over him. */
-  max-height: 420px;
-  overflow: hidden;
+  /* NO overflow:hidden, and no max-height. Both were here to stop the stack
+     growing into the Blob's face, and both clipped the names instead: the box
+     starts at y612, the hover lifts a name up to 15px, and the glow throws
+     light further still — so the top name was sheared off against an invisible
+     line exactly level with the bottom of the holdings tiles. A container that
+     clips its own contents' motion is the wrong tool; the LIST is capped in JS
+     (PU_MAX) instead, which bounds the stack without amputating anything. */
+  overflow: visible;
 }
 
 .pu {
@@ -642,16 +646,25 @@ html, body {
   flex: none;
 }
 
-/* The name. White core with a coloured bloom — the same trick the score and
-   the tickers use, so a paid name sits in the same visual language as a P&L. */
+/* The name. A white core inside a rainbow bloom that never settles on one
+   colour: --pu-c and --pu-c2 are swept 90deg apart by puTick, so the halo is
+   always a gradient sliding through itself rather than a tint.
+
+   FIVE shadow layers, and that is the point — someone paid, and this is the one
+   element on the stage allowed to be obnoxious. The hard extrude stays
+   underneath all of it so the glyphs keep their arcade weight instead of
+   dissolving into their own light. */
 .pu-name {
   color: #ffffff;
   -webkit-text-stroke: 1px rgba(0,0,0,0.65);
   text-shadow:
     2px 2px 0 #1a0016,
     4px 4px 0 rgba(0,0,0,0.85),
-    0 0 var(--pu-glow, 18px) var(--pu-c, #ff00cc),
-    0 0 calc(var(--pu-glow, 18px) * 2) var(--pu-c, #ff00cc);
+    0 0 calc(var(--pu-glow, 18px) * 0.5) #ffffff,
+    0 0 var(--pu-glow, 18px)             var(--pu-c,  #ff00cc),
+    0 0 calc(var(--pu-glow, 18px) * 2)   var(--pu-c,  #ff00cc),
+    0 0 calc(var(--pu-glow, 18px) * 3.2) var(--pu-c2, #00e5ff),
+    0 0 calc(var(--pu-glow, 18px) * 5)   var(--pu-c2, #00e5ff);
 }
 
 /* The amount rides under the name, smaller and in the accent — money is the
@@ -661,7 +674,10 @@ html, body {
   margin-top: 0.35em;
   font-size: 0.5em;
   color: var(--pu-c, #ff00cc);
-  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 12px var(--pu-c, #ff00cc);
+  text-shadow:
+    2px 2px 0 rgba(0,0,0,0.9),
+    0 0 12px var(--pu-c, #ff00cc),
+    0 0 26px var(--pu-c2, #00e5ff);
 }
 
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
