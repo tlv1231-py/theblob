@@ -924,6 +924,123 @@
 
   // Shared by both window lanes — the box leaves entirely so the score gets its
   // floor back the instant nobody is talking.
+  // ═══════════════════════════════════════════════════════════════════════
+  // THE BOX — how it arrives and how it dies
+  //
+  // ONE treatment for BOTH lanes. A viewer's donation and a line of Blobby's
+  // dialogue are different messages in the same window; if they opened
+  // differently the window would stop being a window and start being two.
+  //
+  // IN — it SNAPS. A hot line at the floor thrown open in seven quantized
+  // frames with an overshoot: a menu opening, not a panel fading. No easing
+  // anywhere. An ease is the single loudest modern-web tell there is, and this
+  // is a DMG. It grows UP from the bottom edge because that is where a Gameboy
+  // text box comes from — see transform-origin in the CSS.
+  //
+  // OUT — it DECAYS. The text rots back into the junk x decoded out of, the LCD
+  // lattice eats the panel from the inside until the box is nothing but its own
+  // pixel grid, and the whole thing tears sideways a pixel at a time before
+  // collapsing. ~880ms against the entrance's ~240ms, deliberately: arriving is
+  // an EVENT and leaving is an afterthought, and a box that vanished as fast as
+  // it appeared would read as a dropped frame rather than a decision.
+  //
+  // Both are setInterval. Standing rule, and this page's animation clock cannot
+  // be trusted to run a CSS keyframe at all.
+  // ═══════════════════════════════════════════════════════════════════════
+  var BOX_IN_STEP = 34;
+  var BOX_IN = [
+    // scaleY, brightness — a hot slit that throws itself open and settles.
+    { y: 0.03, b: 3.2 },
+    { y: 0.17, b: 2.5 },
+    { y: 0.49, b: 1.9 },
+    { y: 0.83, b: 1.45 },
+    { y: 1.09, b: 1.2 },    // past the frame
+    { y: 0.96, b: 1.05 },   // and back
+    { y: 1.00, b: 1.0 }
+  ];
+
+  var BOX_OUT_STEP = 55, BOX_OUT_FRAMES = 16;
+  // Opacity in DISCRETE steps. A linear ramp is a dissolve, and a dissolve is
+  // not chaos — it is a fade with extra words. Quantizing makes the panel drop
+  // out in visible chunks, which is what decay looks like on a 4-bit display.
+  var BOX_OUT_A = [1, 1, 0.94, 0.94, 0.8, 0.8, 0.62, 0.62,
+                   0.46, 0.32, 0.32, 0.19, 0.11, 0.06, 0.02, 0];
+  var _boxT = null;
+
+  function boxOpen() {
+    var lcd = $('ev-lcd');
+    if (!lcd) return;
+    clearInterval(_boxT);
+    lcd.style.removeProperty('--lcd-a');
+    lcd.style.opacity = '';
+    var i = 0;
+    _boxT = setInterval(function() {
+      if (i >= BOX_IN.length) {
+        clearInterval(_boxT); _boxT = null;
+        lcd.style.transform = ''; lcd.style.filter = '';
+        return;
+      }
+      var f = BOX_IN[i++];
+      lcd.style.transform = 'scaleY(' + f.y + ')';
+      lcd.style.filter = 'brightness(' + f.b + ')';
+    }, BOX_IN_STEP);
+  }
+
+  // Kills whatever the box was doing and takes it apart. `done` runs when there
+  // is nothing left — the lane must not release the stage until then, or the
+  // next thing plays over a corpse.
+  function boxDecay(done) {
+    var lcd = $('ev-lcd');
+    if (!lcd || !$('s-events').classList.contains('showing')) { done(); return; }
+
+    clearInterval(_boxT);
+    // Whatever was typing must stop, or it types into the rot.
+    clearInterval(annTypeT); clearTimeout(annHoldT);
+    clearInterval(speakTypeT); clearTimeout(speakHoldT);
+
+    var texts = [$('ev-name'), $('ev-act'), $('ev-msg')].map(function(el) {
+      return { el: el, s: el ? el.textContent : '' };
+    });
+
+    var i = 0;
+    _boxT = setInterval(function() {
+      var p = i / (BOX_OUT_FRAMES - 1);      // 0 .. 1
+
+      // Each glyph rots on its OWN roll, so the word visibly comes apart rather
+      // than being swapped for a different word. This is the decode played
+      // backwards — the same alphabet it resolved out of, returning to it.
+      texts.forEach(function(t) {
+        if (!t.s || !t.el) return;
+        var out = '';
+        for (var k = 0; k < t.s.length; k++) {
+          out += (t.s[k] !== ' ' && Math.random() < p * 1.2)
+            ? SCRAM[Math.floor(Math.random() * SCRAM.length)]
+            : t.s[k];
+        }
+        t.el.textContent = out;
+      });
+
+      // The panel eats itself with its own pixel lattice — by the last frame the
+      // box IS the grid and nothing else. Cheapest possible disintegration: the
+      // lattice is already there, it just gets louder.
+      lcd.style.setProperty('--lcd-a', (0.30 + p * 0.7).toFixed(2));
+
+      // Tear. Whole even pixels, and NOT every frame — a constant jitter is
+      // noise, an intermittent one is a signal breaking up.
+      var tear = (i % 3 === 0) ? 0 : Math.round((Math.random() - 0.5) * p * 7) * 2;
+      lcd.style.transform = 'translateX(' + tear + 'px) scaleY(' + (1 - p * 0.07).toFixed(3) + ')';
+      lcd.style.opacity = BOX_OUT_A[Math.min(i, BOX_OUT_A.length - 1)];
+      lcd.style.filter = 'brightness(' + (1 + p * 0.7).toFixed(2) + ')';
+
+      i++;
+      if (i < BOX_OUT_FRAMES) return;
+      clearInterval(_boxT); _boxT = null;
+      lcd.style.transform = ''; lcd.style.opacity = '';
+      lcd.style.filter = ''; lcd.style.removeProperty('--lcd-a');
+      done();
+    }, BOX_OUT_STEP);
+  }
+
   function annClose() {
     var lcd = $('ev-lcd');
     if (!lcd) return;
@@ -952,23 +1069,33 @@
     var lcd = $('ev-lcd');
     if (!lcd) return;
     if (!annQ.length) {
-      annClose();
-      // Guarded because boot calls annNext() once to settle the panel into its
-      // idle state, and that call holds no floor to give back.
-      if (stage.owner === 'popup') {
-        stageDone();
-        // Hand x back to the AFK cycle on the same 2s rule a trade uses —
-        // otherwise "is happy!" waves forever after the last dono of the night.
-        clearTimeout(_idleT); clearTimeout(_afkT);
-        _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
-      }
+      // The box holds the stage while it dies. Releasing first would let the
+      // next thing play over a corpse mid-decay.
+      boxDecay(function() {
+        annClose();
+        // Guarded because boot calls annNext() once to settle the panel into
+        // its idle state, and that call holds no floor to give back.
+        if (stage.owner === 'popup') {
+          stageDone();
+          // Hand x back to the AFK cycle on the same 2s rule a trade uses —
+          // otherwise "is happy!" waves forever after the last dono of the night.
+          clearTimeout(_idleT); clearTimeout(_afkT);
+          _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
+        }
+      });
       return;
     }
     var ev = annQ.shift();
     annBadge();
 
     var cfg = ANN[ev.type];
+    // Only when it is actually ARRIVING. Mid-burst the box is already open and
+    // the next donation just replaces its contents — re-snapping it open for
+    // every event in a dono train would read as the window flickering rather
+    // than as three people being thanked.
+    var arriving = !$('s-events').classList.contains('showing');
     $('s-events').classList.add('showing');   // the overlay arrives
+    if (arriving) boxOpen();
     lcd.classList.remove('idle');
     lcd.classList.remove('speaking');
     lcd.classList.add('open');
@@ -1211,19 +1338,26 @@
     var lcd = $('ev-lcd');
     if (!lcd) return;
     if (!speakQ.length) {
-      annClose();
-      if (stage.owner === 'speaks') {
-        stageDone();
-        // Hand x back to the AFK cycle on the same 2s rule the popup lane and a
-        // trade use, or "says:" would sit there forever after his last word.
-        clearTimeout(_idleT); clearTimeout(_afkT);
-        _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
-      }
+      // Same death as a popup — it is the same window. See boxDecay.
+      boxDecay(function() {
+        annClose();
+        if (stage.owner === 'speaks') {
+          stageDone();
+          // Hand x back to the AFK cycle on the same 2s rule the popup lane and
+          // a trade use, or "says:" would sit there forever after his last word.
+          clearTimeout(_idleT); clearTimeout(_afkT);
+          _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
+        }
+      });
       return;
     }
     var s = speakQ.shift();
 
+    // Same arrival as a popup, and only when it is actually arriving — a second
+    // line mid-burst replaces the contents of a box that is already open.
+    var arriving = !$('s-events').classList.contains('showing');
     $('s-events').classList.add('showing');
+    if (arriving) boxOpen();
     lcd.classList.remove('idle');
     lcd.classList.remove('pop');            // a popup's money hit is not his
     lcd.classList.add('open');

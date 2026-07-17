@@ -221,6 +221,12 @@ html, body {
   transition: border-color 0.25s steps(2, end),
               box-shadow 0.25s steps(2, end);
   overflow: hidden;
+  /* boxOpen() throws this open with scaleY. BOTTOM origin because that is where
+     a Gameboy text box comes from — it rises off the floor of the screen. A
+     centre origin would have it iris open from the middle like a modal, which
+     is the one thing it must not look like. boxDecay() collapses on the same
+     axis, so the box dies where it was born. */
+  transform-origin: bottom center;
 }
 /* The box is a fixed 248 now — the container is what appears and disappears,
    so there is no idle-vs-open height to reconcile. */
@@ -242,14 +248,20 @@ html, body {
     5px calc(100% - 10px), 0 calc(100% - 10px)
   );
 }
-/* The LCD lattice. 3px cell = visible pixel gaps, the way a DMG panel reads. */
+/* The LCD lattice. 3px cell = visible pixel gaps, the way a DMG panel reads.
+
+   --lcd-a is driven by boxDecay(): ramping it 0.30 -> 1.0 makes the panel eat
+   ITSELF, until the box is nothing but its own pixel grid and then nothing at
+   all. The cheapest possible disintegration — the lattice is already drawn on
+   every frame, it just gets louder — and the most honest one, because the box
+   comes apart into exactly the pixels it was always made of. */
 .ev-lcd::after {
   content: '';
   position: absolute; inset: 0;
   pointer-events: none;
   background:
-    repeating-linear-gradient(90deg, rgba(0,0,0,0.30) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(0deg,  rgba(0,0,0,0.30) 0 1px, transparent 1px 3px);
+    repeating-linear-gradient(90deg, rgba(0,0,0,var(--lcd-a, 0.30)) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg,  rgba(0,0,0,var(--lcd-a, 0.30)) 0 1px, transparent 1px 3px);
 }
 .ev-lcd.idle { --ev-c: #2a003d; opacity: 0.5; }
 
