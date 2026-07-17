@@ -59,6 +59,17 @@ else
 fi
 install -d -o blob -g blob -m 755 /home/blob/chrome-profile
 
+# Linger is required, not hygiene. `snap run` asks systemd over D-Bus to create
+# a transient tracking scope for itself, and a system user that never logs in
+# has no session, no /run/user/<uid>, and no bus to ask. Chromium then refuses:
+#
+#   ... is not a snap cgroup for tag snap.chromium.chromium
+#
+# Linger makes logind maintain a user manager and /run/user/<uid> for blob across
+# reboots, with no login. chromium.sh points XDG_RUNTIME_DIR at it.
+loginctl enable-linger blob
+echo "    linger enabled for 'blob' (snap needs the session bus)"
+
 echo "==> install to $DEST"
 mkdir -p "$DEST/music"
 install -m 755 "$HERE/chromium.sh" "$HERE/stream.sh" "$DEST/"

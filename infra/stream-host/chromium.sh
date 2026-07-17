@@ -23,6 +23,23 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DISPLAY_NUM="${DISPLAY_NUM:-:99}"
 export DISPLAY="$DISPLAY_NUM"
 
+# ── snap needs a session bus to track itself ─────────────────────────────────
+# `snap run` asks systemd over D-Bus to create a transient
+# snap.chromium.chromium scope and move itself into it. With no session there is
+# nothing to ask, and it refuses with a message naming the cgroup it FOUND
+# rather than the thing it wanted, which reads like a confinement fault:
+#
+#   /system.slice/blob-chromium.service is not a snap cgroup
+#     for tag snap.chromium.chromium
+#
+# It is not about the service cgroup — the same error appears from an
+# interactive `sudo -u blob`. `blob` is a system user with no login session, so
+# setup.sh runs `loginctl enable-linger blob` and logind then maintains
+# /run/user/<uid> and a user manager for it across reboots. This just points at
+# it. Computed from `id -u` rather than hardcoded: the uid is whatever useradd
+# happened to pick.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
 # ?yt=0 IS MANDATORY.
 # The Stream page ships a temporary design overlay that draws YouTube's own
 # chrome and safe zones on top of itself, and it defaults ON. Capturing the
