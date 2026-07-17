@@ -429,6 +429,18 @@ Paper portfolio start date: **2026-05-29**
     >45s — a lane that never calls `stageDone` would otherwise freeze the broadcast to a
     still frame forever, with nobody there to reload it.
 
+    **The box has ONE arrival and ONE death, shared by both window lanes**
+    (`boxOpen()` / `boxDecay()`). A popup and a line of dialogue are different messages in
+    the same window — opening them differently makes it two windows. **In:** a hot slit at
+    the floor thrown open in 7 quantized frames with an overshoot (~240ms), bottom-origin
+    because that is where a Gameboy box comes from. **Out:** ~880ms of decay — text rots
+    back into `SCRAM` (the decode played backwards, per-glyph rolls), `--lcd-a` ramps
+    0.30→1.0 so the panel is eaten by its own pixel lattice, opacity drops in *discrete*
+    steps (a linear ramp is a dissolve, not chaos), and an intermittent whole-pixel tear.
+    Out is deliberately ~4× In: arriving is an event, leaving is an afterthought.
+    **The lane holds the stage until `boxDecay` finishes**, or the next thing plays over a
+    corpse. `boxOpen` fires only on true arrival — mid-burst events replace contents.
+
     **⚠ Timing cannot be measured from an automated browser.** Its tab is always
     `document.hidden`, and Chrome throttles background timers hard — a 3s beat straddles a
     minute and is indistinguishable from a deadlock. This produced hours of phantom bugs
