@@ -79,13 +79,30 @@ def desired_state() -> bool | None:
     return str(rows[0].get("value", "0")) == "1"
 
 
-def is_running() -> bool:
-    r = subprocess.run(["systemctl", "is-active", "--quiet", FFMPEG_UNIT])
-    return r.returncode == 0
+def unit_state() -> str:
+    """active | activating | inactive | failed | deactivating | ...
+
+    The full string, NOT `is-active --quiet`'s exit code, and the distinction is
+    the difference between a working stop button and a decorative one.
+
+    `is-active` only exits 0 for "active". A unit that is crash-looping under
+    Restart=always sits in "activating" indefinitely, so the exit code says
+    not-running. The switch then compared want=off against running=False, decided
+    there was nothing to do, and never issued the stop — while ffmpeg restarted
+    every 5s underneath it. Pressing STOP on a failing encoder did nothing, which
+    is exactly the moment you would be leaning on it.
+    """
+    r = subprocess.run(["systemctl", "is-active", FFMPEG_UNIT],
+                       capture_output=True, text=True)
+    return (r.stdout or "").strip() or "unknown"
 
 
-def apply(want: bool) -> None:
-    verb = "start" if want else "stop"
+# Anything that is not settled-inactive still needs stopping. "activating" is a
+# crash loop; "failed" will become one the moment systemd's timer fires.
+LIVE_STATES = ("active", "activating", "reloading", "deactivating")
+
+
+def apply(verb: str) -> None:
     print(f"[switch] {verb}ing {FFMPEG_UNIT}", flush=True)
     subprocess.run(["systemctl", verb, FFMPEG_UNIT], check=False)
 
@@ -113,13 +130,21 @@ def main() -> None:
     last_report = 0.0
     while True:
         want = desired_state()
-        running = is_running()
+        state = unit_state()
 
         if want is None:
             pass                       # no opinion — see desired_state
-        elif want != running:
-            apply(want)
-            running = want
+        elif want and state not in LIVE_STATES:
+            # Not already up or coming up. Note this deliberately does NOT fire
+            # while state=="activating": ExecStartPre sleeps 8s, so a naive
+            # equality check re-issued `start` on every 5s poll and filled the
+            # journal with starts for a unit that was already starting.
+            apply("start")
+        elif not want and state != "inactive":
+            # Anything other than settled-inactive gets stopped — including
+            # "activating", which is what a crash loop looks like, and "failed",
+            # which is about to become one.
+            apply("stop")
 
         # This heartbeat is the difference between a button and a placebo. If
         # this process dies, Stream HQ's click still writes the row and still
@@ -130,7 +155,9 @@ def main() -> None:
         if now - last_report >= REPORT_SECONDS:
             post_health("ok", {
                 "desired": "on" if want else ("off" if want is False else "unknown"),
-                "encoder": "running" if running else "stopped",
+                # The real systemd state, not a boolean. "activating" here means
+                # a crash loop and is worth being able to see from HQ.
+                "encoder": unit_state(),
                 "unit": FFMPEG_UNIT,
             })
             last_report = now
