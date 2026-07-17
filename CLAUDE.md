@@ -390,6 +390,28 @@ Paper portfolio start date: **2026-05-29**
     during the 500ms wind-up. **Sells/rolls only** — a constraint, not a preference: an
     entry has no tile to point at until the impact creates it.
 
+    **Ticker colour is three tiers, and `ticker_colors` is only the top one.**
+    `tickerColor()` is ported from `home_nav.js` `symCol()` and must stay identical or the
+    same ticker is two colours on two screens: `ticker_colors` row → `TICKER_OVR` built-in
+    → `_hashCol()` into a 10-colour `PALETTE`. **The hash is what guarantees every ticker
+    has a colour** — the table holds 3 rows against 9 board symbols, so a table-only lookup
+    (the original bug) coloured CRV and left the other 8 white. `'BTC/USD'` → `'BTC'`
+    normalises fine; there was simply never a row, and there needn't be.
+    Known collision: **LINK and SOL both hash to `#ff9900`**. That is what the override
+    tier is *for* — assign one on the Command Center to separate them.
+
+    **`x` never goes quiet: the AFK cycle.** Silent >2s (`AFK_AFTER`) and it decodes
+    through a random line from `AFK[]` every 4.2s, completing the nameplate ("blob" + "is
+    cooking"). **Copy is capped at 25 characters** — measured (640px of runway at
+    25.5px/glyph) and `#s-title` is `overflow:hidden`, so a 26th character silently
+    vanishes rather than wrapping; the list `.filter()`s its own overlong entries.
+    The cycle re-arms instead of firing while `tradeQ` is non-empty: beat-to-beat is 1.6s
+    against the 2s timer, only 400ms of margin, so a beat delayed by a reorder would
+    otherwise flash an AFK line mid-roll.
+
+    **System text is white** (`.xs-verb`, `.xs-for`, `.ttl-x.idle`). Only the two things
+    carrying information get colour: the ticker (its assigned hue) and the P&L (green/red).
+
     `dashboard/yt_overlay.js` is a **TEMP** design aid drawing YouTube's chrome + safe
     zones over the stage. Geometry is sourced and exact; the chrome art is approximate and
     per-element placement is reconstructed (no published pixel map exists). **Defaults ON

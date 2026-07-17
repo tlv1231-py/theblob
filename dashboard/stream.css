@@ -482,10 +482,13 @@ html, body {
     2px 2px 0 #1a0016,
     3px 3px 0 rgba(0,0,0,0.85);
 }
-/* The connective tissue stays quiet — "sold" and "for" are grammar, the ticker
-   and the number are the news. */
+/* SYSTEM TEXT IS WHITE. "rolled", "for", and every AFK line are the machine's
+   own voice — the grammar holding the sentence together. Only the two things
+   that carry information are allowed colour: the ticker (its own assigned hue)
+   and the number (green or red). Pink here competed with the nameplate and made
+   the connective tissue look like it meant something. */
 .xs-verb, .xs-for {
-  color: #ff8ae0;
+  color: #ffffff;
   text-transform: lowercase;
 }
 /* Coloured inline from ticker_colors. Uppercase: a ticker is a ticker. */
@@ -496,8 +499,8 @@ html, body {
 .xs-pnl { color: var(--text-hi); }
 .xs-pnl.win  { color: #00ff9d; text-shadow: 2px 2px 0 #003319, 3px 3px 0 rgba(0,0,0,0.9), 0 0 20px rgba(0,255,157,0.7); }
 .xs-pnl.loss { color: #ff3366; text-shadow: 2px 2px 0 #440011, 3px 3px 0 rgba(0,0,0,0.9), 0 0 20px rgba(255,51,102,0.7); }
-/* Idle copy — lowercase, quiet, same slot. */
-.ttl-x.idle { color: #ff8ae0; text-transform: lowercase; display: block; }
+/* AFK copy — lowercase, white like the rest of the system voice, same slot. */
+.ttl-x.idle { color: #ffffff; text-transform: lowercase; display: block; }
 
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
 #s-nav {

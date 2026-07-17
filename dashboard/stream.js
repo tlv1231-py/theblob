@@ -1413,14 +1413,40 @@
   var SCRAM = '▓▒░█▄▀■◆◇01234567890ABCDEF#$%&*+=/\\|<>';
   var DECODE_FRAMES = 9, DECODE_STEP = 34, SEG_STAGGER = 90;
 
-  // ticker_colors, seeded server-side and re-polled so an edit on the Command
-  // Center reaches the stream. Stored stripped ('CRV'), so normalise.
-  var tickerCols = S.ticker_colors || {};
+  // ── Ticker colour ────────────────────────────────────────────────────────
+  // Ported from home_nav.js `symCol()`, deliberately verbatim. The Command
+  // Center is where colours are decided, so this page agreeing with it is the
+  // whole requirement — any divergence here is a bug by definition. If you
+  // change the palette or the hash, change it in BOTH or the same ticker will
+  // be two different colours on two screens.
+  //
+  // THREE tiers, and missing the first one is what made 8 of 9 tickers white:
+  //   1. hash → PALETTE        EVERY ticker gets a colour, always
+  //   2. TICKER_OVR            built-in defaults for a handful
+  //   3. ticker_colors table   what you actually edit on the Command Center
+  //
+  // The table is an OVERRIDE map, never the source. It holds 3 rows (AMD, CAT,
+  // CRV) against 9 symbols on the board, so a table-only lookup coloured CRV
+  // and fell through to white for BTC/ETH/SOL/AVAX/DOGE/LINK/XTZ/BCH. That was
+  // not a naming bug — 'BTC/USD' normalises to 'BTC' correctly; there simply
+  // has never been a row for it, and there does not need to be.
+  var PALETTE = ['#00e5ff', '#cc00ff', '#ff9900', '#e040fb', '#40c4ff',
+                 '#ff6b35', '#00ffcc', '#f7b731', '#7c4dff', '#18ffff'];
+  var TICKER_OVR = { ETH: '#e040fb', CRV: '#f7b731', XTZ: '#00bfff', NUE: '#ff4dd2' };
+
+  function _hashCol(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff;
+    return PALETTE[h % PALETTE.length];
+  }
+  // Both forms exist in the wild — 'BTC/USD' from positions, 'BTCUSD' from some
+  // feeds — and home_nav strips both. Match it.
+  function bareSym(s) { return String(s || '').replace('/USD', '').replace('USD', ''); }
+
+  var tickerCols = S.ticker_colors || {};   // tier 3, re-polled below
   function tickerColor(sym) {
-    var bare = sym.replace('/USD', '');
-    // No assigned colour is not an error — most tickers have none. Fall back to
-    // white and let the Command Center be the only place colours are decided.
-    return tickerCols[bare] || '#ffffff';
+    var c = bareSym(sym);
+    return tickerCols[c] || TICKER_OVR[c] || _hashCol(c);
   }
 
   function pollTickerColors() {
@@ -1473,16 +1499,61 @@
     return '$' + (n >= 1000 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2));
   }
 
-  // Back to "is trading" once the tape goes quiet. Trades land every ~7s and the
-  // beat is 1.6s, so 20s only ever fires when the engine has genuinely stopped —
-  // it is not a timeout on the animation, it is the difference between "blob
-  // sold BTC" being news and being a stale caption nobody cleared.
-  var IDLE_AFTER = 20000, _idleT = null;
-  function statusIdle() {
+  // ── AFK ──────────────────────────────────────────────────────────────────
+  // He is on 24/7 and the book is quiet ~20s between rolls. A single frozen
+  // line across that gap reads as a dead page — the stream's own liveness is
+  // the thing being broadcast, so the sentence keeps talking when the book
+  // does not. Each one completes the nameplate: "blob" + "is cooking".
+  //
+  // HARD LIMIT 25 CHARACTERS. Measured, not guessed: 640px of runway after the
+  // nameplate at 25.5px/glyph, and #s-title is overflow:hidden — a 26th
+  // character does not wrap or shrink, it silently disappears. There is an
+  // assertion below that drops anything too long rather than letting it clip.
+  var AFK = [
+    'is trading',              'is watching the tape',
+    'is doing numbers',        'is up to something',
+    'is holding the line',     'is thinking about it',
+    'is reading the charts',   'is vibing',
+    'is waiting for a sign',   'is down bad',
+    'is cooking',              'is locked in',
+    'is calculating',          'is fully committed',
+    'is trusting the plan',    'needs a minute',
+    'is running the numbers',  'is feeling lucky',
+    'has a good feeling',      'is staying humble',
+    'is doing his best',       'is monitoring',
+    'is unbothered',           'is so back',
+    'is never selling',        'is in the trenches',
+    'is chilling',             'is zoomed in',
+    'is touching grass',       'is diamond handing',
+    'is not selling',          'is being patient'
+  ].filter(function(m) { return m.length <= 25; });
+
+  var AFK_AFTER = 2000;     // quiet for this long and he starts talking
+  var AFK_HOLD  = 4200;     // per message — long enough to read, short enough
+                            // that a 20s gap gets four of them, not two
+  var _idleT = null, _afkT = null, _afkIdx = -1;
+
+  function afkNext() {
     var el = $('blob-status');
     if (!el) return;
+    // "No event for 2s" must mean nothing is PENDING either, not just that the
+    // last one finished. Beat-to-beat is 1.6s against this 2s timer — only
+    // 400ms of margin — so a beat delayed by a reorder would flash an AFK line
+    // mid-roll and have it stomped a frame later. If trades are waiting, he is
+    // not AFK; re-arm and stay quiet.
+    if (tradeQ.length || stage.owner === 'trade') {
+      _afkT = setTimeout(afkNext, AFK_AFTER);
+      return;
+    }
+    var i;
+    do { i = Math.floor(Math.random() * AFK.length); } while (AFK.length > 1 && i === _afkIdx);
+    _afkIdx = i;                 // random, never twice running: a fixed rotation
+                                 // becomes recognisable over an 8-hour stream
     el.className = 'ttl-x idle';
-    decodeTo(el, 'is trading', 0);
+    clearInterval(el._dec); clearTimeout(el._decT); el._dec = null;
+    el.innerHTML = '';
+    decodeTo(el, AFK[i], 0);     // same decode as a trade — one voice, not two
+    _afkT = setTimeout(afkNext, AFK_HOLD);
   }
 
   // The sentence. A BUY has no P&L yet, so "for" takes what the position COST —
@@ -1493,16 +1564,17 @@
   function setStatus(t) {
     var el = $('blob-status');
     if (!el) return;
-    clearTimeout(_idleT);
-    _idleT = setTimeout(statusIdle, IDLE_AFTER);
+    // An event silences the AFK cycle and restarts the countdown to it.
+    clearTimeout(_idleT); clearTimeout(_afkT);
+    _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
     var bare = t.sym.replace('/USD', '');
     // A roll realised a P&L exactly like a sale did, so it reads like one — the
     // only difference is the verb, because he still holds it.
     var isRoll = t.dir === 'ROLL';
     var hasPnl = isRoll || t.dir === 'EXIT';
 
-    // statusIdle decodes the CONTAINER, so a decode may still be mid-flight on
-    // it. Left running it would keep writing textContent over the spans below
+    // afkNext decodes the CONTAINER, so an AFK decode may still be mid-flight
+    // on it. Left running it would keep writing textContent over the spans below
     // and the sentence would dissolve back into junk a frame after it resolved.
     clearInterval(el._dec); clearTimeout(el._decT); el._dec = null;
 
@@ -1989,6 +2061,9 @@
   renderPositions(true);
   annNext();                      // settles the panel into its idle state
   _booted = true;                 // from here, only a trade beat may change the board
+  afkNext();                      // he starts talking immediately — a page that
+                                  // boots into silence during a quiet spell
+                                  // looks broken for the first 20s
 
   setInterval(syncBlobMood, 1000);
   // One poll now carries both NAV and trade reactions — same rows, one request.
