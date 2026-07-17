@@ -2015,10 +2015,20 @@
   var PU_FPS = 20;
   var PU_BASE_FONT = 20;      // px at the smallest dono
   var PU_FONT_GAIN = 13;      // px added per unit of scale
-  var PU_BASE_AMP = 3;        // hover amplitude in px at the smallest dono
-  var PU_AMP_GAIN = 5;        // px added per unit of scale — the "intensity"
-  var PU_TRAIL = 4;           // ghost copies behind the live name
-  var PU_TRAIL_EVERY = 2;     // frames between trail samples — see puTick
+  // ── The wave ─────────────────────────────────────────────────────────────
+  // The name's only motion: each glyph rises in series, same mechanic as the
+  // board's tickers — but LOUD. The board runs 1px because 14 of them shimmering
+  // would compete with the trade beat; a donor's name is meant to compete, so it
+  // runs ~10-20x that.
+  //
+  // This replaced a 3D tumble with four ghost trails per name. That was 20 extra
+  // nodes rewritten every frame for five power-ups, and it read as noise rather
+  // than as celebration — the name was moving so much you could not read it,
+  // which is the one thing a donor's name has to do.
+  var PU_WAVE_BASE = 5;       // px of rise at the smallest dono
+  var PU_WAVE_GAIN = 5;       // px added per unit of scale — intensity by amount
+  var PU_WAVE_SPREAD = 0.8;   // radians of phase per glyph — the wavelength
+  var PU_WAVE_SPEED = 0.34;   // radians per frame
   var PU_MIN_S = 1;           // $1 and under all look the same — the floor
   var PU_REF = 5;             // the dono the curve is normalised around
   // Bounds the stack in the LIST rather than by clipping the container. The box
@@ -2073,10 +2083,16 @@
 
   var puList = [];            // [{ id, name, amount, until, el, phase, r, speed }]
 
-  function puColor(amount) {
-    // Money is green everywhere else on this page, but a NAME is identity, and
-    // identity is pink here. The amount line carries the money colour instead.
-    return Number(amount) >= 25 ? '#00e5ff' : '#ff00cc';
+  // A donor's name gets a colour the same way a ticker does: hashed into the
+  // house palette. Same function, same 10 colours — so a name and a ticker are
+  // visibly from the same world, and a regular keeps their colour every time
+  // they show up without anyone assigning one.
+  //
+  // This replaced an RGB sweep on the name. Rainbow is what the AMOUNT is for;
+  // a name that will not hold still on a colour is a name you cannot recognise,
+  // which defeats the point of putting it on screen.
+  function puColor(name) {
+    return _hashCol(String(name || '').toUpperCase());
   }
 
   function puRender(full) {
@@ -2107,42 +2123,36 @@
       var el = document.createElement('div');
       el.className = 'pu';
       el.style.fontSize = Math.round(PU_BASE_FONT + s * PU_FONT_GAIN) + 'px';
-      // THE TRAIL is ghost copies of the name parked at where it USED to be.
-      // They must sit outside .pu-live, because a trail that inherits the live
-      // transform is not a trail — it is the same glyph drawn five times in the
-      // same place. .pu itself never transforms; it only holds the stack slot.
+      el.style.setProperty('--pu-n', puColor(d.name));
       var nm = String(d.name || '').toUpperCase().slice(0, 16);
-      var ghosts = '';
-      for (var t = 0; t < PU_TRAIL; t++) ghosts += '<span class="pu-g"></span>';
-      el.innerHTML = ghosts +
-        '<span class="pu-live"><span class="pu-name"></span><span class="pu-amt"></span></span>';
-      el.querySelector('.pu-name').textContent = nm;
+      el.innerHTML = '<span class="pu-name"></span><span class="pu-amt"></span>';
+
+      // One <i> per glyph so the wave can travel THROUGH the name — the same
+      // construction the board's tickers use (setSym), so the two move like they
+      // belong to the same machine.
+      var nameEl = el.querySelector('.pu-name');
+      for (var ci = 0; ci < nm.length; ci++) {
+        var gi = document.createElement('i');
+        gi.textContent = nm[ci] === ' ' ? ' ' : nm[ci];
+        nameEl.appendChild(gi);
+      }
       el.querySelector('.pu-amt').textContent = '$' + (Number(d.amount) % 1 === 0
         ? Number(d.amount).toFixed(0) : Number(d.amount).toFixed(2));
-      var gEls = [].slice.call(el.querySelectorAll('.pu-g'));
-      gEls.forEach(function(g) { g.textContent = nm; });
       host.appendChild(el);
       puList.push({
         name: d.name, until: d.until, amount: d.amount, el: el, scale: s,
-        nameEl: el.querySelector('.pu-name'),
-        liveEl: el.querySelector('.pu-live'),
-        gEls: gEls,
-        hist: [],                 // recent poses, newest first — the trail reads this
-        // Each name bobs on its OWN phase. In lockstep the stack reads as one
-        // rigid block sliding up and down; offset, it reads as several things
-        // independently hanging there.
+        amtEl: el.querySelector('.pu-amt'),
+        glyphs: [].slice.call(nameEl.children),
+        // Each name waves on its OWN phase. In lockstep the stack pulses as one
+        // rigid block; offset, they read as separate things hanging there.
         phase: (puList.length * 2.399) % 6.283,
-        // THE INTENSITY. A $50 name hovers with visibly more travel than a $2
-        // one — the second axis (with size) that carries the amount without
-        // anyone reading the number.
-        amp: PU_BASE_AMP + s * PU_AMP_GAIN,
-        // Bigger donations hover SLOWER and wider — a large name twitching
-        // quickly reads as agitated, not as expensive.
-        speed: 1.5 / (0.7 + s * 0.6),
-        // Hue offset so two names are never the same colour at the same moment.
+        // THE INTENSITY, still by amount — it just lives in the wave's height
+        // now instead of a hover's travel.
+        waveAmp: PU_WAVE_BASE + s * PU_WAVE_GAIN,
+        // Hue offset so two amounts are never the same colour at once.
         hue: Math.random() * 360,
-        // THE STROBE. Bigger donations flash harder and more often. Frames
-        // between flashes — a $2 blinks rarely, a $75 is a lightning storm.
+        // THE STROBE, on the AMOUNT only. Bigger donations flash harder and more
+        // often — a $2 blinks rarely, a $75 is a lightning storm.
         strobeEvery: Math.max(4, Math.round(26 - s * 6)),
         f: 0
       });
@@ -2178,44 +2188,33 @@
         puList.splice(i, 1);
         continue;
       }
-      p.phase += p.speed / PU_FPS;
       p.f++;
 
-      // Hover. Whole pixels — subpixel drift is the thing that breaks pixel art
-      // (BLOB.md), and these hang in the same room as a 48x48 sprite.
-      var y = Math.round(Math.sin(p.phase) * p.amp);
-      // A touch of horizontal sway, a third of the vertical: enough that it
-      // floats rather than slides on a rail, not enough to read as drifting.
-      var x = Math.round(Math.cos(p.phase * 0.7) * p.amp * 0.33);
+      // ── The wave — the name's ONLY motion ────────────────────────────────
+      // Each glyph rises in series, so a ripple runs through the word. Same
+      // mechanic as the board's tickers, ~10-20x the amplitude: the board runs
+      // 1px because 14 shimmering tickers would compete with the trade beat, and
+      // a donor's name is MEANT to compete.
+      //
+      // Whole pixels — subpixel drift is what breaks pixel art (BLOB.md), and
+      // this hangs in the same room as a 48x48 sprite. The name holds still
+      // otherwise: it has to be READ, and a word that will not sit still is a
+      // word nobody reads.
+      for (var g = 0; g < p.glyphs.length; g++) {
+        var gy = -Math.round(
+          (Math.sin(p.phase + p.f * PU_WAVE_SPEED - g * PU_WAVE_SPREAD) * 0.5 + 0.5) * p.waveAmp);
+        p.glyphs[g].style.transform = gy ? 'translateY(' + gy + 'px)' : '';
+      }
 
-      // ── 3D ────────────────────────────────────────────────────────────────
-      // It TURNS. A name that only bobs is a sticker; a name that swings through
-      // its own thickness is an object hanging in the room with him. rotateY is
-      // the whole trick — the glyphs foreshorten toward one edge as it comes
-      // round, which is depth you cannot fake with scale.
+      // ── The amount: absurd RGB, and ONLY the amount ───────────────────────
+      // The rainbow lives here now. It is the money — it can be as obnoxious as
+      // it likes, because nobody needs to recognise it, only notice it. The name
+      // above it keeps one palette colour so it stays a NAME.
       //
-      // rotateX is a third of it: a little tumble so it is not a flat spinner on
-      // a rail. Both scale with the amount, like everything else here.
-      var swing = 16 + p.scale * 12;                       // degrees either way
-      var ry = Math.sin(p.phase * 0.8) * swing;
-      var rx = Math.cos(p.phase * 0.53) * swing * 0.3;
-      var pose = 'perspective(700px) translate(' + x + 'px,' + y + 'px)' +
-                 ' rotateY(' + ry.toFixed(1) + 'deg) rotateX(' + rx.toFixed(1) + 'deg)';
-      if (p.liveEl) p.liveEl.style.transform = pose;
-
-      // ── THE HYPE ──────────────────────────────────────────────────────────
-      // Someone paid. This is the one thing on the stage allowed to be
-      // obnoxious, and restraint here would be a bug: a donation alert that
-      // whispers is a donation alert nobody sends twice.
-      //
-      // TACKY BOARDWALK RGB, not a tasteful gradient. The difference is that a
-      // glowstick shows you SEVERAL colours at once — the halo is three hues
-      // 120deg apart, i.e. an actual RGB triad, sweeping together. One hue
-      // sliding through the spectrum reads as a designer's colour animation;
-      // three at once reads as a cheap LED strip, which is the brief.
-      //
-      // Saturation is pinned at 100% and lightness runs hot: no muted steps, no
-      // easing, nothing that suggests anyone tasteful was involved.
+      // Three hues 120deg apart — an actual RGB triad — sweeping together, so
+      // several colours show at once. That simultaneity is the difference: one
+      // hue sliding through the spectrum reads as a designer's colour animation;
+      // three at once reads as a cheap LED strip on a pier, which is the brief.
       var spin = 3.4 + p.scale * 4.2;                      // hue degrees per frame
       var hue  = (p.hue + p.f * spin) % 360;
       p.el.style.setProperty('--pu-c',  'hsl(' + hue.toFixed(0) + ',100%,60%)');
@@ -2227,40 +2226,20 @@
       // read as alive rather than as a looping asset.
       var pulse = 1 + Math.sin(p.f * 0.22) * 0.45;
       p.el.style.setProperty('--pu-glow',
-        Math.round((13 + p.scale * 11) * pulse) + 'px');
+        Math.round((10 + p.scale * 9) * pulse) + 'px');
 
-      // ── Glow trails ───────────────────────────────────────────────────────
-      // Ghosts of where it just WAS, each one older and dimmer, lit by the hue
-      // of that moment rather than of now — so the trail is a smear of the
-      // rainbow it has been sweeping through, not a monochrome blur.
-      //
-      // Sampled every PU_TRAIL_EVERY frames rather than every frame: at 20fps a
-      // per-frame trail sits on top of itself and reads as a fat blur. Spacing
-      // the samples is what makes it a streak.
-      if (p.f % PU_TRAIL_EVERY === 0) {
-        p.hist.unshift({ pose: pose, hue: hue });
-        if (p.hist.length > PU_TRAIL) p.hist.pop();
-      }
-      for (var t = 0; t < p.gEls.length; t++) {
-        var h = p.hist[t];
-        if (!h) { p.gEls[t].style.opacity = 0; continue; }
-        var fade = 1 - (t + 1) / (PU_TRAIL + 1);
-        p.gEls[t].style.transform = h.pose;
-        p.gEls[t].style.color = 'hsl(' + h.hue.toFixed(0) + ',100%,62%)';
-        p.gEls[t].style.opacity = (fade * 0.5).toFixed(2);
-        p.gEls[t].style.textShadow = '0 0 ' + Math.round(10 + fade * 22) + 'px hsl(' +
-          h.hue.toFixed(0) + ',100%,60%)';
-      }
-
-      // Strobe: a hard white frame on a beat. Two frames on, the rest off — any
-      // longer and it stops being a flash and starts being a colour.
+      // Strobe: a hard white frame on a beat, on the AMOUNT only. Two frames on,
+      // the rest off — any longer and it stops being a flash and becomes a
+      // colour.
       var strobe = (p.f % p.strobeEvery) < 2;
       if (strobe !== p.wasStrobe) {
         p.wasStrobe = strobe;
-        if (p.nameEl) p.nameEl.style.color = strobe ? '#ffffff' : '';
-        p.el.style.filter = strobe
-          ? 'brightness(' + (1.5 + p.scale * 0.7).toFixed(2) + ')'
-          : '';
+        if (p.amtEl) {
+          p.amtEl.style.color = strobe ? '#ffffff' : '';
+          p.amtEl.style.filter = strobe
+            ? 'brightness(' + (1.6 + p.scale * 0.8).toFixed(2) + ')'
+            : '';
+        }
       }
 
       // The last 20s fades out, so a lapse is a decision rather than a name

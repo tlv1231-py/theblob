@@ -633,11 +633,6 @@ html, body {
   overflow: visible;
 }
 
-/* .pu is the STACK SLOT and never transforms — it only reserves the box. All
-   the motion lives on .pu-live, and the trail ghosts hang off it absolutely.
-   Keeping the slot still is what lets the ghosts sit at stale poses: a trail
-   that inherits the live transform is the same glyph drawn five times in one
-   place. */
 .pu {
   position: relative;
   white-space: nowrap;
@@ -649,62 +644,59 @@ html, body {
   flex: none;
 }
 
-/* The live face. In flow, so it defines the slot's box. */
-.pu-live {
-  display: block;
-  transform-origin: right center;
-  will-change: transform;
-}
+/* THE NAME. ONE colour, hashed into the house palette exactly like a ticker
+   (--pu-n, set inline by puColor) — so a donor and a stock are visibly from the
+   same world, and a regular keeps their colour every time they appear.
 
-/* THE TRAIL. Ghost copies of the name at poses it held a few frames ago, each
-   lit by the hue of THAT moment — so the streak is a smear of the rainbow it
-   has been sweeping through rather than a monochrome blur. Behind the live face
-   and out of flow, so they cannot disturb the stack. */
-.pu-g {
-  position: absolute;
-  right: 0; top: 0;
-  transform-origin: right center;
-  will-change: transform, opacity;
-  pointer-events: none;
-  z-index: -1;
-  -webkit-text-stroke: 0;
-}
+   It used to sweep RGB with the amount. A name that will not hold still on a
+   colour is a name you cannot recognise, which defeats the only reason it is on
+   screen. The rainbow belongs to the money; the name belongs to the person.
 
-/* The name. A white core inside a TACKY BOARDWALK RGB halo — three hues 120deg
-   apart (an actual RGB triad) sweeping together, so several colours are visible
-   at once. That simultaneity is the whole difference: one hue sliding through
-   the spectrum reads as a designer's colour animation; three at once reads as a
-   cheap LED strip on a pier, which is the brief.
-
-   SEVEN shadow layers, and that is the point — someone paid, and this is the one
-   element on the stage allowed to be obnoxious. The hard extrude stays
-   underneath all of it so the glyphs keep their arcade weight instead of
-   dissolving into their own light. */
+   Its glow is its OWN colour, so it reads as lit rather than as tinted. */
 .pu-name {
-  color: #ffffff;
+  color: var(--pu-n, #ff00cc);
   -webkit-text-stroke: 1px rgba(0,0,0,0.65);
   text-shadow:
     2px 2px 0 #1a0016,
     4px 4px 0 rgba(0,0,0,0.85),
-    0 0 calc(var(--pu-glow, 18px) * 0.4) #ffffff,
-    0 0 var(--pu-glow, 18px)             var(--pu-c,  #ff00cc),
-    0 0 calc(var(--pu-glow, 18px) * 1.8) var(--pu-c,  #ff00cc),
-    0 0 calc(var(--pu-glow, 18px) * 2.8) var(--pu-c2, #00e5ff),
-    0 0 calc(var(--pu-glow, 18px) * 4.2) var(--pu-c3, #ffee00),
-    0 0 calc(var(--pu-glow, 18px) * 6)   var(--pu-c3, #ffee00);
+    0 0 10px var(--pu-n, #ff00cc),
+    0 0 26px var(--pu-n, #ff00cc);
+}
+
+/* One <i> per glyph so the wave can travel THROUGH the word — same construction
+   as the board's tickers (.t-sym i), so the two move like one machine. Driven by
+   setInterval in puTick; a CSS animation here would be inert. */
+.pu-name i {
+  display: inline-block;
+  font-style: normal;
+  will-change: transform;
 }
 
 /* The amount rides under the name, smaller and in the accent — money is the
    reason it is on screen, but the PERSON is the headline. */
+/* THE AMOUNT — this is where the absurd RGB lives now, and only here.
+
+   It can be as obnoxious as it likes: nobody needs to RECOGNISE a number, only
+   notice it. Three hues 120deg apart (an actual RGB triad) sweep together so
+   several colours show at once — that simultaneity is what reads as a cheap LED
+   strip rather than as a designer's colour animation. Saturation pinned at 100%,
+   lightness hot, six layers, and a hard white strobe on top.
+
+   Concentrating it here is what saved the effect: on the name it was noise; on
+   the money it is the joke. */
 .pu-amt {
   display: block;
   margin-top: 0.35em;
   font-size: 0.5em;
   color: var(--pu-c, #ff00cc);
+  will-change: filter;
   text-shadow:
     2px 2px 0 rgba(0,0,0,0.9),
-    0 0 12px var(--pu-c, #ff00cc),
-    0 0 26px var(--pu-c2, #00e5ff);
+    0 0 calc(var(--pu-glow, 14px) * 0.4) #ffffff,
+    0 0 var(--pu-glow, 14px)             var(--pu-c,  #ff00cc),
+    0 0 calc(var(--pu-glow, 14px) * 2)   var(--pu-c2, #00e5ff),
+    0 0 calc(var(--pu-glow, 14px) * 3.4) var(--pu-c3, #ffee00),
+    0 0 calc(var(--pu-glow, 14px) * 5)   var(--pu-c3, #ffee00);
 }
 
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
