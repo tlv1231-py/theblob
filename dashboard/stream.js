@@ -998,12 +998,66 @@
     return true;
   }
 
+  // ── Autoscale — the line FILLS the window ────────────────────────────────
+  // A Gameboy text box is a fixed frame: the text inside grows to use it rather
+  // than the frame shrinking to the text. So three words land like a shout and
+  // a long line still fits, without anyone choosing a size per message.
+  //
+  // Binary search, not a shrink loop: the range is 16..120px, so a linear walk
+  // costs up to 100 forced reflows per line against 7 here. Measured on the
+  // FULL text before a single glyph is typed — sizing as it types would make
+  // the box visibly breathe, and the size would depend on how far the typewriter
+  // had got rather than on the sentence.
+  // MAX is set so a SHORT line is bound by the box, not by this number: the
+  // window is ~192px of usable height at line-height 1.2, so one line tops out
+  // near 160. A lower ceiling (120 was tried) left "hi" floating in 48px of dead
+  // space — capped rather than filled, which is not what autoscale means. MIN is
+  // the floor at which VT323 stops being readable on a phone-sized Shorts view.
+  var SPEAK_MIN = 16, SPEAK_MAX = 160;
+
+  function fitSpeak(aEl, text) {
+    var lcd = $('ev-lcd'), body = $('ev-body');
+    if (!lcd || !body) return;
+    var lcs = getComputedStyle(lcd), bcs = getComputedStyle(body);
+    // clientWidth/Height exclude the border and include padding, so subtract
+    // padding only — the box is border-box (see the global reset). The ▼ reserve
+    // is the body's own padding-bottom, read from CSS rather than duplicated as
+    // a constant here: two copies of that number would drift the first time
+    // anyone nudged the arrow.
+    var availW = lcd.clientWidth
+               - parseFloat(lcs.paddingLeft) - parseFloat(lcs.paddingRight)
+               - parseFloat(bcs.paddingLeft) - parseFloat(bcs.paddingRight);
+    var availH = lcd.clientHeight
+               - parseFloat(lcs.paddingTop) - parseFloat(lcs.paddingBottom)
+               - parseFloat(bcs.paddingTop) - parseFloat(bcs.paddingBottom);
+
+    aEl.textContent = text;
+    var lo = SPEAK_MIN, hi = SPEAK_MAX, best = SPEAK_MIN;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      aEl.style.fontSize = mid + 'px';
+      // scrollHeight catches too many wrapped lines; scrollWidth catches a
+      // single unbreakable word wider than the box, which wrapping cannot save.
+      if (aEl.scrollHeight <= availH && aEl.scrollWidth <= availW) { best = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    aEl.style.fontSize = best + 'px';
+    aEl.textContent = '';        // typing begins from empty, at the settled size
+    return best;
+  }
+
   function speakNext() {
     var lcd = $('ev-lcd');
     if (!lcd) return;
     if (!speakQ.length) {
       annClose();
-      if (stage.owner === 'speaks') stageDone();
+      if (stage.owner === 'speaks') {
+        stageDone();
+        // Hand x back to the AFK cycle on the same 2s rule the popup lane and a
+        // trade use, or "says:" would sit there forever after his last word.
+        clearTimeout(_idleT); clearTimeout(_afkT);
+        _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
+      }
       return;
     }
     var s = speakQ.shift();
@@ -1020,6 +1074,15 @@
     var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg');
     nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
     $('ev-bigicon').textContent = '';
+
+    // The sentence continues INTO the box: nameplate "blob" + x "says:" + the
+    // line itself. x carries the attribution so the box doesn't have to, which
+    // is why the speaks skin has no name stamp.
+    statusLine('says:');
+
+    // Size to the box now — after the classes are on (a display:none element
+    // measures as 0) and before the first glyph.
+    fitSpeak(aEl, s.text);
 
     if (s.mood) { blob.setMood(s.mood, 30); $('blob-mood').textContent = blob.getMood(); }
 
@@ -2184,7 +2247,8 @@
     stage: stage,
     q: function() { return { ann: annQ.length, speak: speakQ.length, trade: tradeQ.length,
                              owner: stage.owner, reordering: reordering }; },
-    speak: blobSpeak
+    speak: blobSpeak,
+    fit: fitSpeak      // pure (element, text) -> px; testable without the lane
   };
 
   setInterval(syncBlobMood, 1000);

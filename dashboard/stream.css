@@ -333,13 +333,34 @@ html, body {
    alone says it is him before a word is typed. */
 .ev-lcd.speaking .ev-nameline { display: none; }
 .ev-lcd.speaking .ev-msg      { display: none; }
+
+/* Centred, because autoscale cannot always fill the height. Wrapping is
+   discontinuous: "that one hurt." is one line at 105px and two (overflowing) at
+   106, so it is WIDTH-bound and leaves ~66px spare below. Top-aligned that reads
+   as the text having fallen to the ceiling; centred it reads as placed.
+   padding-bottom reserves the blinking ▼ — it is absolute and pushes nothing, so
+   without this a full-height line runs under it. fitSpeak() READS this padding
+   rather than carrying its own constant, so the reserve has one source of truth:
+   change it here and the fit follows.
+   Specificity beats `.ev-lcd.open .ev-body { display: block }` on class count,
+   not on source order — this must win regardless of where it sits in the file. */
+.ev-lcd.open.speaking .ev-body {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-bottom: 22px;
+}
 .ev-lcd.speaking .ev-act {
   /* Dialogue, not a caption. It wraps, it starts at the box edge because
      nothing is stamped to its left, and it is sized to be read across a room
      rather than to fit a verb. VT323 over Press Start here: at this length the
-     arcade face stops being legible and starts being a texture. */
+     arcade face stops being legible and starts being a texture.
+
+     font-size is a FALLBACK ONLY — fitSpeak() sets it inline per line so the
+     text fills the frame (see stream.js). It stays here so a line still renders
+     legibly if that ever fails to run. Do not tune it expecting an effect. */
   font-family: VT323, Consolas, monospace;
-  font-size: 34px; line-height: 1.35;
+  font-size: 34px; line-height: 1.2;
   letter-spacing: 0.01em;
   color: #ffdff7;
   margin-left: 0;
