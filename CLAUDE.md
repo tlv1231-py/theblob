@@ -441,6 +441,20 @@ Paper portfolio start date: **2026-05-29**
     **The lane holds the stage until `boxDecay` finishes**, or the next thing plays over a
     corpse. `boxOpen` fires only on true arrival — mid-burst events replace contents.
 
+    **The background is a vaporwave sidescroller and its HORIZON IS THE P&L**
+    (`stream_bg.js`). `camY` kicks ±34 per win/loss, decays ~0.994/frame so a *run*
+    compounds, and clamps at ±130 (without a ceiling a losing session drives the horizon
+    off the buffer in a minute and the scene becomes plain sky). **The direction inverts
+    once and then reads wrong forever, so:** *we* ascend on a gain → the world moves DOWN
+    in frame → horizon screen-y **increases**. `'enter'` moves the camera deliberately —
+    buying is not yet good or bad news. Scroll speed is *not* tied to P&L; direction is the
+    signal and modulating both makes neither legible. Read it with `_TND_DBG.bg.getCam()`.
+
+    **"SCARED" and "PORTFOLIO VALUE" are deleted on purpose** — both captioned things the
+    stage already said, in the one gap between the Blob and his score. The mood writes
+    still run through `showMood()` and surface at `_TND_DBG.mood()`; restore the
+    `#blob-mood` element and it lights up again.
+
     **⚠ `clearTimeout(true)` is `clearTimeout(1)` — it silently kills timer ID 1.**
     `ghostT[sym]` is a **marker** (`true`), not a timer id; three sites still cleared it as
     one after it changed, and since the Blob's 10fps loop is started early it *owns a very
