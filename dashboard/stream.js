@@ -751,6 +751,11 @@
   // drains before the box closes, because closing and reopening the window
   // between two donations reads as a glitch rather than as two events.
   // ═══════════════════════════════════════════════════════════════════════
+  // The trade poll's cadence. Named because ROLL_WAIT is derived from it — the
+  // two are one decision, and 4s written twice is a bug waiting for whoever
+  // changes only the obvious one.
+  var POLL_MS = 4000;
+
   var stage = { owner: null, since: 0 };   // null | 'popup' | 'speaks' | 'trade'
 
   function stageTake(lane) { stage.owner = lane; stage.since = Date.now(); }
@@ -2050,12 +2055,31 @@
   // announced as a sale that didn't happen.
   // ═══════════════════════════════════════════════════════════════════════
   var pendExit = {};        // sym -> { t, timer } — an exit awaiting its re-entry
-  var ROLL_WAIT = 5000;     // > one poll interval, so a straddled batch reunites
+  // How long an unpaired exit waits for its re-entry before airing as a plain
+  // sell. DERIVED from the poll, because that is the only thing it depends on:
+  // a straddled batch puts the exits in one poll and the enters in the NEXT, so
+  // anything under one poll interval cannot pair by construction.
+  //
+  // Two intervals plus a second, not one plus a second. The old 5000 left ~1s of
+  // margin against a 4s poll — fine when polls are punctual, and they are not
+  // always: a slow fetch, a GC pause or a throttled tab pushes one late and the
+  // pairing silently degrades into two beats with the tile churning out and back.
+  // The cost of waiting longer is paid only by a GENUINE standalone sell, which
+  // this book has never once produced (798/799 batches are pure rolls).
+  var ROLL_WAIT = POLL_MS * 2 + 1000;
   var _dbgIngest = [], _dbgPush = 0;   // see window._TND_DBG.q()
 
-  // Beat trace. The trade lane was observed taking the stage and never giving it
-  // back, with no thrown error to explain it — so every phase stamps itself and
-  // the gap in the trace names the step that died.
+  // ── Beat trace ───────────────────────────────────────────────────────────
+  // A ring buffer of what the stage actually did, readable from a console via
+  // _TND_DBG.q().beat. Kept, not scaffolding: this page runs unattended on a
+  // headless box, the beat is four chained setTimeouts, and a gap in this trace
+  // is the only thing that names WHICH link broke. It is what proved the beat
+  // healthy after hours of instrumentation that lied — every other probe said
+  // "frozen" and only the trace showed a clean 3011ms beat against a designed
+  // 2976ms.
+  //
+  // Phase boundaries and the spoken line only — enough to reconstruct a beat,
+  // cheap enough to leave on: ~4 short strings per 3s.
   var _beatLog = [];
   function _beat(what) {
     _beatLog.push(Math.round(performance.now()) + ' ' + what);
@@ -2143,12 +2167,9 @@
     if (t.dir === 'EXIT' || t.dir === 'ROLL') pointAt(t.sym);
     $('blob-mood').textContent = blob.getMood();
 
-    _beat('pre-scheduled +' + (PRE_MS + EVENT_MS));
     setTimeout(function() {
       // ── EVENT ────────────────────────────────────────────────────────
-      _beat('event-fired');
       applyTrade(t);
-      _beat('applyTrade-returned');
 
       // ── ENTRY (rolls only) ───────────────────────────────────────────
       // A round trip is two fills, so it gets two moments inside its one beat:
@@ -2156,8 +2177,7 @@
       // beat grows to ~2.25s; a 16-leg batch is 8 of them = ~18s against a
       // ~2min cadence, so there is room for the story.
       var tail = t.dir === 'ROLL' ? ROLL_HOLD_MS : 0;
-      _beat('tail=' + tail);
-      if (tail) setTimeout(function() { _beat('entry-fired'); applyEntry(t); _beat('entry-returned'); }, tail);
+      if (tail) setTimeout(function() { applyEntry(t); }, tail);
 
       setTimeout(function() {
         // ── POST ───────────────────────────────────────────────────────
@@ -2167,8 +2187,7 @@
         //
         // Then the floor goes back to the ladder rather than straight to the
         // next trade: anything that queued during this beat gets its turn here.
-        _beat('post-done, releasing in ' + GAP_MS);
-        setTimeout(function() { _beat('stageDone'); stageDone(); }, GAP_MS);
+        setTimeout(function() { _beat('release'); stageDone(); }, GAP_MS);
       }, tail + POST_MS);
     }, PRE_MS + EVENT_MS);
     return true;
@@ -2551,7 +2570,7 @@
   // One poll now carries both NAV and trade reactions — same rows, one request.
   // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
   // almost every one while still costing ~15 tiny requests/min.
-  setInterval(pollEvents, 4000);
+  setInterval(pollEvents, POLL_MS);
   // CoinGecko is free/unauthenticated and rate-limits hard — 15s is the floor
   // that stays safely under it. Tiles are a P&L read, not a tape.
   setInterval(pollCryptoPrices, 15000);
