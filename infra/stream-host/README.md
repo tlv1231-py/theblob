@@ -165,16 +165,47 @@ one place you would conclude everything was fine.
 
 ## Music
 
-Drop 8-12 **licensed** tracks in `/opt/blob-stream/music`. WAV or FLAC — MP3 is
-already lossy and re-encoding to AAC is lossy→lossy for no benefit.
+**Source: YouTube's own Audio Library** (`studio.youtube.com` → Audio Library).
+Decided 2026-07-17, and it is the only part of this that is not a preference.
 
-`stream.sh` builds a concat playlist and loops the **playlist**, not a track: one
-3-minute loop repeats ~480x/day and the AFK audience is precisely the one that
-notices. `loudnorm` is applied across the set, without which volume jumps
-between tracks — the most amateur-sounding defect a music-bed stream can have.
+Royalty-free is **not** Content-ID-proof, and "licensed" does not mean
+"unclaimed" — they are unrelated facts. The concrete case: a Pixabay synthwave
+track was picked for this stream, and its own page carries both
 
-Royalty-free is **not** Content-ID-proof. Tracks get false-claimed because
-someone else registered them. Keep the license PDF for disputes.
+    Free for use under the Pixabay Content License
+    Content ID Registered
+
+at the same time. The licence grants the right to use it; Content ID claims it
+anyway. Pixabay added that badge because users kept getting claimed on tracks
+they were licensed to use.
+
+On a **live** stream a claim is not a revenue footnote — it can mute or interrupt
+the broadcast in real time. And nothing here would catch it: the page beats,
+ffmpeg holds ≥1.0x, RTMP is connected, HOST is green, and YouTube has silently
+muted you. It is the watchdog's exact failure shape in a dimension we do not
+measure. **If you ever add claim detection, it needs the YouTube Data API and
+OAuth — there is no way to see a claim from this host.**
+
+YouTube does not Content-ID-claim its own library. That removes the risk rather
+than reducing it, which is why it wins over "a Pixabay track without the badge".
+
+Two things to watch when picking:
+
+- Some Audio Library tracks **require attribution** (marked with an icon); most
+  do not. Prefer the ones that do not, or the credit has to live in the stream
+  description forever.
+- Grab **8–12**. `stream.sh` builds a concat playlist and loops the **playlist**,
+  not a track: one 2–3 minute loop repeats ~500x/day and the AFK audience is
+  precisely the one that notices.
+
+`loudnorm` is applied across the set, without which volume jumps between tracks —
+the most amateur-sounding defect a music-bed stream can have.
+
+The Audio Library ships MP3. That is fine for the encode path (ffmpeg decodes to
+PCM and encodes AAC either way, so converting first buys no quality) but **loop
+points are worth checking**: MP3 carries encoder delay and padding, and a gap at
+the seam repeats ~500x/day. Verify with `silencedetect` over a couple of loops
+rather than assuming; convert to WAV if a seam shows.
 
 ## Secrets
 
