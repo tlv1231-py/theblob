@@ -360,7 +360,10 @@ def main() -> None:
                 continue
             et, payload = mapped
             if emit(et, payload):
-                who = payload.get("author")
+                # 'from', not 'author' — the payload key was renamed to match what
+                # stream.js reads, and this log kept asking for the old one and
+                # printing None against every message it correctly delivered.
+                who = payload.get("from")
                 extra = payload.get("amount") or payload.get("text", "")[:40]
                 print(f"[chat] {et} <- {who} {extra!r}", flush=True)
 
