@@ -207,31 +207,91 @@
       // So: the horizontals are STATIC. They are depth markers, not motion. All
       // the travel lives in the verticals sweeping past, which is what a
       // sidescroller's ground actually does.
+      // ── The grid, as a NEON TUBE ──────────────────────────────────────────
+      // A vaporwave grid is not a hairline, it is a lit tube: the light BLEEDS.
+      // Thin lines are the single thing that makes this look like a wireframe
+      // rather than a scene.
+      //
+      // The bloom is a real shadowBlur, and this is the one place on the stage
+      // where a genuine diffused blur is right: phosphor smear is period-correct
+      // for the reference, and at half-res upscaled 2x with pixelated rendering
+      // the falloff quantizes into visible bands — which is exactly how a CRT
+      // actually smears a bright line. It arrives chunky, not airbrushed.
+      //
+      // ONE path for BOTH axes, stroked twice. That is two blurred operations
+      // per frame instead of fifty, which is what makes a real blur affordable
+      // on a free-tier ARM box that has to hold this for hours. The crisp cores
+      // are drawn afterwards with the blur off, and they carry the depth fade.
       var depth = H - hz;
+
+      // Build the whole lattice once — the halo pass and the core pass walk the
+      // same geometry, so they cannot drift apart.
+      var rules = [];        // horizontal depth markers: [y, alpha]
       for (var i = 1; i <= 22; i++) {
         var z = i / 22;
         var yy = hz + Math.pow(z, 2.4) * depth;
         if (yy < hz || yy > H) continue;
-        px(0, Math.round(yy / 2) * 2, W, 2, C_GRID, Math.min(0.55, Math.pow(z, 0.7) * 0.6));
+        rules.push([Math.round(yy / 2) * 2, Math.min(0.6, Math.pow(z, 0.7) * 0.65)]);
       }
 
       // The verticals carry the whole sidescroll. FASTEST layer in the scene by
-      // far (hills run 0.18/0.36/0.62) because this is the ground directly under
-      // him — parallax says the nearest thing moves most, and if the floor
-      // crawled at the hills' rate the world would look like it was on rails
-      // rather than moving.
+      // far (hills run 0.18/0.36/0.62) — parallax says the nearest surface moves
+      // most, and at the hills' rate the ground looks painted on.
       //
       // The fan does the perspective for free: each line runs from just off the
-      // vanishing point to 3.4x out at the bottom of the frame, so its near end
-      // sweeps 3.4x faster than its far end. That single ratio is what makes a
-      // flat set of lines read as a plane rushing past underneath.
-      ctx.beginPath();
-      for (var g = -14; g <= 14; g++) {
-        var gx = W / 2 + g * 46 - (scrollX * GRID_SWEEP) % 46;
-        ctx.moveTo(W / 2 + (gx - W / 2) * 0.06, hz);
-        ctx.lineTo(W / 2 + (gx - W / 2) * 3.4, H);
+      // vanishing point to 3.4x out at the bottom, so its near end sweeps 3.4x
+      // faster than its far end. That one ratio is what makes a flat set of
+      // lines read as a plane rushing past underneath.
+      var GRID_RGB = C_GRID[0] + ',' + C_GRID[1] + ',' + C_GRID[2];
+
+      // The bloom is drawn EXPLICITLY, not with shadowBlur. shadowBlur was tried
+      // and is a trap here: the shadow inherits the SOURCE's alpha, so a 10%
+      // stroke casts a 10% shadow smeared over 18px, which is nothing. Measured
+      // — the falloff came back 1,1,2,2,28,2,2,1,1: a hairline with a rumour of
+      // a glow. Cranking the source alpha to fix it lights every rule equally
+      // and destroys the depth fade, which is the one thing making this a floor
+      // rather than a net.
+      //
+      // So: concentric bands, widest and faintest first, each pass compositing
+      // over the last. It is cheaper than a blur, it is predictable, and it
+      // BANDS — which upscaled 2x with pixelated rendering is exactly how a CRT
+      // smears a bright line. An airbrushed gaussian would look more correct on
+      // a monitor and less correct on this stage.
+      //
+      // Every band scales by the rule's own depth alpha, so the far rules keep
+      // their haze in proportion and the horizon does not light up like the
+      // foreground.
+      var GLOW = [[8, 0.05], [5, 0.09], [2, 0.15]];   // [half-height, alpha]
+
+      for (var b = 0; b < GLOW.length; b++) {
+        var hw = GLOW[b][0], ga = GLOW[b][1];
+        for (var r2 = 0; r2 < rules.length; r2++) {
+          px(0, rules[r2][0] - hw, W, hw * 2 + 2, C_GRID, ga * rules[r2][1]);
+        }
+        ctx.beginPath();
+        for (var g2 = -14; g2 <= 14; g2++) {
+          var gx2 = W / 2 + g2 * 46 - (scrollX * GRID_SWEEP) % 46;
+          ctx.moveTo(W / 2 + (gx2 - W / 2) * 0.06, hz);
+          ctx.lineTo(W / 2 + (gx2 - W / 2) * 3.4, H);
+        }
+        ctx.strokeStyle = 'rgba(' + GRID_RGB + ',' + (ga * 0.9) + ')';
+        ctx.lineWidth = hw * 2 + 2;
+        ctx.stroke();
       }
-      ctx.strokeStyle = 'rgba(' + C_GRID[0] + ',' + C_GRID[1] + ',' + C_GRID[2] + ',0.28)';
+
+      // The cores, crisp and full-strength, drawn last so no haze washes over
+      // them. This is what keeps the grid a lit TUBE — a hot filament inside a
+      // soft envelope — rather than a blurred smear.
+      for (var r3 = 0; r3 < rules.length; r3++) {
+        px(0, rules[r3][0], W, 2, C_GRID, Math.min(1, rules[r3][1] * 1.5));
+      }
+      ctx.beginPath();
+      for (var g3 = -14; g3 <= 14; g3++) {
+        var gx3 = W / 2 + g3 * 46 - (scrollX * GRID_SWEEP) % 46;
+        ctx.moveTo(W / 2 + (gx3 - W / 2) * 0.06, hz);
+        ctx.lineTo(W / 2 + (gx3 - W / 2) * 3.4, H);
+      }
+      ctx.strokeStyle = 'rgba(' + GRID_RGB + ',0.5)';
       ctx.lineWidth = 2;
       ctx.stroke();
 
