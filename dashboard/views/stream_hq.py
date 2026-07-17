@@ -727,34 +727,53 @@ def _render_sim() -> None:
     # the stream dropped it silently. The line is the ONLY thing anyone wants to
     # change here, so it gets its own box and cannot be misplaced.
     if etype == "blob_speak":
-        line = st.text_input("Line", value="that one hurt.", key="speak_line",
-                             label_visibility="collapsed",
-                             placeholder="what should blob say?")
+        # Mood sits OUTSIDE the form so it survives clear_on_submit — you can send
+        # ten HAPPY lines in a row without re-picking it every time.
         mood = st.selectbox("Mood", ["(none)", "HAPPY", "SCARED", "ALERT", "SMUG", "IDLE"],
                             index=2, key="speak_mood", label_visibility="collapsed",
                             help="Drives his face while he talks. From BLOB.md's taxonomy.")
-        payload_preview = {"message": line}
+        # A FORM purely so ENTER sends. The alternative — on_change on a bare
+        # text_input — also fires on BLUR, so clicking away from a half-typed line
+        # would air it. A form submits on Enter or the button, and on nothing else.
+        # There is no live "On air →" line here because a form's value does not
+        # propagate until submit: the preview could only ever echo the PREVIOUS
+        # line, which is worse than no preview. Nothing is lost — that preview
+        # exists to decode JSON into a headline, and this box needs no decoding.
+        with st.form("speak_form", clear_on_submit=True, border=False):
+            line = st.text_input("Line", key="speak_line", label_visibility="collapsed",
+                                 placeholder="what should blob say?   ↵ sends")
+            sent = st.form_submit_button("QUEUE EVENT  ↵", type="primary",
+                                         use_container_width=True)
+        if not sent:
+            return
+        if not str(line).strip():
+            st.error("Give him a line to say.")
+            return
+        payload = {"message": line}
         if mood != "(none)":
-            payload_preview["mood"] = mood
-        st.markdown(f"**On air →** `blob: “{line}”`")
-        raw = json.dumps(payload_preview)
-    else:
-        raw = st.text_area("Payload", value=json.dumps(_EVENT_TYPES[etype]),
-                           height=80, key=f"pl_{etype}", label_visibility="collapsed")
-        # Show exactly what the stream will announce, before it goes out.
-        try:
-            st.markdown(f"**On air →** `{_headline_preview(etype, json.loads(raw))}`")
-        except json.JSONDecodeError:
-            st.caption("Payload is not valid JSON — fix it to see the on-air line.")
+            payload["mood"] = mood
+        _queue_event("blob_speak", payload, delay)
+        # No st.rerun(): submitting the form already reran us, and rerunning again
+        # would wipe this confirmation before anyone could read it.
+        st.success("`blob: “{}”` {}".format(line, (
+            "held — air it from Bus." if delay is None
+            else "on air within ~2s." if delay == 0
+            else f"airs in {delay}s.")))
+        return
+
+    raw = st.text_area("Payload", value=json.dumps(_EVENT_TYPES[etype]),
+                       height=80, key=f"pl_{etype}", label_visibility="collapsed")
+    # Show exactly what the stream will announce, before it goes out.
+    try:
+        st.markdown(f"**On air →** `{_headline_preview(etype, json.loads(raw))}`")
+    except json.JSONDecodeError:
+        st.caption("Payload is not valid JSON — fix it to see the on-air line.")
 
     if st.button("QUEUE EVENT", type="primary", use_container_width=True):
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as e:
             st.error(f"Payload is not valid JSON: {e}")
-            return
-        if etype == "blob_speak" and not str(payload.get("message", "")).strip():
-            st.error("Give him a line to say.")
             return
         _queue_event(etype, payload, delay)
         if delay is None:

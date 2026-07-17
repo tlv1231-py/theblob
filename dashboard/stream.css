@@ -66,6 +66,29 @@ html, body {
   transform: scale(var(--s, 0.5));
 }
 
+/* Double-tap target for fullscreen. NO paint — not a faint tint, not a hover
+   state, nothing: this corner is inside the broadcast frame. It is 200x200 in
+   STAGE space, so it shrinks with --s like everything else; at a phone-sized
+   letterbox (--s ~0.37) that is still a ~74px tap target, comfortably above
+   the ~44px minimum. */
+#fs-hit {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 200px;
+  height: 200px;
+  /* Above the whole stack, measured not guessed: bgCanvas 1, vignette 2,
+     #safe 10, popup 20, scanlines 92, yt overlay 100. Being last in the DOM is
+     NOT enough — z-index:auto loses to every one of those, and #bgCanvas is the
+     one layer up there without pointer-events:none, so it swallowed the tap. */
+  z-index: 999;
+  background: none;
+  /* The stage is a capture target and must never flash a tap ring on camera. */
+  -webkit-tap-highlight-color: transparent;
+  /* Kill the mobile double-tap-to-zoom that would otherwise fight this gesture. */
+  touch-action: manipulation;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ATMOSPHERE — everything below fills the whole stage, reserved bands included.
    The rule: you could crop this layer to the safe box and lose zero meaning.

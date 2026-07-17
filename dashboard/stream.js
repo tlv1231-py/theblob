@@ -18,12 +18,105 @@
   // ── Letterbox ────────────────────────────────────────────────────────────
   // The stage never reflows. It scales as a unit so a 1080x1920 capture is
   // pixel-native and anything else is a clean fit.
+  // Measure the WRAP, never window.innerWidth. #stage-wrap is fixed/inset:0, so
+  // its box is the viewport when embedded and the SCREEN when fullscreened —
+  // one measurement that is right in both, with no mode to branch on.
   function fitStage() {
-    var s = Math.min(window.innerWidth / S.stage.w, window.innerHeight / S.stage.h);
+    var vw = window.innerWidth, vh = window.innerHeight;   // fallback only
+    var wrap = $('stage-wrap');
+    if (wrap) {
+      var r = wrap.getBoundingClientRect();
+      if (r.width > 1 && r.height > 1) { vw = r.width; vh = r.height; }
+    }
+    var s = Math.min(vw / S.stage.w, vh / S.stage.h);
     $('stage').style.setProperty('--s', s);
   }
+
+  // ── Fullscreen — the Shorts-perspective check ────────────────────────────
+  // Double-tap the invisible bottom-left corner. There is nothing to configure:
+  // fitStage already fits 1080x1920 into whatever it is given, so a fullscreen
+  // wrap yields exactly the 9:16 frame a Shorts viewer sees, letterboxed on the
+  // black the wrap already paints. The yt overlay stays on its own ?yt= flag —
+  // fullscreen shows the FRAME, the overlay shows YouTube's chrome over it, and
+  // welding them together would leave no way to see one without the other.
+  //
+  // Streamlit's component iframe carries allow="...fullscreen..." and reports
+  // document.fullscreenEnabled === true, so the child fullscreens its OWN
+  // element and never has to reach into the parent.
+  var DTAP_MS = 400;
+  var lastTap = 0;
+
+  function fsOn() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function fsToggle() {
+    try {
+      if (fsOn()) {
+        var exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+      } else {
+        var el = $('stage-wrap') || document.documentElement;
+        var req = el.requestFullscreen || el.webkitRequestFullscreen;
+        // navigationUI:'hide' asks mobile to drop its bars — advisory, ignored
+        // where unsupported, and harmless as an unknown key elsewhere.
+        if (req) {
+          var p = req.call(el, { navigationUI: 'hide' });
+          // requestFullscreen REJECTS rather than throws. Without this the
+          // failure is an unhandled rejection in a console nobody is watching.
+          if (p && p.catch) p.catch(function(e) { console.warn('[stream] fullscreen refused:', e); });
+        }
+      }
+    } catch (e) {
+      console.warn('[stream] fullscreen refused:', e);
+    }
+  }
+
+  var fsHit = $('fs-hit');
+  if (fsHit) {
+    // pointerdown, not click: one handler covers touch and mouse, and it fires
+    // early enough that the gesture still carries the transient activation
+    // requestFullscreen demands. NOT preventDefault-ed — touch-action in CSS
+    // already kills double-tap zoom, and cancelling here risks the activation.
+    fsHit.addEventListener('pointerdown', function() {
+      var now = Date.now();
+      if (now - lastTap > 0 && now - lastTap < DTAP_MS) {
+        lastTap = 0;          // consume, so a third tap starts a fresh pair
+        fsToggle();
+      } else {
+        lastTap = now;
+      }
+    });
+  }
+
+  // Entering fullscreen resizes the wrap, but the box is not always final on the
+  // event itself — re-fit on the next frames too. setTimeout, not rAF: rAF never
+  // fires in this iframe (see the standing rule).
+  function fsRefit() { fitStage(); setTimeout(fitStage, 60); setTimeout(fitStage, 250); }
+  document.addEventListener('fullscreenchange', fsRefit);
+  document.addEventListener('webkitfullscreenchange', fsRefit);
+
   fitStage();
   window.addEventListener('resize', fitStage);
+
+  // ⚠ The iframe's own 'resize' does NOT reliably fire when the frame is resized
+  // from outside. MEASURED: the frame went 1080 -> 375 wide and no event landed,
+  // so the stage sat at scale 1 and overflowed its own viewport. The sibling
+  // sizer in stream.py resizes this frame on every parent resize, so that path is
+  // real, not theoretical. rAF and CSS clocks are inert in here (standing rule)
+  // and ResizeObserver rides the same rendering loop, so a TIMER is the only
+  // thing that can be trusted to notice. Cheap: one rect read, and it only calls
+  // fitStage when the box actually changed.
+  var lastBox = '';
+  setInterval(function() {
+    var wrap = $('stage-wrap');
+    if (!wrap) return;
+    var r = wrap.getBoundingClientRect();
+    var k = Math.round(r.width) + 'x' + Math.round(r.height);
+    if (k === lastBox) return;
+    lastBox = k;
+    fitStage();
+  }, 500);
 
   // ── Format ───────────────────────────────────────────────────────────────
   function usd(v, dp) {

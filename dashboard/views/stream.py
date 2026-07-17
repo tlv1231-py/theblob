@@ -387,6 +387,14 @@ _STAGE_HTML = """
       </div>
 
     </div>
+
+    <!-- Double-tap to fullscreen. Invisible BECAUSE this is on camera — it must
+         never render, so it is a bare hit box with no paint of any kind. It sits
+         in the bottom-left of YouTube's reserved band, below y1540 where nothing
+         is drawn, so it cannot swallow a tap meant for anything real. It carries
+         an explicit z-index (see stream.css) — being last in the DOM does NOT
+         put it on top, and #bgCanvas ate the tap until it did. -->
+    <div id="fs-hit"></div>
   </div>
 </div>
 """
