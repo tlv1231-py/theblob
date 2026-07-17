@@ -441,6 +441,13 @@ Paper portfolio start date: **2026-05-29**
     **The lane holds the stage until `boxDecay` finishes**, or the next thing plays over a
     corpse. `boxOpen` fires only on true arrival — mid-burst events replace contents.
 
+    **⚠ `clearTimeout(true)` is `clearTimeout(1)` — it silently kills timer ID 1.**
+    `ghostT[sym]` is a **marker** (`true`), not a timer id; three sites still cleared it as
+    one after it changed, and since the Blob's 10fps loop is started early it *owns a very
+    low timer id*. He ran ~30s then died on the first exit batch, no error, while every
+    other interval kept going. **Never pass a non-timer to clearTimeout/clearInterval** —
+    JS coerces it and the call is silently valid.
+
     **⚠ Timing cannot be measured from an automated browser.** Its tab is always
     `document.hidden`, and Chrome throttles background timers hard — a 3s beat straddles a
     minute and is indistinguishable from a deadlock. This produced hours of phantom bugs
