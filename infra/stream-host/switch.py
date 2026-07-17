@@ -102,8 +102,8 @@ def unit_state() -> str:
 LIVE_STATES = ("active", "activating", "reloading", "deactivating")
 
 
-def apply(verb: str) -> None:
-    print(f"[switch] {verb}ing {FFMPEG_UNIT}", flush=True)
+def apply(verb: str, state: str) -> None:
+    print(f"[switch] {verb} {FFMPEG_UNIT} (was {state})", flush=True)
     subprocess.run(["systemctl", verb, FFMPEG_UNIT], check=False)
 
 
@@ -135,16 +135,21 @@ def main() -> None:
         if want is None:
             pass                       # no opinion — see desired_state
         elif want and state not in LIVE_STATES:
-            # Not already up or coming up. Note this deliberately does NOT fire
-            # while state=="activating": ExecStartPre sleeps 8s, so a naive
-            # equality check re-issued `start` on every 5s poll and filled the
-            # journal with starts for a unit that was already starting.
-            apply("start")
-        elif not want and state != "inactive":
-            # Anything other than settled-inactive gets stopped — including
-            # "activating", which is what a crash loop looks like, and "failed",
-            # which is about to become one.
-            apply("stop")
+            # Not already up or coming up. Deliberately does NOT fire while
+            # state=="activating": ExecStartPre sleeps 8s, so re-issuing `start`
+            # on every 5s poll would fill the journal with starts for a unit that
+            # is already starting.
+            apply("start", state)
+        elif not want and state in LIVE_STATES:
+            # Only stop what is actually up. "activating" is included because
+            # that is what a crash loop looks like under Restart=always, and
+            # stopping it is the whole point of the button.
+            #
+            # "failed" is NOT in LIVE_STATES, and that matters: `systemctl stop`
+            # does not clear a failed state, so testing `state != "inactive"`
+            # here re-issued a stop every 5s forever against a unit that had
+            # already stopped. Failed is not running. There is nothing to stop.
+            apply("stop", state)
 
         # This heartbeat is the difference between a button and a placebo. If
         # this process dies, Stream HQ's click still writes the row and still
