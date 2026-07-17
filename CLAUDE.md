@@ -372,6 +372,24 @@ Paper portfolio start date: **2026-05-29**
     behind another sounded seconds before its window opened. Mood/sfx/pulse now fire inside
     `annNext()` with the box.
 
+    **The book does not trade, it ROLLS — and that governs the batching.** Measured over
+    6h/3,210 fills: **798 of 799 batches are pure rolls** — the engine exits a set of
+    symbols on `timeout` and re-enters the identical set within ~1.5s, board unchanged.
+    Batch sizes are always even (2,4,…,16) because every fill is half a round trip.
+    So `tradeIngest()` **pairs exit→re-entry into one `ROLL` beat** (`rolled BTC for
+    −$0.38`): the tile stays put, the realised P&L is the news, 16 legs become 8 true
+    beats. Pairing is at poll time because the batch must be visible *as* a batch —
+    ~63% land in one poll, and the ~37% that straddle the 4s boundary wait one cycle
+    (`ROLL_WAIT`) rather than airing as a sale that didn't happen.
+    **Do not "simplify" this back to per-leg narration.** It was per-leg, and it lied:
+    the cap kept the newest 6 of 16 — all ENTERs — so a roll played as "bought SOL,
+    bought AVAX…" with every exit and its P&L dropped (62% of the batch). Cap is 8 =
+    the largest roll; lowering it re-creates the fiction.
+
+    **The pointer** (`.t-point`, `pointAt()`) is the Gen-1 menu cursor, parked on the slot
+    during the 500ms wind-up. **Sells/rolls only** — a constraint, not a preference: an
+    entry has no tile to point at until the impact creates it.
+
     `dashboard/yt_overlay.js` is a **TEMP** design aid drawing YouTube's chrome + safe
     zones over the stage. Geometry is sourced and exact; the chrome art is approximate and
     per-element placement is reconstructed (no published pixel map exists). **Defaults ON
