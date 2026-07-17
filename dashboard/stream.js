@@ -1069,7 +1069,29 @@
 
     // Blobby's own voice — the speaks lane.
     if (ev.event_type === 'blob_speak') {
-      blobSpeak(p.message || p.text, { mood: p.mood || null });
+      // Be generous about the key. HQ hands this page raw JSON, and the natural
+      // mistake is to overwrite the KEY with the line you want said rather than
+      // the value — which produced {"I see what you're doing here.": "..."} and
+      // a silently dropped event. If there is exactly one string that isn't a
+      // known field, that IS the line, whatever it got called.
+      var line = p.message || p.text || p.line;
+      if (!line) {
+        for (var k in p) {
+          if (k === 'mood' || typeof p[k] !== 'string') continue;
+          line = p[k];               // the value...
+          if (!line) line = k;       // ...or the key, if they swapped them
+          break;
+        }
+      }
+      if (!line) {
+        // Never fail silently: the event aired, so SAY that it arrived broken.
+        // A stream that swallows a malformed event looks identical to one that
+        // never received it, which is the hardest possible thing to debug.
+        console.warn('[stream] blob_speak with no readable line:', p);
+        blobSpeak('...?');
+        return;
+      }
+      blobSpeak(line, { mood: p.mood || null });
       return;
     }
 
@@ -2155,6 +2177,15 @@
   afkNext();                      // he starts talking immediately — a page that
                                   // boots into silence during a quiet spell
                                   // looks broken for the first 20s
+
+  // Lane state, exposed for diagnosis. This page runs unattended on a headless
+  // box where the only way to ask "why is nothing happening" is from a console.
+  window._TND_DBG = {
+    stage: stage,
+    q: function() { return { ann: annQ.length, speak: speakQ.length, trade: tradeQ.length,
+                             owner: stage.owner, reordering: reordering }; },
+    speak: blobSpeak
+  };
 
   setInterval(syncBlobMood, 1000);
   // One poll now carries both NAV and trade reactions — same rows, one request.

@@ -450,20 +450,41 @@ def _render_sim() -> None:
                          "Now skips the countdown. Hold waits for a manual release.")
     delay = (pol_hold if pol_auto else None) if mode == "Policy" else (0 if mode == "Now" else None)
 
-    raw = st.text_area("Payload", value=json.dumps(_EVENT_TYPES[etype]),
-                       height=80, key=f"pl_{etype}", label_visibility="collapsed")
-
-    # Show exactly what the stream will announce, before it goes out.
-    try:
-        st.markdown(f"**On air →** `{_headline_preview(etype, json.loads(raw))}`")
-    except json.JSONDecodeError:
-        st.caption("Payload is not valid JSON — fix it to see the on-air line.")
+    # blob_speak gets real fields instead of raw JSON. Editing JSON to make a
+    # character talk invited exactly one mistake, and it was made immediately:
+    # overwrite the KEY with the line you want said rather than the value, giving
+    # {"I see what you're doing here.": "that one hurt."} — no `message` key, so
+    # the stream dropped it silently. The line is the ONLY thing anyone wants to
+    # change here, so it gets its own box and cannot be misplaced.
+    if etype == "blob_speak":
+        line = st.text_input("Line", value="that one hurt.", key="speak_line",
+                             label_visibility="collapsed",
+                             placeholder="what should blob say?")
+        mood = st.selectbox("Mood", ["(none)", "HAPPY", "SCARED", "ALERT", "SMUG", "IDLE"],
+                            index=2, key="speak_mood", label_visibility="collapsed",
+                            help="Drives his face while he talks. From BLOB.md's taxonomy.")
+        payload_preview = {"message": line}
+        if mood != "(none)":
+            payload_preview["mood"] = mood
+        st.markdown(f"**On air →** `blob: “{line}”`")
+        raw = json.dumps(payload_preview)
+    else:
+        raw = st.text_area("Payload", value=json.dumps(_EVENT_TYPES[etype]),
+                           height=80, key=f"pl_{etype}", label_visibility="collapsed")
+        # Show exactly what the stream will announce, before it goes out.
+        try:
+            st.markdown(f"**On air →** `{_headline_preview(etype, json.loads(raw))}`")
+        except json.JSONDecodeError:
+            st.caption("Payload is not valid JSON — fix it to see the on-air line.")
 
     if st.button("QUEUE EVENT", type="primary", use_container_width=True):
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as e:
             st.error(f"Payload is not valid JSON: {e}")
+            return
+        if etype == "blob_speak" and not str(payload.get("message", "")).strip():
+            st.error("Give him a line to say.")
             return
         _queue_event(etype, payload, delay)
         if delay is None:
