@@ -502,6 +502,17 @@ html, body {
 /* AFK copy — lowercase, white like the rest of the system voice, same slot. */
 .ttl-x.idle { color: #ffffff; text-transform: lowercase; display: block; }
 
+/* "is happy!" — the viewer-event face. White like the rest of the system voice;
+   the JOY is carried by the motion, not by a colour swap, exactly as the Blob
+   himself stays pink and emotes through shape (BLOB.md). Each glyph is its own
+   element so the bounce can travel across the word as a wave — the arcade
+   name-entry cheer — driven by setInterval at his 10fps, never by CSS. */
+.ttl-x.happy i {
+  display: inline-block;
+  font-style: normal;
+  will-change: transform;
+}
+
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
 #s-nav {
   height: 172px; flex: none;

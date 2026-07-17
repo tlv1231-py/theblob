@@ -862,7 +862,13 @@
       annClose();
       // Guarded because boot calls annNext() once to settle the panel into its
       // idle state, and that call holds no floor to give back.
-      if (stage.owner === 'popup') stageDone();
+      if (stage.owner === 'popup') {
+        stageDone();
+        // Hand x back to the AFK cycle on the same 2s rule a trade uses —
+        // otherwise "is happy!" waves forever after the last dono of the night.
+        clearTimeout(_idleT); clearTimeout(_afkT);
+        _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
+      }
       return;
     }
     var ev = annQ.shift();
@@ -895,6 +901,19 @@
       bg.pulse(cfg.c === '#00ff9d' ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
     }
     SFX.fanfare();
+    // x celebrates on the same frame as the box and the fanfare, and holds for
+    // as long as the popup lane owns the stage — see the empty branch above,
+    // which hands the sentence back to the AFK cycle when the burst drains.
+    if (VIEWER_EVENTS[ev.type]) {
+      setStatusHappy();
+    } else {
+      // A non-viewer popup must actively CLEAR the celebration, not merely
+      // decline to set one. Measured: a donation and a risk_breach in the same
+      // burst left "blob is happy!" waving through the drawdown alarm for the
+      // full 10.3s the lane held the floor. Gating the set was not enough —
+      // the state persists until something overwrites it.
+      statusLine(react && react.mood === 'SCARED' ? 'is scared' : 'is busy');
+    }
 
     var name = nameOf(ev.type, ev.p);
     var act  = actOf(ev.type, ev.p);
@@ -1533,9 +1552,80 @@
                             // that a 20s gap gets four of them, not two
   var _idleT = null, _afkT = null, _afkIdx = -1;
 
+  // ── "is happy!" — the viewer-event face ──────────────────────────────────
+  // A viewer event OUTRANKS the AFK cycle the same way its popup outranks a
+  // trade. While someone is being thanked, the sentence must not be idly
+  // musing about touching grass underneath the box.
+  //
+  // NOT every popup — only viewer ones. risk_breach opens the same box but is
+  // the machine hurting itself, and its mood is SCARED: "blob is happy!" over a
+  // drawdown alarm would be the single worst sentence this page could produce.
+  var VIEWER_EVENTS = {
+    donation: 1, superchat: 1, supersticker: 1, bits: 1,
+    membership_gift: 1, subscription: 1, follow: 1, raid: 1, chat: 1
+  };
+
+  var HAPPY_TEXT = 'is happy!';
+  var _happyT = null;
+
+  function clearHappy() {
+    clearInterval(_happyT);
+    _happyT = null;
+  }
+
+  function setStatusHappy() {
+    var el = $('blob-status');
+    if (!el) return;
+    // Silence the AFK cycle and any decode mid-flight on the container.
+    clearTimeout(_idleT); clearTimeout(_afkT);
+    clearInterval(el._dec); clearTimeout(el._decT); el._dec = null;
+    clearHappy();
+
+    // Per-character, because the win is a WAVE across the word — one element
+    // can only bob as a block, which reads as a wobble rather than a cheer.
+    el.className = 'ttl-x idle happy';
+    el.innerHTML = '';
+    var chars = [];
+    for (var i = 0; i < HAPPY_TEXT.length; i++) {
+      var c = document.createElement('i');
+      c.textContent = HAPPY_TEXT[i] === ' ' ? ' ' : HAPPY_TEXT[i];
+      el.appendChild(c);
+      chars.push(c);
+    }
+
+    // THE ARCADE WIN. A bounce wave travelling left→right, on a 10fps clock and
+    // quantized to whole pixels — the Blob's own framerate and grid, so his
+    // celebration and the sentence are visibly the same machine. A 60fps sine
+    // would read as a modern web toy sitting next to a 10fps sprite, which is
+    // exactly the failure BLOB.md warns about. No decode here on purpose: the
+    // decode is him computing, and this is him NOT computing.
+    var f = 0;
+    _happyT = setInterval(function() {
+      f++;
+      for (var i = 0; i < chars.length; i++) {
+        var y = Math.round(Math.sin((f - i * 1.2) * 0.7) * 4);
+        chars[i].style.transform = 'translateY(' + y + 'px)';
+      }
+    }, 100);
+  }
+
+  // A one-off system line in the same white voice as AFK, held until something
+  // else claims x rather than cycling on.
+  function statusLine(text) {
+    var el = $('blob-status');
+    if (!el) return;
+    clearTimeout(_idleT); clearTimeout(_afkT);
+    clearHappy();
+    clearInterval(el._dec); clearTimeout(el._decT); el._dec = null;
+    el.className = 'ttl-x idle';
+    el.innerHTML = '';
+    decodeTo(el, text, 0);
+  }
+
   function afkNext() {
     var el = $('blob-status');
     if (!el) return;
+    clearHappy();       // the wave stops or it runs forever on detached nodes
     // "No event for 2s" must mean nothing is PENDING either, not just that the
     // last one finished. Beat-to-beat is 1.6s against this 2s timer — only
     // 400ms of margin — so a beat delayed by a reorder would flash an AFK line
@@ -1566,6 +1656,7 @@
     if (!el) return;
     // An event silences the AFK cycle and restarts the countdown to it.
     clearTimeout(_idleT); clearTimeout(_afkT);
+    clearHappy();
     _idleT = _afkT = setTimeout(afkNext, AFK_AFTER);
     var bare = t.sym.replace('/USD', '');
     // A roll realised a P&L exactly like a sale did, so it reads like one — the
