@@ -1,0 +1,23 @@
+[Unit]
+Description=Blob stream — YouTube live chat -> stream_events
+After=network-online.target
+
+# Never give up. If this dies for good the Blob simply stops reacting to viewers,
+# and nothing else on the page would look wrong — the render beats, the encoder
+# holds speed, every light stays green. See blob-ffmpeg.service for why this
+# belongs in [Unit] and not [Service].
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# Reads one Google API and writes stream_events with the publishable key. No
+# systemctl, no display, no secrets beyond the API key systemd hands it.
+User=blob
+Group=blob
+EnvironmentFile=/opt/blob-stream/.env
+ExecStart=/usr/bin/python3 /opt/blob-stream/chat.py
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

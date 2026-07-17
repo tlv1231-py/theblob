@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""YouTube live chat -> stream_events, so the Blob reacts to viewers.
+
+One call does almost all of it. `liveChatMessages.list` returns regular chat,
+super chats, super stickers, new members and gifted memberships in a single
+stream — so this is one integration, not four.
+
+WHAT YOU CANNOT HAVE
+"Follows" are Twitch. YouTube has subscribers, and offers no real-time
+new-subscriber event to anyone — Streamlabs and StreamElements fake sub alerts by
+polling a delayed, unreliable list. Paid memberships DO fire properly and arrive
+here as newSponsorEvent. Plain subs are simply not on the menu.
+
+WHY IT RUNS HERE AND NOT IN STREAMLIT
+Streamlit Community Cloud is a request-scoped web app that sleeps when no browser
+holds a session. It has no process awake at 3am when someone super-chats. This VM
+is already up 24/7, so the listener lives next to the switch and the watchdog.
+StreamEvent's own docstring anticipated this: "the stream renders in a headless
+Chromium on the streaming host, while HQ runs wherever the operator is ... this
+table IS the channel."
+
+QUOTA IS THE WHOLE DESIGN — see poll_interval().
+"""
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+
+SUPA_URL = os.environ.get("SUPA_URL", "https://seeevuklabvhkawawtxn.supabase.co")
+SUPA_KEY = os.environ.get("SUPA_KEY", "sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY")
+
+API = "https://www.googleapis.com/youtube/v3"
+API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
+
+# Pin the broadcast if you know it; otherwise we discover it from the channel.
+VIDEO_ID = os.environ.get("YOUTUBE_VIDEO_ID", "").strip()
+CHANNEL_ID = os.environ.get("YOUTUBE_CHANNEL_ID", "").strip()
+
+# ── Quota ────────────────────────────────────────────────────────────────────
+# The free tier is 10,000 units/day and liveChatMessages.list costs 5. Polling
+# every 5s costs 86,400/day — 8.6x over. So: poll fast only while someone is
+# actually talking.
+#
+#   idle at 300s  ->    288 polls/day  ->  1,440 units
+#   leaves       ~8,000 units  ->  ~1,600 fast polls  ->  ~2.2h of live chat/day
+#
+# An AFK stream is empty almost all the time, so this buys ~5s reactions during
+# the exact minutes a human is there to see them, and costs nearly nothing the
+# rest of the day. That is the whole trick.
+COST = {"liveChatMessages.list": 5, "videos.list": 1, "search.list": 100}
+DAILY_BUDGET = int(os.environ.get("YT_QUOTA_BUDGET", "10000"))
+POLL_FAST = int(os.environ.get("CHAT_POLL_FAST", "5"))
+POLL_IDLE = int(os.environ.get("CHAT_POLL_IDLE", "300"))
+# Stay hot this long after the last message — a conversation has gaps, and
+# dropping to 5-minute polls between two lines of chat would feel broken.
+HOT_WINDOW = int(os.environ.get("CHAT_HOT_WINDOW", "120"))
+
+REPORT_SECONDS = 30
+
+# YouTube's chat event kinds -> the event_type vocabulary in data/models.py
+KIND_MAP = {
+    "textMessageEvent":       "chat",
+    "superChatEvent":         "superchat",
+    "superStickerEvent":      "supersticker",
+    "newSponsorEvent":        "subscription",
+    "membershipGiftingEvent": "membership_gift",
+    "giftMembershipReceivedEvent": "membership_gift",
+}
+
+
+class Quota:
+    """Spend tracker. YouTube's quota resets at midnight Pacific, not UTC."""
+
+    def __init__(self) -> None:
+        self.spent = 0
+        self.day = self._pt_day()
+
+    @staticmethod
+    def _pt_day():
+        # Good enough without pytz: PT is UTC-7/-8, and we only need the date to
+        # roll at roughly the right time. Being an hour off across a DST boundary
+        # costs one early or late reset, once a year.
+        return (datetime.now(timezone.utc) - timedelta(hours=8)).date()
+
+    def charge(self, method: str) -> None:
+        if self._pt_day() != self.day:
+            print(f"[chat] quota day rolled — spent {self.spent} yesterday", flush=True)
+            self.spent = 0
+            self.day = self._pt_day()
+        self.spent += COST.get(method, 1)
+
+    @property
+    def exhausted(self) -> bool:
+        return self.spent >= DAILY_BUDGET * 0.9
+
+
+def api(method: str, path: str, quota: Quota, **params) -> dict:
+    params["key"] = API_KEY
+    url = f"{API}/{path}?" + urllib.parse.urlencode(params)
+    quota.charge(method)
+    with urllib.request.urlopen(url, timeout=15) as r:
+        return json.loads(r.read())
+
+
+# ── Finding the broadcast ────────────────────────────────────────────────────
+
+def resolve_chat_id(quota: Quota) -> tuple[str | None, str | None]:
+    """(liveChatId, videoId). Cheap when VIDEO_ID is pinned, expensive when not.
+
+    search.list costs 100 units — 2% of the day's entire budget per call — so it
+    is only ever used to FIND a broadcast we do not have, never on a schedule.
+    Pin YOUTUBE_VIDEO_ID in .env and this stays at 1 unit.
+    """
+    vid = VIDEO_ID
+    if not vid:
+        if not CHANNEL_ID:
+            print("[chat] no YOUTUBE_VIDEO_ID and no YOUTUBE_CHANNEL_ID — nothing to watch",
+                  flush=True)
+            return None, None
+        try:
+            r = api("search.list", "search", quota, part="id", channelId=CHANNEL_ID,
+                    eventType="live", type="video", maxResults=1)
+        except urllib.error.HTTPError as e:
+            print(f"[chat] search failed: {e.code} {e.read()[:160]!r}", flush=True)
+            return None, None
+        items = r.get("items") or []
+        if not items:
+            return None, None
+        vid = items[0]["id"]["videoId"]
+
+    try:
+        r = api("videos.list", "videos", quota, part="liveStreamingDetails", id=vid)
+    except urllib.error.HTTPError as e:
+        print(f"[chat] videos.list failed: {e.code} {e.read()[:160]!r}", flush=True)
+        return None, vid
+    items = r.get("items") or []
+    if not items:
+        return None, vid
+    chat_id = (items[0].get("liveStreamingDetails") or {}).get("activeLiveChatId")
+    return chat_id, vid
+
+
+# ── Policy (shared with the START/STOP switch) ───────────────────────────────
+
+def hold_policy() -> tuple[bool, int]:
+    """(auto_release, hold_seconds) from the same strategy_params HQ writes."""
+    url = (f"{SUPA_URL}/rest/v1/strategy_params"
+           "?strategy=eq.stream&param=in.(auto_release,default_hold_s)&select=param,value")
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+    except Exception:
+        return True, 5                      # sensible default; never block on a blip
+    pol = {r["param"]: r["value"] for r in rows}
+    return pol.get("auto_release", "1") == "1", int(pol.get("default_hold_s", "5") or 5)
+
+
+def emit(event_type: str, payload: dict) -> bool:
+    """Write one event onto the bus.
+
+    status='queued' with a release_at is what makes this work unattended: the
+    page airs anything whose release_at has passed, so no HQ browser needs to be
+    open for a viewer's super chat to reach the Blob at 3am. With auto_release
+    off, release_at stays NULL and the row waits for a human — which is exactly
+    what that toggle promises.
+    """
+    auto, hold = hold_policy()
+    now = datetime.now(timezone.utc)
+    body = {
+        "event_type": event_type,
+        "source": "youtube",
+        "payload": payload,
+        "status": "queued",
+        "release_at": (now + timedelta(seconds=hold)).isoformat() if auto else None,
+        "created_at": now.isoformat(),
+    }
+    req = urllib.request.Request(
+        f"{SUPA_URL}/rest/v1/stream_events", data=json.dumps(body).encode(),
+        method="POST",
+        headers={"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}",
+                 "Content-Type": "application/json", "Prefer": "return=minimal"})
+    try:
+        urllib.request.urlopen(req, timeout=10).close()
+        return True
+    except Exception as e:
+        print(f"[chat] emit {event_type} failed: {e}", flush=True)
+        return False
+
+
+def _dollars(micros) -> float | None:
+    """amountMicros -> a NUMBER. Not a display string.
+
+    The page does `Number(p.amount).toFixed(2)` and prefixes '$' itself, so
+    handing it YouTube's ready-made "$5.00" yields NaN and the amount silently
+    vanishes from the popup. Send the number; the page owns the formatting.
+    """
+    try:
+        return round(int(micros) / 1_000_000, 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def to_event(item: dict) -> tuple[str, dict] | None:
+    """Map a YouTube chat item onto the payload shape stream.js actually reads.
+
+    The contract is `p.from`, `p.amount`, `p.count`, `p.viewers` — NOT the names
+    YouTube uses, and not the ones that felt natural. Verified by emitting an
+    event and photographing the render: `author` came out as the literal fallback
+    "SOMEONE", and "$5.00" came out as nothing at all.
+    """
+    sn = item.get("snippet") or {}
+    author = (item.get("authorDetails") or {}).get("displayName", "someone")
+    kind = sn.get("type")
+    et = KIND_MAP.get(kind)
+    if not et:
+        return None
+
+    # `from` is what the popup reads for the name; everything else here is extra
+    # context that costs nothing to carry and may be worth having later.
+    payload: dict = {"from": author, "kind": kind}
+
+    if kind == "textMessageEvent":
+        payload["text"] = (sn.get("textMessageDetails") or {}).get("messageText", "")
+    elif kind == "superChatEvent":
+        d = sn.get("superChatDetails") or {}
+        payload.update(text=d.get("userComment", ""),
+                       amount=_dollars(d.get("amountMicros")),
+                       amount_display=d.get("amountDisplayString"),
+                       currency=d.get("currency"))
+    elif kind == "superStickerEvent":
+        d = sn.get("superStickerDetails") or {}
+        payload.update(amount=_dollars(d.get("amountMicros")),
+                       amount_display=d.get("amountDisplayString"),
+                       currency=d.get("currency"))
+    elif kind == "newSponsorEvent":
+        payload["tier"] = (sn.get("newSponsorDetails") or {}).get("memberLevelName")
+    elif kind in ("membershipGiftingEvent", "giftMembershipReceivedEvent"):
+        d = sn.get("membershipGiftingDetails") or {}
+        payload["count"] = d.get("giftMembershipsCount")
+    return et, payload
+
+
+def post_health(status: str, detail: dict) -> None:
+    body = json.dumps({"component": "chat", "status": status, "detail": detail,
+                       "recorded_at": datetime.now(timezone.utc).isoformat()}).encode()
+    req = urllib.request.Request(
+        f"{SUPA_URL}/rest/v1/stream_health", data=body, method="POST",
+        headers={"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}",
+                 "Content-Type": "application/json", "Prefer": "return=minimal"})
+    try:
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception:
+        pass
+
+
+def main() -> None:
+    if not API_KEY:
+        print("[chat] YOUTUBE_API_KEY missing — put it in /opt/blob-stream/.env", flush=True)
+        raise SystemExit(1)
+
+    quota = Quota()
+    chat_id: str | None = None
+    video_id: str | None = None
+    page: str | None = None
+    last_msg = 0.0
+    last_report = 0.0
+    seeded = False          # see the backlog note below
+
+    print(f"[chat] budget {DAILY_BUDGET}/day  fast {POLL_FAST}s  idle {POLL_IDLE}s",
+          flush=True)
+
+    while True:
+        if not chat_id:
+            chat_id, video_id = resolve_chat_id(quota)
+            if not chat_id:
+                print("[chat] no active broadcast — waiting", flush=True)
+                post_health("degraded", {"reason": "no active broadcast",
+                                         "quota_spent": quota.spent})
+                time.sleep(POLL_IDLE)
+                continue
+            print(f"[chat] watching video={video_id} chat={chat_id[:24]}...", flush=True)
+            page, seeded = None, False
+
+        if quota.exhausted:
+            # Never blow the free quota. Going over does not cost money — it
+            # returns 403 quotaExceeded and the listener is simply deaf until
+            # midnight Pacific, which is worse than being slow.
+            print(f"[chat] quota {quota.spent}/{DAILY_BUDGET} — idling", flush=True)
+            time.sleep(POLL_IDLE)
+            continue
+
+        try:
+            params = dict(part="snippet,authorDetails", liveChatId=chat_id, maxResults=200)
+            if page:
+                params["pageToken"] = page
+            r = api("liveChatMessages.list", "liveChatMessages", quota, **params)
+        except urllib.error.HTTPError as e:
+            raw = e.read()[:200].decode(errors="ignore")
+            print(f"[chat] poll failed: {e.code} {raw}", flush=True)
+            # 403/404 usually means the broadcast ended or the chat id went stale.
+            if e.code in (403, 404):
+                chat_id = None
+            post_health("down", {"error": f"{e.code}", "detail": raw[:120]})
+            time.sleep(POLL_IDLE)
+            continue
+        except Exception as e:
+            print(f"[chat] poll error: {e}", flush=True)
+            time.sleep(POLL_FAST)
+            continue
+
+        page = r.get("nextPageToken")
+        items = r.get("items") or []
+
+        if not seeded:
+            # DISCARD THE FIRST BATCH. A cold liveChatMessages.list returns the
+            # chat's recent backlog, not just what is new — so every restart
+            # (and the watchdog does restart things) would replay a pile of old
+            # messages and the Blob would react to a conversation that finished
+            # an hour ago. Take the page token, drop the messages.
+            seeded = True
+            print(f"[chat] seeded past {len(items)} backlog message(s)", flush=True)
+            items = []
+
+        for it in items:
+            mapped = to_event(it)
+            if not mapped:
+                continue
+            et, payload = mapped
+            if emit(et, payload):
+                who = payload.get("author")
+                extra = payload.get("amount") or payload.get("text", "")[:40]
+                print(f"[chat] {et} <- {who} {extra!r}", flush=True)
+
+        if items:
+            last_msg = time.time()
+
+        now = time.time()
+        if now - last_report >= REPORT_SECONDS:
+            post_health("ok", {
+                "video": video_id,
+                "quota_spent": quota.spent,
+                "quota_budget": DAILY_BUDGET,
+                "hot": (now - last_msg) < HOT_WINDOW,
+            })
+            last_report = now
+
+        hot = (now - last_msg) < HOT_WINDOW
+        time.sleep(POLL_FAST if hot else POLL_IDLE)
+
+
+if __name__ == "__main__":
+    main()

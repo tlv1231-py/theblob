@@ -9,7 +9,8 @@ Oracle ARM VM
           └─ ffmpeg x11grab     blob-ffmpeg.service    → YouTube RTMP
   ├─ agent.py                   blob-agent.service     → stream_health
   ├─ watchdog.py                blob-watchdog.service  ← reads stream_health
-  └─ switch.py                  blob-switch.service    ← Stream HQ START/STOP
+  ├─ switch.py                  blob-switch.service    ← Stream HQ START/STOP
+  └─ chat.py                    blob-chat.service      → stream_events (viewers)
 ```
 
 Nothing here touches `dashboard/`. It only reads the deployed page and writes
@@ -138,6 +139,47 @@ with `reason: broadcast switch is off`. A red light for a system doing exactly
 what it was told is how you learn to ignore red lights. (`off` is deliberately
 not used — HQ's `_DOT` maps only ok/degraded/down/absent/unknown and would
 KeyError on anything else.)
+
+## Viewer events (chat.py)
+
+`liveChatMessages.list` returns regular chat, super chats, super stickers, new
+members and gifted memberships in **one** stream, so this is one integration
+rather than four. Each becomes a `stream_events` row and the Blob reacts.
+
+**"Follows" are Twitch.** YouTube has subscribers and offers no real-time
+new-subscriber event to anyone — Streamlabs and StreamElements fake sub alerts by
+polling a delayed list. Paid **memberships** fire properly and arrive as
+`newSponsorEvent`. Plain subs are not on the menu, from any vendor.
+
+**Quota is the entire design.** Free tier is 10,000 units/day;
+`liveChatMessages.list` costs 5. Polling every 5s costs 86,400/day — **8.6× over**.
+So it idles at 300s (~1,440 units/day) and only sprints to 5s while someone is
+actually talking, staying hot for 120s after the last message because
+conversations have gaps. That buys ~2.2h of live chat a day at ~5s latency, and
+an AFK stream is empty almost all of the time. `search.list` costs 100 units — 2%
+of the day's budget per call — so it is only ever used to *find* a broadcast we do
+not have. Pin `YOUTUBE_VIDEO_ID` and discovery stays at 1 unit.
+
+Two things that are easy to get wrong and were:
+
+- **The first poll returns the backlog, not what's new.** Uncorrected, every
+  restart — and the watchdog does restart things — replays a pile of old messages
+  and the Blob reacts to a conversation that ended an hour ago. `chat.py` takes
+  the page token from the first batch and drops the messages.
+- **The payload contract is `p.from` / `p.amount`, not what YouTube calls them.**
+  The page reads `p.from` (not `author`) and does `Number(p.amount)` (so
+  YouTube's ready-made `"$5.00"` yields NaN and the amount silently vanishes).
+  Both were found by emitting an event and photographing the render: the name
+  came out as the literal fallback `SOMEONE`.
+
+The host writes the bus with the **publishable** key — verified, RLS permits it —
+so the streaming box still never needs the database password.
+
+Events land as `status='queued'` with a `release_at`, which is what makes this
+work unattended: the page airs anything whose `release_at` has passed, so no HQ
+browser needs to be open for a super chat to reach the Blob at 3am. With HQ's
+`auto_release` off, `release_at` stays NULL and the row waits for a human —
+exactly what that toggle promises.
 
 ## Verify
 
