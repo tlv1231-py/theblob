@@ -22,7 +22,7 @@ from pathlib import Path
 
 CELL = 48
 LX, LY, LZ = -0.55, -0.68, 0.48
-ROWS = ['IDLE', 'HAPPY', 'SCARED', 'ALERT', 'SLEEP', 'SMUG', 'BRACE']
+ROWS = ['IDLE', 'HAPPY', 'SCARED', 'ALERT', 'SLEEP', 'SMUG', 'BRACE', 'EXASPERATED']
 OUT_DIR = Path(__file__).resolve().parents[1] / 'dashboard'
 
 P = {'OUT': (0x2A, 0x00, 0x3D), 'LO': (0x8A, 0x00, 0x6C), 'MID': (0xFF, 0x00, 0xCC),
@@ -105,6 +105,9 @@ E = {
     'SMUG':   dict(rx=7, ry=7, lidT=0.52, curve=-0.06, pupR=2.8, div=0.0, gaze=2.6, pupDy=1, glint='key'),
     # BRACE — clamped squint, intense pupils. Focus, not fear.
     'BRACE':  dict(rx=8, ry=6, lidT=0.30, lidB=0.30, curve=0.0, pupR=2.6, div=0.0, pupDy=0, glint='key'),
+    # EXASPERATED — a loss just landed. Heavy lids, pupils rolled UP against the
+    # lid with a crescent of white below: the classic "ugh, again" eye-roll.
+    'EXASPERATED': dict(rx=7, ry=8, lidT=0.40, curve=0.0, pupR=2.3, div=2.4, pupDy=-2, glint='none'),
 }
 
 
@@ -184,6 +187,10 @@ def draw_mouth(st, mood):
     elif mood == 'SCARED':                     # small worried gap
         for x in range(cx - 2, cx + 3):
             st.set(x, 37, E_)
+    elif mood == 'EXASPERATED':                # flat, corners dipped — unimpressed
+        for x in range(cx - 3, cx + 4):
+            st.set(x, 36, E_)
+        st.set(cx - 4, 37, E_); st.set(cx + 4, 37, E_)
     elif mood == 'SLEEP':                      # tiny
         for x in range(cx - 1, cx + 2):
             st.set(x, 36, E_)
@@ -217,8 +224,8 @@ def eyes_cell(mood, lid):
 
 
 def build():
-    body_sh = np.zeros((CELL * 7, CELL * 4, 4), np.uint8)
-    eyes_sh = np.zeros((CELL * 7, CELL * 3, 4), np.uint8)
+    body_sh = np.zeros((CELL * len(ROWS), CELL * 4, 4), np.uint8)
+    eyes_sh = np.zeros((CELL * len(ROWS), CELL * 3, 4), np.uint8)
     for r, m in enumerate(ROWS):
         for c in range(4):
             body_sh[r * CELL:(r + 1) * CELL, c * CELL:(c + 1) * CELL] = body_cell(m, c)
@@ -232,8 +239,8 @@ def build():
 
 
 def contact(path):
-    Z = 9
-    out = np.zeros((CELL, CELL * 7, 4), np.uint8)
+    Z = 8
+    out = np.zeros((CELL, CELL * len(ROWS), 4), np.uint8)
     for i, m in enumerate(ROWS):
         b = body_cell(m, 0).copy()
         e = eyes_cell(m, 0)

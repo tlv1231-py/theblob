@@ -201,7 +201,7 @@
     // anticipation beat would be overwritten with IDLE mid-crouch — the wind-up
     // would visibly abort before the impact it exists to set up.
     var m = blob.getMood();
-    if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED' || m === 'BRACE') return;
+    if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED' || m === 'BRACE' || m === 'EXASPERATED') return;
 
     // He sleeps when THE SYSTEM is idle, not when NYSE is shut. The crypto
     // strategy trades ~9x/min around the clock; gating on market hours had him
@@ -209,13 +209,13 @@
     // point. Equity hours are shown in the status strip, not in his eyelids.
     if (!isSystemLive()) { blob.setMood('SLEEP'); return; }
 
-    // Drawdown against the real configured limit, not a magic number.
-    // SCARED is reserved for genuine risk: the crypto book closes nearly every
-    // position at a small timeout loss, so reacting to any loss would leave him
-    // permanently terrified and the state would stop meaning anything.
-    var ddLimit = S.limits.daily_dd * 100;
-    if (state.dayPnlPct <= -ddLimit * 0.75) { blob.setMood('SCARED'); return; }
-    if (state.dayPnlPct >= 1.0)             { blob.setMood('SMUG');   return; }
+    // AMBIENT SCARED REMOVED. This used to flip him to SCARED whenever the day
+    // P&L crossed -75% of the drawdown limit — but that reads off the NAV series,
+    // a known-buggy source (see CLAUDE.md), so it had him near-permanently scared
+    // instead of his confident default. SCARED is now ONLY the transient reaction
+    // to a real risk_breach EVENT (the REACTIONS map). His resting face is
+    // confident (IDLE), or SMUG on a genuinely green day.
+    if (state.dayPnlPct >= 1.0) { blob.setMood('SMUG'); return; }
     blob.setMood('IDLE');
   }
 
@@ -3350,9 +3350,9 @@
     // window — not an arbitrary constant. A win gets a little longer because it
     // is rare and worth holding; anything shorter than POST_TICKS would have
     // him snap back to idle while the beat was still running.
-    if (verdict === 'win')        blob.setMood('HAPPY', POST_TICKS + 6);
-    else if (verdict === 'enter') blob.setMood('ALERT', POST_TICKS);
-    else                          blob.setMood('ALERT', POST_TICKS - 2);
+    if (verdict === 'win')        blob.setMood('HAPPY', POST_TICKS + 6);        // stoked
+    else if (verdict === 'enter') blob.setMood('ALERT', POST_TICKS);            // a fill landed
+    else                          blob.setMood('EXASPERATED', POST_TICKS + 4);  // a loss — ugh
     glanceAt(t.sym);
     showMood();
 
