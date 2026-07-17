@@ -120,19 +120,11 @@
     return state.lastEventMs > 0 && (Date.now() - state.lastEventMs) < 90000;
   }
 
-  // Show what he just reacted to. Without this a mood change is ambiguous —
-  // the viewer sees him twitch and cannot tell why, which reads as random
-  // rather than responsive.
-  function flashTrade(dir, sym, pnl) {
-    var el = $('trade-flash');
-    if (!el) return;
-    var win = pnl != null && pnl > 0;
-    el.textContent = (dir === 'ENTER' ? '▲ ENTER ' : '✗ EXIT ') + sym +
-                     (pnl != null ? '  ' + (win ? '+' : '−') + '$' + Math.abs(pnl).toFixed(2) : '');
-    el.className = 'trade-flash show ' + (dir === 'ENTER' ? 'enter' : (win ? 'win' : 'loss'));
-    clearTimeout(el._t);
-    el._t = setTimeout(function() { el.className = 'trade-flash'; }, 2600);
-  }
+  // flashTrade is GONE. It named what he reacted to back when the board was a
+  // dense footnote and a mood change was otherwise unattributable. The board
+  // answers that itself now — the slot pops, and a sell prints its own P&L
+  // where the ticker was — so the callout was repeating the tile's line while
+  // covering his face to do it.
 
   // ── State ────────────────────────────────────────────────────────────────
   var state = {
@@ -479,6 +471,15 @@
     // and the result would silently vanish.
     if (Object.keys(ghostT).length) return;
 
+    // FIRST — where every existing slot currently sits, before the DOM moves.
+    // This is the F of a FLIP: the reorder itself is instant, and the animation
+    // is played backwards from the old position afterwards.
+    var first = {};
+    list.querySelectorAll('.tile').forEach(function(el) {
+      var r = el.getBoundingClientRect();
+      first[el.getAttribute('data-sym')] = { x: r.left, y: r.top };
+    });
+
     // REORDER BY MOVING, NOT REBUILDING. appendChild on an element already in
     // the list relocates it; it does not recreate it. The wipe-and-rebuild this
     // replaces destroyed and re-added all 14 slots just to move a few — every
@@ -488,16 +489,96 @@
     list.querySelectorAll('.tile').forEach(function(el) {
       have[el.getAttribute('data-sym')] = el;
     });
+    var ordered = [];
     ps.forEach(function(p) {
       var el = have[p.sym];
       if (el) { el.style.setProperty('--tc', tintOf(p)); delete have[p.sym]; }
       else    { el = makeTile(p.sym, tintOf(p)); }
       list.appendChild(el);          // moves if present, inserts if new
+      ordered.push(el);
     });
     // Whatever is left never made it into the book — drop it.
     Object.keys(have).forEach(function(sym) { have[sym].remove(); });
 
     _lastRoster = ps.map(function(p) { return p.sym; }).join(',');
+
+    // LAST + INVERT + PLAY — only for slots that actually moved.
+    if (_booted) flipReorder(ordered, first);
+  }
+
+  // ── The shuffle ──────────────────────────────────────────────────────────
+  // The reorder used to be instant: tiles teleported to their new slots and the
+  // most interesting thing the board does — the whole book rearranging itself —
+  // happened between two frames where nobody could see it.
+  //
+  // Now it is a FLIP: the DOM has already moved, so each tile is transformed
+  // BACK to where it was and walked home. Quantized to a 4px grid over 9 discrete
+  // frames — no interpolation, because a sprite cuts rather than tweens — and
+  // staggered so the board resolves as a wave instead of a single lurch.
+  //
+  // It OWNS THE STAGE while it runs: tradeNext refuses to start a beat until
+  // reordering is false, so a trade can never land mid-shuffle. It gets to
+  // finish. That is the whole reason it can afford to take this long.
+  var reordering = false;
+  var FLIP_STEP = 55;        // ms per frame
+  var FLIP_STAGGER = 55;     // ms between tiles starting — the wave
+  var FLIP_PATH = [1.00, 0.82, 0.60, 0.38, 0.20, 0.08, 0.00, -0.04, 0.00];
+
+  function flipReorder(ordered, first) {
+    var moving = [];
+    ordered.forEach(function(el) {
+      var f = first[el.getAttribute('data-sym')];
+      if (!f) return;                                  // brand new — flyIn owns it
+      var r = el.getBoundingClientRect();
+      var dx = f.x - r.left, dy = f.y - r.top;
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return; // didn't actually move
+      moving.push({ el: el, dx: dx, dy: dy });
+    });
+    if (!moving.length) return;
+
+    reordering = true;
+    var done = 0;
+    moving.forEach(function(m, i) {
+      var sp = m.el.querySelector('.t-sym');
+      if (!sp) { done++; return; }
+      // Park it at its OLD position immediately, before any frame paints, or
+      // the tile visibly teleports first and then animates back.
+      sp.style.transform = 'translate(' + Math.round(m.dx) + 'px,' + Math.round(m.dy) + 'px)';
+
+      setTimeout(function() {
+        var k = 0;
+        clearInterval(sp._flip);
+        sp._flip = setInterval(function() {
+          if (k >= FLIP_PATH.length) {
+            clearInterval(sp._flip); sp._flip = null;
+            sp.style.transform = ''; sp.style.color = ''; sp.style.textShadow = '';
+            if (++done >= moving.length) reordering = false;
+            return;
+          }
+          var f = FLIP_PATH[k++];
+          // Quantize to the 4px grid the rest of the art lives on. The -0.04
+          // frame is a deliberate overshoot past the target before settling.
+          var x = Math.round(m.dx * f / 4) * 4, y = Math.round(m.dy * f / 4) * 4;
+          sp.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+          // Hot on the way, cooling as it lands — the trail is the flash.
+          if (k <= 3) {
+            sp.style.color = '#ffffff';
+            sp.style.textShadow = '0 0 24px var(--tc), 0 0 10px #fff, 3px 3px 0 rgba(0,0,0,0.9)';
+          } else if (k <= 6) {
+            sp.style.color = '';
+            sp.style.textShadow = '0 0 14px var(--tc), 3px 3px 0 #111, 5px 5px 0 rgba(0,0,0,0.8)';
+          } else {
+            sp.style.color = ''; sp.style.textShadow = '';
+          }
+        }, FLIP_STEP);
+      }, i * FLIP_STAGGER);
+    });
+
+    // Belt and braces: if a tile is removed mid-shuffle its interval never
+    // reaches the end and `done` never completes, which would leave the trade
+    // queue blocked forever. Release the lock on a hard deadline regardless.
+    var worst = moving.length * FLIP_STAGGER + FLIP_PATH.length * FLIP_STEP + 400;
+    setTimeout(function() { reordering = false; }, worst);
   }
 
   // ── Reordering waits ─────────────────────────────────────────────────────
@@ -519,9 +600,10 @@
     clearTimeout(_settleT);
     _settleT = setTimeout(function() {
       _settleT = null;
-      // Never settle over a leavebehind — it would delete the number
-      // mid-sentence. Re-arm and wait for it to finish.
-      if (Object.keys(ghostT).length) { scheduleSettle(); return; }
+      // Never settle over a leavebehind (it would delete the number
+      // mid-sentence) and never mid-beat (the shuffle would yank the slot out
+      // from under an animation that is still playing on it). Re-arm and wait.
+      if (Object.keys(ghostT).length || tradeBusy) { scheduleSettle(); return; }
       refreshCrypto();      // re-reads the DB, then rebuilds in canonical order
     }, SETTLE_DELAY);
   }
@@ -805,12 +887,10 @@
     // loudest thing that happens on this stream.
     bg.pulse(cfg.c === '#00ff9d' ? 'money' : (sfx === 'loss' ? 'loss' : 'enter'), 0.30);
 
-    // Trades speak through the flash under his chin; stream events get the
-    // announcer over his head. Keeping the two channels separate is what lets
-    // a viewer tell "the bot did something" from "a person did something".
+    // A simulated trade speaks through the BOARD; a viewer event gets the
+    // announcer. Keeping the two channels separate is what lets a viewer tell
+    // "the bot did something" from "a person did something".
     if (ev.event_type === 'trade_enter' || ev.event_type === 'trade_exit') {
-      flashTrade(ev.event_type === 'trade_enter' ? 'ENTER' : 'EXIT',
-                 p.symbol || '', p.pnl != null ? Number(p.pnl) : null);
       if (p.symbol) hitTile(p.symbol);
     } else {
       annPush(ev.event_type, p);
@@ -1170,6 +1250,10 @@
 
   function tradeNext() {
     if (!tradeQ.length) { tradeBusy = false; return; }
+    // The shuffle gets to finish. Stay busy and re-check rather than clearing
+    // the flag — dropping it here would let a second caller start a beat on top
+    // of the one that is waiting.
+    if (reordering) { setTimeout(tradeNext, 120); return; }
     tradeBusy = true;
     var t = tradeQ.shift();
 
@@ -1213,7 +1297,6 @@
     else if (verdict === 'enter') blob.setMood('ALERT', POST_TICKS);
     else                          blob.setMood('ALERT', POST_TICKS - 2);
     glanceAt(t.sym);
-    flashTrade(t.dir, t.sym, t.pnl);
     $('blob-mood').textContent = blob.getMood();
 
     // Sound follows the verdict: acquisitions are neutral because buying is

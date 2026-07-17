@@ -121,16 +121,17 @@ html, body {
 }
 
 /* ── The safe box ─────────────────────────────────────────────────────── */
-/* padding-top clears the board, which now overhangs this box from above and
-   ends at y660 — 280px past the safe ceiling at y380. box-sizing is border-box,
-   so the padding eats into the 1160 rather than adding to it: content runs
-   y660 -> y1540, which is exactly Blob(720) + score(160). Change the board's
-   height and this must change with it. */
+/* padding-top clears the board, which overhangs this box from above and ends at
+   y620 — 240px past the safe ceiling at y380. box-sizing is border-box, so the
+   padding eats into the 1160 rather than adding to it: content runs y620 ->
+   y1540 = 920 = title(80) + Blob(672) + score(168).
+   CHANGE THE BOARD'S HEIGHT AND THIS MUST CHANGE WITH IT — they are the same
+   number written twice, and nothing catches the drift but a measurement. */
 #safe {
   position: absolute;
   left: var(--safe-x); top: var(--safe-y);
   width: var(--safe-w); height: var(--safe-h);
-  padding-top: 280px;
+  padding-top: 240px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -356,9 +357,9 @@ html, body {
                      0 0 22px -6px var(--ev-c); }
 }
 
-/* ── Blob · 720 — THE STREAMER ────────────────────────────────────────── */
+/* ── Blob · 672 — THE STREAMER ────────────────────────────────────────── */
 #s-blob {
-  height: 720px; flex: none;
+  height: 672px; flex: none;
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
@@ -373,7 +374,7 @@ html, body {
 }
 #blobCanvas {
   position: relative;
-  width: 720px; height: 720px;   /* 48 x 15 — integer scale, no resample.
+  width: 672px; height: 672px;   /* 48 x 14 — integer scale, no resample.
                                     Any resize MUST stay on a 48px multiple or
                                     his pixels get resampled and the whole
                                     8-bit read collapses. */
@@ -388,34 +389,43 @@ html, body {
   color: var(--text-dim);
 }
 
-/* Names the trade he just reacted to. Steps rather than eases — a smooth
-   fade reads as a web toast; this should read as a cabinet callout. */
-.trade-flash {
-  position: absolute; top: 6px; left: 50%;
-  transform: translateX(-50%);
-  font-family: 'Press Start 2P', Consolas, monospace;
-  font-size: 10px; letter-spacing: 0.08em;
-  white-space: nowrap;
-  padding: 6px 11px;
-  border: 1px solid currentColor;
-  background: rgba(6,0,8,0.9);
-  opacity: 0;
-  transition: opacity 0.25s steps(3, end);
-  pointer-events: none;
-  z-index: 5;
+/* The trade-flash callout is DELETED. It existed to name what he reacted to
+   back when the board was a dense footnote and a mood change was otherwise
+   unattributable. The board now answers that itself: the slot pops, and a sell
+   prints its own P&L where the ticker was. A card in the middle of the stage
+   repeating what the tile already said was covering his face to do it. */
+
+/* ── THE BLOB <x> · 80 ────────────────────────────────────────────────── */
+/* Reserved space. x is a status feed, wired later — the point of building it
+   now is that the layout stops moving before the content arrives. */
+#s-title {
+  height: 80px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px;
 }
-.trade-flash.show  { opacity: 1; animation: flash-pop 0.18s steps(2, end); }
-.trade-flash.enter { color: var(--accent2); box-shadow: 0 0 20px -4px var(--accent2); }
-.trade-flash.win   { color: var(--ok);      box-shadow: 0 0 20px -4px var(--ok); }
-.trade-flash.loss  { color: var(--danger);  box-shadow: 0 0 20px -4px var(--danger); }
-@keyframes flash-pop {
-  from { transform: translateX(-50%) scale(0.82); }
-  to   { transform: translateX(-50%) scale(1); }
+.ttl-name {
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 20px; line-height: 1;
+  color: #ffffff;
+  -webkit-text-stroke: 1px rgba(0,0,0,0.5);
+  text-shadow:
+    2px 2px 0 #222,
+    3px 3px 0 #111,
+    4px 4px 0 rgba(0,0,0,0.8);
+}
+/* x is the variable half, so it is tinted rather than white — the name is the
+   constant and reads as the label; the status reads as the value. */
+.ttl-x {
+  font-family: 'Press Start 2P', Consolas, monospace;
+  font-size: 20px; line-height: 1;
+  color: var(--accent);
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.9), 0 0 18px rgba(255,0,204,0.65);
+  white-space: nowrap;
 }
 
-/* ── SCORE · 160 — his feet to the floor ─────────────────────────────── */
+/* ── SCORE · 168 — his feet to the floor ─────────────────────────────── */
 #s-nav {
-  height: 160px; flex: none;
+  height: 168px; flex: none;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px;
 }
@@ -496,7 +506,7 @@ html, body {
   top: 120px;
   left: var(--safe-x);          /* same 90 -> 960 column as the safe box */
   right: 120px;
-  height: 540px;
+  height: 500px;                /* y120 -> y620; #safe pads 240 to clear it */
   z-index: 11;                  /* above #safe, whose content it overhangs */
   display: flex; flex-direction: column;
 }
