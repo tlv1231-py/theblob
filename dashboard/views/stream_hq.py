@@ -389,12 +389,24 @@ def _put_powerups(rows: list[dict]) -> None:
     ]), "Active donation power-ups")
 
 
+# The stream only orbits this many. Mirrors PU_MAX in stream.js — they are one
+# decision, and if they disagree this table lies about what is on air.
+_PU_ON_AIR = 5
+
+
+def _pu_since(r: dict) -> datetime:
+    """When it arrived. Derived, not stored: until = arrival + amount minutes,
+    so this inverts it exactly and works on every row already in the store."""
+    return r["until"] - timedelta(minutes=max(1.0, float(r["amount"] or 0)))
+
+
 @st.fragment(run_every="5s")
 def _render_powerups() -> None:
     st.caption(
-        "Names orbiting the Blob. **Autofilled** when a paid event airs; edit or revoke "
-        "here. Duration is **$1 = 1 minute** and size scales with the amount, so the ring "
-        "shows who paid and roughly how much without anyone reading a number."
+        f"Names orbiting the Blob. **Autofilled** when a paid event airs; edit or revoke "
+        f"here. Duration is **$1 = 1 minute** and size scales with the amount, so the ring "
+        f"shows who paid and roughly how much without anyone reading a number. "
+        f"The stream orbits the **{_PU_ON_AIR} most recent** — the rest wait."
     )
 
     now = datetime.now(timezone.utc)
@@ -408,21 +420,35 @@ def _render_powerups() -> None:
     if not live:
         st.info("No power-ups in orbit." + (f"  ({lapsed} lapsed)" if lapsed else ""))
     else:
-        src = sorted(live, key=lambda x: x["until"], reverse=True)
+        # NEWEST FIRST, by arrival — the same key the stream sorts on, so this
+        # table shows what is actually on air rather than a different opinion.
+        # It used to sort by `until`, which is arrival + amount and therefore
+        # ranks an hour-old $50 above a fresh $10; new donations sank to the
+        # bottom and never reached the ring.
+        src = sorted(live, key=_pu_since, reverse=True)
         # An explicit KILL column. Revoking used to mean zeroing the minutes or
         # blanking the name — a side effect of editing, which is not something
         # anyone should have to discover when a troll's handle is on the stream
         # and they want it gone NOW.
+        # Say which rows are ACTUALLY on the stream. Without this the table shows
+        # eighteen names and the ring shows five, and the only way to find out
+        # why yours is missing is to ask someone.
         df = pd.DataFrame([{
+            "on air": i < _PU_ON_AIR,
             "kill": False,
             "name": r["name"],
             "$": r["amount"],
             "min left": max(0, round((r["until"] - now).total_seconds() / 60, 1)),
-        } for r in src])
+        } for i, r in enumerate(src)])
         edited = st.data_editor(
             df, use_container_width=True, hide_index=True, key="pu_edit",
             num_rows="fixed",
+            disabled=["on air"],
             column_config={
+                "on air": st.column_config.CheckboxColumn(
+                    "◉", help=f"On the stream right now. Only the {_PU_ON_AIR} newest orbit; "
+                              "the rest are waiting for one to lapse or be removed.",
+                    width="small"),
                 "kill": st.column_config.CheckboxColumn(
                     "✕", help="Tick and APPLY to remove them from orbit.", width="small"),
                 "name": st.column_config.TextColumn("Name", max_chars=16),
@@ -432,6 +458,11 @@ def _render_powerups() -> None:
                                                                "from now."),
             },
         )
+        if len(src) > _PU_ON_AIR:
+            st.caption(
+                f"⚠︎ **{len(src) - _PU_ON_AIR} waiting** — only the {_PU_ON_AIR} most recent "
+                "are in orbit. Remove some to let the rest on."
+            )
 
         marked = [src[i]["name"] for i in range(len(src)) if bool(edited.iloc[i]["kill"])]
         c1, c2 = st.columns([3, 2])

@@ -2259,13 +2259,30 @@
     return _hashCol(String(name || '').toUpperCase());
   }
 
+  // When a power-up ARRIVED, derived rather than stored: puUntil() sets
+  // until = arrival + amount minutes, so this inverts it exactly. No new field,
+  // no migration, and it is correct for every row already in the store.
+  function puSince(d) {
+    return new Date(d.until).getTime() - Math.max(1, Number(d.amount) || 0) * 60000;
+  }
+
   function puRender(full) {
     var host = $('s-orbit');
     if (!host) return;
-    // Newest first, capped. Bounding the LIST is what lets the container stop
-    // clipping — see PU_MAX.
+    // NEWEST FIRST — by arrival, not by expiry.
+    //
+    // Sorting on `until` looked like "newest first" and is not: until is
+    // arrival + amount, so it conflates recency with SIZE. A fresh $10 buys 10
+    // minutes and loses to an hour-old $50 that still has 39 left — so with five
+    // big ones alive, a new small donation could never reach the top and simply
+    // never appeared. Someone paid and got nothing, which is the worst bug this
+    // page can have.
+    //
+    // Arrival is the honest key: the newest dono is always on top, whatever it
+    // was worth, and the ones that drop off the bottom are the OLDEST rather
+    // than the cheapest.
     var list = full.slice().sort(function(a, b) {
-      return new Date(b.until).getTime() - new Date(a.until).getTime();
+      return puSince(b) - puSince(a);
     }).slice(0, PU_MAX);
 
     var seen = {};
