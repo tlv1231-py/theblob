@@ -134,6 +134,16 @@ Prerequisites before building:
   always false → clean glowing disc. Restore the vaporwave banding with MIN 1 /
   MAX 4. The global `#scanlines` CRT overlay still crosses the sun, far fainter.
 
+- **Blob mood wiring — confident default, expressive verdict (2026-07-17):**
+  `syncBlobMood` no longer drives SCARED off day-P&L (it read the buggy NAV
+  series and left him near-permanently scared); SCARED is now only the transient
+  reaction to a real `risk_breach` event. Post-trade verdict: win → HAPPY
+  (stoked), **loss → EXASPERATED** (new row-7 mood), enter → ALERT; BRACE is
+  still the pre-trade wind-up. Also fixed a latent runtime bug: SMUG forced the
+  half-lid column on top of its already-heavy-lidded art, rendering it nearly
+  shut — `baseLid` is now `SLEEP ? 2 : 0` since each mood's resting lid is baked
+  into its col-0 eye.
+
 ---
 
 ## What Has Been Built (V0)
@@ -197,13 +207,15 @@ Prerequisites before building:
   **Read `dashboard/BLOB.md` before touching `dashboard/blob.js`.** It is the
   design contract: the 10fps tick, the locked palette and the always-pink rule
   are deliberate and look like bugs if you don't know why.
-  Status (2026-07-17): **now sprite-driven** — the goofy-slime redesign, two
-  48×48 sheets (`blob_body.png` + `blob_eyes.png`) blitted by blob.js, inlined
-  as base64. Shading is cel + gloss now, **not Bayer dither** (see BLOB.md's
-  STATUS banner). Regenerate with `scripts/gen_blobby_ref.py`, re-embed with
-  `scripts/embed_blob_sheets.py`. **Wired to live state on the Stream page**
-  (stream.js drives setMood/setPnl); Home (`home_nav.js`) not yet. Streamlit is
-  deliberately not involved — see BLOB.md.
+  Status (2026-07-17): **sprite-driven, EYES-ONLY** — a small pink circle + one
+  line mouth + cartoonishly large over-the-top eyes, no arm/fangs/tongue/brows/
+  particles. Two 48×48 sheets (`blob_body.png` + `blob_eyes.png`) blitted by
+  blob.js, inlined as base64; cel + gloss, **not Bayer dither**. **8 moods** now
+  (`IDLE HAPPY SCARED ALERT SLEEP SMUG BRACE EXASPERATED`); **IDLE is the
+  confident default**, EXASPERATED is the loss reaction. Regenerate with
+  `scripts/gen_blobby_eyes.py`, re-embed with `scripts/embed_blob_sheets.py`.
+  **Wired to live state on the Stream page** (stream.js drives setMood/setPnl);
+  Home (`home_nav.js`) not yet. Streamlit is deliberately not involved — see BLOB.md.
 
 - [ ] Feature queue — professional quant tooling (build in priority order):
   1. [ ] Correlation matrix — live heatmap of current position price correlations
