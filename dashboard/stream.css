@@ -291,11 +291,20 @@ html, body {
    idea of what "important number/name" looks like. Per-character reveal below. */
 .ev-name {
   font-family: 'Press Start 2P', Consolas, monospace;
+  /* font-size is a FALLBACK — fitNoWrap() sets it inline per handle so a long
+     one shrinks instead of clipping. */
   font-size: 30px; line-height: 1.1;
   letter-spacing: 0.02em;
   color: #ffffff;
   -webkit-text-stroke: 1px rgba(0,0,0,0.6);
   white-space: nowrap; overflow: hidden;
+  /* Take the row's remaining width rather than sizing to the text. As a plain
+     flex item its width WAS its content width, which made "does the text
+     overflow?" circular — scrollWidth and clientWidth moved together and the
+     fit could never detect a clip. min-width:0 defeats the automatic minimum
+     size, or a flex item refuses to shrink below its longest word. */
+  flex: 1 1 auto;
+  min-width: 0;
   text-shadow:
     2px 2px 0 #111,
     4px 4px 0 rgba(0,0,0,0.85),
@@ -303,15 +312,26 @@ html, body {
     0 0 26px var(--ev-c);
 }
 /* Each glyph lands on its own frame — the name assembles rather than appears.
-   steps(2) so it snaps in; a smooth scale would read as a CSS transition. */
+   The assembly is JS (one <i> appended per tick); this only adds the pop.
+
+   VISIBILITY MUST NOT DEPEND ON THE ANIMATION. It used to: `both` fill-mode plus
+   an `opacity: 0` from-keyframe meant that if the animation clock does not
+   advance, every glyph pins to `from` and the handle renders INVISIBLE. Measured
+   in the component iframe: playState "running" with currentTime still 0 after
+   965ms — the documented inert clock. It happens to resolve in a normal
+   foreground tab, which is why this has never been seen, but the whole point of
+   this page is an unattended headless capture.
+   So: no opacity in the keyframes, no fill-mode. Clock dead -> the name is
+   simply there, no pop. Clock alive -> it pops. Nothing load-bearing is left on
+   a clock this page cannot trust. */
 .ev-name i {
   display: inline-block;
   font-style: normal;
-  animation: name-pop 0.16s steps(2, end) both;
+  animation: name-pop 0.16s steps(2, end);
 }
 @keyframes name-pop {
-  from { transform: translateY(-9px) scale(1.5); opacity: 0; }
-  to   { transform: none; opacity: 1; }
+  from { transform: translateY(-9px) scale(1.5); }
+  to   { transform: none; }
 }
 
 .ev-act {
@@ -331,25 +351,42 @@ html, body {
    What changes: no name stamp (a character's own dialogue box does not caption
    itself), and pink — he is the only pink thing on this stage, so the skin
    alone says it is him before a word is typed. */
-.ev-lcd.speaking .ev-nameline { display: none; }
 .ev-lcd.speaking .ev-msg      { display: none; }
+/* No icon — the ♥/★ marks WHAT a viewer did, and he is not doing a thing to
+   himself. Hidden rather than blanked so the nameline's 14px gap collapses and
+   "blob" sits flush with the box edge, exactly where a handle starts. */
+.ev-lcd.speaking .ev-bigicon  { display: none; }
 
-/* Centred, because autoscale cannot always fill the height. Wrapping is
-   discontinuous: "that one hurt." is one line at 105px and two (overflowing) at
-   106, so it is WIDTH-bound and leaves ~66px spare below. Top-aligned that reads
-   as the text having fallen to the ceiling; centred it reads as placed.
+/* HIS header. Same slot and same stacked-shadow shape a viewer's handle uses —
+   so the box reads identically whoever is talking — but in his pink and
+   lowercase, matching the nameplate up top. The magenta-into-black extrude is
+   the nameplate's, not the announcer's black one: a pure black extrude under
+   pink reads as dirty. */
+.ev-lcd.speaking .ev-name {
+  color: #ff00cc;
+  text-transform: lowercase;
+  text-shadow:
+    2px 2px 0 #6b0057,
+    4px 4px 0 #3a0030,
+    6px 6px 0 rgba(0,0,0,0.7),
+    0 0 26px rgba(255,0,204,0.55);
+}
+
+/* Plain block flow: header on top, line beneath — a dialogue box, and the same
+   vertical order as a popup. Deliberately NOT flex-centred: an earlier version
+   centred the line to soak up the slack that wrapping leaves, but a flex
+   container with centred content overflows in BOTH directions and scrollHeight
+   stops reporting it, which would quietly break the fit measurement. With a
+   header above it there is no slack worth the risk.
    padding-bottom reserves the blinking ▼ — it is absolute and pushes nothing, so
    without this a full-height line runs under it. fitSpeak() READS this padding
-   rather than carrying its own constant, so the reserve has one source of truth:
-   change it here and the fit follows.
-   Specificity beats `.ev-lcd.open .ev-body { display: block }` on class count,
-   not on source order — this must win regardless of where it sits in the file. */
+   instead of carrying its own constant, so the reserve has one source of truth.
+   Specificity beats `.ev-lcd.open .ev-body` on class count, not source order. */
 .ev-lcd.open.speaking .ev-body {
-  display: flex;
-  align-items: center;
   height: 100%;
   padding-bottom: 22px;
 }
+.ev-lcd.speaking .ev-nameline { margin-bottom: 6px; }
 .ev-lcd.speaking .ev-act {
   /* Dialogue, not a caption. It wraps, it starts at the box edge because
      nothing is stamped to its left, and it is sized to be read across a room

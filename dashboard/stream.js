@@ -921,6 +921,20 @@
     var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg');
     nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
 
+    // BOTH lines are sized to fit before a glyph is typed.
+    //
+    // The action line MUST be reset here even if it were never fitted: ev-act is
+    // shared with the speaks lane, and fitSpeak leaves an inline font-size on it.
+    // Without this, a blob_speak at 105px leaked straight into the next donation
+    // — "DEGENMIKE / just SUPER" rendered enormous and clipped mid-word, which is
+    // exactly what it looked like on air.
+    //
+    // Maxima, not fixed sizes: the handle is what someone paid for, so it takes
+    // what the box will give (up to 56) and only shrinks when it must. The action
+    // line is grammar around it and stays subordinate.
+    fitNoWrap(nEl, name, 14, 56, true);   // stamped — the name renders as glyphs
+    fitNoWrap(aEl, act, 11, 30);          // plain text
+
     clearInterval(annTypeT); clearTimeout(annHoldT);
 
     // ── Stage 1: the NAME assembles, one glyph per frame, each with a blip.
@@ -1015,6 +1029,47 @@
   // the floor at which VT323 stops being readable on a phone-sized Shorts view.
   var SPEAK_MIN = 16, SPEAK_MAX = 160;
 
+  // Fit a single NOWRAP line to its own width. The popup's handle and action
+  // line are both nowrap + overflow:hidden, so an overlong one neither shrinks
+  // nor wraps — it silently CLIPS, and "DEGENMIKE just SUPERCHATTED $10 !!!"
+  // lost its back half to the box edge with no sign anything was missing.
+  //
+  // clientWidth is the laid-out content box (it already respects the 54px
+  // indent); scrollWidth is what the text actually needs. The gap between them
+  // IS the clipping.
+  // One <i> per glyph — the shape the announcer's name actually renders in.
+  function stampGlyphs(el, text) {
+    el.innerHTML = '';
+    for (var i = 0; i < text.length; i++) {
+      var c = document.createElement('i');
+      c.textContent = text[i] === ' ' ? ' ' : text[i];
+      el.appendChild(c);
+    }
+  }
+
+  // `stamped` measures with per-glyph <i> boxes instead of a plain string.
+  // MEASURE THE WAY YOU RENDER: each inline-block glyph rounds its advance up to
+  // its own box, so the stamped name is ~2.8% wider than the same string as text
+  // (measured: 528px vs 514px at 56px). Fitting against the plain string picked
+  // a size the real render then overflowed — a clip of exactly the last glyph or
+  // two, which looks like a rendering artefact rather than a sizing bug.
+  function fitNoWrap(el, text, minPx, maxPx, stamped) {
+    if (!el) return;
+    var put = stamped ? function() { stampGlyphs(el, text); }
+                      : function() { el.textContent = text; };
+    put();
+    var lo = minPx, hi = maxPx, best = minPx;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      el.style.fontSize = mid + 'px';
+      if (el.scrollWidth <= el.clientWidth) { best = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    el.style.fontSize = best + 'px';
+    el.innerHTML = '';
+    return best;
+  }
+
   function fitSpeak(aEl, text) {
     var lcd = $('ev-lcd'), body = $('ev-body');
     if (!lcd || !body) return;
@@ -1030,6 +1085,14 @@
     var availH = lcd.clientHeight
                - parseFloat(lcs.paddingTop) - parseFloat(lcs.paddingBottom)
                - parseFloat(bcs.paddingTop) - parseFloat(bcs.paddingBottom);
+
+    // The "blob" header sits above the line and takes real height. Measured
+    // rather than assumed — it is the same element a viewer's handle uses, and
+    // its size is set by CSS that may change without this code hearing about it.
+    var nl = document.querySelector('.ev-nameline');
+    if (nl && getComputedStyle(nl).display !== 'none') {
+      availH -= nl.offsetHeight + (parseFloat(getComputedStyle(nl).marginBottom) || 0);
+    }
 
     aEl.textContent = text;
     var lo = SPEAK_MIN, hi = SPEAK_MAX, best = SPEAK_MIN;
@@ -1070,14 +1133,17 @@
     lcd.style.setProperty('--ev-c', '#ff00cc');
     $('ev-more').className = 'ev-more';
 
-    // No name stamp and no icon — the box is his, so it needs no attribution.
+    // The header. Same slot and shape a viewer's handle uses, so the box reads
+    // the same way whoever is talking — but it is HIM, so it is his pink and it
+    // says only "blob". Plain textContent, not the announcer's per-glyph <i>
+    // stamp: the handle assembles because a name is the news, and his own
+    // nameplate is not news, it is just who is speaking.
     var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg');
     nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
+    nEl.style.fontSize = '';        // drop any size fitNoWrap left on a handle
+    nEl.textContent = 'blob';
     $('ev-bigicon').textContent = '';
 
-    // The sentence continues INTO the box: nameplate "blob" + x "says:" + the
-    // line itself. x carries the attribution so the box doesn't have to, which
-    // is why the speaks skin has no name stamp.
     statusLine('says:');
 
     // Size to the box now — after the classes are on (a display:none element
