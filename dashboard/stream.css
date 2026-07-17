@@ -722,6 +722,17 @@ html, body {
   will-change: transform;
 }
 
+/* One <i> per character so a wave can travel THROUGH the word (waveTick in
+   stream.js). The span keeps its own transform for the arcade hit, which scales
+   the whole ticker; these move within it. Two transform layers, no conflict.
+   No CSS animation here on purpose — the wave is setInterval-driven, because
+   this iframe's animation clock does not advance. */
+.t-sym i {
+  display: inline-block;
+  font-style: normal;
+  will-change: transform;
+}
+
 /* THE POINTER. The Gen-1 menu cursor, parked against the slot he is about to
    sell during the wind-up. Same character Pokemon points at MENU items with,
    doing the same job: this one, next.

@@ -424,6 +424,21 @@
     return pc > 0.001 ? '#00ff9d' : (pc < -0.001 ? '#ff3366' : '#8060a0');
   }
 
+  // ── Per-glyph tickers ────────────────────────────────────────────────────
+  // Every ticker is one <i> per character rather than a string, so a wave can
+  // travel THROUGH the word. Nothing else may set .t-sym's textContent directly
+  // — that would drop the glyphs and silently kill the wave on that tile only,
+  // which reads as one tile being mysteriously dead.
+  function setSym(sp, text) {
+    if (!sp) return;
+    sp.innerHTML = '';
+    for (var i = 0; i < text.length; i++) {
+      var c = document.createElement('i');
+      c.textContent = text[i];
+      sp.appendChild(c);
+    }
+  }
+
   function makeTile(sym, tint) {
     var el = document.createElement('div');
     el.className = 'tile';
@@ -431,9 +446,42 @@
     el.style.setProperty('--tc', tint || '#8060a0');
     var sp = document.createElement('span');
     sp.className = 't-sym';
-    sp.textContent = sym.replace('/USD', '');
+    setSym(sp, sym.replace('/USD', ''));
     el.appendChild(sp);
     return el;
+  }
+
+  // ── The wave ─────────────────────────────────────────────────────────────
+  // Each character rises ONE pixel in series, so a ripple runs left→right
+  // through every ticker on the board. One pixel is the whole trick: at 38px
+  // glyphs it is barely a shimmer standing still, but across 14 tiles it is the
+  // difference between a board and a screenshot of a board. Any more and it
+  // competes with the trade beat, which is the only thing here allowed to shout.
+  //
+  // ONE interval for the entire board, not one per tile. 14 tiles x ~4 glyphs is
+  // ~56 elements; 56 timers would each wake independently and the phases would
+  // drift apart into noise instead of a wave.
+  //
+  // 10fps and whole pixels — the Blob's clock and grid (BLOB.md). setInterval,
+  // because a CSS animation here is inert.
+  var WAVE_AMP = 1;          // "up a pixel"
+  var WAVE_SPREAD = 0.9;     // radians of phase per glyph — the wavelength
+  var WAVE_SPEED = 0.55;     // radians per tick
+  var _waveT = 0;
+
+  function waveTick() {
+    _waveT += WAVE_SPEED;
+    var syms = document.querySelectorAll('#pos-list .t-sym');
+    for (var s = 0; s < syms.length; s++) {
+      var gl = syms[s].children;
+      // Offset each tile by its index so the board ripples as one field rather
+      // than 14 words all bobbing in lockstep.
+      var base = _waveT - s * 0.35;
+      for (var g = 0; g < gl.length; g++) {
+        var y = -Math.round((Math.sin(base - g * WAVE_SPREAD) * 0.5 + 0.5) * WAVE_AMP);
+        gl[g].style.transform = y ? 'translateY(' + y + 'px)' : '';
+      }
+    }
   }
 
   // ── The board is EVENT-OWNED after boot ──────────────────────────────────
@@ -703,13 +751,53 @@
   // drains before the box closes, because closing and reopening the window
   // between two donations reads as a glitch rather than as two events.
   // ═══════════════════════════════════════════════════════════════════════
-  var stage = { owner: null };        // null | 'popup' | 'speaks' | 'trade'
+  var stage = { owner: null, since: 0 };   // null | 'popup' | 'speaks' | 'trade'
 
-  function stageTake(lane) { stage.owner = lane; }
+  function stageTake(lane) { stage.owner = lane; stage.since = Date.now(); }
 
   function stageDone() {
     stage.owner = null;
+    stage.since = 0;
     stagePump();
+  }
+
+  // ── The watchdog ─────────────────────────────────────────────────────────
+  // A lane holds the floor until it calls stageDone. If it never does — a timer
+  // chain broken by a thrown callback, a detached node, anything — the stage is
+  // held FOREVER and the broadcast freezes: no trades, no popups, no dialogue,
+  // just a still frame. Observed exactly that: the speaks lane wedged mid-word
+  // and 4s of watching showed zero mutations with 2 popups, 3 speaks and 8
+  // trades stacked behind it.
+  //
+  // This page runs unattended for days with nobody to reload it, so "a lane can
+  // deadlock the stream" is not an acceptable failure mode no matter how rare
+  // the trigger. The floor is therefore taken on a LEASE, not a lock.
+  //
+  // The bound is generous — a popup burst legitimately runs ~36s (6 events at
+  // ~6s each) — because this must never fire during normal operation. It is a
+  // last resort, not pacing, and it says so loudly when it trips.
+  var STAGE_MAX_MS = 45000;
+
+  function stageWatchdog() {
+    if (!stage.owner || !stage.since) return;
+    // A HIDDEN tab is throttled, not wedged. Chrome slows timers hard in a
+    // background tab, so a beat that normally takes 3s can straddle a minute and
+    // look exactly like a deadlock — it fooled this watchdog into reporting a
+    // 53s "wedge" that was nothing but a backgrounded window. The real capture
+    // renders to a virtual display and is never hidden, so skipping here costs
+    // the broadcast nothing and removes the only known false positive.
+    if (document.hidden) return;
+    var held = Date.now() - stage.since;
+    if (held < STAGE_MAX_MS) return;
+    console.warn('[stream] lane "' + stage.owner + '" held the stage ' +
+                 Math.round(held / 1000) + 's — forcing release. Queues: ' +
+                 JSON.stringify({ ann: annQ.length, speak: speakQ.length, trade: tradeQ.length }));
+    // Tear down whatever the wedged lane was mid-way through, or its corpse
+    // stays on screen over whatever plays next.
+    clearInterval(speakTypeT); clearTimeout(speakHoldT);
+    clearInterval(annTypeT);   clearTimeout(annHoldT);
+    annClose();
+    stageDone();
   }
 
   function stagePump() {
@@ -1156,20 +1244,35 @@
 
     // One glyph at a time with a blip — the Gameboy convention, and the reason
     // it reads as a voice rather than as a label that appeared.
-    var i = 0;
-    speakTypeT = setInterval(function() {
-      if (i < s.text.length) {
-        aEl.textContent += s.text[i];
-        // Blip on non-spaces only, or the gaps between words click.
-        if (s.text[i] !== ' ') SFX.blip();
-        i++;
-        return;
+    // `h` is a LOCAL handle. speakTypeT is shared, so a re-entrant speakNext
+    // reassigns it and this callback's clearInterval(speakTypeT) would then kill
+    // the NEW typewriter instead of itself — leaving two chains, one of them
+    // orphaned and running forever.
+    var i = 0, h;
+    h = setInterval(function() {
+      // The whole body is guarded. `i` only advances if the glyph lands, so ANY
+      // throw in here (audio, a detached node) freezes i and the line stops mid
+      // word with the lane still holding the floor — the exact deadlock observed.
+      // A voice is not worth wedging the broadcast: on failure, finish the line.
+      try {
+        if (i < s.text.length) {
+          aEl.textContent += s.text[i];
+          if (s.text[i] !== ' ') SFX.blip();   // blip on non-spaces, or word gaps click
+          i++;
+          return;
+        }
+      } catch (err) {
+        console.warn('[stream] speak typewriter failed at glyph ' + i + ':', err);
+        try { aEl.textContent = s.text; } catch (e2) {}
       }
-      clearInterval(speakTypeT);
-      $('ev-more').className = 'ev-more on';
+      clearInterval(h);
+      if (speakTypeT === h) speakTypeT = null;
+      var more = $('ev-more');
+      if (more) more.className = 'ev-more on';
       // Shorter hold during a burst so a queued line isn't left waiting.
       speakHoldT = setTimeout(speakNext, speakQ.length ? 900 : SPEAK_HOLD);
     }, SPEAK_STEP);
+    speakTypeT = h;
   }
 
   // Money reads as a win regardless of size; the Blob's amplitude carries the
@@ -1422,6 +1525,49 @@
 
   // Kept as the name the rest of the file calls.
   function hitTile(sym) { arcadeHit(sym); }
+
+  // ── The arcade entry ─────────────────────────────────────────────────────
+  // The ticker ASSEMBLES: each glyph drops in on its own beat, left to right,
+  // overshooting and settling. It is the ambient wave at full volume — same
+  // mechanic, ~20x the amplitude — so the entry reads as the board waking up
+  // rather than as an unrelated effect bolted on.
+  //
+  // Per-glyph and staggered is the whole point of "individually": a tile that
+  // pops as one block is a tile appearing, and a tile whose letters land one
+  // after another is a tile being PLACED.
+  var ENTER_FRAMES = [
+    { y: -22, s: 1.9 }, { y: -12, s: 1.5 }, { y: -5, s: 1.2 },
+    { y:   2, s: 0.9 }, { y:   1, s: 1.05 }, { y:  0, s: 1.0 }
+  ];
+  var ENTER_STEP = 45;       // ms per frame
+  var ENTER_STAGGER = 1;     // frames of delay per glyph — the left-to-right run
+
+  function enterSym(sp) {
+    if (!sp) return;
+    var gl = sp.children;
+    if (!gl.length) return;
+    clearInterval(sp._ent);
+    var f = 0;
+    var total = ENTER_FRAMES.length + gl.length * ENTER_STAGGER;
+    sp._ent = setInterval(function() {
+      if (f >= total) {
+        clearInterval(sp._ent); sp._ent = null;
+        // Hand every glyph back to the ambient wave, which owns transform from
+        // here. Clearing is required: a leftover inline transform would pin the
+        // glyph and the wave would look dead on exactly the tiles that traded.
+        for (var g = 0; g < gl.length; g++) gl[g].style.transform = '';
+        return;
+      }
+      for (var g2 = 0; g2 < gl.length; g2++) {
+        var k = f - g2 * ENTER_STAGGER;
+        if (k < 0) { gl[g2].style.opacity = '0'; continue; }
+        gl[g2].style.opacity = '1';
+        var fr = ENTER_FRAMES[Math.min(k, ENTER_FRAMES.length - 1)];
+        gl[g2].style.transform = 'translateY(' + fr.y + 'px) scale(' + fr.s + ')';
+      }
+      f++;
+    }, ENTER_STEP);
+  }
 
   // The terminal feed is DELETED — markup, CSS and renderer. It was texture in
   // the reserved bands; the background is the starfield now. pollEvents still
@@ -1846,8 +1992,11 @@
     }
     pEl.className = 'xs-pnl ' + cls;
 
+    var verb = isRoll ? 'rolled' : (t.dir === 'EXIT' ? 'sold' : 'bought');
+    _beat('x: "' + verb + ' ' + bare + ' for ' + tail + '"');
+
     // Staggered so the sentence assembles word by word rather than all at once.
-    decodeTo(vEl, isRoll ? 'rolled' : (t.dir === 'EXIT' ? 'sold' : 'bought'), 0);
+    decodeTo(vEl, verb, 0);
     decodeTo(sEl, bare, SEG_STAGGER);
     decodeTo(fEl, 'for', SEG_STAGGER * 2);
     decodeTo(pEl, tail, SEG_STAGGER * 3);
@@ -1902,6 +2051,16 @@
   // ═══════════════════════════════════════════════════════════════════════
   var pendExit = {};        // sym -> { t, timer } — an exit awaiting its re-entry
   var ROLL_WAIT = 5000;     // > one poll interval, so a straddled batch reunites
+  var _dbgIngest = [], _dbgPush = 0;   // see window._TND_DBG.q()
+
+  // Beat trace. The trade lane was observed taking the stage and never giving it
+  // back, with no thrown error to explain it — so every phase stamps itself and
+  // the gap in the trace names the step that died.
+  var _beatLog = [];
+  function _beat(what) {
+    _beatLog.push(Math.round(performance.now()) + ' ' + what);
+    if (_beatLog.length > 40) _beatLog.shift();
+  }
 
   function mkRoll(ex, en) {
     return { dir: 'ROLL', sym: ex.sym, pnl: ex.pnl,
@@ -1923,6 +2082,8 @@
   // Order matters: within a batch every exit precedes every entry, so pairing
   // forward is what distinguishes a roll from a genuine sell-then-rebuy.
   function tradeIngest(list) {
+    _dbgIngest.push(list.map(function(t) { return t.dir + ':' + t.sym; }).join(','));
+    if (_dbgIngest.length > 6) _dbgIngest.shift();
     var open = {}, out = [];
 
     list.forEach(function(t) {
@@ -1948,6 +2109,7 @@
   var tradeQ = [];
 
   function tradePush(t) {
+    _dbgPush++;
     tradeQ.push(t);
     // A long backlog is stale by the time it plays — better to drop the oldest
     // than to narrate a minute-old fill as if it just happened. 8, not 6:
@@ -1967,6 +2129,7 @@
     if (!tradeQ.length) return false;
     stageTake('trade');
     var t = tradeQ.shift();
+    _beat('take ' + t.dir + ' ' + t.sym);
 
     // ── PRE ────────────────────────────────────────────────────────────
     // He looks at the slot and braces. Nothing else moves yet: no sound, no
@@ -1980,9 +2143,21 @@
     if (t.dir === 'EXIT' || t.dir === 'ROLL') pointAt(t.sym);
     $('blob-mood').textContent = blob.getMood();
 
+    _beat('pre-scheduled +' + (PRE_MS + EVENT_MS));
     setTimeout(function() {
       // ── EVENT ────────────────────────────────────────────────────────
+      _beat('event-fired');
       applyTrade(t);
+      _beat('applyTrade-returned');
+
+      // ── ENTRY (rolls only) ───────────────────────────────────────────
+      // A round trip is two fills, so it gets two moments inside its one beat:
+      // the sell lands, its P&L is read, THEN he re-places the position. The
+      // beat grows to ~2.25s; a 16-leg batch is 8 of them = ~18s against a
+      // ~2min cadence, so there is room for the story.
+      var tail = t.dir === 'ROLL' ? ROLL_HOLD_MS : 0;
+      _beat('tail=' + tail);
+      if (tail) setTimeout(function() { _beat('entry-fired'); applyEntry(t); _beat('entry-returned'); }, tail);
 
       setTimeout(function() {
         // ── POST ───────────────────────────────────────────────────────
@@ -1992,8 +2167,9 @@
         //
         // Then the floor goes back to the ladder rather than straight to the
         // next trade: anything that queued during this beat gets its turn here.
-        setTimeout(stageDone, GAP_MS);
-      }, POST_MS);
+        _beat('post-done, releasing in ' + GAP_MS);
+        setTimeout(function() { _beat('stageDone'); stageDone(); }, GAP_MS);
+      }, tail + POST_MS);
     }, PRE_MS + EVENT_MS);
     return true;
   }
@@ -2046,7 +2222,12 @@
     // x speaks on the same frame too. The decode runs for ~400ms after this,
     // but it STARTS here, which is what makes the sentence read as caused by the
     // sound rather than as a caption that arrived late.
-    setStatus(t);
+    //
+    // A roll's sell half narrates AS a sell — because that is literally what
+    // just happened — and its buy half gets its own sentence from applyEntry.
+    // "rolled" was a compression of the pair into one line; now that both halves
+    // are shown there is nothing left to compress.
+    setStatus(t.dir === 'ROLL' ? { dir: 'EXIT', sym: t.sym, pnl: t.pnl } : t);
 
     // Any reordering waits — see scheduleSettle.
     scheduleSettle();
@@ -2079,9 +2260,9 @@
       el = makeTile(t.sym, '#8060a0');
       $('pos-list').appendChild(el);       // wherever there's room; settle sorts it
     } else {
-      var sp = el.querySelector('.t-sym');
-      sp.textContent = t.sym.replace('/USD', '');
-      sp.className = 't-sym';
+      var sp0 = el.querySelector('.t-sym');
+      setSym(sp0, t.sym.replace('/USD', ''));
+      sp0.className = 't-sym';
       el.style.removeProperty('--tc');
     }
 
@@ -2091,6 +2272,7 @@
     var o = blobCenter(), r = el.getBoundingClientRect();
     if (o) flyIn(el, o.x - (r.left + r.width / 2), o.y - (r.top + r.height / 2));
     hitTile(t.sym);
+    enterSym(el.querySelector('.t-sym'));
   }
 
   // ── The roll ─────────────────────────────────────────────────────────────
@@ -2099,9 +2281,15 @@
   // back. Deliberately NOT a leavebehind + fly-in pair — that would claim the
   // slot died and a new one was placed, when in truth nothing about the board
   // changed at all. Nothing is removed, nothing flies in, nothing reorders.
-  var ROLL_SHOW_MS = 2600;   // shorter than a leavebehind: a leavebehind marks a
-                             // slot that is GONE, and lingering that long here
-                             // would imply this one is too.
+  var ROLL_SHOW_MS = 4000;   // safety-net only — the entry moment normally takes
+                             // the ticker back long before this.
+  // sell -> buy. This MUST clear the decode or the sell sentence never gets to
+  // exist: x takes SEG_STAGGER*3 + DECODE_FRAMES*DECODE_STEP = ~576ms just to
+  // finish resolving, and the entry moment REBUILDS the spans. At 650ms the
+  // finished sentence was readable for 74ms — measured as four empty spans,
+  // which is a sell that technically aired and nobody could ever read.
+  // Derived, not typed: the decode plus a beat to actually read it.
+  var ROLL_HOLD_MS = SEG_STAGGER * 3 + DECODE_FRAMES * DECODE_STEP + 800;   // ~1376ms
 
   function boardRoll(t) {
     var el = tileEl(t.sym);
@@ -2117,24 +2305,47 @@
 
     var sp = el.querySelector('.t-sym');
     var v = Number(t.pnl || 0);
-    sp.textContent = (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2);
+    setSym(sp, (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2));
     sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
     el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
     hitTile(t.sym);
 
-    // Hand the ticker back. Shares ghostT so the settle waits for it, same as a
-    // leavebehind — but this timer restores the slot instead of removing it.
+    // The ticker comes back on the ENTRY MOMENT (see tradeStart), not on this
+    // timer. This is a safety net only: if a beat is ever cut short before its
+    // entry fires, a slot must never be left stranded showing a number instead
+    // of its name. ROLL_SHOW_MS is far longer than ROLL_HOLD_MS so the entry
+    // wins every time in practice, and boardEnter clears this on arrival.
     clearTimeout(ghostT[t.sym]);
     ghostT[t.sym] = setTimeout(function() {
       delete ghostT[t.sym];
       var live = tileEl(t.sym);
       var s2 = live && live.querySelector('.t-sym');
       if (!s2) return;
-      s2.textContent = t.sym.replace('/USD', '');
+      setSym(s2, t.sym.replace('/USD', ''));
       s2.className = 't-sym';
       live.style.removeProperty('--tc');
       scheduleSettle();
     }, ROLL_SHOW_MS);
+  }
+
+  // ── The entry moment ─────────────────────────────────────────────────────
+  // The BUY half of a roll, given its own beat ~650ms after the sell.
+  //
+  // Until now an entry was NEVER narrated. 100% of batches are rolls, so every
+  // ENTER paired away into a ROLL and x could only ever say "rolled" — "bought"
+  // was unreachable code. But the buy is real: he re-places the position at a
+  // new price, and that is half of what he actually did.
+  //
+  // Still ONE stage-beat per round trip, so this does not undo the pairing —
+  // the batch is 8 beats, not 16, and nothing is dropped. It just stops the
+  // beat from telling only half its story.
+  function applyEntry(t) {
+    blob.setMood('ALERT', POST_TICKS);
+    $('blob-mood').textContent = blob.getMood();
+    SFX.entry();
+    bg.pulse('enter', 0.42);
+    boardEnter(t);                 // ticker returns, flies in, assembles
+    setStatus({ dir: 'ENTER', sym: t.sym, price: t.price, qty: t.qty });
   }
 
   // ── The pointer ──────────────────────────────────────────────────────────
@@ -2194,7 +2405,7 @@
 
     var sp = el.querySelector('.t-sym');
     var v = Number(t.pnl || 0);
-    sp.textContent = (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2);
+    setSym(sp, (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2));
     sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
     el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
     hitTile(t.sym);              // the number lands with the same arcade punch
@@ -2292,7 +2503,16 @@
         });
         if (trades.length) tradeIngest(trades);
       })
-      .catch(function() {});
+      // NOT a silent catch. This .then() runs the entire ingest → pump → beat
+      // chain synchronously, so ANY throw inside a lane lands here — and an
+      // empty catch turned a hard crash into "the stream is quiet", which is
+      // indistinguishable from a quiet market and cost this session an hour.
+      // A fetch failure is expected and boring; a TypeError from the renderer
+      // is not, and must say so.
+      .catch(function(err) {
+        if (err && err.name === 'TypeError' && /fetch/i.test(err.message || '')) return;
+        console.error('[stream] pollEvents chain threw:', err && err.stack ? err.stack : err);
+      });
   }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
@@ -2312,12 +2532,22 @@
   window._TND_DBG = {
     stage: stage,
     q: function() { return { ann: annQ.length, speak: speakQ.length, trade: tradeQ.length,
-                             owner: stage.owner, reordering: reordering }; },
+                             owner: stage.owner, reordering: reordering,
+                             pendExit: Object.keys(pendExit),
+                             seenEvTs: state.seenEvTs,
+                             ingested: _dbgIngest, pushed: _dbgPush,
+                             beat: _beatLog }; },
     speak: blobSpeak,
     fit: fitSpeak      // pure (element, text) -> px; testable without the lane
   };
 
   setInterval(syncBlobMood, 1000);
+  // The ambient ticker wave. 10fps — the Blob's clock, so the board and the
+  // character share one heartbeat instead of beating against each other.
+  setInterval(waveTick, 100);
+  // Last resort against a wedged lane freezing the whole broadcast. 2s is the
+  // detection granularity, not the bound — see STAGE_MAX_MS.
+  setInterval(stageWatchdog, 2000);
   // One poll now carries both NAV and trade reactions — same rows, one request.
   // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
   // almost every one while still costing ~15 tiny requests/min.
