@@ -725,11 +725,12 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   ACTIVE POTION — the LEFT-side HUD, opposite the donor names. NO panel: just
-   the power-up name floating in its own randomly-assigned steampunk glow, with
-   a live "Xs" countdown beside it. Colour, glow flicker and countdown are all
-   set inline by renderPotion (interval-driven — CSS animation is inert here).
-   The matching orbs ring the Blob himself (#s-orbs).
+   ACTIVE POTIONS — the LEFT-side HUD, opposite the donor names. NO panel: each
+   active potion is one left-justified row, "[NAME] [Xs]", floating in its own
+   randomly-assigned steampunk glow. Potions STACK downward. Colour, glow
+   flicker, countdown and the row list are all managed by renderPotion
+   (interval-driven — CSS animation is inert here). The matching spinning-star
+   orbs ring the Blob himself (#s-orbs).
    ═══════════════════════════════════════════════════════════════════════════ */
 #s-potion {
   position: absolute;
@@ -737,30 +738,35 @@ html, body {
   left: var(--safe-x);
   z-index: 5;
   pointer-events: none;
-  max-width: 360px;
+  max-width: 460px;
   display: none;
-  align-items: baseline;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;    /* always left-justified; new potions stack below */
+  gap: 8px;
 }
 #s-potion.on { display: flex; }
-#s-potion .pot-name {
-  font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: 0.02em;
+.pot-row { display: flex; align-items: baseline; gap: 12px; }
+.pot-name {
+  font-size: 36px; font-weight: 800; line-height: 1; letter-spacing: 0.02em;
   /* colour + text-shadow assigned inline per potion */
 }
-#s-potion .pot-timer {
-  font-size: 26px; font-weight: 700; letter-spacing: 0.04em;
+.pot-timer {
+  font-size: 22px; font-weight: 700; letter-spacing: 0.04em;
   /* colour + text-shadow assigned inline per potion */
 }
 
-/* Powerup orbs orbiting the Blob — centred on #s-blob, position/scale/opacity/
-   z-index all written by updateOrbs each tick. No z-index or transform on the
-   container itself, so each orb's z-index competes directly with #blobCanvas
-   (z 2): back orbs sit behind him, front orbs cross in front. */
+/* Powerup orbs orbiting the Blob — centred on #s-blob. Each is a spinning STAR:
+   the star silhouette (clip-path), the bright-core fill and the coloured glow
+   (drop-shadow, which follows the clip) are all set inline by spawnOrbs, and
+   position/scale/spin/opacity/z by updateOrbs each tick. NO border-radius — the
+   point silhouette is what reads as a power-up rather than a dot. No z-index or
+   transform on the container, so each orb's z competes with #blobCanvas (z 2):
+   back stars sit behind him, front stars cross in front. */
 #s-orbs { position: absolute; inset: 0; pointer-events: none; }
 .p-orb {
   position: absolute; top: 50%; left: 50%;
-  width: 34px; height: 34px; border-radius: 50%;
-  will-change: transform, opacity;
+  width: 32px; height: 32px;
+  will-change: transform, opacity, filter;
 }
 
 /* The potion popup — the same Gameboy box, but MAGIC. --ev-c is already the
@@ -768,6 +774,16 @@ html, body {
 /* The glow rides --ev-c, which potionStarTick strobes through the rainbow on an
    interval — so the whole box flashes like a Mario star, not a fixed violet. */
 .ev-lcd.potion { filter: drop-shadow(0 0 16px var(--ev-c)); }
+
+/* The *wild* glyphs in a potion panel — whatever the operator wraps in
+   asterisks. Colour, glow and transform are written by wildTick each tick; this
+   just makes them transformable and keeps them lit (the box's per-glyph stamp
+   animation is inert in this iframe, so an opacity keyframe would hide them). */
+#ev-lcd .wild {
+  display: inline-block;
+  opacity: 1 !important;
+  will-change: transform;
+}
 
 .pu {
   position: relative;

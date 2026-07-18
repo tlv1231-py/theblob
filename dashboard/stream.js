@@ -1082,7 +1082,7 @@
     risk_breach:     { c: '#ff3366', i: '⚠', verb: '' },
     // The magic one: violet, its own colour so it never reads as money (cyan),
     // identity (pink), or an alarm (red). Fires as a second popup behind a dono.
-    potion:          { c: '#b14dff', i: '✦', verb: 'TRIGGERED' }
+    potion:          { c: '#b14dff', i: '✦', verb: 'ACTIVATED' }
   };
 
   function money(p) {
@@ -1477,6 +1477,9 @@
     var act  = actOf(ev.type, ev.p);
     var amt  = amountFor(ev.type, ev.p);
     var msg  = (ev.p.message || '').slice(0, 42);
+    // Reset the wild-text ranges every event so a previous potion's *markup*
+    // can never bleed onto an ordinary popup. Only the potion branch sets them.
+    _wildName = null; _wildMsg = null;
     // Wrap the comment in quotes: it is the viewer's OWN words (see the note by
     // fitNoWrap below), so quoting it reads as PETER saying it, not us narrating.
     // Done here, before the fit and the typewriter, so both size and type the
@@ -1484,15 +1487,22 @@
     // (a risk_breach) never gets empty quotes.
     if (msg) msg = '"' + msg + '"';
     // The potion popup is its own sentence, not a viewer's: the name IS the
-    // potion, the verb is TRIGGERED, and the "comment" is its effect (unquoted —
+    // potion, the verb is ACTIVATED, and the "comment" is its effect (unquoted —
     // the game is talking, not a person). Its magic sound and the left-HUD
     // countdown fire HERE, when the box actually plays, not when it was queued
     // behind the dono.
     if (ev.type === 'potion') {
-      name = String(ev.p.name || 'POTION').toUpperCase().slice(0, 16);
-      act  = 'TRIGGERED';
+      // Whatever the operator wraps in *asterisks* in the HQ potion fields gets
+      // the wild treatment IN THIS PANEL: parseWild strips the *'s and records
+      // the glyph ranges, which the typewriters below tag `.wild` and wildTick
+      // animates. The left-HUD name stays clean — the effect belongs to the
+      // dialogue, not to the potion's identity.
+      var pn = parseWild(String(ev.p.name || 'POTION').toUpperCase());
+      name = pn.text.slice(0, 16); _wildName = clampRanges(pn.ranges, 16);
+      act  = 'ACTIVATED';
       amt  = '';
-      msg  = String(ev.p.status || '').slice(0, 40);
+      var ps = parseWild(String(ev.p.status || ''));
+      msg  = ps.text.slice(0, 40); _wildMsg = clampRanges(ps.ranges, 40);
       SFX.powerup();
       activatePotion(ev.p);
     }
@@ -1551,6 +1561,7 @@
         ch.textContent = name[ni] === ' ' ? ' ' : name[ni];
         // Stagger the pop so the name lands like a stamp, not a wipe.
         ch.style.animationDelay = '0s';
+        if (_wildName && inWild(ni, _wildName)) ch.className = 'wild';
         nEl.appendChild(ch);
         SFX.blip();
         ni++;
@@ -1564,7 +1575,18 @@
         if (i < act.length) {
           aEl.textContent += act[i++];
         } else if (i - act.length < msg.length) {
-          mEl.textContent += msg[i++ - act.length];
+          var mi = i - act.length;
+          // Potion panels render the comment per-glyph so *wild* runs can be
+          // tagged and animated; every other event stays plain textContent.
+          if (_wildMsg) {
+            var mch = document.createElement('i');
+            mch.textContent = msg[mi];
+            if (inWild(mi, _wildMsg)) mch.className = 'wild';
+            mEl.appendChild(mch);
+          } else {
+            mEl.textContent += msg[mi];
+          }
+          i++;
         } else {
           clearInterval(annTypeT);
           $('ev-more').className = 'ev-more on';
@@ -3868,7 +3890,10 @@
   // one as a violet popup behind the dono, then it runs on the LEFT-side arcade
   // HUD with a live countdown until it expires.
   // ═══════════════════════════════════════════════════════════════════════
-  var _potions = [], _potionActive = null;
+  var _potions = [], _actPotions = [];
+  // Wild-text ranges for the CURRENT potion panel (see parseWild), read by the
+  // annNext typewriters. Declared here; hoisting makes them visible up there.
+  var _wildName = null, _wildMsg = null;
 
   function pollPotions() {
     fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
@@ -3910,100 +3935,168 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
-  // Set the active potion + its expiry, pick its glow, and cast its orbs.
-  // renderPotion (20fps) draws the HUD, counts it down, and spins the orbs;
-  // nothing here writes the DOM text on every tick so a burst can't thrash it.
+  // ── Wild text — the *asterisk* effect in the potion panel ─────────────────
+  // parseWild("Fire *Blast* now") -> { text:"Fire Blast now", ranges:[[5,10]] }.
+  // The *'s are stripped; the ranges are the glyph spans that were between them.
+  // Unclosed runs go to the end. clampRanges clips them to the box's char cap.
+  function parseWild(str) {
+    var text = '', ranges = [], cur = null;
+    for (var i = 0; i < str.length; i++) {
+      if (str[i] === '*') {
+        if (cur) { cur[1] = text.length; ranges.push(cur); cur = null; }
+        else cur = [text.length, text.length];
+        continue;
+      }
+      text += str[i];
+    }
+    if (cur) { cur[1] = text.length; ranges.push(cur); }
+    return { text: text, ranges: ranges };
+  }
+  function clampRanges(ranges, max) {
+    var out = [];
+    for (var i = 0; i < ranges.length; i++) {
+      var s = ranges[i][0], e = Math.min(ranges[i][1], max);
+      if (s < max && e > s) out.push([s, e]);
+    }
+    return out;
+  }
+  function inWild(i, ranges) {
+    if (!ranges) return false;
+    for (var r = 0; r < ranges.length; r++) if (i >= ranges[r][0] && i < ranges[r][1]) return true;
+    return false;
+  }
+
+  // The wild treatment itself: every .wild glyph in the box dances — a rainbow
+  // hue cycle, a vertical wobble, a scale pulse and a rock, each offset by its
+  // index so the run ripples rather than moving in lockstep. Interval-driven
+  // like everything here; a CSS animation would be inert.
+  var _wildPh = 0;
+  function wildTick() {
+    var els = document.querySelectorAll('#ev-lcd .wild');
+    if (!els.length) return;
+    _wildPh += 1;
+    for (var i = 0; i < els.length; i++) {
+      var e = els[i], ph = _wildPh * 0.5 + i * 0.7;
+      var hue = (_wildPh * 11 + i * 40) % 360;
+      e.style.color = 'hsl(' + hue + ',100%,66%)';
+      e.style.textShadow = '0 0 12px hsl(' + hue + ',100%,60%), 0 0 4px #fff';
+      e.style.transform = 'translateY(' + Math.round(Math.sin(ph) * 4) + 'px) ' +
+        'scale(' + (1 + 0.16 * Math.sin(ph * 1.3)).toFixed(2) + ') ' +
+        'rotate(' + (Math.sin(ph * 0.7) * 12).toFixed(1) + 'deg)';
+    }
+  }
+
+  // Set / refresh an active potion. Potions STACK: a new name appends a row and
+  // its own orbs; a repeat of a live name just refreshes that one's timer (no
+  // duplicate row). renderPotion (20fps) draws the stacked HUD, counts each
+  // down, and spins every potion's orbs.
   function activatePotion(p) {
-    var glow = STEAMPUNK[Math.floor(Math.random() * STEAMPUNK.length)];
-    _potionActive = {
-      name: String(p.name || 'POTION').toUpperCase().slice(0, 18),
-      endsAt: Date.now() + Math.max(1, Number(p.duration) || 20) * 1000,
+    var name = parseWild(String(p.name || 'POTION')).text.toUpperCase().slice(0, 18);
+    var dur  = Math.max(1, Number(p.duration) || 20);
+    for (var i = 0; i < _actPotions.length; i++) {
+      if (_actPotions[i].name === name) {
+        _actPotions[i].endsAt = Date.now() + dur * 1000;
+        _actPotions[i].born = Date.now();
+        renderPotion();
+        return;
+      }
+    }
+    var pot = {
+      name: name,
+      glow: STEAMPUNK[Math.floor(Math.random() * STEAMPUNK.length)],
+      endsAt: Date.now() + dur * 1000,
       born: Date.now(),
-      glow: glow
+      rowEl: null, nmEl: null, tmEl: null, orbs: null
     };
-    spawnOrbs(glow);
+    pot.orbs = spawnOrbs(pot);
+    _actPotions.push(pot);
     renderPotion();
   }
 
-  // Powerup orbs that ring the Blob for the potion's life — same glow as the
-  // name. Elliptical orbit faked in JS (rAF/CSS-anim are inert here); depth from
-  // the orbit angle scales + dims the back half so it reads as a 3-D ring.
-  var _orbs = null;
-  function spawnOrbs(color) {
+  // Powerup ORBS — spinning stars, not plain dots, so they read as a game
+  // character's power-up: a bright core, a hard star silhouette (clip-path), a
+  // coloured bloom (drop-shadow, which follows the clip; box-shadow would not).
+  // Each potion owns its own little constellation in its glow; they all ring the
+  // Blob together. Elliptical orbit + depth scaling fakes a 3-D ring; each star
+  // also spins on its own axis.
+  var ORB_STAR = 'polygon(50% 0%, 63% 34%, 98% 35%, 70% 57%, 80% 91%, 50% 70%, 20% 91%, 30% 57%, 2% 35%, 37% 34%)';
+  function spawnOrbs(pot) {
     var host = $('s-orbs');
-    clearOrbs();
-    if (!host) return;
-    _orbs = [];
-    var N = 5;
-    for (var i = 0; i < N; i++) {
+    if (!host) return [];
+    var color = pot.glow, K = 4, base = Math.random() * Math.PI * 2, orbs = [];
+    for (var i = 0; i < K; i++) {
       var o = document.createElement('div');
       o.className = 'p-orb';
-      o.style.background = 'radial-gradient(circle at 35% 30%, #fff, ' + color +
-        ' 55%, ' + potRGBA(color, 0.18) + ')';
-      o.style.boxShadow = '0 0 10px ' + color + ', 0 0 22px ' + color;
+      o.style.clipPath = ORB_STAR;
+      o.style.webkitClipPath = ORB_STAR;
+      o.style.background = 'radial-gradient(circle at 42% 34%, #ffffff, ' + color + ' 60%, ' + potRGBA(color, 0.55) + ')';
+      o.style.filter = 'drop-shadow(0 0 6px ' + color + ') drop-shadow(0 0 13px ' + potRGBA(color, 0.75) + ')';
       host.appendChild(o);
-      _orbs.push({ el: o, a: (i / N) * Math.PI * 2 });
+      orbs.push({ el: o, a: base + (i / K) * Math.PI * 2, spin: Math.random() * 6.28 });
     }
-  }
-  function clearOrbs() {
-    var host = $('s-orbs');
-    if (host) host.innerHTML = '';
-    _orbs = null;
+    return orbs;
   }
   function updateOrbs() {
-    if (!_orbs) return;
-    var RX = 300, RY = 148;   // elliptical ring — wide, shallow, seen near edge-on
-    for (var i = 0; i < _orbs.length; i++) {
-      var o = _orbs[i];
-      o.a += 0.06;
-      var x = Math.cos(o.a) * RX, y = Math.sin(o.a) * RY;
-      var depth = (Math.sin(o.a) + 1) / 2;         // 0 at the back, 1 at the front
-      var sc = 0.55 + depth * 0.7;
-      o.el.style.transform = 'translate(-50%,-50%) translate(' + x.toFixed(1) + 'px,' +
-        y.toFixed(1) + 'px) scale(' + sc.toFixed(2) + ')';
-      o.el.style.opacity = (0.35 + depth * 0.65).toFixed(2);
-      o.el.style.zIndex = depth > 0.5 ? 3 : 1;      // front orbs cross over him
+    var RX = 300, RY = 150;   // wide, shallow ring — seen near edge-on
+    for (var p = 0; p < _actPotions.length; p++) {
+      var orbs = _actPotions[p].orbs;
+      if (!orbs) continue;
+      for (var i = 0; i < orbs.length; i++) {
+        var o = orbs[i];
+        o.a += 0.085;          // orbit — a livelier lap than the old dots
+        o.spin += 0.22;        // each star twirls on its own axis
+        var x = Math.cos(o.a) * RX, y = Math.sin(o.a) * RY;
+        var depth = (Math.sin(o.a) + 1) / 2;     // 0 back, 1 front
+        var sc = 0.6 + depth * 0.75;
+        o.el.style.transform = 'translate(-50%,-50%) translate(' + x.toFixed(1) + 'px,' +
+          y.toFixed(1) + 'px) scale(' + sc.toFixed(2) + ') rotate(' + (o.spin * 57.3).toFixed(0) + 'deg)';
+        o.el.style.opacity = (0.4 + depth * 0.6).toFixed(2);
+        o.el.style.zIndex = depth > 0.5 ? 3 : 1;   // front stars cross over him
+      }
     }
   }
 
   function renderPotion() {
     var host = $('s-potion');
     if (!host) return;
-    var left = _potionActive ? _potionActive.endsAt - Date.now() : 0;
-    if (!_potionActive || left <= 0) {
+    var now = Date.now();
+    // Reap the expired — drop the row and its orbs.
+    for (var i = _actPotions.length - 1; i >= 0; i--) {
+      if (_actPotions[i].endsAt <= now) {
+        var dead = _actPotions.splice(i, 1)[0];
+        if (dead.rowEl && dead.rowEl.parentNode) dead.rowEl.parentNode.removeChild(dead.rowEl);
+        if (dead.orbs) dead.orbs.forEach(function(o) { if (o.el.parentNode) o.el.parentNode.removeChild(o.el); });
+      }
+    }
+    if (!_actPotions.length) {
       if (host.classList.contains('on')) { host.classList.remove('on'); host.innerHTML = ''; }
-      clearOrbs();
-      _potionActive = null;
       return;
     }
-    var g = _potionActive.glow;
-    // Build once on arrival: no frame, no panel — just the name and a live "Xs"
-    // beside it, floating in the potion's own steampunk glow.
-    if (!host.classList.contains('on')) {
-      host.classList.add('on');
-      host.innerHTML = '<span class="pot-name"></span><span class="pot-timer"></span>';
-      var nm0 = host.querySelector('.pot-name');
-      nm0.textContent = _potionActive.name;
-      nm0.style.color = g;
-      var tm0 = host.querySelector('.pot-timer');
-      tm0.style.color = g;
-      tm0.style.textShadow = '0 0 10px ' + g;
-    }
-    var secs = Math.ceil(left / 1000);
-    var tm = host.querySelector('.pot-timer');
-    if (tm) tm.textContent = ' ' + secs + 's';
-    // A brass-lamp flicker on the name — steampunk breath, JS-driven, with an
-    // occasional gas-flame jump.
-    var nm = host.querySelector('.pot-name');
-    if (nm) {
-      var ph = (Date.now() - _potionActive.born) / 1000;
-      var fl = 0.7 + 0.3 * Math.abs(Math.sin(ph * 2.4)) + (Math.random() < 0.06 ? 0.18 : 0);
-      nm.style.textShadow = '0 0 ' + (5 + fl * 6).toFixed(1) + 'px ' + g +
+    if (!host.classList.contains('on')) host.classList.add('on');
+
+    for (var p = 0; p < _actPotions.length; p++) {
+      var pot = _actPotions[p], g = pot.glow;
+      // Build the row once — "[NAME] [Xs]", left-justified, transparent, lit by
+      // the potion's own steampunk glow.
+      if (!pot.rowEl || !pot.rowEl.parentNode) {
+        var row = document.createElement('div'); row.className = 'pot-row';
+        var nm = document.createElement('span'); nm.className = 'pot-name'; nm.textContent = pot.name;
+        var tm = document.createElement('span'); tm.className = 'pot-timer';
+        nm.style.color = g;
+        tm.style.color = g; tm.style.textShadow = '0 0 10px ' + g;
+        row.appendChild(nm); row.appendChild(tm);
+        host.appendChild(row);
+        pot.rowEl = row; pot.nmEl = nm; pot.tmEl = tm;
+      }
+      var secs = Math.ceil((pot.endsAt - now) / 1000);
+      pot.tmEl.textContent = secs + 's';
+      // Brass-lamp flicker on the name — steampunk breath, with a gas-flame jump.
+      var fl = 0.7 + 0.3 * Math.abs(Math.sin((now - pot.born) / 1000 * 2.4)) + (Math.random() < 0.06 ? 0.18 : 0);
+      pot.nmEl.style.textShadow = '0 0 ' + (5 + fl * 6).toFixed(1) + 'px ' + g +
         ', 0 0 ' + (14 + fl * 18).toFixed(1) + 'px ' + g +
         ', 0 0 ' + (26 + fl * 22).toFixed(1) + 'px ' + potRGBA(g, 0.55);
+      pot.tmEl.style.opacity = (secs <= 5 && (Math.floor(now / 240) % 2)) ? '0.4' : '1';
     }
-    // Urgent blink on the countdown under 5s.
-    if (tm) tm.style.opacity = (secs <= 5 && (Math.floor(Date.now() / 240) % 2)) ? '0.35' : '1';
     updateOrbs();
   }
 
@@ -4058,6 +4151,9 @@
   // The Mario-star box strobe runs fast and independently — it only does work
   // while the potion popup is actually up.
   setInterval(potionStarTick, 60);
+  // The *wild* text dance in the potion panel — only touches .wild glyphs, so
+  // it idles cheaply when none are on screen.
+  setInterval(wildTick, 45);
   // Mute lands within ~3s of hitting the button — fast enough that it feels
   // like a mute button rather than a setting.
   // AFK copy is edited by a human in HQ, so it changes at human speed. 15s is
