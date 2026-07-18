@@ -56,5 +56,15 @@ ExecStart=/opt/blob-stream/stream.sh
 Restart=always
 RestartSec=5
 
+# ffmpeg exits 255 when it catches the SIGTERM that `systemctl stop` sends — it
+# does its FLV cleanup ("Failed to update header", normal on a live stream) and
+# leaves with 255, which systemd otherwise flags as failed. That false "failed"
+# state was the whole cause of Stream HQ's "OFF AIR set but still broadcasting"
+# alarm and every reset-failed this stack needed: a clean stop looked like a
+# crash. Telling systemd 255 is success makes a stop land in "inactive", which is
+# the truth. Restart=always still covers a genuine crash — it restarts on any
+# exit — so nothing real is masked; only the stop is reported honestly.
+SuccessExitStatus=255
+
 [Install]
 WantedBy=multi-user.target
