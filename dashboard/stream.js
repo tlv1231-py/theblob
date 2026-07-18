@@ -1423,6 +1423,12 @@
     var act  = actOf(ev.type, ev.p);
     var amt  = amountFor(ev.type, ev.p);
     var msg  = (ev.p.message || '').slice(0, 42);
+    // Wrap the comment in quotes: it is the viewer's OWN words (see the note by
+    // fitNoWrap below), so quoting it reads as PETER saying it, not us narrating.
+    // Done here, before the fit and the typewriter, so both size and type the
+    // quotes with the text. Guarded on `msg`, so a machine event with no comment
+    // (a risk_breach) never gets empty quotes.
+    if (msg) msg = '"' + msg + '"';
     var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg'), amEl = $('ev-amt');
     nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
 
