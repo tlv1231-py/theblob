@@ -22,7 +22,7 @@ from pathlib import Path
 
 CELL = 48
 LX, LY, LZ = -0.55, -0.68, 0.48
-ROWS = ['IDLE', 'HAPPY', 'SCARED', 'ALERT', 'SLEEP', 'SMUG', 'BRACE', 'EXASPERATED']
+ROWS = ['IDLE', 'HAPPY', 'SCARED', 'ALERT', 'SLEEP', 'SMUG', 'BRACE', 'EXASPERATED', 'HOPEFUL']
 OUT_DIR = Path(__file__).resolve().parents[1] / 'dashboard'
 
 P = {'OUT': (0x2A, 0x00, 0x3D), 'LO': (0x8A, 0x00, 0x6C), 'MID': (0xFF, 0x00, 0xCC),
@@ -108,6 +108,9 @@ E = {
     # EXASPERATED — a loss just landed. Heavy lids, pupils rolled UP against the
     # lid with a crescent of white below: the classic "ugh, again" eye-roll.
     'EXASPERATED': dict(rx=7, ry=8, lidT=0.40, curve=0.0, pupR=2.3, div=2.4, pupDy=-2, glint='none'),
+    # HOPEFUL — a fresh pickup. He is looking UP at the tile he just bought,
+    # wide-eyed and eager, sure it's a winner. Sparkle of optimism.
+    'HOPEFUL': dict(rx=8, ry=9, lidT=0.0, curve=0.0, pupR=2.8, div=0.0, pupDy=-3, glint='sparkle'),
 }
 
 
@@ -120,38 +123,41 @@ def draw_eye(st, cx, cy, s, side, lidAdd):
     st.ellipse(cx, cy, rx, ry, P['WHT'])
 
     shut = lidT >= 0.9
-    # top lid
+    # Pupil + glints go down FIRST, so a lowered lid OCCLUDES a rolled-up pupil
+    # rather than the pupil painting over the eyelid — that was the "his pupils
+    # go through his eyelids" bug on EXASPERATED and any looking-up eye.
+    if not shut:
+        px = cx + side * s.get('div', 0) + s.get('gaze', 0)
+        py = cy + s.get('pupDy', 0)
+        st.disc(px, py, s['pupR'], P['EYE'])
+        g = s.get('glint', 'key')
+        if g != 'none':
+            st.disc(px - s['pupR'] * 0.45, py - s['pupR'] * 0.5, max(1.3, s['pupR'] * 0.42), P['WHT'])
+            st.set(px + s['pupR'] * 0.5, py + s['pupR'] * 0.5, P['HI'])
+        if g == 'sparkle':
+            st.disc(px + s['pupR'] * 0.55, py - s['pupR'] * 0.2, 1.4, P['WHT'])   # second sparkle
+
+    EYEINT = (P['WHT'], P['EYE'], P['HI'])   # eye-interior colours the lid covers
+    # top lid — repaints the interior (white, pupil, glint) above the lash line
     if lidT > 0:
         base = cy - ry + 2 * ry * lidT
         for x in range(int(cx - rx - 1), int(cx + rx + 2)):
             u = (x - cx) / rx
             lb = base + curve * (u * u) * ry
             for y in range(int(cy - ry - 1), int(lb) + 1):
-                if st.get(x, y) == P['WHT']:
+                if st.get(x, y) in EYEINT:
                     st.set(x, y, P['MID'])
-            if st.get(x, int(round(lb))) in (P['WHT'], P['MID']):
+            if st.get(x, int(round(lb))) in (P['MID'],) + EYEINT:
                 st.set(x, int(round(lb)), P['EYE'])
     # bottom lid (squint)
     if lidB > 0:
         base = cy + ry - 2 * ry * lidB
         for x in range(int(cx - rx - 1), int(cx + rx + 2)):
             for y in range(int(base), int(cy + ry + 2)):
-                if st.get(x, y) == P['WHT']:
+                if st.get(x, y) in EYEINT:
                     st.set(x, y, P['MID'])
-            if st.get(x, int(round(base))) in (P['WHT'], P['MID']):
+            if st.get(x, int(round(base))) in (P['MID'],) + EYEINT:
                 st.set(x, int(round(base)), P['EYE'])
-    if shut:
-        return
-
-    px = cx + side * s.get('div', 0) + s.get('gaze', 0)
-    py = cy + s.get('pupDy', 0)
-    st.disc(px, py, s['pupR'], P['EYE'])
-    g = s.get('glint', 'key')
-    if g != 'none':
-        st.disc(px - s['pupR'] * 0.45, py - s['pupR'] * 0.5, max(1.3, s['pupR'] * 0.42), P['WHT'])
-        st.set(px + s['pupR'] * 0.5, py + s['pupR'] * 0.5, P['HI'])
-    if g == 'sparkle':
-        st.disc(px + s['pupR'] * 0.55, py - s['pupR'] * 0.2, 1.4, P['WHT'])   # second sparkle
 
 
 def closed_eye(st, cx, cy, droop=False):
@@ -194,6 +200,10 @@ def draw_mouth(st, mood):
     elif mood == 'SLEEP':                      # tiny
         for x in range(cx - 1, cx + 2):
             st.set(x, 36, E_)
+    elif mood == 'HOPEFUL':                    # small eager open smile
+        for x in range(cx - 2, cx + 3):
+            st.set(x, 36, E_)
+        st.set(cx - 3, 35, E_); st.set(cx + 3, 35, E_)
     else:                                      # ALERT / BRACE — flat tight line
         for x in range(cx - 3, cx + 4):
             st.set(x, 36, E_)
