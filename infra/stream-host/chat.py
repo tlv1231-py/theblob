@@ -156,10 +156,21 @@ def discover_video(quota: Quota) -> str | None:
 
         # One call for all of them — videos.list takes a comma-separated id list
         # and still costs 1 unit.
-        r = api("videos.list", "videos", quota, part="snippet", id=",".join(ids))
+        #
+        # Match "live" OR "upcoming". YouTube opens the chat during the
+        # pre-show (broadcast state "upcoming") before ffmpeg ever connects, and
+        # that waiting-room chat is real engagement — confirmed against the
+        # actual channel, where a message typed pre-live flowed all the way to
+        # the Blob. Prefer a truly-live broadcast if both exist; fall back to an
+        # upcoming one with an open chat.
+        live_id = upcoming_id = None
         for it in r.get("items") or []:
-            if it["snippet"].get("liveBroadcastContent") == "live":
-                return it["id"]
+            state = it["snippet"].get("liveBroadcastContent")
+            if state == "live":
+                live_id = it["id"]
+            elif state == "upcoming":
+                upcoming_id = it["id"]
+        return live_id or upcoming_id
     except urllib.error.HTTPError as e:
         print(f"[chat] discovery failed: {e.code} {e.read()[:160]!r}", flush=True)
     return None
