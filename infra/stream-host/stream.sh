@@ -32,7 +32,6 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 # volume filters below are NAMED, and azmq brokers commands to them by name).
 MUSIC_VOL="${MUSIC_VOL:-0.6}"
 SFX_VOL="${SFX_VOL:-2.0}"
-ZMQ_PORT="${ZMQ_PORT:-5556}"
 
 mkdir -p "$(dirname "$PROGRESS")"
 : > "$PROGRESS"
@@ -102,8 +101,13 @@ if pactl list sinks short 2>/dev/null | grep -qw blob_sink; then
   # them live via the azmq broker on 127.0.0.1:$ZMQ_PORT. amix normalize=0 keeps
   # the sum from being auto-halved; the limiter catches any peak the boost pushes
   # over. azmq sits inline (it passes audio through, only listening for commands).
+  # azmq with NO bind_address uses its default tcp://*:5555 — deliberately, to
+  # dodge filtergraph escaping (a bind_address URL's colons need escaping that does
+  # not survive the shell -> ffmpeg -> filtergraph chain cleanly). Binding all
+  # interfaces is not an exposure here: Oracle's security list blocks every inbound
+  # port, and faders.py reaches it over localhost. Port 5555 is azmq's default.
   FILTER=(-filter_complex \
-    "[1:a]volume@mvol=${MUSIC_VOL}[m];[2:a]volume@svol=${SFX_VOL}[s];[m][s]amix=inputs=2:duration=first:normalize=0,azmq=bind_address=tcp\\://127.0.0.1\\:${ZMQ_PORT},alimiter=limit=0.95[aout]")
+    "[1:a]volume@mvol=${MUSIC_VOL}[m];[2:a]volume@svol=${SFX_VOL}[s];[m][s]amix=inputs=2:duration=first:normalize=0,azmq,alimiter=limit=0.95[aout]")
   MAP=(-map 0:v -map "[aout]")
   echo "[stream] SFX: mixing blob_sink.monitor (music ${MUSIC_VOL} / sfx ${SFX_VOL})"
 else

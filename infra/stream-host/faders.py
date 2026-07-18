@@ -26,7 +26,7 @@ import zmq
 SUPA_URL = os.environ.get("SUPA_URL", "https://seeevuklabvhkawawtxn.supabase.co")
 SUPA_KEY = os.environ.get("SUPA_KEY", "sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7K98OeY")
 
-ZMQ_ADDR = os.environ.get("FADER_ZMQ", "tcp://127.0.0.1:5556")
+ZMQ_ADDR = os.environ.get("FADER_ZMQ", "tcp://127.0.0.1:5555")  # azmq default port
 POLL = int(os.environ.get("FADER_POLL", "3"))
 
 # Launch defaults, matching stream.sh. Also the fallback when a row is missing or
