@@ -85,26 +85,26 @@ fi
 # ffmpeg captured the same one 24x/s. `speed` stayed 1.0x throughout, so every
 # metric read green while the picture lagged.
 #
-# preset superfast, NOT ultrafast, and NOT veryfast:
+# preset ultrafast + cabac=1 — the one combination that is BOTH cheap AND
+# YouTube-compatible. The road here, all found on real broadcasts:
 #
-#  * ultrafast forces CAVLC (no CABAC), which yields H.264 BASELINE profile.
-#    YouTube's live "Preparing stream" step wants Main/High and hangs on Baseline
-#    — the exact failure seen: ingest "Excellent", preview stuck on "Preparing"
-#    forever, never offering Go Live. superfast is the FASTEST preset that keeps
-#    CABAC, so it produces High profile and YouTube goes live on it.
-#  * veryfast is the known-good profile too, but heavier: it does full motion
-#    estimation, so a high-motion event frame costs far more than a static one and
-#    that spike is what saturated the box on the first broadcast. superfast does
-#    far less ME, keeping the event-time encode cost down, while staying CABAC.
+#  * veryfast went live but its full motion estimation ballooned on high-motion
+#    event frames, saturating all 4 cores and stuttering the Blob.
+#  * ultrafast is far cheaper — it does almost no ME, so its cost is nearly FLAT
+#    across static and event frames — BUT it forces CAVLC, yielding H.264
+#    BASELINE profile, and YouTube's "Preparing stream" step hangs on Baseline
+#    forever (ingest reads "Excellent", the preview never goes live).
+#  * superfast keeps CABAC (=> Main/High, YouTube-happy) but does real ME again,
+#    so it ate ~1.9 of its 2 pinned cores and re-starved the render on spikes.
 #
-# So superfast is the sweet spot: YouTube-compatible profile AND light. Kept from
-# the ultrafast attempt: nothing — this is a different lever.
+# The fix: keep ultrafast's cheap ME and just switch CABAC back ON explicitly.
+# `-x264-params cabac=1` turns the profile Baseline -> MAIN (verified with
+# ffprobe), which YouTube accepts, while the motion estimation stays ultrafast-
+# cheap and FLAT through activity spikes — which is the whole point, since the
+# spikes were the lag. -profile:v main makes it explicit.
 #
-# framerate STAYS 24. A first attempt at 20 to shave CPU also hung "Preparing":
-# 20 is not one of YouTube's accepted live rates (24/25/30/48/50/60). Two separate
-# ways to hang the prep step, found the hard way; both are avoided here.
-#
-# -g 48 = 2s keyframe interval at 24fps, which is what YouTube wants for live.
+# framerate STAYS 24. 20 also hangs "Preparing" — it is not one of YouTube's
+# accepted live rates (24/25/30/48/50/60). -g 48 = 2s keyframe interval at 24.
 #
 # -draw_mouse 0 IS NOT COSMETIC. x11grab draws the pointer by default, and X
 # parks it dead centre of the screen (540,960) — which on a 1080x1920 stage is
@@ -116,7 +116,7 @@ exec ffmpeg -hide_banner -loglevel warning \
   -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${AUDIO_FILTER[@]}" \
-  -c:v libx264 -preset superfast -tune zerolatency -profile:v high -pix_fmt yuv420p \
+  -c:v libx264 -preset ultrafast -x264-params cabac=1 -tune zerolatency -profile:v main -pix_fmt yuv420p \
   -b:v 4500k -maxrate 4500k -bufsize 9000k \
   -g 48 -keyint_min 48 -sc_threshold 0 \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \
