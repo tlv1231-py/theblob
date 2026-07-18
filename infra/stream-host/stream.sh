@@ -90,11 +90,15 @@ fi
 # spikes exactly when the render is also busiest. ultrafast does almost no ME, so
 # its cost is nearly FLAT across static and motion: it removes the encode half of
 # the event spike, not just the average. Quality cost is negligible on flat-colour
-# sharp-edged pixel art. 20 fps trims a further ~17% off capture+encode and is
-# imperceptible on this content. Between them the encoder gets out of the render's
-# way; the render's own event cost is a dashboard concern.
+# sharp-edged pixel art. That is the main win, and it is kept.
 #
-# -g 40 = 2s keyframe interval at 20fps, which is what YouTube wants for live.
+# framerate STAYS 24, NOT 20. A first attempt at 20 to shave another ~17% left
+# YouTube stuck on "Preparing stream" forever with the ingest reading "Excellent"
+# — 20 is not one of its accepted live rates (24/25/30/48/50/60). The health was
+# green because the bytes arrived fine; the prep step choked on the frame rate.
+# 24 is the floor that YouTube actually goes live on.
+#
+# -g 48 = 2s keyframe interval at 24fps, which is what YouTube wants for live.
 #
 # -draw_mouse 0 IS NOT COSMETIC. x11grab draws the pointer by default, and X
 # parks it dead centre of the screen (540,960) — which on a 1080x1920 stage is
@@ -103,12 +107,12 @@ fi
 # entire life of the stream. Caught by screenshotting the framebuffer; every
 # health signal reads green through it.
 exec ffmpeg -hide_banner -loglevel warning \
-  -f x11grab -framerate 20 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
+  -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${AUDIO_FILTER[@]}" \
   -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
   -b:v 4500k -maxrate 4500k -bufsize 9000k \
-  -g 40 -keyint_min 40 -sc_threshold 0 \
+  -g 48 -keyint_min 48 -sc_threshold 0 \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \
   `# -progress feeds agent.py, which is the ONLY thing that surfaces speed.` \
   `# -stats_period throttles it to one block per 5s: the default is 0.5s, and` \

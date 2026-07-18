@@ -337,10 +337,11 @@
     var api = {
       start: function() {
         if (!self.timer) self.timer = setInterval(loop, 1000 / FPS);
-        if (fxOn && !self.fxTimer) self.fxTimer = setInterval(fxLoop, 50);   // 20fps — matches
-        // the encode; faster only burns frames ffmpeg discards, and the FX loop
-        // (bloom, chromatic aberration, gloss) is a chunk of the event-time CPU
-        // that saturated the box on the first broadcast.
+        if (fxOn && !self.fxTimer) self.fxTimer = setInterval(fxLoop, 42);   // 24fps —
+        // matches the encode 1:1. Was 30, which burned frames the 24fps capture
+        // discarded; 24 keeps that saving while staying smooth. (Briefly 20 to save
+        // more, but the encode had to return to 24 for YouTube to go live, and a
+        // 20fps FX under 24fps capture judders on a 1.2:1 ratio.
         return api;
       },
       stop: function() {
