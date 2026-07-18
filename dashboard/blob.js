@@ -316,8 +316,16 @@
 
       // Volume-preserving squash, bouncing off his base rather than his middle.
       var sy = (1 + s).toFixed(3), sx = (1 - s * 0.55).toFixed(3);
-      canvas.style.transformOrigin = '50% 62%';
-      canvas.style.transform = 'scale(' + sx + ',' + sy + ')';
+      // Same change-guard as the bloom below. At rest sx/sy settle to 1.000 and
+      // rewriting an identical transform still asks the compositor to re-do the
+      // layer — which on this software-rendering box is a real cost that buys
+      // exactly zero moved pixels.
+      var tr = 'scale(' + sx + ',' + sy + ')';
+      if (tr !== self._lastTransform) {
+        canvas.style.transformOrigin = '50% 62%';
+        canvas.style.transform = tr;
+        self._lastTransform = tr;
+      }
 
       // Neon bloom — a mood-coloured glow that breathes and spikes on impact,
       // plus a chromatic-aberration hit (two offset colour shadows) on a punch.

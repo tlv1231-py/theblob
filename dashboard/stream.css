@@ -571,9 +571,20 @@ html, body {
   width: 900px; height: 900px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,0,204,0.26), transparent 66%);
-  filter: blur(52px);
-  transition: background 0.45s linear;
+  /* NO blur() FILTER. This was `radial-gradient(...)` + `filter: blur(52px)` —
+     a gaussian blur over a 900x900 element (810k px) recomposited on EVERY
+     frame, in software, on a GPU-less ARM box. Measured with mpdecimate: the
+     render was painting ~6 unique fps against a 24fps capture, so ffmpeg was
+     encoding each frame 4x and the motion read as lag. A blur is the most
+     expensive op available here and this one was blurring a gradient that is
+     already soft — pure cost for almost no pixels changed.
+     A multi-stop gradient gives the same falloff for free. */
+  background: radial-gradient(circle,
+    rgba(255,0,204,0.30) 0%,
+    rgba(255,0,204,0.17) 30%,
+    rgba(255,0,204,0.07) 50%,
+    rgba(255,0,204,0.02) 66%,
+    transparent 78%);
 }
 #blobCanvas {
   position: relative;
