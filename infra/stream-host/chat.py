@@ -163,13 +163,17 @@ def discover_video(quota: Quota) -> str | None:
         # actual channel, where a message typed pre-live flowed all the way to
         # the Blob. Prefer a truly-live broadcast if both exist; fall back to an
         # upcoming one with an open chat.
+        # .get() throughout — a video in the uploads list can come back without a
+        # snippet (private, deleted, still processing), and indexing it["snippet"]
+        # directly crashed the whole listener on one bad item. Every other lookup
+        # in this file already guards this way; this line did not.
         live_id = upcoming_id = None
         for it in r.get("items") or []:
-            state = it["snippet"].get("liveBroadcastContent")
+            state = (it.get("snippet") or {}).get("liveBroadcastContent")
             if state == "live":
-                live_id = it["id"]
+                live_id = it.get("id")
             elif state == "upcoming":
-                upcoming_id = it["id"]
+                upcoming_id = it.get("id")
         return live_id or upcoming_id
     except urllib.error.HTTPError as e:
         print(f"[chat] discovery failed: {e.code} {e.read()[:160]!r}", flush=True)
