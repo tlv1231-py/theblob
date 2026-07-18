@@ -437,9 +437,21 @@ Paper portfolio start date: **2026-05-29**
     bought AVAX…" with every exit and its P&L dropped (62% of the batch). Cap is 8 =
     the largest roll; lowering it re-creates the fiction.
 
-    **The pointer** (`.t-point`, `pointAt()`) is the Gen-1 menu cursor, parked on the slot
-    during the 500ms wind-up. **Sells/rolls only** — a constraint, not a preference: an
-    entry has no tile to point at until the impact creates it.
+    **The pick + the reveal** (`pickAt()` / `revealExit()`, replacing the old `.t-point`
+    Gen-1 cursor). A sell is staged as a gamble in three moments. **PICK** (the 500ms
+    wind-up): a ring in his body pink locks around the target tile and *charges* — glow
+    ramps up, a `?` pulses above it — so attention converges on that ticker before it pops.
+    **REEL** (`REVEAL_MS` = 420ms, EXIT only): at the impact the ticker does NOT print the
+    P&L; it spins through random ±$ values in neutral gold (`.t-spin`), sign included, so
+    win/loss is genuinely unknown. **LOCK**: the reel stops on the real number, white-pops,
+    then the arcade hit restains it green/red. **The verdict is held to the lock** — mood
+    (HAPPY/EXASPERATED), win/loss sound, the horizon `bg.pulse`, the NAV move, and the
+    `blob <x>` sentence all fire in `onLock`, not at the impact, so his face never gives the
+    result away early. `applyTrade` returns `REVEAL_MS` so `tradeStart` pushes the POST
+    release out by it. **Sells/rolls only** — a constraint, not a preference: an entry has no
+    tile to lock onto (and no P&L to reveal) until its impact creates the slot. Sounds:
+    `SFX.charge` (rising run under the wind-up) → `SFX.reelTick` (per spin frame) →
+    `SFX.win/loss` (at the lock). The reel is per-sym (`_reelT`) and self-terminating.
 
     **Ticker colour is three tiers, and `ticker_colors` is only the top one.**
     `tickerColor()` is ported from `home_nav.js` `symCol()` and must stay identical or the

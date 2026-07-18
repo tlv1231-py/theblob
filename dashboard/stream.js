@@ -573,6 +573,25 @@
         note(880 + Math.random() * 80, 0, 0.02, 0.016);
       },
 
+      // ── The gamble ──────────────────────────────────────────────────────
+      // CHARGE — the pick winding up. A fast rising run under the 500ms
+      // wind-up, so the anticipation you SEE (the ring charging on the tile)
+      // has a pitch climbing with it. Quiet: it's tension, not a payout.
+      charge: function() {
+        if (!ctx) return;
+        if (ctx.state === 'suspended') { ctx.resume(); return; }
+        var V = 0.028;
+        var run = [196, 262, 330, 392, 494, 587, 698];   // ~450ms climb
+        for (var i = 0; i < run.length; i++) note(run[i], i * 0.06, 0.055, V);
+      },
+      // REEL — one blip per spin frame while the P&L cycles. Dry and quiet, a
+      // notch under the text blip, so a spinning number reads as a reel
+      // clicking rather than as a tune.
+      reelTick: function() {
+        if (!ctx || ctx.state !== 'running') return;
+        note(520 + Math.random() * 140, 0, 0.016, 0.014);
+      },
+
 
       isLive:   function() { return isLive; },
       isReady:  function() { return ready && ctx && ctx.state === 'running'; }
@@ -3211,6 +3230,13 @@
   // The Blob runs at 10fps, so ticks are ms/100. BLOB.md: do not raise the FPS.
   var PRE_TICKS = Math.round(PRE_MS / 100);
   var POST_TICKS = Math.round(POST_MS / 100);
+  // EXIT only: after the impact the P&L does not just appear — the reel SPINS
+  // through random values and then LOCKS, so the number is a reveal, not a
+  // readout. The verdict (mood, sound, score, the sentence) is held back to the
+  // lock, and the beat's release is pushed out by the same amount (applyTrade
+  // returns it so tradeStart can account for it). Buys have no P&L and skip it.
+  var REVEAL_MS = 420;
+  var REVEAL_TICKS = Math.round(REVEAL_MS / 100);
 
   // ═══════════════════════════════════════════════════════════════════════
   // BATCHING — the book does not trade, it ROLLS
@@ -3426,26 +3452,30 @@
     // and it is what makes the impact feel caused rather than random.
     blob.setMood('BRACE', PRE_TICKS + 2);   // +2 so it holds through the handoff
     glanceAt(t.sym);
-    // The cursor names the target while he winds up. His glance already aims at
-    // the slot, but a 768px blob looking 8px left is not something a viewer can
-    // actually read — the pointer is what makes the aim legible.
-    if (t.dir === 'EXIT') pointAt(t.sym);
+    // He PICKS the slot he's about to gamble on: a ring in his own colour locks
+    // around it and charges over the wind-up, with a pulsing "?" — the outcome
+    // is unknown until it pops. Replaces the Gen-1 cursor. Sells only, same as
+    // the cursor was: an entry's slot doesn't exist yet to point at.
+    if (t.dir === 'EXIT') pickAt(t.sym);
     showMood();
 
     setTimeout(function() {
       // ── EVENT ────────────────────────────────────────────────────────
-      applyTrade(t);
+      // For a sell this kicks off the reel and returns REVEAL_MS: the verdict
+      // lands when the reel LOCKS, so the release must wait that long extra
+      // before the POST follow-through starts. A buy returns 0.
+      var reveal = applyTrade(t) || 0;
 
       setTimeout(function() {
         // ── POST ───────────────────────────────────────────────────────
-        // The verdict mood set at the impact is still decaying — this is its
-        // window. Nothing to fire; the beat just isn't over yet, and the next
-        // wind-up must not start on top of the follow-through.
+        // The verdict mood (set at the impact, or at the lock for a sell) is
+        // still decaying — this is its window. Nothing to fire; the beat just
+        // isn't over yet, and the next wind-up must not start on top of it.
         //
         // Then the floor goes back to the ladder rather than straight to the
         // next trade: anything that queued during this beat gets its turn here.
         setTimeout(function() { _beat('release'); stageDone(); }, GAP_MS);
-      }, POST_MS);
+      }, reveal + POST_MS);
     }, PRE_MS + EVENT_MS);
     return true;
   }
@@ -3458,50 +3488,49 @@
   // He still leads — his glance and mood are set before the slot moves within
   // this same synchronous block, which is enough.
   function applyTrade(t) {
-    var verdict = t.dir === 'ENTER' ? 'enter' : (t.pnl > 0 ? 'win' : 'loss');
-
-    // The verdict mood IS the follow-through, so its duration is the POST
-    // window — not an arbitrary constant. A win gets a little longer because it
-    // is rare and worth holding; anything shorter than POST_TICKS would have
-    // him snap back to idle while the beat was still running.
-    if (verdict === 'win')        blob.setMood('HAPPY', POST_TICKS + 6);        // stoked
-    else if (verdict === 'enter') blob.setMood('HOPEFUL', POST_TICKS + 4);      // fresh pickup — gonna win!
-    else                          blob.setMood('EXASPERATED', POST_TICKS + 4);  // a loss — ugh
     glanceAt(t.sym);
-    showMood();
 
-    // Sound follows the verdict: acquisitions are neutral because buying is
-    // not yet good or bad news.
-    if (verdict === 'enter')     SFX.entry();
-    else if (verdict === 'win')  SFX.win();
-    else                         SFX.loss();
-    bg.pulse(verdict, 0.42);
-
-    // THE SCORE MOVES ON THE TRADE. A realised exit changes NAV, so the number
-    // reacts now rather than waiting up to 10s for the next engine UPDATE. The
-    // UPDATE still lands and corrects — a prediction the authoritative feed
-    // confirms, not a second source of truth.
-    if (t.dir === 'EXIT' && t.pnl != null) {
-      state.nav += t.pnl;
-      updateNav(state.nav);
+    // ── ENTER — a fresh pickup. No P&L, so no reveal: it lands whole, on the
+    // same frame as its sound, exactly as before. He's hopeful, buying is
+    // neutral news.
+    if (t.dir !== 'EXIT') {
+      blob.setMood('HOPEFUL', POST_TICKS + 4);
+      showMood();
+      SFX.entry();
+      bg.pulse('enter', 0.42);
+      boardEnter(t);
+      setStatus(t);
+      scheduleSettle();
+      return 0;
     }
 
-    // The pointer's job is done the instant the impact lands — from here the
-    // hit animation is saying "this one" far louder than a cursor could.
-    clearPointer();
+    // ── EXIT — the gamble. The pick's charge is spent, so hand the tile to the
+    // reel. NOTHING about the verdict — mood, sound, score, or the P&L in words
+    // — fires here: it all lands when the reel LOCKS, so the outcome is a
+    // genuine reveal and not something the Blob's face gives away early. He
+    // stays braced, watching it spin.
+    clearPick();
+    blob.setMood('BRACE', REVEAL_TICKS + 2);
+    showMood();
 
-    // Same frame as the sound.
-    if (t.dir === 'ENTER') boardEnter(t);
-    else                   boardExit(t);
-
-    // x speaks on the same frame too. The decode runs for ~400ms after this,
-    // but it STARTS here, which is what makes the sentence read as caused by the
-    // sound rather than as a caption that arrived late.
-    //
-    setStatus(t);
+    revealExit(t, function onLock() {
+      var win = (t.pnl != null ? Number(t.pnl) : 0) >= 0;
+      blob.setMood(win ? 'HAPPY' : 'EXASPERATED', win ? POST_TICKS + 6 : POST_TICKS + 4);
+      showMood();
+      if (win) SFX.win(); else SFX.loss();
+      bg.pulse(win ? 'win' : 'loss', 0.42);
+      // The score moves WITH the reveal — a realised exit changes NAV, and the
+      // engine UPDATE confirms it moments later (a prediction, not a rival
+      // source of truth).
+      if (t.pnl != null) { state.nav += t.pnl; updateNav(state.nav); }
+      // The sentence resolves on the same frame as the number and the sound,
+      // so the nameplate and the tile reveal the P&L together.
+      setStatus(t);
+    });
 
     // Any reordering waits — see scheduleSettle.
     scheduleSettle();
+    return REVEAL_MS;
   }
 
   // ── The board reacts ─────────────────────────────────────────────────────
@@ -3560,41 +3589,54 @@
     enterSym(el.querySelector('.t-sym'));
   }
 
-  // ── The pointer ──────────────────────────────────────────────────────────
-  // The Gen-1 menu cursor. During the wind-up it parks against the slot he is
-  // about to sell: BRACE says "something is coming", the pointer says "to THAT
-  // one". Without it the 500ms of anticipation has no target and the impact
-  // still arrives from nowhere.
+  // ── The pick ───────────────────────────────────────────────────────────────
+  // Replaces the Gen-1 cursor. During the wind-up he LOCKS ONTO the slot he's
+  // about to gamble on: a ring in his own pink snaps around the tile and CHARGES
+  // — the glow ramps up over the 500ms while a "?" pulses above it, because the
+  // outcome is unknown until the reel pops. BRACE says "something is coming";
+  // this says "on THAT one, and it could go either way". Charge is spent at the
+  // impact (clearPick), where the reel takes over.
   //
-  // Sells only — and that is a constraint, not a preference. Only a sale has a
-  // tile to point AT; an entry's slot does not exist until the impact creates
-  // it, so there is nothing on the board to aim at during its wind-up.
+  // His pink, because it is HIM choosing — the only board element in his body
+  // colour. Sells only, same constraint the cursor had: an entry's slot doesn't
+  // exist to lock onto until its impact creates it.
   //
-  // It nudges on a 2-frame cycle, setInterval — a CSS animation here would be
+  // Tile-local (no cross-tile travel) so it never has to reason about the
+  // stage's letterbox scale, and interval-driven because a CSS animation here is
   // inert like every other one on this page.
-  var POINT_NUDGE = [0, 3];
-  var _pointEl = null, _pointT = null;
+  var _pickRing = null, _pickQ = null, _pickT = null;
 
-  function pointAt(sym) {
-    clearPointer();
+  function pickAt(sym) {
+    clearPick();
     var el = tileEl(sym);
     if (!el) return;
-    var p = document.createElement('span');
-    p.className = 't-point';
-    p.textContent = '▶';
-    el.appendChild(p);
-    _pointEl = p;
-    var i = 0;
-    _pointT = setInterval(function() {
-      i = (i + 1) % POINT_NUDGE.length;
-      p.style.transform = 'translate(' + (-POINT_NUDGE[i]) + 'px, -50%)';
-    }, 150);
+    var ring = document.createElement('div'); ring.className = 't-pick';
+    var q = document.createElement('span'); q.className = 't-q'; q.textContent = '?';
+    el.appendChild(ring); el.appendChild(q);
+    _pickRing = ring; _pickQ = q;
+    SFX.charge();
+
+    var t0 = Date.now();
+    _pickT = setInterval(function() {
+      var prog = Math.min(1, (Date.now() - t0) / PRE_MS);   // 0 -> 1 across the wind-up
+      var puls = Math.sin(Date.now() / 55) * 0.5 + 0.5;     // 0..1 flicker
+      // The ring swells and its glow ramps as it charges.
+      ring.style.opacity = (0.5 + prog * 0.5).toFixed(2);
+      ring.style.transform = 'scale(' + (1 + 0.05 * (puls - 0.5) * 2 + prog * 0.04).toFixed(3) + ')';
+      ring.style.boxShadow =
+        '0 0 ' + (8 + prog * 22 + puls * 5).toFixed(1) + 'px rgba(255,0,204,' + (0.5 + prog * 0.45).toFixed(2) + '), ' +
+        'inset 0 0 ' + (6 + prog * 10).toFixed(1) + 'px rgba(255,0,204,0.5)';
+      // The "?" pulses and rocks — the gamble tell.
+      q.style.opacity = (0.7 + 0.3 * puls).toFixed(2);
+      q.style.transform = 'scale(' + (1 + 0.18 * puls + prog * 0.15).toFixed(3) + ') rotate(' + ((puls - 0.5) * 16).toFixed(1) + 'deg)';
+    }, 45);
   }
 
-  function clearPointer() {
-    clearInterval(_pointT); _pointT = null;
-    if (_pointEl && _pointEl.parentNode) _pointEl.parentNode.removeChild(_pointEl);
-    _pointEl = null;
+  function clearPick() {
+    clearInterval(_pickT); _pickT = null;
+    if (_pickRing && _pickRing.parentNode) _pickRing.parentNode.removeChild(_pickRing);
+    if (_pickQ && _pickQ.parentNode) _pickQ.parentNode.removeChild(_pickQ);
+    _pickRing = _pickQ = null;
   }
 
   // ── The leavebehind ──────────────────────────────────────────────────────
@@ -3612,25 +3654,72 @@
   // The fade owns the ending now; boardExit only owns the impact. ghostT still
   // marks "this slot is showing a number, leave it alone" for the tint pass and
   // the settle, and fadeLeavebehinds clears it.
-  function boardExit(t) {
+  // ── The reveal — a slot reel, not a readout ──────────────────────────────
+  // On a sell the slot doesn't just print what the position earned: the ticker
+  // SPINS through random dollar values, either sign, and then LOCKS on the real
+  // result. Until it stops you don't know if it's green or red, which is the
+  // whole point — a closed position is a settled bet, and this is the reveal of
+  // how it paid. onLock fires the verdict (see applyTrade) on the same frame the
+  // number resolves.
+  //
+  // Per-sym timer id so a teardown can kill a reel; it also self-terminates.
+  // These are real interval ids — safe to clearInterval, unlike ghostT.
+  var _reelT = {};
+  function revealExit(t, onLock) {
     var el = tileEl(t.sym);
-    if (!el) return;
+    var v = t.pnl != null ? Number(t.pnl) : 0;
 
-    var sp = el.querySelector('.t-sym');
-    var v = Number(t.pnl || 0);
-    setSym(sp, (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toFixed(2));
-    sp.className = 't-sym ' + (v >= 0 ? 'pnl-win' : 'pnl-loss');
-    sp.style.opacity = '';       // a reclaimed slot may still carry the last fade
-    el.style.setProperty('--tc', v >= 0 ? '#00ff9d' : '#ff3366');
-    hitTile(t.sym);              // the number lands with the same arcade punch
-
-    // Drop the position from local state now so the settle doesn't resurrect
-    // the slot — but leave the ELEMENT on screen holding its number.
+    // The position is closed the instant he sells — drop it from state now so
+    // the settle can't resurrect the slot, but keep the ELEMENT to run the reel.
     S.crypto = (S.crypto || []).filter(function(c) { return c.sym !== t.sym; });
+    ghostT[t.sym] = true;   // marker: this slot is spoken for (tint pass, settle)
 
-    // A marker, not a countdown: nothing fires when this is set, it only tells
-    // the tint pass and the settle that this slot is spoken for.
-    ghostT[t.sym] = true;
+    if (!el) { onLock(); return; }
+    var sp = el.querySelector('.t-sym');
+
+    // The reel look — neutral gold, no verdict colour yet, so a spinning number
+    // reads as "still deciding" rather than as a real profit or loss.
+    sp.className = 't-sym t-spin';
+    sp.style.opacity = '';       // a reclaimed slot may still carry the last fade
+    el.style.setProperty('--tc', '#ffcf5a');
+
+    // Spread the random values around the real magnitude so the lock doesn't
+    // visibly jump from a wild number to the answer.
+    var span = Math.abs(v) * 1.6 + 3;
+    clearInterval(_reelT[t.sym]);
+    var t0 = Date.now();
+    _reelT[t.sym] = setInterval(function() {
+      try {
+        if (Date.now() - t0 >= REVEAL_MS) {
+          clearInterval(_reelT[t.sym]); delete _reelT[t.sym];
+          lockExit(el, sp, v, t.sym);
+          onLock();
+          return;
+        }
+        setSym(sp, (Math.random() < 0.5 ? '+' : '−') + '$' + (Math.random() * span).toFixed(2));
+        SFX.reelTick();
+      } catch (e) {
+        // A reel is not worth wedging the beat: on any throw, stop, lock the
+        // real value, and fire the verdict so the lane still releases.
+        clearInterval(_reelT[t.sym]); delete _reelT[t.sym];
+        try { lockExit(el, sp, v, t.sym); } catch (e2) {}
+        onLock();
+      }
+    }, 45);
+  }
+
+  // The stop: the real P&L snaps in, coloured by the verdict, with a white pop
+  // the instant it resolves — then the arcade hit restains it to green/red, the
+  // "it landed!" beat of a payout.
+  function lockExit(el, sp, v, sym) {
+    var win = v >= 0;
+    setSym(sp, (win ? '+' : '−') + '$' + Math.abs(v).toFixed(2));
+    sp.className = 't-sym ' + (win ? 'pnl-win' : 'pnl-loss');
+    sp.style.opacity = '';
+    el.style.setProperty('--tc', win ? '#00ff9d' : '#ff3366');
+    sp.style.color = '#ffffff';
+    sp.style.textShadow = '0 0 30px #fff, 0 0 12px #fff, 3px 3px 0 rgba(0,0,0,0.9)';
+    setTimeout(function() { arcadeHit(sym); }, 70);   // hit takes over, tints to --tc
   }
 
   function pollEvents() {
