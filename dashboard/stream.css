@@ -215,11 +215,12 @@ html, body {
    valuable space on the stage to say nothing. */
 #s-events {
   position: absolute;
-  /* bottom lifted 0 -> 110: the first broadcast put the box's floor at y1540,
-     right where YouTube's live-chat input bar sits on mobile, so the lower third
-     of every popup was behind the chat field. 110 lifts its floor to ~y1430,
-     clear of the bar. */
-  left: 0; right: 0; bottom: 110px;
+  /* Floor at the SCORE's bottom (y1492), so the box covers the portfolio number
+     ENTIRELY when it fires — they line up now instead of the box floating too
+     high above it. The score+bar cluster moved up (blob 768->720), so this floor
+     also clears YouTube's chat bar without needing the old +110 lift. The
+     compliance bar sits just below this floor and stays visible mid-event. */
+  left: 0; right: 0; bottom: 48px;
   height: 248px;
   z-index: 20;                 /* covers the NAV — it must win */
   display: none;
@@ -557,7 +558,11 @@ html, body {
 
 /* ── Blob · 768 — THE STREAMER ────────────────────────────────────────── */
 #s-blob {
-  height: 768px; flex: none;
+  height: 720px; flex: none;    /* was 768 (48x16). One integer step down to 720
+                                   (48x15) frees exactly 48px for the compliance
+                                   bar BELOW the score, and lifts the whole
+                                   score+bar cluster off YouTube's bottom chrome.
+                                   Still a 48px multiple, so no resample. */
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
@@ -573,10 +578,11 @@ html, body {
 #blobCanvas {
   position: relative;
   z-index: 2;                    /* orbs depth-sort around this: back z1, front z3 */
-  width: 768px; height: 768px;   /* 48 x 16 — integer scale, no resample.
+  width: 720px; height: 720px;   /* 48 x 15 — integer scale, no resample.
                                     Any resize MUST stay on a 48px multiple or
                                     his pixels get resampled and the whole
-                                    8-bit read collapses. */
+                                    8-bit read collapses. (768 -> 720 to open the
+                                    compliance-bar slot below the score.) */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -913,20 +919,18 @@ html, body {
 }
 
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
-/* ── Compliance disclaimer — permanent scrolling band ─────────────────────── */
-/* Floats over the Blob's lower body at ~y1150, above the lifted popup's top edge
-   (~y1182) so a viewer event never covers it. Dim white — it is system text, and
-   the only things allowed real colour on this stage are the ticker and the P&L.
-   Masked at both ends so glyphs fade in/out rather than pop at the edges. */
+/* ── Compliance disclaimer — permanent scrolling bar, BELOW the score ──────── */
+/* Now a flat bar in the flex flow, the LAST item in #safe: blob / score / this.
+   It sits directly under the portfolio number, at the very bottom of the safe
+   box, out of the Blob's body entirely. The popup covers the score above it but
+   NOT this — so the disclosure is on screen even mid-event. Dim white: system
+   text, and only the ticker and P&L get real colour. Masked ends so glyphs fade
+   rather than pop. */
 #s-disc {
-  position: absolute;
-  left: var(--safe-x); right: 120px;
-  /* Over the Blob's LOWER BODY, well below his eyes — the face (the expressive
-     part) stays clear, per BLOB.md. A firing popup may briefly cover it; that is
-     fine, compliance only needs it present the vast majority of the time, and it
-     re-emerges the moment the box closes. */
-  bottom: 250px;
-  height: 32px;
+  flex: none;
+  height: 48px;
+  width: 100%;
+  display: flex; align-items: center;
   overflow: hidden;
   white-space: nowrap;
   z-index: 11;

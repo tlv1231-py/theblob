@@ -323,14 +323,21 @@
       // plus a chromatic-aberration hit (two offset colour shadows) on a punch.
       var c = self.accent || P.MID, rgb = c[0] + ',' + c[1] + ',' + c[2];
       var g = Math.min(1, (MOOD_GLOW[self.mood] || 0.16) + glowSpike);
-      var f = 'drop-shadow(0 0 ' + (5 + g * 14).toFixed(1) + 'px rgba(' + rgb + ',' + (0.55 + g * 0.35).toFixed(2) + ')) '
-            + 'drop-shadow(0 0 ' + (14 + g * 30).toFixed(1) + 'px rgba(' + rgb + ',' + (0.20 + g * 0.30).toFixed(2) + '))';
+      // Radii cut ~in half. drop-shadow is a gaussian blur — the single most
+      // expensive op in software rendering, which is all this GPU-less VM has —
+      // and its cost scales ~radius^2, so halving the radius roughly quarters the
+      // cost. This bloom, redrawn every FX frame on the 720px canvas, was a big
+      // slice of the event-time CPU spike that lagged the stream. Still reads neon.
+      var f = 'drop-shadow(0 0 ' + (3 + g * 6).toFixed(1) + 'px rgba(' + rgb + ',' + (0.55 + g * 0.35).toFixed(2) + ')) '
+            + 'drop-shadow(0 0 ' + (7 + g * 13).toFixed(1) + 'px rgba(' + rgb + ',' + (0.20 + g * 0.30).toFixed(2) + '))';
       if (aber > 0.03) {
-        var ao = (aber * 5).toFixed(1);
+        var ao = (aber * 5).toFixed(1);   // 0-blur offset shadows — cheap, kept.
         f += ' drop-shadow(' + ao + 'px 0 rgba(255,64,80,' + (aber * 0.8).toFixed(2) + ')) '
            + 'drop-shadow(-' + ao + 'px 0 rgba(64,220,255,' + (aber * 0.8).toFixed(2) + '))';
       }
-      canvas.style.filter = f;
+      // Only touch the DOM when it actually changed. At rest the bloom string is
+      // constant, so this stops re-triggering the blur recompute every frame.
+      if (f !== self._lastFilter) { canvas.style.filter = f; self._lastFilter = f; }
     }
 
     // ── Public API — identical surface to the procedural version ─────────────
