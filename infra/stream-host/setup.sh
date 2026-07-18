@@ -105,7 +105,7 @@ echo "    linger enabled for 'blob' (snap needs the session bus)"
 
 echo "==> install to $DEST"
 mkdir -p "$DEST/music"
-install -m 755 "$HERE/chromium.sh" "$HERE/stream.sh" "$DEST/"
+install -m 755 "$HERE/chromium.sh" "$HERE/stream.sh" "$HERE/normalize-music.sh" "$DEST/"
 install -m 755 "$HERE/agent.py" "$HERE/watchdog.py" "$HERE/switch.py" "$HERE/chat.py" "$DEST/"
 
 # Stays root:root 0600 on purpose. systemd reads EnvironmentFile= as root before
