@@ -1,0 +1,17 @@
+# Minimal PulseAudio config for the stream host.
+#
+# The VM has no sound hardware and never will — this exists solely so the
+# browser's WebAudio SFX have somewhere to play and ffmpeg has somewhere to
+# capture them from. Loaded with `pulseaudio -nF`: -n skips the stock config and
+# its hardware autodetection (which finds nothing here and only adds failure
+# surface), -F runs this script instead.
+#
+#   browser --plays--> blob_sink --monitor--> ffmpeg --mixes with--> music
+#
+# The sink has ONLY the SFX; the music bed is added by ffmpeg from files. That
+# separation is deliberate — it is what makes independent SFX/music faders
+# possible later without untangling one stream into two.
+
+load-module module-native-protocol-unix
+load-module module-null-sink sink_name=blob_sink sink_properties=device.description=BlobSink
+set-default-sink blob_sink

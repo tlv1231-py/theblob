@@ -20,7 +20,8 @@ command -v apt-get >/dev/null 2>&1 || {
 echo "==> packages"
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  xvfb ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates curl fontconfig
+  xvfb ffmpeg python3 x11vnc fonts-dejavu-core ca-certificates curl fontconfig \
+  pulseaudio pulseaudio-utils
 
 # ── Fonts are a dependency, not a download ───────────────────────────────────
 # The page asks fonts.googleapis.com for Press Start 2P and VT323 at load time.
@@ -106,6 +107,7 @@ echo "    linger enabled for 'blob' (snap needs the session bus)"
 echo "==> install to $DEST"
 mkdir -p "$DEST/music"
 install -m 755 "$HERE/chromium.sh" "$HERE/stream.sh" "$HERE/normalize-music.sh" "$DEST/"
+install -m 644 "$HERE/pulse.pa" "$DEST/"
 install -m 755 "$HERE/agent.py" "$HERE/watchdog.py" "$HERE/switch.py" "$HERE/chat.py" "$DEST/"
 
 # Stays root:root 0600 on purpose. systemd reads EnvironmentFile= as root before
@@ -156,7 +158,7 @@ systemctl daemon-reload
 echo "==> enable"
 # blob-ffmpeg is enabled but NOT started by the switch's design — blob-switch
 # owns whether the encoder runs, driven by the button on Stream HQ.
-systemctl enable blob-xvfb blob-chromium blob-ffmpeg blob-agent blob-watchdog blob-switch blob-chat
+systemctl enable blob-pulse blob-xvfb blob-chromium blob-ffmpeg blob-agent blob-watchdog blob-switch blob-chat
 
 cat <<'EOF'
 

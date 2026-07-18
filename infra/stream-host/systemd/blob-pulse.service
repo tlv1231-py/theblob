@@ -1,0 +1,24 @@
+[Unit]
+Description=Blob stream — PulseAudio virtual sink (captures the browser's SFX)
+After=network-online.target
+# Chromium must find the sink to play into it, and ffmpeg must find it to capture
+# it, so both start after this.
+Before=blob-chromium.service blob-ffmpeg.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=blob
+Group=blob
+
+# XDG_RUNTIME_DIR must be blob's own (/run/user/<uid>), the SAME one chromium.sh
+# uses — that is where the pulse socket lands, so an unmodified Chromium started
+# by the same user finds it with no PULSE_SERVER wiring. Computed from `id -u`
+# rather than hardcoding 999, since useradd picked the uid. logind maintains that
+# dir because setup.sh lingers the blob user (also needed for the chromium snap).
+ExecStart=/bin/sh -c 'export XDG_RUNTIME_DIR=/run/user/$(id -u); exec /usr/bin/pulseaudio --daemonize=no --exit-idle-time=-1 -nF /opt/blob-stream/pulse.pa'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

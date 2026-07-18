@@ -1,7 +1,11 @@
 [Unit]
 Description=Blob stream — Chromium rendering the Stream page
-After=blob-xvfb.service
+After=blob-xvfb.service blob-pulse.service
 Requires=blob-xvfb.service
+# Wants, not Requires: if PulseAudio is down the render must still run — it just
+# loses sound, which ffmpeg degrades to music-only. A missing sink is not a
+# reason to take the picture off the air.
+Wants=blob-pulse.service
 
 # A crash loop here must not become a permanent stop: this is the unit the
 # watchdog restarts, and if systemd's default start limit (5 starts / 10s) trips

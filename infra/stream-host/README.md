@@ -4,9 +4,12 @@ Broadcasts the vertical Stream page to YouTube, 24/7, unattended.
 
 ```
 Oracle ARM VM
-  └─ Xvfb :99 @ 1080x1920      blob-xvfb.service
+  ├─ PulseAudio null sink       blob-pulse.service     ← browser SFX land here
+  └─ Xvfb :99 @ 1080x1920       blob-xvfb.service
       └─ Chromium kiosk         blob-chromium.service  ← the watchdog reloads THIS
+          │                                              (SFX -> blob_sink)
           └─ ffmpeg x11grab     blob-ffmpeg.service    → YouTube RTMP
+             (video + music files + blob_sink.monitor SFX, mixed)
   ├─ agent.py                   blob-agent.service     → stream_health
   ├─ watchdog.py                blob-watchdog.service  ← reads stream_health
   ├─ switch.py                  blob-switch.service    ← Stream HQ START/STOP

@@ -20,6 +20,18 @@ MUSIC_DIR="${MUSIC_DIR:-$HERE/music}"
 PROGRESS="${FFMPEG_PROGRESS:-/run/blob-stream/progress}"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_KEY}"
 
+# So ffmpeg (and pactl below) find blob's PulseAudio — the browser's SFX play
+# into blob_sink and we capture blob_sink.monitor. Same runtime dir the browser
+# and blob-pulse use.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+# The two faders. The browser's WebAudio SFX come out quiet (peaks ~-18..-36 dB),
+# the music is normalised to -16 LUFS, so the SFX get a boost and the music sits
+# back as a bed. Env-overridable — this is the seam a future Stream HQ fader set
+# writes to.
+MUSIC_VOL="${MUSIC_VOL:-0.6}"
+SFX_VOL="${SFX_VOL:-2.0}"
+
 mkdir -p "$(dirname "$PROGRESS")"
 : > "$PROGRESS"
 
@@ -70,8 +82,28 @@ else
   # audio stream as unhealthy, and a missing track is harder to notice than a
   # quiet one.
   AUDIO_IN=(-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100)
-  AUDIO_FILTER=()
   echo "[stream] WARNING: no music in $MUSIC_DIR — streaming silence"
+fi
+
+# ── Browser SFX (input 2) + mix ─────────────────────────────────────────────
+# The page synthesises its 8-bit sound in WebAudio; Chromium plays it into
+# blob_sink (blob-pulse.service) and we capture blob_sink.monitor here, mixing it
+# with the music bed. music = input 1, SFX = input 2, video = input 0.
+#
+# GRACEFUL: if pulse or the sink is not up, fall back to music-only rather than
+# failing the whole encode. The stream ran without SFX its entire life before
+# this; a missing sink must never be what takes the broadcast down.
+SFX_IN=(); FILTER=(); MAP=(-map 0:v -map 1:a)
+if pactl list sinks short 2>/dev/null | grep -qw blob_sink; then
+  SFX_IN=(-f pulse -i blob_sink.monitor)
+  # Boost the quiet SFX, sit the music back, sum WITHOUT amix's auto-halving
+  # (normalize=0), then a limiter to catch any peak the boost pushes over.
+  FILTER=(-filter_complex \
+    "[1:a]volume=${MUSIC_VOL}[m];[2:a]volume=${SFX_VOL}[s];[m][s]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]")
+  MAP=(-map 0:v -map "[aout]")
+  echo "[stream] SFX: mixing blob_sink.monitor (music ${MUSIC_VOL} / sfx ${SFX_VOL})"
+else
+  echo "[stream] SFX: blob_sink not found — music only (browser sound absent)"
 fi
 
 # ── Encode ────────────────────────────────────────────────────────────────────
@@ -115,7 +147,9 @@ fi
 exec ffmpeg -hide_banner -loglevel warning \
   -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
-  "${AUDIO_FILTER[@]}" \
+  "${SFX_IN[@]}" \
+  "${FILTER[@]}" \
+  "${MAP[@]}" \
   -c:v libx264 -preset ultrafast -x264-params cabac=1 -tune zerolatency -profile:v main -pix_fmt yuv420p \
   -b:v 4500k -maxrate 4500k -bufsize 9000k \
   -g 48 -keyint_min 48 -sc_threshold 0 \
