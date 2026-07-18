@@ -180,30 +180,107 @@ def discover_video(quota: Quota) -> str | None:
     return None
 
 
-def resolve_chat_id(quota: Quota) -> tuple[str | None, str | None]:
-    """(liveChatId, videoId).
+def broadcast_expected() -> bool:
+    """Is the operator's START/STOP switch on? Then a live stream SHOULD exist.
 
-    Pinning YOUTUBE_VIDEO_ID keeps this at 1 unit and is worth doing: a 24/7
-    broadcast reusing one stream key keeps the same video id, so there is usually
-    nothing to discover.
+    This is the gate that makes the 100-unit search.list affordable. When the
+    switch is on we know to look hard for a broadcast; when it is off there is
+    nothing live and no reason to spend anything hunting.
     """
-    vid = VIDEO_ID or (discover_video(quota) if CHANNEL_ID else None)
-    if not vid:
-        if not VIDEO_ID and not CHANNEL_ID:
-            print("[chat] no YOUTUBE_VIDEO_ID and no YOUTUBE_CHANNEL_ID — nothing to watch",
-                  flush=True)
+    url = (f"{SUPA_URL}/rest/v1/strategy_params"
+           "?strategy=eq.stream&param=eq.broadcast_enabled&select=value&limit=1")
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+    except Exception:
+        return False
+    return bool(rows) and str(rows[0].get("value", "0")) == "1"
+
+
+def search_live(quota: Quota) -> str | None:
+    """The reliable-but-expensive backstop: search.list, 100 units.
+
+    The uploads-playlist walk is 3 units but EVENTUALLY CONSISTENT — measured on a
+    just-created broadcast it flapped between listing the video and returning
+    empty. search.list is authoritative and finds a live broadcast every time, so
+    it is the fallback when the cheap walk missed one we have reason to believe
+    exists. Gated on broadcast_expected() and a cooldown so it can never drain the
+    day hunting a channel that is simply dark.
+    """
+    try:
+        r = api("search.list", "search", quota, part="id", channelId=CHANNEL_ID,
+                eventType="live", type="video", maxResults=1)
+    except urllib.error.HTTPError as e:
+        print(f"[chat] search.list failed: {e.code} {e.read()[:160]!r}", flush=True)
+        return None
+    items = r.get("items") or []
+    return items[0]["id"]["videoId"] if items else None
+
+
+# search.list is 100 units. Never fire it more than once per this window, so even
+# a persistently-undetected broadcast cannot cost more than ~10k/day on its own.
+SEARCH_COOLDOWN = int(os.environ.get("CHAT_SEARCH_COOLDOWN", "900"))
+_last_search = 0.0
+
+
+def resolve_chat_id(quota: Quota) -> tuple[str | None, str | None]:
+    """(liveChatId, videoId), by three routes cheapest-first.
+
+    1. A pinned YOUTUBE_VIDEO_ID — 1 unit, dead reliable. Worth setting for a
+       24/7 broadcast, and this now FALLS THROUGH if the pinned id has no active
+       chat, so a stale id (the broadcast ended, a new one has a new id) self-heals
+       into discovery instead of watching a dead video forever.
+    2. The uploads-playlist walk — 3 units, but eventually consistent, so it can
+       miss a fresh broadcast.
+    3. search.list — 100 units, authoritative, gated on the broadcast switch being
+       on and a 15-minute cooldown so it is affordable.
+    """
+    global _last_search
+
+    if not VIDEO_ID and not CHANNEL_ID:
+        print("[chat] no YOUTUBE_VIDEO_ID and no YOUTUBE_CHANNEL_ID — nothing to watch",
+              flush=True)
         return None, None
 
+    # 1. Pinned id, if it still has a live chat.
+    if VIDEO_ID:
+        cid = chat_for(VIDEO_ID, quota)
+        if cid:
+            return cid, VIDEO_ID
+        # Pinned but dead — fall through to discovery rather than loop on it.
+
+    if not CHANNEL_ID:
+        return None, VIDEO_ID or None
+
+    # 2. Cheap uploads-playlist walk.
+    vid = discover_video(quota)
+
+    # 3. Expensive, reliable backstop — only when a broadcast is expected and the
+    #    cheap walk came up empty, and no more than once per cooldown.
+    if not vid and broadcast_expected() and (time.time() - _last_search) > SEARCH_COOLDOWN:
+        print("[chat] cheap discovery missed a broadcast the switch says is live "
+              "— falling back to search.list (100u)", flush=True)
+        _last_search = time.time()
+        vid = search_live(quota)
+
+    if not vid:
+        return None, None
+    return chat_for(vid, quota), vid
+
+
+def chat_for(vid: str, quota: Quota) -> str | None:
+    """activeLiveChatId for a video, or None. 1 unit."""
     try:
         r = api("videos.list", "videos", quota, part="liveStreamingDetails", id=vid)
     except urllib.error.HTTPError as e:
         print(f"[chat] videos.list failed: {e.code} {e.read()[:160]!r}", flush=True)
-        return None, vid
+        return None
     items = r.get("items") or []
     if not items:
-        return None, vid
-    chat_id = (items[0].get("liveStreamingDetails") or {}).get("activeLiveChatId")
-    return chat_id, vid
+        return None
+    return (items[0].get("liveStreamingDetails") or {}).get("activeLiveChatId")
 
 
 # ── Policy (shared with the START/STOP switch) ───────────────────────────────
