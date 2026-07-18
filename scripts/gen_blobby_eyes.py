@@ -88,6 +88,42 @@ def body(st, dR, dim=0):
         st.disc(18, cy + 6, 2.0, P['SPEC'])   # gloss
 
 
+def draw_mullet(st):
+    """A big 80s mullet — dark, voluminous hair BEHIND the circle: a poof up top,
+    long locks flaring down the back, feathered pink highlight streaks for the
+    rich sheen. Drawn before the body so the pink face sits in front of it."""
+    cx, cy, R = CIRC
+    HAIR = P['EYE']
+
+    def hw(y):                          # hair half-width per row (from centre)
+        if y < 16:                      # a rounded 80s DOME — big volume up top
+            return 5 + 15 * math.sin(y / 16.0 * math.pi * 0.9)
+        if y < 32:                      # SHORT business sides — hug the head
+            return math.sqrt(max(0.0, R * R - (y - cy) ** 2)) + 2.0
+        return 15 + (y - 32) * 0.95     # the TAIL — full length flaring out the back
+
+    FEATHER = [0, 1, 1, 0, -1, 1]       # gentle jagged edge so it reads as hair
+    for y in range(0, 48):
+        w = hw(y) + FEATHER[y % 6]
+        for x in range(int(round(cx - w)), int(round(cx + w)) + 1):
+            st.set(x, y, HAIR)
+
+    # Sheen: BROAD feathered locks (2px) through the poof and the tail — volume,
+    # not stringy drips, and no straight crown line (that read as a hat brim).
+    locks = [(cx - 11, 4, 15), (cx + 10, 4, 15),
+             (cx - 15, 33, 47), (cx - 9, 35, 47), (cx + 9, 35, 47), (cx + 15, 33, 47)]
+    for base, y0, y1 in locks:
+        for y in range(y0, y1):
+            x = int(round(base + math.sin(y * 0.5) * 1.4))
+            if st.get(x, y) == HAIR:
+                st.set(x, y, P['HI'])
+            if st.get(x + 1, y) == HAIR:
+                st.set(x + 1, y, P['HI'])
+    for (x, y) in [(cx - 3, 2), (cx + 3, 2), (cx - 16, 44), (cx + 16, 44)]:
+        if st.get(x, y) is not None:
+            st.set(x, y, P['SPEC'])
+
+
 # ── Eye specs per mood. Everything dialled up. ───────────────────────────────
 # lidT/lidB: fraction of the eye covered from top / bottom (a curved lid).
 # div: pupils pushed outward (wall-eye). gaze: both pupils shift together.
@@ -214,6 +250,7 @@ BREATH_dR = [0, 0.5, 0, -0.5]
 
 def body_cell(mood, col):
     st = Buf()
+    draw_mullet(st)                                          # 80s hair, behind him
     body(st, BREATH_dR[col], dim=1 if mood == 'SLEEP' else 0)
     draw_mouth(st, mood)
     return st.a
