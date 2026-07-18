@@ -1188,6 +1188,22 @@ html, body {
     0 0 18px rgba(255,200,80,0.7);
 }
 
+/* Exit reveal — a blank WHITE FRAME held over the tile while the P&L "decides",
+   then lockExit resolves it to the number. Replaces the spinning reel: one static
+   held state instead of a ~9-frame interval, so it costs nothing per frame on the
+   event spikes AND reads as a clean "slot locks in". Hard edges, no radius — an
+   arcade cell, not a rounded card. Shown ~420ms on one tile at a time, so the
+   glow is a one-time paint, not a running cost. */
+.tile.t-reveal::before {
+  content: '';
+  position: absolute;
+  inset: 5px 4px;
+  border: 3px solid #fff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55),
+              inset 0 0 8px rgba(255, 255, 255, 0.30);
+}
+
 /* THE RESULT REPLACES THE NAME. On a sell the slot prints what the position
    earned, in the same face and size the ticker used — the swap is the whole
    message, so nothing else about the type may change or the eye reads it as a

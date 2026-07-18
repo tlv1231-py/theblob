@@ -3702,50 +3702,41 @@
   // how it paid. onLock fires the verdict (see applyTrade) on the same frame the
   // number resolves.
   //
-  // Per-sym timer id so a teardown can kill a reel; it also self-terminates.
-  // These are real interval ids — safe to clearInterval, unlike ghostT.
+  // Per-sym reveal timer so a teardown can kill it; it also self-terminates.
+  // These are now setTimeout ids (one held frame, not a spinning interval) —
+  // clearTimeout, and still safe to clear, unlike ghostT's bare-true marker.
   var _reelT = {};
   function revealExit(t, onLock) {
     var el = tileEl(t.sym);
     var v = t.pnl != null ? Number(t.pnl) : 0;
 
     // The position is closed the instant he sells — drop it from state now so
-    // the settle can't resurrect the slot, but keep the ELEMENT to run the reel.
+    // the settle can't resurrect the slot, but keep the ELEMENT for the reveal.
     S.crypto = (S.crypto || []).filter(function(c) { return c.sym !== t.sym; });
     ghostT[t.sym] = true;   // marker: this slot is spoken for (tint pass, settle)
 
     if (!el) { onLock(); return; }
     var sp = el.querySelector('.t-sym');
 
-    // The reel look — neutral gold, no verdict colour yet, so a spinning number
-    // reads as "still deciding" rather than as a real profit or loss.
-    sp.className = 't-sym t-spin';
+    // WHITE-FRAME reveal, replacing the spinning reel. The tile snaps to a blank
+    // white box — "still deciding", no verdict colour yet — holds for REVEAL_MS,
+    // then the real P&L number locks in. This is ONE timeout in place of a
+    // ~9-frame interval that rebuilt the ticker glyphs (setSym) and played a
+    // sound every frame: that per-frame churn was pure CPU during the exact event
+    // spikes that lagged the stream, and the held frame reads cleaner besides.
+    sp.className = 't-sym';
     sp.style.opacity = '';       // a reclaimed slot may still carry the last fade
-    el.style.setProperty('--tc', '#ffcf5a');
+    setSym(sp, '');              // blank — the white frame IS the content now
+    el.classList.add('t-reveal');
+    try { SFX.reelTick(); } catch (e) {}   // one tick on the snap, not per frame
 
-    // Spread the random values around the real magnitude so the lock doesn't
-    // visibly jump from a wild number to the answer.
-    var span = Math.abs(v) * 1.6 + 3;
-    clearInterval(_reelT[t.sym]);
-    var t0 = Date.now();
-    _reelT[t.sym] = setInterval(function() {
-      try {
-        if (Date.now() - t0 >= REVEAL_MS) {
-          clearInterval(_reelT[t.sym]); delete _reelT[t.sym];
-          lockExit(el, sp, v, t.sym);
-          onLock();
-          return;
-        }
-        setSym(sp, (Math.random() < 0.5 ? '+' : '−') + '$' + (Math.random() * span).toFixed(2));
-        SFX.reelTick();
-      } catch (e) {
-        // A reel is not worth wedging the beat: on any throw, stop, lock the
-        // real value, and fire the verdict so the lane still releases.
-        clearInterval(_reelT[t.sym]); delete _reelT[t.sym];
-        try { lockExit(el, sp, v, t.sym); } catch (e2) {}
-        onLock();
-      }
-    }, 45);
+    clearTimeout(_reelT[t.sym]);
+    _reelT[t.sym] = setTimeout(function() {
+      delete _reelT[t.sym];
+      el.classList.remove('t-reveal');
+      try { lockExit(el, sp, v, t.sym); } catch (e) {}
+      onLock();
+    }, REVEAL_MS);
   }
 
   // The stop: the real P&L snaps in, coloured by the verdict, with a white pop
