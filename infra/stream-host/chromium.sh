@@ -162,4 +162,17 @@ exec "$BIN" \
   --disable-gpu \
   --disable-dev-shm-usage \
   \
+  `# THE COMPOSITOR WAS THE BOTTLENECK, NOT THE PAGE.` \
+  `# --disable-gpu alone leaves Chromium on its slowest software compositing` \
+  `# path, single-threaded, inside the gpu-process. Measured on the live host:` \
+  `# gpu-process pegged at 90-96% of ONE core while the renderer sat at 0.0% —` \
+  `# a whole core idle while the other drowned. The page itself was never the` \
+  `# problem (it is smooth on a phone, where compositing is GPU'd and free).` \
+  `#` \
+  `# --disable-gpu-compositing moves compositing into the RENDERER, which is` \
+  `# the process that had the idle core. --num-raster-threads spreads raster` \
+  `# work instead of pinning it to one thread.` \
+  --disable-gpu-compositing \
+  --num-raster-threads=4 \
+  \
   "$STREAM_URL"
