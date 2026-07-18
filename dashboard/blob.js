@@ -213,24 +213,24 @@
 
       // ── Engine motion the sheet deliberately does NOT bake ─────────────────
       // Whole-pixel translation only; the mood deformation itself is in the art.
-      var bob = Math.round(Math.sin(t * 1.7) * 1.6);
+      var bob = Math.sin(t * 1.7) * 1.6;
       var jx = 0, jy = 0;
       // Default = his identity NEON PINK. Colour comes from the MOOD (a verdict),
       // not ambient P&L: red is reserved for a loss, green for a win. Driving it
       // off `p` lit him red at rest on any down day — the opposite of confident.
       var accent = P.MID;
 
-      if (mood === 'HAPPY')  { bob = Math.round(Math.abs(Math.sin(t * 5.5)) * -4); accent = P.GRN; }
+      if (mood === 'HAPPY')  { bob = Math.abs(Math.sin(t * 5.5)) * -4; accent = P.GRN; }
       if (mood === 'SCARED') { accent = P.RED; jx = (self.tick % 2 ? 1 : -1); jy = (self.tick % 3 ? 0 : 1); }
-      if (mood === 'ALERT')  { accent = P.CYN; var pop = Math.max(0, 1 - (self.tick - alertAt) / 12); bob -= Math.round(pop * 2); }
-      if (mood === 'SLEEP')  { bob = Math.round(Math.sin(t * 0.8) * 1.2); }
-      if (mood === 'BRACE')  { accent = P.CYN; bob = Math.round(Math.sin(t * 1.7) * 0.4); }
+      if (mood === 'ALERT')  { accent = P.CYN; var pop = Math.max(0, 1 - (self.tick - alertAt) / 12); bob -= pop * 2; }
+      if (mood === 'SLEEP')  { bob = Math.sin(t * 0.8) * 1.2; }
+      if (mood === 'BRACE')  { accent = P.CYN; bob = Math.sin(t * 1.7) * 0.4; }
       // EXASPERATED — a loss landed. A slow, deflated sigh; red accent.
-      if (mood === 'EXASPERATED') { accent = P.RED; bob = Math.round(Math.sin(t * 1.1) * 1.0) + 1; }
+      if (mood === 'EXASPERATED') { accent = P.RED; bob = Math.sin(t * 1.1) * 1.0 + 1; }
       // HOPEFUL — a fresh pickup. An eager little upward hop. NEUTRAL cyan, not
       // green: a buy is not a win yet, so it glows "activity" (like ALERT/BRACE),
       // and green stays reserved for an actual winning exit.
-      if (mood === 'HOPEFUL') { accent = P.CYN; bob = Math.round(Math.abs(Math.sin(t * 4.2)) * -3) - 1; }
+      if (mood === 'HOPEFUL') { accent = P.CYN; bob = Math.abs(Math.sin(t * 4.2)) * -3 - 1; }
 
       // ── Breath frame (baked columns) ───────────────────────────────────────
       var breath = Math.floor(self.tick / BREATH_HOLD) % 4;
@@ -258,7 +258,24 @@
       var eyeY = 0;
       if (reading) { eyeY = 3; look += Math.round(Math.sin(self.tick * 0.55) * 2); }
 
-      var dx = jx, dy = bob + jy;
+      // THE BOB IS NO LONGER BLITTED — it rides the element transform instead.
+      //
+      // The sheet is 48px and displays ~16x, so a bob measured in SPRITE pixels
+      // could only ever move him in 16-SCREEN-PIXEL leaps: he hopped rather than
+      // drifted, and no framerate could fix that because the steps themselves
+      // were coarse. `bob` is now a float and is handed to fxLoop, which puts it
+      // into the canvas element's transform in SCREEN pixels — so he glides.
+      //
+      // This does NOT resample the pixel art: translating a whole element moves
+      // the already-rasterised layer, it does not redraw the sprite at a
+      // fractional source offset. The art stays exactly as hard-edged as before,
+      // which is why this is a legal break of BLOB.md's whole-pixel rule — the
+      // rule protects the ART, and the art is untouched.
+      //
+      // The JITTER (jx/jy, SCARED) deliberately stays blitted and integer: that
+      // one is meant to read as a hard 1px judder, not a glide.
+      self._bobPx = bob * ((canvas.clientWidth || CELL) / CELL);
+      var dx = jx, dy = jy;
       if (ready >= 2) {
         ctx.drawImage(bodyImg, breath * CELL, row * CELL, CELL, CELL, dx, dy, CELL, CELL);
         ctx.drawImage(eyesImg, lid * CELL, row * CELL, CELL, CELL, dx + look, dy + eyeY, CELL, CELL);
@@ -347,7 +364,13 @@
       // rewriting an identical transform still asks the compositor to re-do the
       // layer — which on this software-rendering box is a real cost that buys
       // exactly zero moved pixels.
-      var tr = 'scale(' + sx + ',' + sy + ')';
+      // translateY carries the BOB, in SCREEN pixels (see the note in draw()).
+      // Ordered translate-then-scale so the squash still pivots about his base
+      // rather than about wherever the bob happens to have put him.
+      // Rounded to 0.1px: the compositor is the bottleneck on the stream host, so
+      // there is no point handing it a new transform for a 0.001px difference.
+      var by = Math.round((self._bobPx || 0) * 10) / 10;
+      var tr = 'translateY(' + by + 'px) scale(' + sx + ',' + sy + ')';
       if (tr !== self._lastTransform) {
         canvas.style.transformOrigin = '50% 62%';
         canvas.style.transform = tr;
