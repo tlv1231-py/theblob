@@ -529,6 +529,23 @@
         }
       },
 
+      // ── POWERUP — the potion trigger ────────────────────────────────────
+      // The magic sound. A fast ascending whole-tone-ish sweep (reads
+      // "enchanted", not "correct") into a high shimmer chord. Shorter than the
+      // jackpot — the potion rides in behind a donation, so it must not step on
+      // the payout it follows. Original, no jingle reproduced.
+      powerup: function() {
+        if (!ctx) return;
+        if (ctx.state === 'suspended') { ctx.resume(); return; }
+        var V = 0.05;
+        var run = [440, 554, 659, 831, 988, 1245, 1480];   // rising sparkle
+        for (var i = 0; i < run.length; i++) note(run[i], i * 0.034, 0.05, V * 0.8);
+        var t = run.length * 0.034;
+        note(1480, t,        0.30, V);          // the shimmer
+        note(1976, t + 0.03, 0.28, V * 0.7);
+        note(2637, t + 0.06, 0.24, V * 0.5);
+      },
+
       fanfare: function() {
         if (!ctx) return;
         if (ctx.state === 'suspended') { ctx.resume(); return; }
@@ -1043,7 +1060,10 @@
     follow:          { c: '#9400ff', i: '◈', verb: 'FOLLOWED' },
     raid:            { c: '#ff00cc', i: '⚡', verb: 'RAIDED' },
     chat:            { c: '#8060a0', i: '·', verb: '' },
-    risk_breach:     { c: '#ff3366', i: '⚠', verb: '' }
+    risk_breach:     { c: '#ff3366', i: '⚠', verb: '' },
+    // The magic one: violet, its own colour so it never reads as money (cyan),
+    // identity (pink), or an alarm (red). Fires as a second popup behind a dono.
+    potion:          { c: '#b14dff', i: '✦', verb: 'TRIGGERED' }
   };
 
   function money(p) {
@@ -1350,6 +1370,7 @@
     lcd.classList.remove('idle');
     lcd.classList.remove('speaking');
     lcd.classList.add('open');
+    lcd.classList.toggle('potion', ev.type === 'potion');   // the magic skin
     lcd.style.setProperty('--ev-c', cfg.c);
     $('ev-bigicon').textContent = cfg.i;
     $('ev-more').className = 'ev-more';
@@ -1393,8 +1414,9 @@
       bg.pulse(isMoney ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
     }
     // Money gets the jackpot; everything else gets the fanfare. A follow and a
-    // $50 must not sound the same.
-    if (isMoney) SFX.jackpot(); else SFX.fanfare();
+    // $50 must not sound the same. The potion plays its own magic sound in its
+    // branch below, so it opts out here rather than double-triggering a fanfare.
+    if (ev.type !== 'potion') { if (isMoney) SFX.jackpot(); else SFX.fanfare(); }
     // x celebrates on the same frame as the box and the sound, and holds for
     // as long as the popup lane owns the stage — see the empty branch above,
     // which hands the sentence back to the AFK cycle when the burst drains.
@@ -1403,6 +1425,11 @@
       // Money buys an orbit AND a thank-you. Both fire here, with the box.
       if (PU_TYPES[ev.type] && Number(ev.p.amount) > 0) {
         puAdd(ev.id, ev.p.from || 'SOMEONE', Number(ev.p.amount));
+        // A dono also brews a POTION. Queued as a second popup, so the natural
+        // FIFO + stagePump ladder plays: this dono box -> the potion box -> the
+        // thanks (speaks lane, lower priority than popups). Exactly the order the
+        // use case asks for: viewer text, then "that triggered X!", then he talks.
+        triggerPotion(ev);
         thankThem(ev.p.from || 'SOMEONE', Number(ev.p.amount));
       } else if (ev.type === 'follow') {
         // A follow buys no orbit, but it is still a person arriving and being
@@ -1429,6 +1456,19 @@
     // quotes with the text. Guarded on `msg`, so a machine event with no comment
     // (a risk_breach) never gets empty quotes.
     if (msg) msg = '"' + msg + '"';
+    // The potion popup is its own sentence, not a viewer's: the name IS the
+    // potion, the verb is TRIGGERED, and the "comment" is its effect (unquoted —
+    // the game is talking, not a person). Its magic sound and the left-HUD
+    // countdown fire HERE, when the box actually plays, not when it was queued
+    // behind the dono.
+    if (ev.type === 'potion') {
+      name = String(ev.p.name || 'POTION').toUpperCase().slice(0, 16);
+      act  = 'TRIGGERED';
+      amt  = '';
+      msg  = String(ev.p.status || '').slice(0, 40);
+      SFX.powerup();
+      activatePotion(ev.p);
+    }
     var nEl = $('ev-name'), aEl = $('ev-act'), mEl = $('ev-msg'), amEl = $('ev-amt');
     nEl.innerHTML = ''; aEl.textContent = ''; mEl.textContent = '';
 
@@ -3722,6 +3762,92 @@
     }
   };
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // POTIONS — the magic power-ups. An editable list in Stream HQ
+  // (potionname / potionstatus / potionduration); every donation brews a random
+  // one as a violet popup behind the dono, then it runs on the LEFT-side arcade
+  // HUD with a live countdown until it expires.
+  // ═══════════════════════════════════════════════════════════════════════
+  var _potions = [], _potionActive = null;
+
+  function pollPotions() {
+    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=eq.potions&select=value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || !rows.length) return;
+        try {
+          var list = JSON.parse(rows[0].value);
+          if (Array.isArray(list)) {
+            _potions = list.filter(function(p) { return p && p.name; });
+          }
+        } catch (e) {}
+      })
+      .catch(function() {});
+  }
+
+  // Queued as a second popup from a dono's annNext. Picks a random potion; the
+  // sound + activation fire when the box PLAYS (in annNext), not here.
+  function triggerPotion() {
+    if (!_potions.length) return;
+    var p = _potions[Math.floor(Math.random() * _potions.length)];
+    announce('potion', {
+      name: p.name, status: p.status || '',
+      duration: Math.max(1, Number(p.duration) || 20)
+    }, 'potion:' + Date.now());
+  }
+
+  // Set the active potion + its expiry. renderPotion (10fps) draws the HUD and
+  // counts it down; nothing here writes the DOM so a burst can't thrash it.
+  function activatePotion(p) {
+    _potionActive = {
+      name: String(p.name || 'POTION').toUpperCase().slice(0, 18),
+      status: String(p.status || '').slice(0, 40),
+      endsAt: Date.now() + Math.max(1, Number(p.duration) || 20) * 1000,
+      born: Date.now()
+    };
+    renderPotion();
+  }
+
+  function renderPotion() {
+    var host = $('s-potion');
+    if (!host) return;
+    var left = _potionActive ? _potionActive.endsAt - Date.now() : 0;
+    if (!_potionActive || left <= 0) {
+      if (host.classList.contains('on')) { host.classList.remove('on'); host.innerHTML = ''; }
+      _potionActive = null;
+      return;
+    }
+    // Build once on arrival; after that only the timer + the pulse change.
+    if (!host.classList.contains('on')) {
+      host.classList.add('on');
+      host.innerHTML =
+        '<div class="pot-frame">' +
+          '<div class="pot-label">ACTIVE POTION</div>' +
+          '<div class="pot-name"></div>' +
+          '<div class="pot-status"></div>' +
+          '<div class="pot-timer"></div>' +
+        '</div>';
+      host.querySelector('.pot-name').textContent = _potionActive.name;
+      host.querySelector('.pot-status').textContent = _potionActive.status;
+    }
+    var secs = Math.ceil(left / 1000);
+    host.querySelector('.pot-timer').textContent = secs + 's';
+    // Arcade pulse — a magic breath on the frame; JS-driven because CSS
+    // animation is frozen in this iframe. Under 6s it flips to an urgent flash.
+    var frame = host.querySelector('.pot-frame');
+    if (frame) {
+      var ph = (Date.now() - _potionActive.born) / 1000;
+      var pulse = 0.55 + 0.45 * Math.abs(Math.sin(ph * 3.2));
+      frame.style.boxShadow = '0 0 ' + (10 + pulse * 16).toFixed(1) + 'px rgba(177,77,255,' +
+        (0.4 + pulse * 0.4).toFixed(2) + '), inset 0 0 12px rgba(177,77,255,0.28)';
+      var t = host.querySelector('.pot-timer');
+      if (secs <= 5) { t.style.color = (Math.floor(Date.now() / 260) % 2) ? '#ff3366' : '#b14dff'; }
+      else if (t.style.color) { t.style.color = ''; }
+    }
+  }
+
   setInterval(syncBlobMood, 1000);
   // The ambient ticker wave. 10fps — the Blob's clock, so the board and the
   // character share one heartbeat instead of beating against each other.
@@ -3750,6 +3876,12 @@
   // you drag the fader. Called once now so a saved setting applies on load.
   setInterval(pollBgSettings, 2000);
   pollBgSettings();
+  // Potions: the list is edited by a human in HQ (potionname/status/duration),
+  // so 15s is fast enough to see an edit land. The active-potion HUD ticks at
+  // 10fps for the countdown + arcade pulse.
+  setInterval(pollPotions, 15000);
+  pollPotions();
+  setInterval(renderPotion, 100);
   // Mute lands within ~3s of hitting the button — fast enough that it feels
   // like a mute button rather than a setting.
   // AFK copy is edited by a human in HQ, so it changes at human speed. 15s is

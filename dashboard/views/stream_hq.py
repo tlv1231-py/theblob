@@ -510,6 +510,61 @@ def _render_powerups() -> None:
             st.rerun()
 
 
+# ── Potions ───────────────────────────────────────────────────────────────────
+# The magic power-ups. Every donation brews a RANDOM one from this pool, shown as
+# a violet popup behind the dono, then run on the stream's left-side arcade HUD
+# with a live countdown. Three fields per potion: name, status effect, duration.
+# Stored as a JSON list in strategy_params (potions), polled by the stream ~15s.
+_POTION_DEFAULT = [
+    {"name": "DOUBLE XP", "status": "gains count double", "duration": 30},
+    {"name": "SHIELD",    "status": "losses shrugged off", "duration": 20},
+    {"name": "FRENZY",    "status": "trading twice as fast", "duration": 25},
+    {"name": "LUCKY",     "status": "the next exit is a winner", "duration": 15},
+    {"name": "SLOW-MO",   "status": "the market holds its breath", "duration": 20},
+]
+
+
+def _render_potions() -> None:
+    st.caption("Every donation brews a **random** potion from this pool. Edit it "
+               "live — the stream picks up changes within ~15s.")
+    pol = _get_policy()
+    try:
+        rows = json.loads(pol.get("potions", "")) or []
+    except (TypeError, ValueError):
+        rows = []
+    if not rows:
+        rows = list(_POTION_DEFAULT)
+
+    df = pd.DataFrame(rows, columns=["name", "status", "duration"])
+    edited = st.data_editor(
+        df, use_container_width=True, hide_index=True, key="potion_edit",
+        num_rows="dynamic",
+        column_config={
+            "name": st.column_config.TextColumn("Potion name", max_chars=18, required=True),
+            "status": st.column_config.TextColumn("Status effect", max_chars=40),
+            "duration": st.column_config.NumberColumn("Duration (s)", min_value=1,
+                                                      max_value=999, step=1, format="%d s"),
+        },
+    )
+    if st.button("SAVE POTIONS", type="primary", use_container_width=True):
+        out = []
+        for _, r in edited.iterrows():
+            name = str(r.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                dur = int(r.get("duration") or 20)
+            except (TypeError, ValueError):
+                dur = 20
+            out.append({
+                "name": name[:18],
+                "status": str(r.get("status") or "").strip()[:40],
+                "duration": max(1, min(999, dur)),
+            })
+        _set_policy("potions", json.dumps(out), "Potions for the potion event")
+        st.rerun()
+
+
 def _render_policy() -> None:
     pol = _get_policy()
     auto = pol.get("auto_release", "1") == "1"
@@ -932,10 +987,12 @@ def render() -> None:
 
     _render_health()
 
-    tab_sim, tab_bus, tab_pu, tab_afk, tab_pol, tab_plan = st.tabs(
-        ["Simulate", "Bus", "Orbit", "AFK", "Policy", "Plan"])
+    tab_sim, tab_bus, tab_pu, tab_pot, tab_afk, tab_pol, tab_plan = st.tabs(
+        ["Simulate", "Bus", "Orbit", "Potions", "AFK", "Policy", "Plan"])
     with tab_pu:
         _render_powerups()
+    with tab_pot:
+        _render_potions()
     with tab_afk:
         _render_afk()
     with tab_sim:

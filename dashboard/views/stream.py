@@ -340,6 +340,13 @@ _STAGE_HTML = """
          occludes them as he moves, and that is the point. -->
     <div id="s-orbit"></div>
 
+    <!-- Active potion — stage-level and BEHIND the Blob, LEFT side, opposite the
+         donor names on the right. A retro arcade HUD: the active power-up's name,
+         effect, and a live seconds countdown. Driven entirely from stream.js
+         (renderPotion), animated on an interval because CSS animation is frozen
+         in this iframe. -->
+    <div id="s-potion"></div>
+
     <div id="safe">
 
       <div id="s-blob">

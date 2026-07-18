@@ -723,6 +723,47 @@ html, body {
   overflow: visible;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACTIVE POTION — the LEFT-side arcade HUD, opposite the donor names. A crisp
+   arcade-game panel: chunky violet frame, the power-up name big, its effect
+   under it, and a live seconds countdown. The pulse + low-time urgency are
+   driven by renderPotion on an interval — CSS animation is inert in this iframe.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#s-potion {
+  position: absolute;
+  top: 612px;
+  left: var(--safe-x);
+  z-index: 5;
+  pointer-events: none;
+  max-width: 320px;
+}
+#s-potion .pot-frame {
+  display: none;
+  padding: 12px 18px 14px;
+  border: 3px solid #b14dff;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(58,10,92,0.74), rgba(28,4,48,0.74));
+  box-shadow: 0 0 20px rgba(177,77,255,0.5), inset 0 0 12px rgba(177,77,255,0.28);
+}
+#s-potion.on .pot-frame { display: block; }
+#s-potion .pot-label {
+  font-size: 13px; letter-spacing: 0.2em; color: #c9a0ff;
+  text-shadow: 0 0 8px rgba(177,77,255,0.7);
+}
+#s-potion .pot-name {
+  font-size: 32px; font-weight: 700; color: #fff; margin: 6px 0 2px; line-height: 1;
+  text-shadow: 0 0 12px rgba(177,77,255,0.95), 2px 2px 0 #4a0a72;
+}
+#s-potion .pot-status { font-size: 15px; color: #e6ccff; text-shadow: 0 0 6px rgba(177,77,255,0.5); }
+#s-potion .pot-timer {
+  font-size: 28px; font-weight: 700; color: #b14dff; margin-top: 8px; letter-spacing: 0.05em;
+  text-shadow: 0 0 10px rgba(177,77,255,0.9);
+}
+
+/* The potion popup — the same Gameboy box, but MAGIC. --ev-c is already the
+   potion violet (set from ANN.potion); this adds the enchanted glow on top. */
+.ev-lcd.potion { filter: drop-shadow(0 0 15px rgba(177,77,255,0.75)); }
+
 .pu {
   position: relative;
   white-space: nowrap;
