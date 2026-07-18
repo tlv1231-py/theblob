@@ -181,6 +181,26 @@
   var bg = TNDBg.create($('bgCanvas'), { fps: 24 });
   bg.start();
 
+  // ── Live background control from Stream HQ ───────────────────────────────
+  // bg_enabled / bg_opacity live in strategy_params (polled below). Opacity
+  // EASES toward its target here rather than snapping on the poll: a CSS
+  // transition is inert in this component iframe (rAF is dead here, so is its
+  // clock), so the fade has to be driven by an interval. Initialised to the CSS
+  // default (0.68) so nothing flashes before the first poll lands. When it has
+  // faded fully out the draw loop is stopped, so OFF genuinely costs nothing on
+  // the host — not just an invisible canvas still burning a 24fps loop.
+  var _bgEnabled = true, _bgOpTarget = 0.68, _bgOpCur = 0.68, _bgRunning = true, _bgLast = '';
+  setInterval(function() {
+    var tgt = _bgEnabled ? _bgOpTarget : 0;
+    _bgOpCur += (tgt - _bgOpCur) * 0.18;
+    if (Math.abs(tgt - _bgOpCur) < 0.004) _bgOpCur = tgt;
+    var s = _bgOpCur.toFixed(3);
+    if (s !== _bgLast) { var el = $('bgCanvas'); if (el) el.style.opacity = s; _bgLast = s; }
+    var visible = _bgOpCur > 0.002;
+    if (visible && !_bgRunning) { bg.start(); _bgRunning = true; }
+    else if (!visible && _bgRunning) { bg.stop(); _bgRunning = false; }
+  }, 80);
+
   // The mood readout is gone from the stage — it captioned a performance the
   // character was already giving, in the one gap between him and his score.
   // The call sites stay and route through here rather than being deleted: mood
@@ -194,6 +214,8 @@
     if (el) el.textContent = _mood;
   }
 
+  var coolUntil = 0;   // holds the dono "cool guy" pose against syncBlobMood
+
   function syncBlobMood() {
     // Transient moods own the character until they decay; don't stomp them.
     // BRACE is in this list for a reason that is easy to miss: this runs every
@@ -201,7 +223,9 @@
     // anticipation beat would be overwritten with IDLE mid-crouch — the wind-up
     // would visibly abort before the impact it exists to set up.
     var m = blob.getMood();
-    if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED' || m === 'BRACE' || m === 'EXASPERATED') return;
+    if (m === 'ALERT' || m === 'HAPPY' || m === 'SCARED' || m === 'BRACE' ||
+        m === 'EXASPERATED' || m === 'HOPEFUL') return;
+    if (Date.now() < coolUntil) return;   // don't stomp the sunglasses smirk
 
     // He sleeps when THE SYSTEM is idle, not when NYSE is shut. The crypto
     // strategy trades ~9x/min around the clock; gating on market hours had him
@@ -1354,7 +1378,16 @@
     // trade beat: one event, one frame.
     var react = EVENT_MOOD[ev.type];
     if (react) {
-      if (react.mood) blob.setMood(react.mood, react.mood === 'HAPPY' ? 26 : 18);
+      if (isMoney) {
+        // COOL GUY: a viewer paid, so sunglasses drop from overhead onto a
+        // smirk and he plays it unbothered. coolUntil holds the pose past
+        // syncBlobMood's 1s tick so the smirk doesn't blink back to idle.
+        blob.setMood('SMUG', 44);
+        blob.cool(44);
+        coolUntil = Date.now() + 4400;
+      } else if (react.mood) {
+        blob.setMood(react.mood, react.mood === 'HAPPY' ? 26 : 18);
+      }
       showMood();
       // A viewer paying is the loudest thing that happens on this stream.
       bg.pulse(isMoney ? 'money' : (react.sfx === 'loss' ? 'loss' : 'enter'), 0.30);
@@ -1943,6 +1976,30 @@
         // rather than guessing.
         if (!rows.length) return;
         window._ytToggle(rows[0].value !== '0');
+      })
+      .catch(function() {});
+  }
+
+  // Stream HQ's live background control. Same store as the YT filter — HQ and
+  // this page are different browsers, so strategy_params is the only thing they
+  // both reach. NO broadcast short-circuit: dimming or killing the background is
+  // a valid on-air choice, not an outage the way a mute would be. The ease loop
+  // above turns these two numbers into a fade; this just tracks the target.
+  function pollBgSettings() {
+    fetch(S.supa.url + '/rest/v1/strategy_params?strategy=eq.stream' +
+          '&param=in.(bg_enabled,bg_opacity)&select=param,value',
+          { headers: { apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key } })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows)) return;
+        rows.forEach(function(row) {
+          if (row.param === 'bg_enabled') {
+            _bgEnabled = row.value !== '0';
+          } else if (row.param === 'bg_opacity') {
+            var v = parseFloat(row.value);
+            if (!isNaN(v)) _bgOpTarget = Math.max(0, Math.min(1, v / 100));
+          }
+        });
       })
       .catch(function() {});
   }
@@ -3351,7 +3408,7 @@
     // is rare and worth holding; anything shorter than POST_TICKS would have
     // him snap back to idle while the beat was still running.
     if (verdict === 'win')        blob.setMood('HAPPY', POST_TICKS + 6);        // stoked
-    else if (verdict === 'enter') blob.setMood('ALERT', POST_TICKS);            // a fill landed
+    else if (verdict === 'enter') blob.setMood('HOPEFUL', POST_TICKS + 4);      // fresh pickup — gonna win!
     else                          blob.setMood('EXASPERATED', POST_TICKS + 4);  // a loss — ugh
     glanceAt(t.sym);
     showMood();
@@ -3683,6 +3740,10 @@
   // window. Remove with yt_overlay.js.
   setInterval(pollYtOverlay, 3000);
   pollYtOverlay();
+  // Background toggle/opacity: flipped live in HQ, so 2s feels immediate while
+  // you drag the fader. Called once now so a saved setting applies on load.
+  setInterval(pollBgSettings, 2000);
+  pollBgSettings();
   // Mute lands within ~3s of hitting the button — fast enough that it feels
   // like a mute button rather than a setting.
   // AFK copy is edited by a human in HQ, so it changes at human speed. 15s is

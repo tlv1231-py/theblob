@@ -851,6 +851,32 @@ def render() -> None:
         _set_policy("yt_overlay", "0" if yt_on else "1", "Temp YouTube safe-zone filter")
         st.rerun()
 
+    # ── Background ────────────────────────────────────────────────────────────
+    # The animated cyberpunk background on the Stream page, controllable live so
+    # you can dim it under the Blob or kill it entirely mid-broadcast without a
+    # reload. Same store and shape as every other live setting; the stream polls
+    # it ~2s and eases the opacity so the fader reads as a fade, not a jump.
+    # OFF stops the draw loop on the host, so it is a real toggle, not just an
+    # invisible canvas. 68 is the tuned default (full strength out-shouts the sun).
+    bg_on = pol.get("bg_enabled", "1") != "0"
+    try:
+        bg_op = max(0, min(100, int(float(pol.get("bg_opacity", "68")))))
+    except (TypeError, ValueError):
+        bg_op = 68
+    bgc1, bgc2 = st.columns([1, 3])
+    if bgc1.button("BG: " + ("ON" if bg_on else "OFF"), use_container_width=True,
+                   type="primary" if bg_on else "secondary",
+                   help="The animated cyberpunk background on the Stream page. Fades out "
+                        "when off and stops rendering. Applies live (~2s), no reload."):
+        _set_policy("bg_enabled", "0" if bg_on else "1", "Stream animated background on/off")
+        st.rerun()
+    new_bg_op = bgc2.slider("BG opacity", 0, 100, bg_op, disabled=not bg_on,
+                            help="Fades the background live on the Stream page. 68 is the "
+                                 "tuned default; 100 is full strength, 0 is invisible.")
+    if new_bg_op != bg_op:
+        _set_policy("bg_opacity", str(new_bg_op), "Stream background opacity (%)")
+        st.rerun()
+
     # The SOUND/MUTED button is GONE, and so is preview_muted.
     #
     # It worked exactly as designed, and that was the problem: it sat at 1 for
