@@ -1114,6 +1114,19 @@
     chat:            'SAID'
   };
 
+  // Noun form of each viewer action, for the potion panel's "ACTIVATED BY <X>".
+  var POTION_BY = {
+    donation:        'DONATION',
+    superchat:       'SUPERCHAT',
+    supersticker:    'STICKER',
+    bits:            'BITS',
+    membership_gift: 'GIFT',
+    subscription:    'SUBSCRIPTION',
+    follow:          'FOLLOW',
+    raid:            'RAID',
+    chat:            'CHAT'
+  };
+
   function amountFor(type, p) {
     switch (type) {
       case 'donation':
@@ -1449,14 +1462,16 @@
     // which hands the sentence back to the AFK cycle when the burst drains.
     if (VIEWER_EVENTS[ev.type]) {
       setStatusHappy();
+      // EVERY viewer action brews a POTION — dono, follow, sub, raid, gift…
+      // Queued as a second popup, so the natural FIFO + stagePump ladder plays:
+      // this viewer box -> the potion box ("ACTIVATED BY <X>") -> the thanks
+      // (speaks lane, lower priority). `ev.type` rides along so the panel can
+      // name what set it off. Chat is the one exception: it's far too frequent
+      // to fire a powerup on every line.
+      if (ev.type !== 'chat') triggerPotion(ev);
       // Money buys an orbit AND a thank-you. Both fire here, with the box.
       if (PU_TYPES[ev.type] && Number(ev.p.amount) > 0) {
         puAdd(ev.id, ev.p.from || 'SOMEONE', Number(ev.p.amount));
-        // A dono also brews a POTION. Queued as a second popup, so the natural
-        // FIFO + stagePump ladder plays: this dono box -> the potion box -> the
-        // thanks (speaks lane, lower priority than popups). Exactly the order the
-        // use case asks for: viewer text, then "that triggered X!", then he talks.
-        triggerPotion(ev);
         thankThem(ev.p.from || 'SOMEONE', Number(ev.p.amount));
       } else if (ev.type === 'follow') {
         // A follow buys no orbit, but it is still a person arriving and being
@@ -1499,7 +1514,7 @@
       // dialogue, not to the potion's identity.
       var pn = parseWild(String(ev.p.name || 'POTION').toUpperCase());
       name = pn.text.slice(0, 16); _wildName = clampRanges(pn.ranges, 16);
-      act  = 'ACTIVATED';
+      act  = 'ACTIVATED BY ' + (POTION_BY[ev.p.by] || 'A VIEWER');
       amt  = '';
       var ps = parseWild(String(ev.p.status || ''));
       msg  = ps.text.slice(0, 40); _wildMsg = clampRanges(ps.ranges, 40);
@@ -3915,14 +3930,16 @@
       .catch(function() {});
   }
 
-  // Queued as a second popup from a dono's annNext. Picks a random potion; the
-  // sound + activation fire when the box PLAYS (in annNext), not here.
-  function triggerPotion() {
+  // Queued as a second popup from a viewer action's annNext. Picks a random
+  // potion; the sound + activation fire when the box PLAYS (in annNext), not
+  // here. `src` is the triggering event, so the panel can say "ACTIVATED BY <X>".
+  function triggerPotion(src) {
     if (!_potions.length) return;
     var p = _potions[Math.floor(Math.random() * _potions.length)];
     annPush('potion', {
       name: p.name, status: p.status || '',
-      duration: Math.max(1, Number(p.duration) || 20)
+      duration: Math.max(1, Number(p.duration) || 20),
+      by: (src && src.type) || ''
     }, 'potion:' + Date.now());
   }
 
