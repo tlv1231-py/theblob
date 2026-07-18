@@ -162,17 +162,14 @@ exec "$BIN" \
   --disable-gpu \
   --disable-dev-shm-usage \
   \
-  `# THE COMPOSITOR WAS THE BOTTLENECK, NOT THE PAGE.` \
-  `# --disable-gpu alone leaves Chromium on its slowest software compositing` \
-  `# path, single-threaded, inside the gpu-process. Measured on the live host:` \
-  `# gpu-process pegged at 90-96% of ONE core while the renderer sat at 0.0% —` \
-  `# a whole core idle while the other drowned. The page itself was never the` \
-  `# problem (it is smooth on a phone, where compositing is GPU'd and free).` \
-  `#` \
-  `# --disable-gpu-compositing moves compositing into the RENDERER, which is` \
-  `# the process that had the idle core. --num-raster-threads spreads raster` \
-  `# work instead of pinning it to one thread.` \
-  --disable-gpu-compositing \
-  --num-raster-threads=4 \
+  `# TRIED AND REVERTED (2026-07-18): --disable-gpu-compositing` \
+  `# --num-raster-threads=4. The theory was sound and the measurement that` \
+  `# motivated it is real — chrome's gpu-process pegs at ~91% of ONE core doing` \
+  `# software compositing while the renderer sits at 0.0%, a whole core idle.` \
+  `# But the flags changed NOTHING: gpu-process 90.7% -> 91.3%, renderer still` \
+  `# 0.0%, and unique painted frames went 12.7 -> ~7. Compositing did not move` \
+  `# to the renderer. Do not re-try these expecting a different answer; the` \
+  `# single-threaded software compositor appears to be a floor of this setup,` \
+  `# not a flag away. Fix it with resolution, or with hardware.` \
   \
   "$STREAM_URL"
