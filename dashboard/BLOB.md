@@ -108,12 +108,27 @@ survives only as long as all three hold:
    quantize the rim to the ramp too. It currently reads fine because the
    intermediates are all pink-adjacent and confined to the rim — but if he ever
    looks subtly "too modern" and you can't say why, this is the first suspect.
-3. **Quantized framerate.** `setInterval` at **10fps**, not `requestAnimationFrame`.
-   *This is the one that matters most and the one most likely to get
-   "fixed" by someone.* Same code at 60fps instantly reads as a modern web toy
-   instead of an arcade cabinet. If you want to see it, raise FPS and look.
-   Related: his position snaps to whole pixels (`Math.round` on `bob`, `look`,
-   `cx`). Subpixel motion breaks the illusion the same way.
+3. **Quantized framerate — now SPLIT into two clocks (2026-07-18).** Still
+   `setInterval`, never `requestAnimationFrame`.
+   - **The tick clock is 10/s and is the one that matters.** `TICK_MS = 100`,
+     derived from elapsed TIME, not from frames. The sprite ART advances on it
+     (breath cels, blink, mood decay) and **every duration in this file and in
+     `stream.js` is counted in ticks** — `PRE_TICKS`, `POST_TICKS`,
+     `REVEAL_TICKS`, mood ticks, shades ticks. This is what keeps him reading as
+     an arcade cabinet instead of a modern web toy, and it is the rule most
+     likely to get "fixed" by someone.
+   - **The DRAW rate is 24fps** (`FPS`), matched to the stream's capture rate so
+     every frame ffmpeg grabs is freshly painted and a visual lands within ~42ms
+     of its sound. Only whole-pixel POSITIONAL motion (bob/jitter/glance) is
+     sampled at this rate — it is computed from continuous wall-clock seconds,
+     not from `tick`.
+   - **Why the split:** at a single 10fps clock the movement was steppy enough
+     to read as lag on stream, and SFX felt desynced because the visual could be
+     100ms behind the sound. Raising a single clock instead would have made
+     every mood decay 2.4x too fast, because durations are counted in ticks.
+     Verified after the change: tick 9.97/s, draw 24.4fps.
+   - Position still snaps to whole pixels (`Math.round` on `bob`, `look`, `cx`).
+     Subpixel motion breaks the illusion regardless of framerate.
 
 ## Rules of the character
 

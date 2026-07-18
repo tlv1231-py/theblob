@@ -89,7 +89,24 @@
     opts = opts || {};
     var W = opts.grid || 48;
     var H = W;
-    var FPS = opts.fps || 10;   // Do not raise. See BLOB.md "Framerate".
+    // DRAW rate, raised 10 -> 24 to match the stream's capture framerate: every
+    // frame ffmpeg grabs is then a freshly painted one (no duplicates), and a
+    // visual lands within ~42ms of the sound that fired it instead of up to
+    // ~100ms — which is what read as SFX being out of sync.
+    //
+    // This does NOT break BLOB.md's quantized-framerate rule. The SPRITE ART
+    // still advances on the 10fps tick clock below (breath cels, blink, mood),
+    // so the cels stay 8-bit; only the whole-pixel POSITIONAL motion (bob,
+    // jitter, glance) is now sampled per draw. The art stays steppy on purpose,
+    // the movement stops being steppy by accident.
+    var FPS = opts.fps || 24;
+    // A "tick" is 100ms, ALWAYS, whatever the draw rate. Every duration in this
+    // file and in stream.js (PRE_TICKS / POST_TICKS / REVEAL_TICKS, mood ticks,
+    // blink ticks, shades ticks) is counted in ticks, so the tick clock is
+    // derived from elapsed TIME, not from frames. Increment it per frame and
+    // raising FPS would make every mood decay 2.4x too fast.
+    var TICK_MS = 100;
+    var t0 = Date.now();
 
     canvas.width = W; canvas.height = H;
     var ctx = canvas.getContext('2d');
@@ -186,7 +203,10 @@
     function draw() {
       ctx.clearRect(0, 0, W, H);
 
-      var t = self.tick / FPS;
+      // Continuous wall-clock seconds, NOT tick/FPS. The tick clock advances
+      // 10x/s; sampling motion from it would still give 10fps movement however
+      // often we draw. This is what actually makes the bob smooth.
+      var t = (Date.now() - t0) / 1000;
       var p = Math.max(-1, Math.min(1, self.pnl / 4));      // ±4% saturates
       var mood = self.mood;
       var row = MOODS.indexOf(mood); if (row < 0) row = 0;
@@ -284,15 +304,22 @@
     function transBlink() { if (self.tick >= blinkUntil) blinkUntil = self.tick + 3; }
 
     function loop() {
-      self.tick++;
-      // A transient mood decaying back to IDLE is a transition too — give the
-      // return-to-calm the same soft beat + blink so it eases rather than snaps.
-      if (moodUntil > 0 && self.tick > moodUntil) {
-        self.mood = 'IDLE'; moodUntil = -1; impact(0.24); transBlink();
-      }
-      if (self.tick > nextBlink) {
-        blinkUntil = self.tick + 3;    // 3 ticks = closing / shut / opening
-        nextBlink = self.tick + 30 + Math.random() * 50;
+      // The tick clock comes from elapsed TIME (see TICK_MS), so it still runs
+      // at 10/s no matter the draw rate — every tick-counted duration keeps its
+      // wall-clock meaning. Per-tick logic fires only when that clock actually
+      // advances; the DRAW runs every frame, which is what buys smooth motion.
+      var prevTick = self.tick;
+      self.tick = Math.floor((Date.now() - t0) / TICK_MS);
+      if (self.tick !== prevTick) {
+        // A transient mood decaying back to IDLE is a transition too — give the
+        // return-to-calm the same soft beat + blink so it eases rather than snaps.
+        if (moodUntil > 0 && self.tick > moodUntil) {
+          self.mood = 'IDLE'; moodUntil = -1; impact(0.24); transBlink();
+        }
+        if (self.tick > nextBlink) {
+          blinkUntil = self.tick + 3;    // 3 ticks = closing / shut / opening
+          nextBlink = self.tick + 30 + Math.random() * 50;
+        }
       }
       draw();
     }
