@@ -1,0 +1,21 @@
+[Unit]
+Description=Blob stream — audio faders (Stream HQ music/SFX sliders -> ffmpeg live)
+After=blob-ffmpeg.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# Only talks to Supabase (read) and ffmpeg's local ZMQ. No display, no secrets
+# beyond the publishable key. Same unprivileged user as the rest.
+User=blob
+Group=blob
+EnvironmentFile=/opt/blob-stream/.env
+ExecStart=/usr/bin/python3 /opt/blob-stream/faders.py
+Restart=always
+RestartSec=10
+
+# Deliberately NOT Requires=blob-ffmpeg. If the encoder is down there is nothing
+# to fade, but this should keep polling and re-apply the moment it returns —
+# faders.py already treats a missing ZMQ endpoint as "retry", not "fail".
+[Install]
+WantedBy=multi-user.target

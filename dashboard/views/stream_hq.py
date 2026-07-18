@@ -844,6 +844,39 @@ def _render_sim() -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _render_audio() -> None:
+    st.caption("Live audio faders. **faders.py** on the host polls these ~3s and "
+               "retargets the encoder over ZMQ — no restart, no blip. Music is the "
+               "bed; SFX are the Blob's 8-bit sounds, boosted because the browser "
+               "emits them quiet against the -16 LUFS music.")
+    pol = _get_policy()
+    try:
+        music = float(pol.get("music_vol", "0.6") or 0.6)
+    except ValueError:
+        music = 0.6
+    try:
+        sfx = float(pol.get("sfx_vol", "2.0") or 2.0)
+    except ValueError:
+        sfx = 2.0
+
+    c1, c2 = st.columns(2)
+    with c1:
+        new_music = st.slider("♫ Music bed", 0.0, 1.5, music, 0.05,
+                              help="Gain on the music. 0.60 is the default bed level.")
+    with c2:
+        new_sfx = st.slider("▸ Blob SFX", 0.0, 4.0, sfx, 0.1,
+                            help="Gain on the 8-bit sounds. 2.0 default — the browser "
+                                 "emits them quiet, so they need the boost to cut through.")
+
+    if abs(new_music - music) > 1e-9:
+        _set_policy("music_vol", f"{new_music:.2f}", "Music bed gain")
+    if abs(new_sfx - sfx) > 1e-9:
+        _set_policy("sfx_vol", f"{new_sfx:.2f}", "SFX gain")
+
+    st.caption(f"Now: music **{new_music:.2f}** · sfx **{new_sfx:.2f}**. "
+               "0 mutes that channel. A change is audible on the broadcast within a poll.")
+
+
 def render() -> None:
     # Laid out for a narrow column beside the stream itself, not full width.
     # Health is a one-line strip and everything else is tabbed, so the console
@@ -989,8 +1022,10 @@ def render() -> None:
 
     _render_health()
 
-    tab_sim, tab_bus, tab_pu, tab_pot, tab_afk, tab_pol, tab_plan = st.tabs(
-        ["Simulate", "Bus", "Orbit", "Potions", "AFK", "Policy", "Plan"])
+    tab_sim, tab_bus, tab_pu, tab_pot, tab_afk, tab_aud, tab_pol, tab_plan = st.tabs(
+        ["Simulate", "Bus", "Orbit", "Potions", "AFK", "Audio", "Policy", "Plan"])
+    with tab_aud:
+        _render_audio()
     with tab_pu:
         _render_powerups()
     with tab_pot:

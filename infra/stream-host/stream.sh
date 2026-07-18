@@ -25,12 +25,14 @@ RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_KEY}"
 # and blob-pulse use.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
-# The two faders. The browser's WebAudio SFX come out quiet (peaks ~-18..-36 dB),
-# the music is normalised to -16 LUFS, so the SFX get a boost and the music sits
-# back as a bed. Env-overridable — this is the seam a future Stream HQ fader set
-# writes to.
+# The two faders' STARTING values. The browser's WebAudio SFX come out quiet
+# (peaks ~-18..-36 dB) against music normalised to -16 LUFS, so SFX get a boost
+# and the music sits back as a bed. These are just the launch defaults now —
+# faders.py adjusts them LIVE over ZMQ from Stream HQ, no ffmpeg restart (the
+# volume filters below are NAMED, and azmq brokers commands to them by name).
 MUSIC_VOL="${MUSIC_VOL:-0.6}"
 SFX_VOL="${SFX_VOL:-2.0}"
+ZMQ_PORT="${ZMQ_PORT:-5556}"
 
 mkdir -p "$(dirname "$PROGRESS")"
 : > "$PROGRESS"
@@ -96,10 +98,12 @@ fi
 SFX_IN=(); FILTER=(); MAP=(-map 0:v -map 1:a)
 if pactl list sinks short 2>/dev/null | grep -qw blob_sink; then
   SFX_IN=(-f pulse -i blob_sink.monitor)
-  # Boost the quiet SFX, sit the music back, sum WITHOUT amix's auto-halving
-  # (normalize=0), then a limiter to catch any peak the boost pushes over.
+  # Named volume filters (volume@mvol / volume@svol) so faders.py can retarget
+  # them live via the azmq broker on 127.0.0.1:$ZMQ_PORT. amix normalize=0 keeps
+  # the sum from being auto-halved; the limiter catches any peak the boost pushes
+  # over. azmq sits inline (it passes audio through, only listening for commands).
   FILTER=(-filter_complex \
-    "[1:a]volume=${MUSIC_VOL}[m];[2:a]volume=${SFX_VOL}[s];[m][s]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]")
+    "[1:a]volume@mvol=${MUSIC_VOL}[m];[2:a]volume@svol=${SFX_VOL}[s];[m][s]amix=inputs=2:duration=first:normalize=0,azmq=bind_address=tcp\\://127.0.0.1\\:${ZMQ_PORT},alimiter=limit=0.95[aout]")
   MAP=(-map 0:v -map "[aout]")
   echo "[stream] SFX: mixing blob_sink.monitor (music ${MUSIC_VOL} / sfx ${SFX_VOL})"
 else
