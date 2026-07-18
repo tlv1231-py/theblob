@@ -163,7 +163,10 @@
       // Whole-pixel translation only; the mood deformation itself is in the art.
       var bob = Math.round(Math.sin(t * 1.7) * 1.6);
       var jx = 0, jy = 0;
-      var accent = p > 0.05 ? P.GRN : (p < -0.05 ? P.RED : P.MID);
+      // Default = his identity NEON PINK. Colour comes from the MOOD (a verdict),
+      // not ambient P&L: red is reserved for a loss, green for a win. Driving it
+      // off `p` lit him red at rest on any down day — the opposite of confident.
+      var accent = P.MID;
 
       if (mood === 'HAPPY')  { bob = Math.round(Math.abs(Math.sin(t * 5.5)) * -4); accent = P.GRN; }
       if (mood === 'SCARED') { accent = P.RED; jx = (self.tick % 2 ? 1 : -1); jy = (self.tick % 3 ? 0 : 1); }
@@ -172,8 +175,10 @@
       if (mood === 'BRACE')  { accent = P.CYN; bob = Math.round(Math.sin(t * 1.7) * 0.4); }
       // EXASPERATED — a loss landed. A slow, deflated sigh; red accent.
       if (mood === 'EXASPERATED') { accent = P.RED; bob = Math.round(Math.sin(t * 1.1) * 1.0) + 1; }
-      // HOPEFUL — a fresh pickup he's sure will win. An eager little upward hop.
-      if (mood === 'HOPEFUL') { accent = P.GRN; bob = Math.round(Math.abs(Math.sin(t * 4.2)) * -3) - 1; }
+      // HOPEFUL — a fresh pickup. An eager little upward hop. NEUTRAL cyan, not
+      // green: a buy is not a win yet, so it glows "activity" (like ALERT/BRACE),
+      // and green stays reserved for an actual winning exit.
+      if (mood === 'HOPEFUL') { accent = P.CYN; bob = Math.round(Math.abs(Math.sin(t * 4.2)) * -3) - 1; }
 
       // ── Breath frame (baked columns) ───────────────────────────────────────
       var breath = Math.floor(self.tick / BREATH_HOLD) % 4;
@@ -229,9 +234,17 @@
       if (self.onAccent) self.onAccent(accent);
     }
 
+    // A transition blink — masks an expression swap behind a dipped lid. Guarded
+    // so a burst of changes doesn't restart it mid-blink and strobe.
+    function transBlink() { if (self.tick >= blinkUntil) blinkUntil = self.tick + 3; }
+
     function loop() {
       self.tick++;
-      if (moodUntil > 0 && self.tick > moodUntil) { self.mood = 'IDLE'; moodUntil = -1; }
+      // A transient mood decaying back to IDLE is a transition too — give the
+      // return-to-calm the same soft beat + blink so it eases rather than snaps.
+      if (moodUntil > 0 && self.tick > moodUntil) {
+        self.mood = 'IDLE'; moodUntil = -1; impact(0.24); transBlink();
+      }
       if (self.tick > nextBlink) {
         blinkUntil = self.tick + 3;    // 3 ticks = closing / shut / opening
         nextBlink = self.tick + 30 + Math.random() * 50;
@@ -294,10 +307,14 @@
         self.mood = m;
         moodUntil = durTicks ? self.tick + durTicks : -1;
         if (m === 'ALERT') alertAt = self.tick;
-        // A mood LANDING is a punch — squash bounce + glow spike + aberration.
-        // Only on a real change, so a mood re-asserted every second by
-        // syncBlobMood doesn't buzz.
-        if (changed && MOOD_KICK[m]) impact(MOOD_KICK[m]);
+        // A mood LANDING is a punch — squash bounce + glow spike + aberration —
+        // and it BLINKS. The blink is the human bit: the eyes dip shut across the
+        // swap, so the new expression eases in behind a lid instead of hard-
+        // cutting, which reads as a reaction rather than a state flip. Verdicts
+        // hit hard (MOOD_KICK); any other change still gets a soft beat so a
+        // burst feels connected. Guarded on a real change so syncBlobMood's every-
+        // second re-assert doesn't buzz.
+        if (changed) { impact(MOOD_KICK[m] || 0.28); transBlink(); }
         return api;
       },
       setPnl:   function(pct) { self.pnl = pct; return api; },
