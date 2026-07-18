@@ -1,0 +1,28 @@
+[Unit]
+Description=Blob stream — Streamlabs Socket API listener (tips -> stream_events)
+After=network-online.target
+Wants=network-online.target
+
+# Same reasoning as blob-chat: a crash loop must not become a permanent stop.
+# If systemd's default start limit trips during a Streamlabs outage, the listener
+# would stay dead after the service came back and money would land silently.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=blob
+Group=blob
+
+# The SOCKET API token lives here, root:root 0600 — systemd reads it as root
+# before dropping to `blob`, same as YOUTUBE_KEY for the encoder.
+EnvironmentFile=/opt/blob-stream/.env
+ExecStart=/usr/bin/python3 /opt/blob-stream/streamlabs.py
+Restart=always
+RestartSec=10
+
+# Independent of the broadcast switch ON PURPOSE. A tip that arrives while the
+# encoder is off is still a tip: it belongs on the bus, and the page airs it
+# whenever it next renders. Gating this on ON AIR would silently drop money.
+
+[Install]
+WantedBy=multi-user.target
