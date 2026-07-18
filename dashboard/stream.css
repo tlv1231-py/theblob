@@ -817,7 +817,9 @@ html, body {
 .p-orb {
   position: absolute; top: 50%; left: 50%;
   width: 32px; height: 32px;
-  will-change: transform, opacity, filter;
+  /* will-change removed — see .t-sym i. Up to 16 of these orbit at once, each
+     already carrying a drop-shadow (its own layer); promoting them as well was
+     doubling down on the software compositor's worst case. */
 }
 
 /* The potion popup — the same Gameboy box, dressed as an RPG "you learned a
@@ -1139,7 +1141,8 @@ html, body {
   white-space: nowrap;
   display: inline-block;
   transform-origin: center center;
-  will-change: transform;
+  /* will-change removed — see the note on .t-sym i. 14 more layers the software
+     compositor had to carry for no benefit; arcadeHit still scales this fine. */
 }
 
 /* One <i> per character so a wave can travel THROUGH the word (waveTick in
@@ -1147,10 +1150,18 @@ html, body {
    the whole ticker; these move within it. Two transform layers, no conflict.
    No CSS animation here on purpose — the wave is setInterval-driven, because
    this iframe's animation clock does not advance. */
+/* NO will-change HERE. This is a PER-GLYPH rule: 14 tiles x 4-9 characters is
+   50-100+ elements, and will-change promotes every one to its own compositor
+   layer. On a GPU that is free — which is why the page looks perfect on a phone
+   — but the broadcast VM has no GPU and composites in software, where each
+   layer is a separate buffer rasterised and composited every frame. Measured on
+   the live host: chrome's gpu-process pegged at 96% of a core while the RENDERER
+   sat at 0%, i.e. the page was not struggling to paint, it was drowning in
+   layers. The wave still animates — it sets transform directly; will-change was
+   only ever a hint. */
 .t-sym i {
   display: inline-block;
   font-style: normal;
-  will-change: transform;
 }
 
 /* THE PICK — replaces the Gen-1 cursor. During the wind-up a ring in his own
