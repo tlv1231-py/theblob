@@ -3926,11 +3926,32 @@
     }, 'potion:' + Date.now());
   }
 
-  // Steampunk glows — brass, copper, amber, antique gold, verdigris. One is
-  // picked at random per activation and lights BOTH the name and the orbiting
-  // orbs, so the whole HUD reads as one artifact.
+  // Steampunk glows — brass, copper, amber, antique gold, verdigris. One lights
+  // the potion's NAME + timer, so the label reads as an old apothecary tag.
   var STEAMPUNK = ['#d9a441', '#c87f3a', '#b5732e', '#e0b84e', '#a8763c',
                    '#d98a2b', '#5fae9c', '#c9922e'];
+  // Cyberpunk powerup neons — one is attributed at random per potion and lights
+  // the BOTTLE icon's glow AND that potion's orbiting orbs, so the pickup on the
+  // HUD and the stars ringing the Blob read as the same charge.
+  var CYBERPUNK = ['#00fff2', '#ff2bd6', '#9d4dff', '#39ff14', '#ff3d81',
+                   '#2b6bff', '#ff7a00', '#f6ff00', '#ff1f4f', '#18e0ff'];
+  // A tiny arcade potion bottle — tan cork, pale glass, neon liquid (currentColor
+  // = the potion's --neon), one white shine. shape-rendering:crispEdges keeps the
+  // pixels hard at any size. Mostly-transparent via CSS; the glow sits behind it.
+  var POT_BOTTLE_SVG =
+    '<svg class="pot-bottle" viewBox="0 0 16 16" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect x="6" y="1" width="4" height="3" fill="#d8c9a0"/>' +
+      '<rect x="6" y="4" width="4" height="2" fill="#e8f0ff"/>' +
+      '<rect x="5" y="6" width="6" height="1" fill="#e8f0ff"/>' +
+      '<rect x="4" y="7" width="8" height="1" fill="#e8f0ff"/>' +
+      '<rect x="3" y="8" width="10" height="5" fill="#e8f0ff"/>' +
+      '<rect x="4" y="13" width="8" height="1" fill="#e8f0ff"/>' +
+      '<rect x="5" y="14" width="6" height="1" fill="#e8f0ff"/>' +
+      '<rect x="3" y="10" width="10" height="3" fill="currentColor"/>' +
+      '<rect x="4" y="13" width="8" height="1" fill="currentColor"/>' +
+      '<rect x="5" y="14" width="6" height="1" fill="currentColor"/>' +
+      '<rect x="4" y="8" width="1" height="4" fill="#ffffff"/>' +
+    '</svg>';
   function potRGBA(hex, a) {
     var h = hex.replace('#', '');
     if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
@@ -4006,7 +4027,8 @@
     }
     var pot = {
       name: name,
-      glow: STEAMPUNK[Math.floor(Math.random() * STEAMPUNK.length)],
+      glow: STEAMPUNK[Math.floor(Math.random() * STEAMPUNK.length)],   // name + timer
+      neon: CYBERPUNK[Math.floor(Math.random() * CYBERPUNK.length)],   // bottle glow + orbs
       endsAt: Date.now() + dur * 1000,
       born: Date.now(),
       rowEl: null, nmEl: null, tmEl: null, orbs: null
@@ -4026,7 +4048,7 @@
   function spawnOrbs(pot) {
     var host = $('s-orbs');
     if (!host) return [];
-    var color = pot.glow, K = 4, base = Math.random() * Math.PI * 2, orbs = [];
+    var color = pot.neon, K = 4, base = Math.random() * Math.PI * 2, orbs = [];
     for (var i = 0; i < K; i++) {
       var o = document.createElement('div');
       o.className = 'p-orb';
@@ -4085,11 +4107,17 @@
       // the potion's own steampunk glow.
       if (!pot.rowEl || !pot.rowEl.parentNode) {
         var row = document.createElement('div'); row.className = 'pot-row';
+        // The bottle: a mostly-transparent arcade potion with a crisp neon glow
+        // behind it, in the potion's own cyberpunk colour (the same one its orbs
+        // wear). Sits left of the label like the "Q" the request drew.
+        var icon = document.createElement('span'); icon.className = 'pot-icon';
+        icon.style.setProperty('--neon', pot.neon);
+        icon.innerHTML = POT_BOTTLE_SVG;
         var nm = document.createElement('span'); nm.className = 'pot-name'; nm.textContent = pot.name;
         var tm = document.createElement('span'); tm.className = 'pot-timer';
         nm.style.color = g;
         tm.style.color = g; tm.style.textShadow = '0 0 10px ' + g;
-        row.appendChild(nm); row.appendChild(tm);
+        row.appendChild(icon); row.appendChild(nm); row.appendChild(tm);
         host.appendChild(row);
         pot.rowEl = row; pot.nmEl = nm; pot.tmEl = tm;
       }

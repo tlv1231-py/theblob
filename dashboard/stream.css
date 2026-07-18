@@ -745,7 +745,7 @@ html, body {
   gap: 8px;
 }
 #s-potion.on { display: flex; }
-.pot-row { display: flex; align-items: baseline; gap: 12px; }
+.pot-row { display: flex; align-items: center; gap: 10px; }
 .pot-name {
   font-size: 36px; font-weight: 800; line-height: 1; letter-spacing: 0.02em;
   /* colour + text-shadow assigned inline per potion */
@@ -753,6 +753,31 @@ html, body {
 .pot-timer {
   font-size: 22px; font-weight: 700; letter-spacing: 0.04em;
   /* colour + text-shadow assigned inline per potion */
+}
+
+/* The potion bottle — a single-character-sized arcade potion left of the label.
+   The bottle itself is mostly transparent; the COLOUR comes from a crisp neon
+   glow sitting BEHIND it (::before), in the potion's own cyberpunk --neon (the
+   same colour its orbs wear). currentColor feeds the bottle's liquid. */
+.pot-icon {
+  position: relative; flex: none;
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--neon);
+}
+.pot-icon::before {           /* the crisp glow, behind the glass */
+  content: ''; position: absolute; inset: 3px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--neon) 0%, var(--neon) 32%, transparent 68%);
+  box-shadow: 0 0 8px var(--neon), 0 0 16px var(--neon);
+  opacity: 0.85;
+}
+.pot-bottle {
+  position: relative; z-index: 1;
+  width: 100%; height: 100%;
+  opacity: 0.5;               /* mostly transparent — the glow reads through it */
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 1.5px rgba(0,0,0,0.6));
 }
 
 /* Powerup orbs orbiting the Blob — centred on #s-blob. Each is a spinning STAR:
