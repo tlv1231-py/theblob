@@ -32,6 +32,17 @@ ExecStart=/opt/blob-stream/chromium.sh
 Restart=always
 RestartSec=5
 
+# FENCE THE RENDER OFF THE ENCODER'S CORES.
+# blob-ffmpeg is pinned to 0-1; without a complementary pin here Chromium roamed
+# all four and fought it. Measured on a live broadcast: the `chrome
+# --type=gpu-process` alone holds ~97% of a core doing SOFTWARE compositing (it
+# spawns and composites even with --disable-gpu — the display compositor lives
+# there regardless), so unfenced it lands on top of the encoder and the picture
+# lags while `speed` still reads 1.0x.
+#
+# 2-3 is the complement of the encoder's 0-1: two cores each, no overlap.
+CPUAffinity=2-3
+
 # This is the unit the watchdog restarts. Reloading the BROWSER is the whole
 # point: when Streamlit drops its websocket the page freezes while ffmpeg
 # happily encodes the dead frame, and restarting the encoder against a frozen
