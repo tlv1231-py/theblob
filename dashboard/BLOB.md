@@ -41,12 +41,14 @@ purpose:
 - **One accessory survives the no-particles rule: the dono sunglasses.** On a
   donation, `blob.cool(durTicks)` drops deal-with-it shades from overhead onto a
   smirk, holds, then lifts them off — an accessory ON him, not a separate mark.
-- **A second accessory: the paper party crown (`drawCrown`), worn ALWAYS.** The
+- **A second accessory: the paper party crown (`drawCrown`), POTION-GATED.** The
   Burger King kind — a flat-gold zigzag band + five points perched on his dome,
   drawn in cell coords so it bobs and squashes with the sprite. Off-ramp gold is
   allowed for the same reason the shades' black is: it's an accessory, not his
-  body, and the always-pink rule governs HIM. Default on; `blob.setCrown(false)`
-  removes it (or pass `{crown:false}` to `create`).
+  body, and the always-pink rule governs HIM. He wears it **while a potion is
+  active** and it **blinks out over the potion's last ~4s** (like the tile
+  timers) before vanishing — driven from `stream.js` `renderPotion`, which calls
+  `blob.setCrown(alpha)` (0 hides, 1 solid, in-between dims). Default hidden.
 - **The "hi-bit" FX layer (`opts.fx`, on by default).** The sprite stays crisp
   8-bit; SMOOTH light and motion wrap it — **squash-and-stretch** (a spring
   bounce on every mood landing), a **neon bloom** (mood-coloured `drop-shadow`

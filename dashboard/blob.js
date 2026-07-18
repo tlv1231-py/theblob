@@ -107,7 +107,9 @@
     var lookX = 0, lookUntil = -1, reading = false;
     var alertAt = -1;   // when ALERT last fired, for the entry pop
     var shadesAt = -1, shadesUntil = -1;   // the dono "cool guy" sunglasses
-    var crownOn = opts.crown !== false;    // the paper party crown, worn always
+    var crownAlpha = opts.crown === true ? 1 : 0;   // paper crown; 0 = hidden.
+    // Potion-driven from stream.js (setCrown): worn while a potion is active,
+    // dimmed to blink it out at the end of the potion's life.
     var fxOn = opts.fx !== false;
     // FX state: a squash SPRING (pos/vel), an aberration punch and a glow spike,
     // all eased toward rest in fxLoop. impact() kicks all three at once.
@@ -241,8 +243,13 @@
         ctx.drawImage(bodyImg, breath * CELL, row * CELL, CELL, CELL, dx, dy, CELL, CELL);
         ctx.drawImage(eyesImg, lid * CELL, row * CELL, CELL, CELL, dx + look, dy + eyeY, CELL, CELL);
         // The crown sits on his dome, above the eyes — drawn after the sprite so
-        // it rests on top of his head rather than behind it.
-        if (crownOn) drawCrown(dx, dy);
+        // it rests on top of his head rather than behind it. globalAlpha lets
+        // stream.js blink it out at the end of a potion's life.
+        if (crownAlpha > 0) {
+          ctx.save(); ctx.globalAlpha = crownAlpha;
+          drawCrown(dx, dy);
+          ctx.restore();
+        }
       }
 
       // No particles — "just Blobby". Every mood is carried entirely by the
@@ -357,7 +364,13 @@
       },
       setPnl:   function(pct) { self.pnl = pct; return api; },
       setVisor: function(on)  { self.visor = !!on; return api; },   // no-op in art
-      setCrown: function(on)  { crownOn = !!on; return api; },      // the paper crown
+      // The paper crown. Accepts a boolean (on/off) or an alpha 0..1 — stream.js
+      // drives it from potion state and dims it to blink the crown out at the end
+      // of a potion's life. 0 hides it entirely.
+      setCrown: function(v) {
+        crownAlpha = (v === true) ? 1 : (v === false ? 0 : Math.max(0, Math.min(1, +v || 0)));
+        return api;
+      },
 
       // The dono "cool guy": sunglasses drop from overhead, hold for durTicks,
       // then lift off. Independent of mood — pair it with a smirk for full effect.

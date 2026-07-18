@@ -4073,10 +4073,12 @@
     }
     if (!_actPotions.length) {
       if (host.classList.contains('on')) { host.classList.remove('on'); host.innerHTML = ''; }
+      if (blob && blob.setCrown) blob.setCrown(0);   // no potion -> no crown
       return;
     }
     if (!host.classList.contains('on')) host.classList.add('on');
 
+    var maxLeft = 0;   // ms until the LAST potion expires — the crown's lifespan
     for (var p = 0; p < _actPotions.length; p++) {
       var pot = _actPotions[p], g = pot.glow;
       // Build the row once — "[NAME] [Xs]", left-justified, transparent, lit by
@@ -4091,7 +4093,8 @@
         host.appendChild(row);
         pot.rowEl = row; pot.nmEl = nm; pot.tmEl = tm;
       }
-      var secs = Math.ceil((pot.endsAt - now) / 1000);
+      var left = pot.endsAt - now, secs = Math.ceil(left / 1000);
+      if (left > maxLeft) maxLeft = left;
       pot.tmEl.textContent = secs + 's';
       // Brass-lamp flicker on the name — steampunk breath, with a gas-flame jump.
       var fl = 0.7 + 0.3 * Math.abs(Math.sin((now - pot.born) / 1000 * 2.4)) + (Math.random() < 0.06 ? 0.18 : 0);
@@ -4099,6 +4102,12 @@
         ', 0 0 ' + (14 + fl * 18).toFixed(1) + 'px ' + g +
         ', 0 0 ' + (26 + fl * 22).toFixed(1) + 'px ' + potRGBA(g, 0.55);
       pot.tmEl.style.opacity = (secs <= 5 && (Math.floor(now / 240) % 2)) ? '0.4' : '1';
+    }
+    // The crown rides the potions: on his head while the longest-lived one is
+    // healthy, then a slow blink over its last 4s (like the tile timers) before
+    // it vanishes with the last potion. Blink is ~400ms, dimming to 0.2.
+    if (blob && blob.setCrown) {
+      blob.setCrown(maxLeft <= 4000 ? ((Math.floor(now / 400) % 2) ? 0.2 : 1) : 1);
     }
     updateOrbs();
   }
