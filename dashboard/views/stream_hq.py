@@ -999,9 +999,32 @@ def render() -> None:
         )
     else:
         enc = (sw["encoder"] or "unknown").lower()
+        seen = (sw["desired"] or "").lower()      # what the switch itself last READ
         want_on = on_air
-        # 'active' is the only state that means it is really pushing frames.
-        if want_on and enc != "active":
+        want_str = "on" if want_on else "off"
+        age_txt = f"{sw['age']}s ago" if sw["age"] is not None else "unknown"
+        # DO NOT compare the button against a report that predates the click.
+        #
+        # The button writes instantly; switch.py only POSTS its state every ~30s
+        # (SWITCH_REPORT), though it polls and acts every ~5s. So for up to 30s
+        # after any click the newest row still describes the PREVIOUS state — and
+        # this block used to read that as a fault and shout "YOU ARE PROBABLY
+        # STILL BROADCASTING" on a perfectly good stop, while telling you it
+        # would clear in ~5s (the poll interval, not the report interval — it
+        # could not clear that fast). It cried wolf on every single press.
+        #
+        # `desired` is what the switch last read from the flag, so it dates the
+        # report: if it still disagrees with the button, the row is simply older
+        # than the click. Wait for the next one rather than alarming.
+        if seen and seen != want_str:
+            st.info(
+                f"Waiting for the host to confirm **{'ON AIR' if want_on else 'OFF AIR'}** — "
+                f"the switch acts within ~5s but only reports every ~30s (last report {age_txt}). "
+                "This clears on its own."
+            )
+        # From here the switch has confirmed it read the same flag you set, so a
+        # mismatch is real.
+        elif want_on and enc != "active":
             st.error(
                 f"**ON AIR is set, but `{sw['unit'] or 'the encoder unit'}` is `{enc}`.** "
                 "Nothing is reaching YouTube. The switch is alive and saw the flag, so this "
@@ -1009,9 +1032,11 @@ def render() -> None:
             )
         elif not want_on and enc == "active":
             st.error(
-                f"**OFF AIR is set, but `{sw['unit'] or 'the encoder unit'}` is still `active` "
-                "— YOU ARE PROBABLY STILL BROADCASTING.** The switch has seen the flag; if this "
-                "does not clear within ~5s, stop the unit on the host directly."
+                f"**OFF AIR is set and the switch has confirmed it read that, but "
+                f"`{sw['unit'] or 'the encoder unit'}` is still `active` — YOU ARE PROBABLY "
+                f"STILL BROADCASTING.** (Report {age_txt}.) This is not a lag: the host saw "
+                "the flag and the unit did not stop. Stop it on the host directly:\n\n"
+                f"`sudo systemctl stop {sw['unit'] or 'blob-ffmpeg.service'}`"
             )
         elif want_on and enc == "active":
             st.success("**◉ LIVE** — the encoder is active and pushing to YouTube.")
