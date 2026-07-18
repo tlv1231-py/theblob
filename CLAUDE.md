@@ -157,6 +157,15 @@ Prerequisites before building:
   iframe); when faded fully off it stops the 24fps `stream_bg` loop, so OFF is a
   real toggle, not an invisible canvas still rendering.
 
+- **Blob "hi-bit" FX layer (2026-07-17):** the crisp pixel sprite now gets SMOOTH
+  wrapping FX in `blob.js` — squash-and-stretch spring bounce on mood landings,
+  a mood-coloured neon `drop-shadow` bloom, a chromatic-aberration punch on big
+  hits, and a gloss sweep. Runs on a separate ~30fps `fxLoop` (element-level
+  `transform`/`filter`, capture-safe; CSS transitions would freeze). Impacts fire
+  from `setMood`/`cool`, so no upstream change; `opts.fx=false` disables it. Tune
+  with `MOOD_GLOW`/`MOOD_KICK`. Not yet eyeballed on a real capture — the headless
+  screenshot pane can't settle on the continuous filter updates.
+
 ---
 
 ## What Has Been Built (V0)

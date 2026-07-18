@@ -41,6 +41,17 @@ purpose:
 - **One accessory survives the no-particles rule: the dono sunglasses.** On a
   donation, `blob.cool(durTicks)` drops deal-with-it shades from overhead onto a
   smirk, holds, then lifts them off — an accessory ON him, not a separate mark.
+- **The "hi-bit" FX layer (`opts.fx`, on by default).** The sprite stays crisp
+  8-bit; SMOOTH light and motion wrap it — **squash-and-stretch** (a spring
+  bounce on every mood landing), a **neon bloom** (mood-coloured `drop-shadow`
+  that breathes and spikes on impact), a **chromatic-aberration** punch on big
+  hits, and a **gloss sweep**. Runs on its OWN ~30fps `fxLoop`, separate from the
+  10fps sprite redraw, and it is all `transform` / `drop-shadow` on the canvas
+  element — smooth over a pixel sprite because both rasterise the alpha and
+  scale/blur it, ignoring `image-rendering`. **It MUST be interval-driven, not a
+  CSS transition/animation** — those are frozen in the capture (same reason as
+  everything else here). Impacts fire from `setMood`/`cool`, so nothing upstream
+  changed. Tune via `MOOD_GLOW` / `MOOD_KICK` and the spring constants.
 
 What did **not** change: the engine still applies bob, jitter, the eyes-only
 glance, the travelling blink, and the outer bloom (`onAccent`); the public API is
