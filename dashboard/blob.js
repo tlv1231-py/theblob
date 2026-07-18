@@ -51,6 +51,21 @@
   // loss reaction; HOPEFUL (row 8) is the fresh-pickup "gonna win" face.
   var MOODS = ['IDLE','HAPPY','SCARED','ALERT','SLEEP','SMUG','BRACE','EXASPERATED','HOPEFUL'];
 
+  // ── Modern FX layer ─────────────────────────────────────────────────────────
+  // "Hi-bit": the sprite stays crisp 8-bit, but around it we add SMOOTH light
+  // and motion driven by an interval (rAF and CSS transitions are frozen in the
+  // headless capture, so the fade/bounce has to be driven). None of this touches
+  // the pixel art — it is transform + drop-shadow on the canvas element, plus one
+  // in-canvas gloss pass. Set opts.fx = false to render the bare sprite.
+  //
+  // Resting neon-bloom strength per mood (the drop-shadow glow breathes at this).
+  var MOOD_GLOW = { IDLE: 0.16, HAPPY: 0.46, SCARED: 0.34, ALERT: 0.52, SLEEP: 0.04,
+                    SMUG: 0.24, BRACE: 0.42, EXASPERATED: 0.30, HOPEFUL: 0.44 };
+  // How hard each mood "lands" — the squash bounce + glow spike + aberration hit
+  // when it fires. Verdicts hit hardest; SLEEP/IDLE don't punch at all.
+  var MOOD_KICK = { HAPPY: 1.0, ALERT: 0.85, SCARED: 0.7, BRACE: 0.5,
+                    EXASPERATED: 0.78, HOPEFUL: 0.82, SMUG: 0.4 };
+
   // ── Sprite sheets ──────────────────────────────────────────────────────────
   //  blob_body.png  192x432  = 4 breath cols x 9 mood rows (48x48 cells)
   //  blob_eyes.png  144x432  = 3 lid   cols x 9 mood rows
@@ -92,6 +107,16 @@
     var lookX = 0, lookUntil = -1;
     var alertAt = -1;   // when ALERT last fired, for the entry pop
     var shadesAt = -1, shadesUntil = -1;   // the dono "cool guy" sunglasses
+    var fxOn = opts.fx !== false;
+    // FX state: a squash SPRING (pos/vel), an aberration punch and a glow spike,
+    // all eased toward rest in fxLoop. impact() kicks all three at once.
+    var sqPos = 0, sqVel = 0, aber = 0, glowSpike = 0;
+
+    function impact(strength) {
+      sqVel -= strength * 0.26;                        // flatten, then spring back up
+      aber = Math.max(aber, strength);
+      glowSpike = Math.max(glowSpike, strength * 0.9);
+    }
 
     function fill(c, x, y, w, h) {
       ctx.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
@@ -183,6 +208,24 @@
       // not a separate character.
       if (self.tick < shadesUntil) drawShades(dx, dy + shadesOffset());
 
+      // Gloss sweep — a slow specular sheen travelling across him, clipped to
+      // his silhouette (source-atop). A glossy-mascot highlight on top of the
+      // flat pixel fill. Chunky by design; it rides the 48px grid like the rest.
+      if (fxOn) {
+        var gp = (self.tick % 34) / 34;
+        var gx = -14 + gp * (W + 28);
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        var grd = ctx.createLinearGradient(gx - 7, 0, gx + 7, H);
+        grd.addColorStop(0, 'rgba(255,255,255,0)');
+        grd.addColorStop(0.5, 'rgba(255,255,255,0.26)');
+        grd.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+
+      self.accent = accent;   // handed to fxLoop for the bloom colour
       if (self.onAccent) self.onAccent(accent);
     }
 
@@ -196,19 +239,65 @@
       draw();
     }
 
+    // Element-level FX, on their OWN faster interval so the bounce and glow are
+    // smooth even though the sprite only redraws at 10fps. Everything here is a
+    // transform / drop-shadow on the canvas element — smooth over a pixel sprite
+    // because both rasterise the alpha and scale/blur it, ignoring
+    // image-rendering. Degrades gracefully: throttled in the capture, it simply
+    // updates less often, never breaks.
+    function fxLoop() {
+      // Squash SPRING toward rest, plus a tiny ambient bounce on the up moods.
+      sqVel += (0 - sqPos) * 0.24;
+      sqVel *= 0.78;
+      sqPos += sqVel;
+      aber *= 0.80;
+      glowSpike *= 0.86;
+      var amb = (self.mood === 'HAPPY' || self.mood === 'HOPEFUL')
+              ? Math.sin(Date.now() / 130) * 0.05 : 0;
+      var s = Math.max(-0.30, Math.min(0.40, sqPos + amb));
+
+      // Volume-preserving squash, bouncing off his base rather than his middle.
+      var sy = (1 + s).toFixed(3), sx = (1 - s * 0.55).toFixed(3);
+      canvas.style.transformOrigin = '50% 62%';
+      canvas.style.transform = 'scale(' + sx + ',' + sy + ')';
+
+      // Neon bloom — a mood-coloured glow that breathes and spikes on impact,
+      // plus a chromatic-aberration hit (two offset colour shadows) on a punch.
+      var c = self.accent || P.MID, rgb = c[0] + ',' + c[1] + ',' + c[2];
+      var g = Math.min(1, (MOOD_GLOW[self.mood] || 0.16) + glowSpike);
+      var f = 'drop-shadow(0 0 ' + (5 + g * 14).toFixed(1) + 'px rgba(' + rgb + ',' + (0.55 + g * 0.35).toFixed(2) + ')) '
+            + 'drop-shadow(0 0 ' + (14 + g * 30).toFixed(1) + 'px rgba(' + rgb + ',' + (0.20 + g * 0.30).toFixed(2) + '))';
+      if (aber > 0.03) {
+        var ao = (aber * 5).toFixed(1);
+        f += ' drop-shadow(' + ao + 'px 0 rgba(255,64,80,' + (aber * 0.8).toFixed(2) + ')) '
+           + 'drop-shadow(-' + ao + 'px 0 rgba(64,220,255,' + (aber * 0.8).toFixed(2) + '))';
+      }
+      canvas.style.filter = f;
+    }
+
     // ── Public API — identical surface to the procedural version ─────────────
     var api = {
       start: function() {
         if (!self.timer) self.timer = setInterval(loop, 1000 / FPS);
+        if (fxOn && !self.fxTimer) self.fxTimer = setInterval(fxLoop, 33);   // ~30fps
         return api;
       },
-      stop: function() { clearInterval(self.timer); self.timer = null; return api; },
+      stop: function() {
+        clearInterval(self.timer); self.timer = null;
+        clearInterval(self.fxTimer); self.fxTimer = null;
+        return api;
+      },
 
       setMood: function(m, durTicks) {
         if (MOODS.indexOf(m) < 0) return api;
+        var changed = m !== self.mood;
         self.mood = m;
         moodUntil = durTicks ? self.tick + durTicks : -1;
         if (m === 'ALERT') alertAt = self.tick;
+        // A mood LANDING is a punch — squash bounce + glow spike + aberration.
+        // Only on a real change, so a mood re-asserted every second by
+        // syncBlobMood doesn't buzz.
+        if (changed && MOOD_KICK[m]) impact(MOOD_KICK[m]);
         return api;
       },
       setPnl:   function(pct) { self.pnl = pct; return api; },
@@ -219,6 +308,7 @@
       cool: function(durTicks) {
         shadesAt = self.tick;
         shadesUntil = self.tick + (durTicks || 42);
+        impact(0.95);   // the dono is the biggest hit on the stream
         return api;
       },
 
