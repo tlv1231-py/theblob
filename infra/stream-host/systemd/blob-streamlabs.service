@@ -16,7 +16,15 @@ Group=blob
 # The SOCKET API token lives here, root:root 0600 — systemd reads it as root
 # before dropping to `blob`, same as YOUTUBE_KEY for the encoder.
 EnvironmentFile=/opt/blob-stream/.env
-ExecStart=/usr/bin/python3 /opt/blob-stream/streamlabs.py
+# The VENV python, not /usr/bin/python3. Every other listener here is pure
+# stdlib; this one needs python-socketio, and Ubuntu 24.04's python is
+# PEP-668 externally-managed (there is no pip, and pip install into it is
+# refused by design). So socketio lives in its own venv:
+#   sudo python3 -m venv /opt/blob-stream/venv
+#   sudo /opt/blob-stream/venv/bin/pip install \
+#        "python-socketio[client]==4.6.1" "python-engineio==3.14.2"
+# The pin is not optional — see the note at the top of streamlabs.py.
+ExecStart=/opt/blob-stream/venv/bin/python /opt/blob-stream/streamlabs.py
 Restart=always
 RestartSec=10
 
