@@ -107,6 +107,7 @@
     var lookX = 0, lookUntil = -1, reading = false;
     var alertAt = -1;   // when ALERT last fired, for the entry pop
     var shadesAt = -1, shadesUntil = -1;   // the dono "cool guy" sunglasses
+    var crownOn = opts.crown !== false;    // the paper party crown, worn always
     var fxOn = opts.fx !== false;
     // FX state: a squash SPRING (pos/vel), an aberration punch and a glow spike,
     // all eased toward rest in fxLoop. impact() kicks all three at once.
@@ -149,6 +150,35 @@
       }
       if (rem < LIFT) return Math.round(-UP * (1 - rem / LIFT));
       return 0;
+    }
+
+    // The paper party crown — the Burger King kind. An accessory ON him like the
+    // shades: flat gold "paper", drawn in cell coords so it scales crisp and bobs
+    // on his dome with the sprite (and squashes with the FX). A wide zigzag band
+    // with five points, perched over the top of his head (his eyes start ~y15, so
+    // the band at y11-13 sits on the forehead). No text — just the shape. Off-ramp
+    // gold is allowed here for the same reason the shades' black is: it is an
+    // accessory, not his body, and the always-pink rule is about HIM.
+    var CROWN_GOLD = [242, 193, 29];    // the paper
+    var CROWN_HI   = [255, 228, 130];   // upper-left highlight (his key light)
+    var CROWN_SH   = [176, 122, 18];    // the band's shaded underside
+    function drawCrown(ox, oy) {
+      // Band across the dome. Bottom row darker so it reads as a folded paper edge.
+      fill(CROWN_GOLD, ox + 14, oy + 11, 21, 2);      // x14..34, y11..12
+      fill(CROWN_SH,   ox + 14, oy + 13, 21, 1);      // y13 — the shaded lip
+      // Five points rising from the band — centre tallest, sides shorter, so the
+      // silhouette reads as a crown and not a saw. hb=2 -> ~5px bases that meet.
+      var pts = [[15, 6], [20, 4], [24, 3], [28, 4], [33, 6]];   // [cx, tipY]
+      for (var i = 0; i < pts.length; i++) {
+        var cx = pts[i][0], tip = pts[i][1], hb = 2, h = 11 - tip;
+        for (var yy = tip; yy <= 11; yy++) {
+          var half = Math.round((yy - tip) / h * hb);
+          fill(CROWN_GOLD, ox + cx - half, oy + yy, half * 2 + 1, 1);
+          fill(CROWN_HI,   ox + cx - half, oy + yy, 1, 1);       // lit left edge
+        }
+      }
+      // A gloss dab on the band, upper-left, and a rounded lit tip on each point.
+      fill(CROWN_HI, ox + 16, oy + 11, 2, 1);
     }
 
     function draw() {
@@ -210,6 +240,9 @@
       if (ready >= 2) {
         ctx.drawImage(bodyImg, breath * CELL, row * CELL, CELL, CELL, dx, dy, CELL, CELL);
         ctx.drawImage(eyesImg, lid * CELL, row * CELL, CELL, CELL, dx + look, dy + eyeY, CELL, CELL);
+        // The crown sits on his dome, above the eyes — drawn after the sprite so
+        // it rests on top of his head rather than behind it.
+        if (crownOn) drawCrown(dx, dy);
       }
 
       // No particles — "just Blobby". Every mood is carried entirely by the
@@ -324,6 +357,7 @@
       },
       setPnl:   function(pct) { self.pnl = pct; return api; },
       setVisor: function(on)  { self.visor = !!on; return api; },   // no-op in art
+      setCrown: function(on)  { crownOn = !!on; return api; },      // the paper crown
 
       // The dono "cool guy": sunglasses drop from overhead, hold for durTicks,
       // then lift off. Independent of mood — pair it with a smirk for full effect.
