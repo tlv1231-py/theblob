@@ -29,11 +29,18 @@ purpose:
 - **Shading is cel + a couple of gloss dots, not Bayer dither.** The **always-pink
   rule and the locked 10-colour palette still hold** — MID is still the bulk of
   him in every mood.
-- **Moods are 8, not 7.** Order (row index, non-negotiable): `IDLE HAPPY SCARED
-  ALERT SLEEP SMUG BRACE EXASPERATED`. **IDLE is the confident-dumb-guy face and
-  is the DEFAULT.** `EXASPERATED` (row 7) is the loss reaction — a dead-eyed
-  up-roll. Ambient P&L no longer drives SCARED (it read the buggy NAV series);
-  SCARED is now only the transient reaction to a real `risk_breach` event.
+- **Moods are 9, not 7.** Order (row index, non-negotiable): `IDLE HAPPY SCARED
+  ALERT SLEEP SMUG BRACE EXASPERATED HOPEFUL`. **IDLE is the confident-dumb-guy
+  face and is the DEFAULT.** `EXASPERATED` (row 7) is the loss reaction — a
+  dead-eyed up-roll; `HOPEFUL` (row 8) is the fresh-pickup "gonna win" face,
+  looking up at the tile. Ambient P&L no longer drives SCARED (it read the buggy
+  NAV series); SCARED is now only the transient reaction to a real `risk_breach`.
+- **Eye occlusion is deliberate order.** The pupil + glints are drawn BEFORE the
+  eyelid so a rolled-up pupil tucks UNDER the lid — drawing the lid last was the
+  fix for "his pupils go through his eyelids". Keep that order in the generator.
+- **One accessory survives the no-particles rule: the dono sunglasses.** On a
+  donation, `blob.cool(durTicks)` drops deal-with-it shades from overhead onto a
+  smirk, holds, then lifts them off — an accessory ON him, not a separate mark.
 
 What did **not** change: the engine still applies bob, jitter, the eyes-only
 glance, the travelling blink, and the outer bloom (`onAccent`); the public API is

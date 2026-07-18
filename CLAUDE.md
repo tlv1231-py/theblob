@@ -144,6 +144,19 @@ Prerequisites before building:
   shut — `baseLid` is now `SLEEP ? 2 : 0` since each mood's resting lid is baked
   into its col-0 eye.
 
+- **Blob reactions + sunglasses + eye occlusion (2026-07-17):** enter →
+  **HOPEFUL** (row-8, looks up at the fresh pickup); a donation drops **deal-with-it
+  sunglasses** onto a smirk (`blob.cool()`, `coolUntil` holds the pose past
+  `syncBlobMood`'s 1s tick). Eye pupils are now drawn BEFORE the lid so a
+  rolled-up pupil tucks under it (fixed "pupils through eyelids" on EXASPERATED).
+
+- **Stream background live control (2026-07-17):** Stream HQ gained a **BG
+  ON/OFF toggle + opacity fader** (`bg_enabled` / `bg_opacity` in
+  `strategy_params`, default 68 = the tuned `#bgCanvas` opacity). stream.js polls
+  ~2s and EASES the opacity in JS (CSS transitions are inert in the component
+  iframe); when faded fully off it stops the 24fps `stream_bg` loop, so OFF is a
+  real toggle, not an invisible canvas still rendering.
+
 ---
 
 ## What Has Been Built (V0)
@@ -210,12 +223,14 @@ Prerequisites before building:
   Status (2026-07-17): **sprite-driven, EYES-ONLY** — a small pink circle + one
   line mouth + cartoonishly large over-the-top eyes, no arm/fangs/tongue/brows/
   particles. Two 48×48 sheets (`blob_body.png` + `blob_eyes.png`) blitted by
-  blob.js, inlined as base64; cel + gloss, **not Bayer dither**. **8 moods** now
-  (`IDLE HAPPY SCARED ALERT SLEEP SMUG BRACE EXASPERATED`); **IDLE is the
-  confident default**, EXASPERATED is the loss reaction. Regenerate with
-  `scripts/gen_blobby_eyes.py`, re-embed with `scripts/embed_blob_sheets.py`.
-  **Wired to live state on the Stream page** (stream.js drives setMood/setPnl);
-  Home (`home_nav.js`) not yet. Streamlit is deliberately not involved — see BLOB.md.
+  blob.js, inlined as base64; cel + gloss, **not Bayer dither**. **9 moods** now
+  (`IDLE HAPPY SCARED ALERT SLEEP SMUG BRACE EXASPERATED HOPEFUL`); **IDLE is the
+  confident default**, EXASPERATED is the loss reaction, HOPEFUL the fresh pickup.
+  A donation drops **sunglasses** (`blob.cool()`) — the one surviving accessory.
+  Regenerate with `scripts/gen_blobby_eyes.py`, re-embed with
+  `scripts/embed_blob_sheets.py`. **Wired to live state on the Stream page**
+  (stream.js drives setMood/setPnl); Home (`home_nav.js`) not yet. Streamlit is
+  deliberately not involved — see BLOB.md.
 
 - [ ] Feature queue — professional quant tooling (build in priority order):
   1. [ ] Correlation matrix — live heatmap of current position price correlations
