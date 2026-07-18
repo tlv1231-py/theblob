@@ -104,7 +104,7 @@
       onAccent: opts.onAccent || null
     };
     var blinkUntil = -1, nextBlink = 30, moodUntil = -1;
-    var lookX = 0, lookUntil = -1;
+    var lookX = 0, lookUntil = -1, reading = false;
     var alertAt = -1;   // when ALERT last fired, for the entry pop
     var shadesAt = -1, shadesUntil = -1;   // the dono "cool guy" sunglasses
     var fxOn = opts.fx !== false;
@@ -200,11 +200,16 @@
       // brow, which is what makes it read as a glance. Whole pixels.
       var look = Math.round(p * 1.6);
       if (self.tick < lookUntil) look = Math.round(lookX * 2.4);
+      // Reading a narrator/potion panel: the eyes drop toward it (it sits below
+      // him) and scan the line side-to-side, so he looks like he's reading it.
+      // Not for his own speech — that is him talking, not reading.
+      var eyeY = 0;
+      if (reading) { eyeY = 3; look += Math.round(Math.sin(self.tick * 0.55) * 2); }
 
       var dx = jx, dy = bob + jy;
       if (ready >= 2) {
         ctx.drawImage(bodyImg, breath * CELL, row * CELL, CELL, CELL, dx, dy, CELL, CELL);
-        ctx.drawImage(eyesImg, lid * CELL, row * CELL, CELL, CELL, dx + look, dy, CELL, CELL);
+        ctx.drawImage(eyesImg, lid * CELL, row * CELL, CELL, CELL, dx + look, dy + eyeY, CELL, CELL);
       }
 
       // No particles — "just Blobby". Every mood is carried entirely by the
@@ -334,6 +339,9 @@
         lookUntil = self.tick + (durTicks || 12);
         return api;
       },
+
+      // Reading a panel below him — eyes drop and scan until turned off.
+      read: function(on) { reading = !!on; return api; },
 
       getMood:  function()    { return self.mood; },
       getTick:  function()    { return self.tick; },

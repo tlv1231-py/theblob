@@ -1292,6 +1292,9 @@
     // never fire again if the clock ever does run — on a different host, or if
     // this gets ported off the iframe. Clear it with the rest of the state.
     lcd.classList.remove('pop');
+    // The magic skin, cleared with the rest — otherwise potionStarTick keeps
+    // finding `.potion` and strobes the idle/next box through the rainbow.
+    lcd.classList.remove('potion');
     lcd.style.removeProperty('--ev-c');
     $('ev-more').className = 'ev-more';
     startAmtRgb(false);        // the sweep must not outlive the box it lit
@@ -1345,6 +1348,7 @@
       // next thing play over a corpse mid-decay.
       boxDecay(function() {
         annClose();
+        if (blob && blob.read) blob.read(false);   // panel's gone — stop reading
         // Guarded because boot calls annNext() once to settle the panel into
         // its idle state, and that call holds no floor to give back.
         if (stage.owner === 'popup') {
@@ -1359,6 +1363,10 @@
     }
     var ev = annQ.shift();
     annBadge();
+    // He reads the narrator/potion panel while it holds the floor: the eyes drop
+    // toward the box (it sits below him) and scan the line. Turned off when the
+    // box closes, and by speakNext — his own voice is talking, not reading.
+    if (blob && blob.read) blob.read(true);
 
     var cfg = ANN[ev.type];
     // Only when it is actually ARRIVING. Mid-burst the box is already open and
@@ -1798,6 +1806,7 @@
       // Same death as a popup — it is the same window. See boxDecay.
       boxDecay(function() {
         annClose();
+        if (blob && blob.read) blob.read(false);
         if (stage.owner === 'speaks') {
           stageDone();
           // Hand x back to the AFK cycle on the same 2s rule the popup lane and
@@ -1809,6 +1818,7 @@
       return;
     }
     var s = speakQ.shift();
+    if (blob && blob.read) blob.read(false);   // his own voice — he talks, not reads
 
     // Same arrival as a popup, and only when it is actually arriving — a second
     // line mid-burst replaces the contents of a box that is already open.
@@ -1816,6 +1826,7 @@
     $('s-events').classList.add('showing');
     lcd.classList.remove('idle');
     lcd.classList.remove('pop');            // a popup's money hit is not his
+    lcd.classList.remove('potion');         // nor is the magic skin — he's talking
     lcd.classList.add('open');
     lcd.classList.add('speaking');          // his skin, not the announcer's
     lcd.style.setProperty('--ev-c', '#ff00cc');
@@ -3798,16 +3809,72 @@
     }, 'potion:' + Date.now());
   }
 
-  // Set the active potion + its expiry. renderPotion (10fps) draws the HUD and
-  // counts it down; nothing here writes the DOM so a burst can't thrash it.
+  // Steampunk glows — brass, copper, amber, antique gold, verdigris. One is
+  // picked at random per activation and lights BOTH the name and the orbiting
+  // orbs, so the whole HUD reads as one artifact.
+  var STEAMPUNK = ['#d9a441', '#c87f3a', '#b5732e', '#e0b84e', '#a8763c',
+                   '#d98a2b', '#5fae9c', '#c9922e'];
+  function potRGBA(hex, a) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  // Set the active potion + its expiry, pick its glow, and cast its orbs.
+  // renderPotion (20fps) draws the HUD, counts it down, and spins the orbs;
+  // nothing here writes the DOM text on every tick so a burst can't thrash it.
   function activatePotion(p) {
+    var glow = STEAMPUNK[Math.floor(Math.random() * STEAMPUNK.length)];
     _potionActive = {
       name: String(p.name || 'POTION').toUpperCase().slice(0, 18),
-      status: String(p.status || '').slice(0, 40),
       endsAt: Date.now() + Math.max(1, Number(p.duration) || 20) * 1000,
-      born: Date.now()
+      born: Date.now(),
+      glow: glow
     };
+    spawnOrbs(glow);
     renderPotion();
+  }
+
+  // Powerup orbs that ring the Blob for the potion's life — same glow as the
+  // name. Elliptical orbit faked in JS (rAF/CSS-anim are inert here); depth from
+  // the orbit angle scales + dims the back half so it reads as a 3-D ring.
+  var _orbs = null;
+  function spawnOrbs(color) {
+    var host = $('s-orbs');
+    clearOrbs();
+    if (!host) return;
+    _orbs = [];
+    var N = 5;
+    for (var i = 0; i < N; i++) {
+      var o = document.createElement('div');
+      o.className = 'p-orb';
+      o.style.background = 'radial-gradient(circle at 35% 30%, #fff, ' + color +
+        ' 55%, ' + potRGBA(color, 0.18) + ')';
+      o.style.boxShadow = '0 0 10px ' + color + ', 0 0 22px ' + color;
+      host.appendChild(o);
+      _orbs.push({ el: o, a: (i / N) * Math.PI * 2 });
+    }
+  }
+  function clearOrbs() {
+    var host = $('s-orbs');
+    if (host) host.innerHTML = '';
+    _orbs = null;
+  }
+  function updateOrbs() {
+    if (!_orbs) return;
+    var RX = 300, RY = 148;   // elliptical ring — wide, shallow, seen near edge-on
+    for (var i = 0; i < _orbs.length; i++) {
+      var o = _orbs[i];
+      o.a += 0.06;
+      var x = Math.cos(o.a) * RX, y = Math.sin(o.a) * RY;
+      var depth = (Math.sin(o.a) + 1) / 2;         // 0 at the back, 1 at the front
+      var sc = 0.55 + depth * 0.7;
+      o.el.style.transform = 'translate(-50%,-50%) translate(' + x.toFixed(1) + 'px,' +
+        y.toFixed(1) + 'px) scale(' + sc.toFixed(2) + ')';
+      o.el.style.opacity = (0.35 + depth * 0.65).toFixed(2);
+      o.el.style.zIndex = depth > 0.5 ? 3 : 1;      // front orbs cross over him
+    }
   }
 
   function renderPotion() {
@@ -3816,36 +3883,51 @@
     var left = _potionActive ? _potionActive.endsAt - Date.now() : 0;
     if (!_potionActive || left <= 0) {
       if (host.classList.contains('on')) { host.classList.remove('on'); host.innerHTML = ''; }
+      clearOrbs();
       _potionActive = null;
       return;
     }
-    // Build once on arrival; after that only the timer + the pulse change.
+    var g = _potionActive.glow;
+    // Build once on arrival: no frame, no panel — just the name and a live "Xs"
+    // beside it, floating in the potion's own steampunk glow.
     if (!host.classList.contains('on')) {
       host.classList.add('on');
-      host.innerHTML =
-        '<div class="pot-frame">' +
-          '<div class="pot-label">ACTIVE POTION</div>' +
-          '<div class="pot-name"></div>' +
-          '<div class="pot-status"></div>' +
-          '<div class="pot-timer"></div>' +
-        '</div>';
-      host.querySelector('.pot-name').textContent = _potionActive.name;
-      host.querySelector('.pot-status').textContent = _potionActive.status;
+      host.innerHTML = '<span class="pot-name"></span><span class="pot-timer"></span>';
+      var nm0 = host.querySelector('.pot-name');
+      nm0.textContent = _potionActive.name;
+      nm0.style.color = g;
+      var tm0 = host.querySelector('.pot-timer');
+      tm0.style.color = g;
+      tm0.style.textShadow = '0 0 10px ' + g;
     }
     var secs = Math.ceil(left / 1000);
-    host.querySelector('.pot-timer').textContent = secs + 's';
-    // Arcade pulse — a magic breath on the frame; JS-driven because CSS
-    // animation is frozen in this iframe. Under 6s it flips to an urgent flash.
-    var frame = host.querySelector('.pot-frame');
-    if (frame) {
+    var tm = host.querySelector('.pot-timer');
+    if (tm) tm.textContent = ' ' + secs + 's';
+    // A brass-lamp flicker on the name — steampunk breath, JS-driven, with an
+    // occasional gas-flame jump.
+    var nm = host.querySelector('.pot-name');
+    if (nm) {
       var ph = (Date.now() - _potionActive.born) / 1000;
-      var pulse = 0.55 + 0.45 * Math.abs(Math.sin(ph * 3.2));
-      frame.style.boxShadow = '0 0 ' + (10 + pulse * 16).toFixed(1) + 'px rgba(177,77,255,' +
-        (0.4 + pulse * 0.4).toFixed(2) + '), inset 0 0 12px rgba(177,77,255,0.28)';
-      var t = host.querySelector('.pot-timer');
-      if (secs <= 5) { t.style.color = (Math.floor(Date.now() / 260) % 2) ? '#ff3366' : '#b14dff'; }
-      else if (t.style.color) { t.style.color = ''; }
+      var fl = 0.7 + 0.3 * Math.abs(Math.sin(ph * 2.4)) + (Math.random() < 0.06 ? 0.18 : 0);
+      nm.style.textShadow = '0 0 ' + (5 + fl * 6).toFixed(1) + 'px ' + g +
+        ', 0 0 ' + (14 + fl * 18).toFixed(1) + 'px ' + g +
+        ', 0 0 ' + (26 + fl * 22).toFixed(1) + 'px ' + potRGBA(g, 0.55);
     }
+    // Urgent blink on the countdown under 5s.
+    if (tm) tm.style.opacity = (secs <= 5 && (Math.floor(Date.now() / 240) % 2)) ? '0.35' : '1';
+    updateOrbs();
+  }
+
+  // MARIO STAR: while the potion popup holds the box, strobe the whole panel
+  // through the rainbow — the invincibility-star flash. JS-driven (a CSS
+  // animation is inert in this iframe); only touches the box while `.potion` is
+  // on, so it never fights another event for --ev-c.
+  var _starHue = 0;
+  function potionStarTick() {
+    var lcd = $('ev-lcd');
+    if (!lcd || !lcd.classList.contains('potion')) return;
+    _starHue = (_starHue + 47) % 360;
+    lcd.style.setProperty('--ev-c', 'hsl(' + _starHue + ',100%,62%)');
   }
 
   setInterval(syncBlobMood, 1000);
@@ -3881,7 +3963,12 @@
   // 10fps for the countdown + arcade pulse.
   setInterval(pollPotions, 15000);
   pollPotions();
-  setInterval(renderPotion, 100);
+  // 20fps: the countdown only needs 10, but the orbiting orbs want the smoother
+  // clock. Still the Blob's family of setIntervals, not rAF (inert here).
+  setInterval(renderPotion, 50);
+  // The Mario-star box strobe runs fast and independently — it only does work
+  // while the potion popup is actually up.
+  setInterval(potionStarTick, 60);
   // Mute lands within ~3s of hitting the button — fast enough that it feels
   // like a mute button rather than a setting.
   // AFK copy is edited by a human in HQ, so it changes at human speed. 15s is

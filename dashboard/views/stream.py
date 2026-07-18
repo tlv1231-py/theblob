@@ -352,6 +352,11 @@ _STAGE_HTML = """
       <div id="s-blob">
         <div class="blob-bloom" id="blob-bloom"></div>
         <canvas id="blobCanvas"></canvas>
+        <!-- Powerup orbs ring the Blob for a potion's life. Centered on him;
+             spun + depth-sorted (front orbs cross in front, back orbs behind)
+             from stream.js (updateOrbs). No stacking context of its own, so its
+             orbs' z-index competes with the canvas above. -->
+        <div id="s-orbs"></div>
 <!-- The mood readout is GONE. It named what the character was already showing
              you — a caption on a performance — and it sat in the one gap between him
              and his score. If you want to know he is scared, look at him. -->
