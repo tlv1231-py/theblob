@@ -4140,10 +4140,13 @@
   // you drag the fader. Called once now so a saved setting applies on load.
   setInterval(pollBgSettings, 2000);
   pollBgSettings();
-  // Potions: the list is edited by a human in HQ (potionname/status/duration),
-  // so 15s is fast enough to see an edit land. The active-potion HUD ticks at
-  // 10fps for the countdown + arcade pulse.
-  setInterval(pollPotions, 15000);
+  // Potions: the list is edited by a human in HQ (name/status/duration) and the
+  // operator expects an edit to be live "instantly". 3s matches the other
+  // live-tuned controls (bg 2s, yt 3s) so a save lands on the broadcast in a few
+  // seconds with no Streamlit restart — the JS polls the DB straight from the
+  // iframe. (It was 15s, which read as "did that even save?".) Still cheap: this
+  // is one tiny strategy_params row. The active-potion HUD ticks separately.
+  setInterval(pollPotions, 3000);
   pollPotions();
   // 20fps: the countdown only needs 10, but the orbiting orbs want the smoother
   // clock. Still the Blob's family of setIntervals, not rAF (inert here).

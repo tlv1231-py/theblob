@@ -525,8 +525,10 @@ _POTION_DEFAULT = [
 
 
 def _render_potions() -> None:
-    st.caption("Every donation brews a **random** potion from this pool. Edit it "
-               "live — the stream picks up changes within ~15s.")
+    st.caption("Every donation brews a **random** potion from this pool. Edit + "
+               "**SAVE** and the live stream picks it up within ~3s — no restart "
+               "needed. Note: a potion only appears **on a donation**, and the pick "
+               "is random, so an edit shows up the next time that potion is rolled.")
     pol = _get_policy()
     try:
         rows = json.loads(pol.get("potions", "")) or []
