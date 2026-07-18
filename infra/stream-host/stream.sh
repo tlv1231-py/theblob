@@ -57,7 +57,7 @@ done
 shopt -u nullglob nocaseglob
 
 if [[ -s "$PLAYLIST" ]]; then
-  AUDIO_IN=(-f concat -safe 0 -stream_loop -1 -i "$PLAYLIST")
+  AUDIO_IN=(-thread_queue_size 1024 -f concat -safe 0 -stream_loop -1 -i "$PLAYLIST")
   # NO runtime loudnorm. The tracks are normalised OFFLINE to -16 LUFS by
   # normalize-music.sh, which is both better and cheaper:
   #
@@ -96,7 +96,7 @@ fi
 # this; a missing sink must never be what takes the broadcast down.
 SFX_IN=(); FILTER=(); MAP=(-map 0:v -map 1:a)
 if pactl list sinks short 2>/dev/null | grep -qw blob_sink; then
-  SFX_IN=(-f pulse -i blob_sink.monitor)
+  SFX_IN=(-thread_queue_size 1024 -f pulse -i blob_sink.monitor)
   # Named volume filters (volume@mvol / volume@svol) so faders.py can retarget
   # them live via the azmq broker on 127.0.0.1:$ZMQ_PORT. amix normalize=0 keeps
   # the sum from being auto-halved; the limiter catches any peak the boost pushes
@@ -152,7 +152,15 @@ fi
 # touch a headless browser, so without this an arrow sits on his forehead for the
 # entire life of the stream. Caught by screenshotting the framebuffer; every
 # health signal reads green through it.
+# -thread_queue_size on EVERY input. ffmpeg's default is 8 packets, and the
+# journal showed BOTH x11grab and pulse logging "Thread message queue blocking"
+# within a second of every start: on 4 saturated ARM cores the input threads
+# cannot hand off fast enough, so frames and audio arrive in bursts. That is not
+# only a stutter — it ragged the A/V timeline enough that YouTube's ingest read
+# "Excellent" and then sat on "Preparing stream" forever, never finalising the
+# broadcast. 1024 is ~42s of video packets and costs a few MB of RAM.
 exec ffmpeg -hide_banner -loglevel warning \
+  -thread_queue_size 1024 \
   -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${SFX_IN[@]}" \
