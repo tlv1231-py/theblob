@@ -4146,7 +4146,10 @@
       pot.nmEl.style.textShadow = '0 0 ' + (5 + fl * 6).toFixed(1) + 'px ' + g +
         ', 0 0 ' + (14 + fl * 18).toFixed(1) + 'px ' + g +
         ', 0 0 ' + (26 + fl * 22).toFixed(1) + 'px ' + potRGBA(g, 0.55);
-      pot.tmEl.style.opacity = (secs <= 5 && (Math.floor(now / 240) % 2)) ? '0.4' : '1';
+      // The WHOLE tile — bottle, name and timer together — flashes over its last
+      // 5s, not just the countdown. A hard ~260ms blink to 0.2, the "buff about
+      // to wear off" tell.
+      pot.rowEl.style.opacity = (secs <= 5 && (Math.floor(now / 260) % 2)) ? '0.2' : '1';
     }
     // The crown rides the potions: on his head while the longest-lived one is
     // healthy, then a slow blink over its last 4s (like the tile timers) before
@@ -4157,16 +4160,18 @@
     updateOrbs();
   }
 
-  // MARIO STAR: while the potion popup holds the box, strobe the whole panel
-  // through the rainbow — the invincibility-star flash. JS-driven (a CSS
-  // animation is inert in this iframe); only touches the box while `.potion` is
-  // on, so it never fights another event for --ev-c.
-  var _starHue = 0;
+  // ARCANE SHIMMER: while the potion popup holds the box, its frame + glow drift
+  // SLOWLY through a blue-violet band — an enchanted "you learned a spell" RPG
+  // glow, not the old Mario-star rainbow. The text is fixed legible now, so this
+  // is pure atmosphere on the frame. JS-driven (a CSS animation is inert here);
+  // only touches the box while `.potion` is on, so it never fights another event.
+  var _potShim = 0;
   function potionStarTick() {
     var lcd = $('ev-lcd');
     if (!lcd || !lcd.classList.contains('potion')) return;
-    _starHue = (_starHue + 47) % 360;
-    lcd.style.setProperty('--ev-c', 'hsl(' + _starHue + ',100%,62%)');
+    _potShim += 0.05;
+    var hue = 232 + Math.sin(_potShim) * 34;   // ~198..266 — cyan / blue / violet
+    lcd.style.setProperty('--ev-c', 'hsl(' + hue.toFixed(0) + ',85%,62%)');
   }
 
   setInterval(syncBlobMood, 1000);

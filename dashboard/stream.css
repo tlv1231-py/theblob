@@ -794,11 +794,30 @@ html, body {
   will-change: transform, opacity, filter;
 }
 
-/* The potion popup — the same Gameboy box, but MAGIC. --ev-c is already the
-   potion violet (set from ANN.potion); this adds the enchanted glow on top. */
-/* The glow rides --ev-c, which potionStarTick strobes through the rainbow on an
-   interval — so the whole box flashes like a Mario star, not a fixed violet. */
-.ev-lcd.potion { filter: drop-shadow(0 0 16px var(--ev-c)); }
+/* The potion popup — the same Gameboy box, dressed as an RPG "you learned a
+   spell" panel. The frame + glow ride --ev-c, which potionStarTick now drifts
+   SLOWLY through an arcane blue-violet band (an enchanted shimmer, not the old
+   Mario-star rainbow). The panel itself goes a deep magic blue. */
+.ev-lcd.potion {
+  background: linear-gradient(180deg, #10132e, #070819);
+  filter: drop-shadow(0 0 16px var(--ev-c));
+}
+/* Potion TEXT is fixed and legible — it no longer cycles with --ev-c. Classic
+   RPG palette: the name in item-gold, the "ACTIVATED BY x" line in cool white,
+   the effect in parchment, each with a hard black outline so it reads over the
+   shimmering frame. The *wild* glyphs still override this inline (wildTick). */
+.ev-lcd.potion .ev-name, .ev-lcd.potion .ev-name i {
+  color: #ffe4a0;
+  text-shadow: 2px 2px 0 #150d02, 4px 4px 0 rgba(0,0,0,0.85), 0 0 18px rgba(150,130,255,0.65);
+}
+.ev-lcd.potion .ev-act {
+  color: #dfe6ff;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.95), 0 0 10px rgba(150,130,255,0.5);
+}
+.ev-lcd.potion .ev-msg {
+  color: #f2ecd8;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.95), 0 0 12px rgba(150,130,255,0.5);
+}
 
 /* The *wild* glyphs in a potion panel — whatever the operator wraps in
    asterisks. Colour, glow and transform are written by wildTick each tick; this
