@@ -102,10 +102,8 @@ Prerequisites before building:
   fiction (renders as ~−72%). Blocks livestreaming until fixed: the Stream page would
   broadcast a loss that never happened.
 
-- **`positions_data.entry_price` is 0 for all positions** → `entry_pnl` and
-  `entry_pnl_pct` are all 0, so every position P&L reads +0.00%. Affects Home and
-  Stream (both consume `_load_chart_data()`). Entry lookup against fills is not
-  resolving.
+- ~~`positions_data.entry_price` is 0 for all positions~~ **— FIXED, verified
+  2026-07-18.** See Known Fixes Applied below. Do not re-chase this.
 
 - **Two books are presented as one.** `_load_chart_data()` returns Alpaca account NAV
   (~$25k, mostly cash, crypto fills in the feed) alongside momentum paper-model
@@ -115,6 +113,24 @@ Prerequisites before building:
   surface represents before shipping it.
 
 ## Known Fixes Applied
+
+- **`entry_price` = 0 / every position reading +0.00% — FIXED (verified
+  2026-07-18).** The entry lookup in `home._load_chart_data()` queried
+  `WHERE side = 'BUY'`, but `fills.side` is stored **lowercase** and in two
+  vocabularies — `buy`/`sell` for equity, `entry`/`exit` for crypto (measured:
+  36,926 `entry`, 36,651 `exit`, 13 `buy`, 8 `sell`). The uppercase compare
+  matched zero rows, silently, so `entry_price` fell to 0 and both the Command
+  Center and the Stream page showed +0.00% on every position. The query is now
+  `WHERE LOWER(side) IN ('buy','entry')`. Verified against live data: all five
+  held positions resolve (AMD 518.61, CAT 888.56, GOOGL 390.52, INTC 121.01,
+  NUE 249.01), and no fill row has a null/zero `fill_price`.
+  **Known remaining wrinkle, not the same bug:** the lookup takes
+  `DISTINCT ON (symbol) ... ORDER BY filled_at ASC`, i.e. the EARLIEST entry
+  ever. For the equity book (1 fill/symbol) that is correct. For a crypto symbol
+  that rolls thousands of times it would return the first entry in history
+  rather than the current position's — harmless today because the positions
+  panel is fed from the momentum equity snapshot, but wrong the moment crypto
+  positions render through this path.
 
 - **np.float64 casting:** yfinance returns `np.float64` values. These must be cast to Python `float` before SQLAlchemy passes them to psycopg2. Apply at ingestion boundary.
 - **Price lookup:** Use latest available date per symbol, not `date == today`. Intraday data is not available from yfinance.

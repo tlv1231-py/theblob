@@ -80,6 +80,13 @@ def post_health(component: str, status: str, detail: dict) -> bool:
 
 # ── encoder ───────────────────────────────────────────────────────────────────
 
+# Last observed frame counter + the wall clock when we saw it. The health verdict
+# is the DELTA between polls (see read_encoder), because ffmpeg's own `speed`
+# field cannot be trusted — it reported 0.0 through ten hours of a healthy
+# encode. Module-level so it survives across the poll loop.
+_last: dict = {"frames": None, "t": None}
+
+
 def read_encoder() -> tuple[str, dict]:
     """Parse ffmpeg's -progress file.
 
@@ -137,10 +144,45 @@ def read_encoder() -> tuple[str, dict]:
     detail = {"speed": round(speed, 3), "fps": round(fps, 1),
               "bitrate": bitrate, "dropped": drop, "frames": frames}
 
-    # speed < 1.0 = encoding slower than real time = YouTube will buffer.
-    if speed <= 0:
+    # ── THE VERDICT COMES FROM FRAME PROGRESS, NOT FROM `speed` ──────────────
+    #
+    # `speed` lies. Measured over a real 10-hour broadcast: it read 0.0 for 1164
+    # of 1214 samples — i.e. "down", continuously, for nine hours — while the
+    # frame counter advanced 770,722 frames at 21 fps the entire time. The encode
+    # was perfectly healthy and this function called it dead. It cost hours of
+    # misdiagnosis (twice we "fixed" a stall that never existed), and on a real
+    # outage at 3am it would have cried wolf exactly when the light mattered.
+    #
+    # Frames advancing IS the ground truth: if ffmpeg's RTMP output were blocked
+    # or rejected it would stall on write and the counter would freeze. So the
+    # counter moving proves both that we are encoding AND that the far end is
+    # accepting bytes — which is more than `speed` ever proved.
+    #
+    # `speed` stays in the payload because it is still worth SEEING on HQ; it
+    # just no longer decides anything.
+    now = time.time()
+    prev_frames, prev_t = _last["frames"], _last["t"]
+    _last["frames"], _last["t"] = frames, now
+
+    if prev_frames is None or prev_t is None or now <= prev_t:
+        # First sample after start — no delta yet. The staleness check above has
+        # already proved ffmpeg is writing, so this is not an outage.
+        return "ok", detail
+
+    advanced = frames - prev_frames
+    real_fps = advanced / (now - prev_t)
+    detail["real_fps"] = round(real_fps, 1)
+
+    if advanced <= 0:
+        # Frozen counter with a fresh file = ffmpeg is alive but producing
+        # nothing. THIS is the genuine stall `speed` was supposed to catch.
+        detail["error"] = "frame counter frozen — encoding stalled"
         return "down", detail
-    if speed < 0.97:
+    # Target is the configured capture rate; below ~80% of it the broadcast
+    # visibly judders. Compared against what ffmpeg reports it is TRYING to do,
+    # so this keeps working if the capture rate is ever retuned.
+    target = fps if fps > 1 else 24.0
+    if real_fps < target * 0.8:
         return "degraded", detail
     return "ok", detail
 
