@@ -85,18 +85,24 @@ fi
 # ffmpeg captured the same one 24x/s. `speed` stayed 1.0x throughout, so every
 # metric read green while the picture lagged.
 #
-# The event spike is largely x264 MOTION ESTIMATION. veryfast does real ME, so a
-# high-motion event frame costs far more than a static one — the encode cost
-# spikes exactly when the render is also busiest. ultrafast does almost no ME, so
-# its cost is nearly FLAT across static and motion: it removes the encode half of
-# the event spike, not just the average. Quality cost is negligible on flat-colour
-# sharp-edged pixel art. That is the main win, and it is kept.
+# preset superfast, NOT ultrafast, and NOT veryfast:
 #
-# framerate STAYS 24, NOT 20. A first attempt at 20 to shave another ~17% left
-# YouTube stuck on "Preparing stream" forever with the ingest reading "Excellent"
-# — 20 is not one of its accepted live rates (24/25/30/48/50/60). The health was
-# green because the bytes arrived fine; the prep step choked on the frame rate.
-# 24 is the floor that YouTube actually goes live on.
+#  * ultrafast forces CAVLC (no CABAC), which yields H.264 BASELINE profile.
+#    YouTube's live "Preparing stream" step wants Main/High and hangs on Baseline
+#    — the exact failure seen: ingest "Excellent", preview stuck on "Preparing"
+#    forever, never offering Go Live. superfast is the FASTEST preset that keeps
+#    CABAC, so it produces High profile and YouTube goes live on it.
+#  * veryfast is the known-good profile too, but heavier: it does full motion
+#    estimation, so a high-motion event frame costs far more than a static one and
+#    that spike is what saturated the box on the first broadcast. superfast does
+#    far less ME, keeping the event-time encode cost down, while staying CABAC.
+#
+# So superfast is the sweet spot: YouTube-compatible profile AND light. Kept from
+# the ultrafast attempt: nothing — this is a different lever.
+#
+# framerate STAYS 24. A first attempt at 20 to shave CPU also hung "Preparing":
+# 20 is not one of YouTube's accepted live rates (24/25/30/48/50/60). Two separate
+# ways to hang the prep step, found the hard way; both are avoided here.
 #
 # -g 48 = 2s keyframe interval at 24fps, which is what YouTube wants for live.
 #
@@ -110,7 +116,7 @@ exec ffmpeg -hide_banner -loglevel warning \
   -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${AUDIO_FILTER[@]}" \
-  -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
+  -c:v libx264 -preset superfast -tune zerolatency -profile:v high -pix_fmt yuv420p \
   -b:v 4500k -maxrate 4500k -bufsize 9000k \
   -g 48 -keyint_min 48 -sc_threshold 0 \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \
