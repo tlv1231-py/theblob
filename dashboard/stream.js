@@ -3792,7 +3792,7 @@
   function triggerPotion() {
     if (!_potions.length) return;
     var p = _potions[Math.floor(Math.random() * _potions.length)];
-    announce('potion', {
+    annPush('potion', {
       name: p.name, status: p.status || '',
       duration: Math.max(1, Number(p.duration) || 20)
     }, 'potion:' + Date.now());
