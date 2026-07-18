@@ -79,12 +79,22 @@ fi
 # CSS transform; at exactly this size the scale resolves to 1 and the pixel art
 # is unresampled. Any other size softens the whole 8-bit look.
 #
-# -r 24 / veryfast / 4500k: this is a mostly-static pixel-art scene on 4 free ARM
-# cores. The binding constraint is keeping `speed` >= 1.0x — below that ffmpeg
-# encodes slower than real time and YouTube buffers. Raise fps/bitrate only after
-# watching the agent's reported speed hold.
+# -r 20 / ultrafast / 4500k. The FIRST real broadcast saturated all 4 cores
+# during events (measured: 34% idle -> 100% at an event burst, load 4.38) and the
+# Blob stuttered — the render, starved of CPU, could not paint new frames while
+# ffmpeg captured the same one 24x/s. `speed` stayed 1.0x throughout, so every
+# metric read green while the picture lagged.
 #
-# -g 48 = 2s keyframe interval at 24fps, which is what YouTube wants for live.
+# The event spike is largely x264 MOTION ESTIMATION. veryfast does real ME, so a
+# high-motion event frame costs far more than a static one — the encode cost
+# spikes exactly when the render is also busiest. ultrafast does almost no ME, so
+# its cost is nearly FLAT across static and motion: it removes the encode half of
+# the event spike, not just the average. Quality cost is negligible on flat-colour
+# sharp-edged pixel art. 20 fps trims a further ~17% off capture+encode and is
+# imperceptible on this content. Between them the encoder gets out of the render's
+# way; the render's own event cost is a dashboard concern.
+#
+# -g 40 = 2s keyframe interval at 20fps, which is what YouTube wants for live.
 #
 # -draw_mouse 0 IS NOT COSMETIC. x11grab draws the pointer by default, and X
 # parks it dead centre of the screen (540,960) — which on a 1080x1920 stage is
@@ -93,12 +103,12 @@ fi
 # entire life of the stream. Caught by screenshotting the framebuffer; every
 # health signal reads green through it.
 exec ffmpeg -hide_banner -loglevel warning \
-  -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
+  -f x11grab -framerate 20 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${AUDIO_FILTER[@]}" \
-  -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
+  -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
   -b:v 4500k -maxrate 4500k -bufsize 9000k \
-  -g 48 -keyint_min 48 -sc_threshold 0 \
+  -g 40 -keyint_min 40 -sc_threshold 0 \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \
   `# -progress feeds agent.py, which is the ONLY thing that surfaces speed.` \
   `# -stats_period throttles it to one block per 5s: the default is 0.5s, and` \

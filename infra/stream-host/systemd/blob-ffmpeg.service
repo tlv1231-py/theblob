@@ -32,6 +32,16 @@ StartLimitIntervalSec=0
 Type=simple
 User=blob
 Group=blob
+
+# Pin the encoder to cores 0-1 so it can NEVER starve the render. The first
+# broadcast saturated all 4 cores during events and the Blob stuttered — with
+# ffmpeg free to grab every core, Chromium lost the fight and stopped painting.
+# Confined to 2 cores, ffmpeg leaves cores 2-3 permanently available to the
+# render. ultrafast/20fps (see stream.sh) fits comfortably in 2 cores, so this
+# costs the encoder nothing. Chromium is deliberately left unpinned: it may use
+# all four, but 2-3 are always there for it when ffmpeg is busy on 0-1.
+CPUAffinity=0 1
+
 EnvironmentFile=/opt/blob-stream/.env
 # Owns /run/blob-stream so the unprivileged user can write the progress file.
 # Preserve=yes keeps the dir across a restart, so agent.py reports the honest
