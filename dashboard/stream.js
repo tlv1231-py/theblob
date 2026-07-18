@@ -3642,9 +3642,12 @@
     _pickT = setInterval(function() {
       var prog = Math.min(1, (Date.now() - t0) / PRE_MS);   // 0 -> 1 across the wind-up
       var puls = Math.sin(Date.now() / 55) * 0.5 + 0.5;     // 0..1 flicker
-      // The ring swells and its glow ramps as it charges.
+      // The ring breathes and its glow ramps as it charges. Scale is capped at
+      // 1.0 (it breathes INWARD, 0.95..1.0) — a scale above 1 grew the ring past
+      // the tile, and #pos-list's overflow:hidden then clipped the bottom-row
+      // ring at the board edge. The charge now reads through the glow, not size.
       ring.style.opacity = (0.5 + prog * 0.5).toFixed(2);
-      ring.style.transform = 'scale(' + (1 + 0.05 * (puls - 0.5) * 2 + prog * 0.04).toFixed(3) + ')';
+      ring.style.transform = 'scale(' + (0.95 + 0.05 * puls).toFixed(3) + ')';
       ring.style.boxShadow =
         '0 0 ' + (8 + prog * 22 + puls * 5).toFixed(1) + 'px rgba(255,0,204,' + (0.5 + prog * 0.45).toFixed(2) + '), ' +
         'inset 0 0 ' + (6 + prog * 10).toFixed(1) + 'px rgba(255,0,204,0.5)';

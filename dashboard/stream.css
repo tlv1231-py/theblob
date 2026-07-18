@@ -1054,7 +1054,11 @@ html, body {
    interval; the base rule is just the resting shape (opacity 0 until it charges).
    Absolutely positioned so it never disturbs the flex-centred ticker. */
 .t-pick {
-  position: absolute; inset: -2px 4px;
+  /* border-box + a positive inset keeps the whole solid ring INSIDE the tile,
+     so #pos-list's overflow:hidden can't clip it at the board edge (the ring
+     used to sit at inset:-2px and scale >1, which cut the bottom row off). */
+  box-sizing: border-box;
+  position: absolute; inset: 4px 5px;
   border: 3px solid #ff00cc;
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(255,0,204,0.6), inset 0 0 8px rgba(255,0,204,0.4);
