@@ -250,7 +250,7 @@ BREATH_dR = [0, 0.5, 0, -0.5]
 
 def body_cell(mood, col):
     st = Buf()
-    draw_mullet(st)                                          # 80s hair, behind him
+    # draw_mullet(st)  # 80s hair — pulled back out; the function is kept for later
     body(st, BREATH_dR[col], dim=1 if mood == 'SLEEP' else 0)
     draw_mouth(st, mood)
     return st.a
