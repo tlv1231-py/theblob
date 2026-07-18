@@ -125,7 +125,10 @@ exec "$BIN" \
   "${SANDBOX[@]}" \
   --user-data-dir="$PROFILE" \
   --window-position=0,0 \
-  --window-size=1080,1920 \
+  `# 810x1440 — the stage at exactly 0.75. See blob-xvfb.service for why 0.75` \
+  `# and not some rounder number (the Blob's 48px sprite must stay an integer` \
+  `# multiple). Must match Xvfb's screen and ffmpeg's -video_size.` \
+  --window-size=810,1440 \
   --kiosk \
   --start-fullscreen \
   --hide-scrollbars \

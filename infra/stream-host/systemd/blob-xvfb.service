@@ -4,10 +4,22 @@ After=network-online.target
 
 [Service]
 Type=simple
-# 1080x1920x24 EXACTLY. The page renders a fixed 1080x1920 stage and letterboxes
-# via CSS transform: at exactly this size the scale resolves to 1 and the Blob's
-# pixel art is unresampled. Any other geometry softens the entire 8-bit look.
-ExecStart=/usr/bin/Xvfb :99 -screen 0 1080x1920x24 -nolisten tcp -dpi 96
+# 810x1440 = the 1080x1920 stage at EXACTLY 0.75 (was 1080x1920 @ 1.0).
+#
+# WHY SMALLER: measured on this host, chrome's gpu-process pegs at ~98.7% of one
+# core compositing the surface IN SOFTWARE, and it does so regardless of what the
+# page animates — proven by an A/B that switched a full-screen 24fps starfield
+# off and moved the compositor 0.1%. The cost is per-PIXEL, not per-animation, so
+# area is the only lever the software has. 810x1440 is 56% of the pixels.
+#
+# WHY 0.75 SPECIFICALLY — do not pick a "nicer" number:
+# the Blob's canvas is 768 CSS px for a 48px sprite (48 x 16). The stage scale
+# must keep 768 * scale divisible by 48, i.e. scale must be a multiple of 1/16.
+# 0.75 = 12/16 -> 576 = 48 x 12, still an exact integer scale, so his pixel art
+# stays unresampled. 0.667 would give 512.0/48 = 10.67 and soften every pixel.
+# Both dimensions must also stay even for yuv420p. Valid: 0.5 (540x960),
+# 0.75 (810x1440), 0.875 (945x1680).
+ExecStart=/usr/bin/Xvfb :99 -screen 0 810x1440x24 -nolisten tcp -dpi 96
 Restart=always
 RestartSec=3
 

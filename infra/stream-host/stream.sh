@@ -161,7 +161,7 @@ fi
 # broadcast. 1024 is ~42s of video packets and costs a few MB of RAM.
 exec ffmpeg -hide_banner -loglevel warning \
   -thread_queue_size 1024 \
-  -f x11grab -framerate 24 -video_size 1080x1920 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
+  -f x11grab -framerate 24 -video_size 810x1440 -draw_mouse 0 -i "${DISPLAY_NUM}.0+0,0" \
   "${AUDIO_IN[@]}" \
   "${SFX_IN[@]}" \
   "${FILTER[@]}" \
