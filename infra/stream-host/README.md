@@ -253,14 +253,27 @@ Two things to watch when picking:
   not a track: one 2–3 minute loop repeats ~500x/day and the AFK audience is
   precisely the one that notices.
 
-`loudnorm` is applied across the set, without which volume jumps between tracks —
-the most amateur-sounding defect a music-bed stream can have.
+**Normalise before installing — `stream.sh` no longer does it at runtime:**
 
-The Audio Library ships MP3. That is fine for the encode path (ffmpeg decodes to
-PCM and encodes AAC either way, so converting first buys no quality) but **loop
-points are worth checking**: MP3 carries encoder delay and padding, and a gap at
-the seam repeats ~500x/day. Verify with `silencedetect` over a couple of loops
-rather than assuming; convert to WAV if a seam shows.
+```bash
+sudo ./normalize-music.sh /tmp/incoming     # -> /opt/blob-stream/music
+```
+
+Volume lurching between tracks is a music bed's most amateur defect, and the
+debut 8 spanned **-9.0 to -14.4 LUFS raw** — a 5.4 dB jump. `normalize-music.sh`
+level-matches each to -16 LUFS by measured loudness + exact linear gain (a limiter
+guards any track that needs boosting), and outputs **WAV**. Doing it ONCE offline
+beats a runtime `loudnorm`: that filter is dynamic, pumps on transients, and
+degrades the very evenness it is meant to create when pointed at already-matched
+audio — and it is one more filter on the cores that also encode.
+
+The WAV output **fixes the loop seam for free**: decoding drops the MP3
+encoder-delay padding that makes concat clicks, so the seams come out
+sample-accurate. Confirmed with `silencedetect` — the only silences are the
+tracks' own quiet intros/outros, none inserted at a boundary.
+
+**Invariant:** everything in `/opt/blob-stream/music` is already normalised. Never
+copy raw tracks straight in — run them through `normalize-music.sh` first.
 
 ## Secrets
 

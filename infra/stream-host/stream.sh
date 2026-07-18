@@ -45,10 +45,26 @@ shopt -u nullglob nocaseglob
 
 if [[ -s "$PLAYLIST" ]]; then
   AUDIO_IN=(-f concat -safe 0 -stream_loop -1 -i "$PLAYLIST")
-  # loudnorm: without it, volume jumps between tracks — the single most
-  # amateur-sounding defect a music-bed stream can have.
-  AUDIO_FILTER=(-af "loudnorm=I=-16:TP=-1.5:LRA=11")
-  echo "[stream] music: $(wc -l < "$PLAYLIST") track(s) from $MUSIC_DIR"
+  # NO runtime loudnorm. The tracks are normalised OFFLINE to -16 LUFS by
+  # normalize-music.sh, which is both better and cheaper:
+  #
+  #   * Better — offline level-matching by measured integrated loudness is exact
+  #     and static. Runtime single-pass `loudnorm` is a DYNAMIC processor: pointed
+  #     at already-normalised audio it has nothing to correct but still gates and
+  #     adjusts over a ~3s window, which can PUMP on transients. It would degrade
+  #     the very consistency the offline pass established. (Measured: the 8-track
+  #     bed spanned -9.0 to -14.4 LUFS raw; offline it is dead flat at -16.0.)
+  #   * Cheaper — one less filter on 4 ARM cores whose binding constraint is
+  #     holding `speed` >= 1.0x.
+  #   * Gapless — normalize-music.sh outputs WAV, so decoding drops MP3 encoder
+  #     padding and the concat seams are sample-accurate. loudnorm never fixed
+  #     that anyway.
+  #
+  # The invariant this assumes: everything in MUSIC_DIR is already normalised.
+  # Drop raw files in and re-run normalize-music.sh; do NOT copy unprocessed
+  # tracks straight into MUSIC_DIR.
+  AUDIO_FILTER=()
+  echo "[stream] music: $(wc -l < "$PLAYLIST") pre-normalised track(s) from $MUSIC_DIR"
 else
   # Silence rather than no audio track at all. YouTube flags streams with no
   # audio stream as unhealthy, and a missing track is harder to notice than a
