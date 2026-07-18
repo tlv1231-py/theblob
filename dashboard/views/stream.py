@@ -362,6 +362,14 @@ _STAGE_HTML = """
              and his score. If you want to know he is scared, look at him. -->
       </div>
 
+      <!-- COMPLIANCE — a permanent scrolling disclaimer. NOT one line in the AFK
+           pool (that is present one rotation in eight); this is always on screen.
+           Floats over the Blob's lower body, above the popup's reach, so a viewer
+           event never hides it. Duplicated content = seamless loop. Scrolled by
+           setInterval in stream.js, because CSS animation is inert in this
+           iframe. -->
+      <div id="s-disc"><div id="s-disc-track"><span class="s-disc-seg">NOT FINANCIAL ADVICE  &#183;  SIMULATED PAPER TRADING  &#183;  NO REAL MONEY AT RISK  &#183;  REAL STRATEGY SIGNALS, SIMULATED CAPITAL  &#183;  FOR ENTERTAINMENT &amp; RESEARCH ONLY  &#183;  </span><span class="s-disc-seg">NOT FINANCIAL ADVICE  &#183;  SIMULATED PAPER TRADING  &#183;  NO REAL MONEY AT RISK  &#183;  REAL STRATEGY SIGNALS, SIMULATED CAPITAL  &#183;  FOR ENTERTAINMENT &amp; RESEARCH ONLY  &#183;  </span></div></div>
+
       <!-- THE SCORE. -->
       <div id="s-nav">
 <!-- "PORTFOLIO VALUE" is GONE too. A six-figure number in an arcade face

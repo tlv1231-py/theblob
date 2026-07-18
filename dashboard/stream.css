@@ -215,7 +215,11 @@ html, body {
    valuable space on the stage to say nothing. */
 #s-events {
   position: absolute;
-  left: 0; right: 0; bottom: 0;
+  /* bottom lifted 0 -> 110: the first broadcast put the box's floor at y1540,
+     right where YouTube's live-chat input bar sits on mobile, so the lower third
+     of every popup was behind the chat field. 110 lifts its floor to ~y1430,
+     clear of the bar. */
+  left: 0; right: 0; bottom: 110px;
   height: 248px;
   z-index: 20;                 /* covers the NAV — it must win */
   display: none;
@@ -600,11 +604,16 @@ html, body {
    all hang off. */
 #s-title {
   position: absolute;
-  top: 12px;
+  /* Was y12 — inside the top reserved band, and the first real broadcast
+     confirmed it: YouTube's channel/subscribe chrome sat straight over it. The
+     board proved the top chrome only reaches ~y120, so the nameplate drops just
+     below it. The board follows it down (see #s-pos), compressed a touch to keep
+     its bottom edge where it was. */
+  top: 132px;
   left: var(--safe-x);
   right: 120px;
   height: 100px;
-  z-index: 11;
+  z-index: 12;
   display: flex; align-items: baseline; justify-content: flex-start;
   gap: 18px;
   overflow: hidden;
@@ -904,6 +913,35 @@ html, body {
 }
 
 /* ── SCORE · 172 — his feet to the floor ─────────────────────────────── */
+/* ── Compliance disclaimer — permanent scrolling band ─────────────────────── */
+/* Floats over the Blob's lower body at ~y1150, above the lifted popup's top edge
+   (~y1182) so a viewer event never covers it. Dim white — it is system text, and
+   the only things allowed real colour on this stage are the ticker and the P&L.
+   Masked at both ends so glyphs fade in/out rather than pop at the edges. */
+#s-disc {
+  position: absolute;
+  left: var(--safe-x); right: 120px;
+  bottom: 384px;
+  height: 32px;
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: 11;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+#s-disc-track {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+}
+.s-disc-seg {
+  font-family: VT323, Consolas, monospace;
+  font-size: 26px; line-height: 32px;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.5);
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.8);
+}
+
 #s-nav {
   height: 172px; flex: none;
   display: flex; flex-direction: column; align-items: center;
@@ -981,10 +1019,14 @@ html, body {
    pull the whole board back inside the safe box. */
 #s-pos {
   position: absolute;
-  top: 120px;
+  /* Dropped from y120 to make room for the nameplate the top chrome was eating,
+     and compressed 480 -> 360 so the board's BOTTOM edge stays at y600 where the
+     #safe padding was tuned to clear it. Tiles get a little shorter; they are
+     wide 3-letter cells, so they stay legible. */
+  top: 240px;
   left: var(--safe-x);          /* same 90 -> 960 column as the safe box */
   right: 120px;
-  height: 480px;                /* y120 -> y600; #safe pads 220 to clear it */
+  height: 360px;                /* y240 -> y600; #safe pads 220 to clear it */
   z-index: 11;                  /* above #safe, whose content it overhangs */
   display: flex; flex-direction: column;
 }

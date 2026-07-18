@@ -4181,6 +4181,24 @@
   // Last resort against a wedged lane freezing the whole broadcast. 2s is the
   // detection granularity, not the bound — see STAGE_MAX_MS.
   setInterval(stageWatchdog, 2000);
+
+  // Compliance disclaimer marquee. setInterval + element transform, because CSS
+  // animation is inert in this iframe like everything else that moves here. The
+  // track carries two copies of the text; when the first has scrolled fully off
+  // we add its width back, so the loop has no seam. Measured lazily — scrollWidth
+  // is 0 until the fonts and layout settle.
+  (function () {
+    var t = document.getElementById('s-disc-track');
+    if (!t) return;
+    var x = 0, half = 0;
+    setInterval(function () {
+      if (!half) { half = t.scrollWidth / 2; if (!half) return; }
+      x -= 1.1;                       // ~33px/s at 30fps
+      if (-x >= half) x += half;      // seamless wrap onto the duplicate
+      t.style.transform = 'translateX(' + x + 'px)';
+    }, 33);
+  })();
+
   // One poll now carries both NAV and trade reactions — same rows, one request.
   // Trades land every ~7s. A 10s poll straddled them; 4s means he answers
   // almost every one while still costing ~15 tiny requests/min.

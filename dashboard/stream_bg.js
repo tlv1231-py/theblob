@@ -34,7 +34,11 @@
 
   function create(canvas, opts) {
     opts = opts || {};
-    var FPS = opts.fps || 24;          // enough to feel alive, cheap enough to leave running
+    var FPS = opts.fps || 20;          // matches the 20fps encode — rendering the
+                                       // sidescroller faster just burns frames the
+                                       // encoder discards. This is a continuous cost
+                                       // and it shares 4 cores with ffmpeg; the first
+                                       // broadcast saturated them during events.
     var W = 540, H = 960;              // half of 1080x1920 — see header
     canvas.width = W; canvas.height = H;
     var ctx = canvas.getContext('2d');

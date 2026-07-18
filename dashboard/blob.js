@@ -337,7 +337,10 @@
     var api = {
       start: function() {
         if (!self.timer) self.timer = setInterval(loop, 1000 / FPS);
-        if (fxOn && !self.fxTimer) self.fxTimer = setInterval(fxLoop, 33);   // ~30fps
+        if (fxOn && !self.fxTimer) self.fxTimer = setInterval(fxLoop, 50);   // 20fps — matches
+        // the encode; faster only burns frames ffmpeg discards, and the FX loop
+        // (bloom, chromatic aberration, gloss) is a chunk of the event-time CPU
+        // that saturated the box on the first broadcast.
         return api;
       },
       stop: function() {
