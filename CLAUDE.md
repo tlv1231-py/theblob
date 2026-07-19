@@ -282,6 +282,51 @@ transitions/animations are INERT inside the component iframe. Anything that must
 move uses `setInterval`.** `dashboard/views/stream2.py` is the scaffold that
 already encodes all of this — start from it, do not start from scratch.
 
+### Design every visual for the framerate we ACTUALLY have (~24fps)
+
+**The budget, measured on the real host (2026-07-18):**
+
+| | unique painted fps |
+|---|---|
+| 1080x1920 | ~6, swinging 5.3–12.3 |
+| **810x1440 (current)** | **~22–23.6, dead stable** |
+| ffmpeg capture / ceiling | 24 |
+
+So **24fps is the ceiling and ~22–23 is the working number.** A frame is ~42ms.
+Design to that, not to the 60fps a phone gives you — the page looking perfect on
+your phone tells you nothing, because a phone composites on a GPU and the
+broadcast VM does it in software.
+
+**THE COUNTERINTUITIVE PART — DO NOT "OPTIMISE" VISUALS FOR FRAMERATE.**
+Animation complexity is FREE. Proven by A/B on the live host: switching a
+full-screen 24fps starfield OFF moved the compositor from 98.6% to 98.7% and
+changed painted frames by ~0. The renderer sits at **0.0% CPU**; the cost is
+`chrome --type=gpu-process` compositing the surface in software, and it is
+**per-PIXEL, not per-animation**. Stripping effects to "save frames" buys
+nothing and costs the show. Add all the effects you want.
+
+Only two things actually move the number:
+1. **Resolution** (surface area) — the one lever in software. 44% fewer pixels
+   bought ~2.5x the frames.
+2. **Faster cores.** Not more — the compositor is single-threaded.
+
+**What this means for how motion is DESIGNED:**
+
+- **Nothing may depend on smooth interpolation.** At 42ms/frame, fine easing and
+  fast small movements strobe. Anything crossing the stage in under ~0.5s will
+  judder no matter what.
+- **Quantized, stepped, held motion reads BETTER here** — which is why the 8-bit
+  aesthetic suits this hardware. Lean into poses and cuts, not tweens. The Blob's
+  10fps sprite-art cadence against a 24fps draw rate is the model: the ART steps,
+  the POSITION glides.
+- **Coarse position grids read as choppy at ANY framerate — a separate axis from
+  fps.** The Blob's bob was rounded to whole 48px-sprite pixels displayed at 16x,
+  i.e. 16-SCREEN-PIXEL leaps; raising the framerate did nothing because the steps
+  themselves were coarse. Move things in SCREEN pixels (element `transform`),
+  which does not resample pixel art. See `blob.js` `fxLoop`.
+- **Budget motion in frames, not milliseconds.** A 100ms effect is 2–3 frames.
+  If it needs to be seen, give it 6+.
+
 ---
 
 ## Pending Infrastructure Tasks
