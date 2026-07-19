@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 from dashboard.views import (home, benchmarks, portfolio, signals, backtest_lab,
-                             risk_monitor, daytrader, stream, stream_hq)
+                             risk_monitor, daytrader, stream, stream2, stream_hq)
 
 # ── Global CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -419,6 +419,7 @@ PAGES = {
     "Risk Monitor":   risk_monitor.render,
     "Daytrader":      daytrader.render,
     "Stream":         stream.render,
+    "Stream 2":       stream2.render,
     "Stream HQ":      stream_hq.render,
 }
 
@@ -437,6 +438,7 @@ _PAGE_ICONS = {
     "Risk Monitor":   ("◬", "Risk Monitor"),
     "Daytrader":      ("⊕", "Daytrader"),
     "Stream":         ("▶", "Stream (vertical)"),
+    "Stream 2":       ("▷", "Stream 2 (vertical) — scaffold"),
     "Stream HQ":      ("◉", "Stream HQ"),
 }
 

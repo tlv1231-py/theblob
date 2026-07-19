@@ -1,0 +1,118 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   STREAM 2 — a second vertical stream app.
+   SCAFFOLD. The geometry here is not a starting guess, it is the layout the
+   Blob stream arrived at the hard way. Keep it; change what is INSIDE #safe.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg:      #060008;
+  --bg2:     #0d0010;
+  --border:  #2a003d;
+  --accent:  #00e5ff;      /* deliberately NOT the Blob's pink — this is a
+                              different app and should not look like his */
+  --accent2: #ff00cc;
+  --text-hi: #f0e0ff;
+  --text-mid:#8060a0;
+  --text-dim:#3a1a4a;
+
+  /* THE SAFE BOX. Named once so nothing re-derives it by hand.
+     YouTube surfaces vertical live in the Shorts feed, so Shorts safe zones
+     apply: the top 380 and bottom 380 are reserved (on a LIVE stream the chat
+     input is permanently down there) and the right ~120 is the action rail.
+     380 + 1160 + 380 = 1920 and 90 + 900 + 90 = 1080 — it reconciles.
+     Anything outside this box WILL be covered by YouTube's own chrome. */
+  --safe-x: 90px;
+  --safe-y: 380px;
+  --safe-w: 870px;
+  --safe-h: 1160px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: #000;
+  overflow: hidden;
+  height: 100%;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+/* Letterbox: the stage is ALWAYS exactly 1080x1920 in its own coordinate
+   space and the browser only scales it to fit. At a true 1080x1920 capture the
+   scale resolves to 1 and every pixel is native. If you ever put pixel art in
+   here, keep any resize on a multiple of its cell size or it resamples. */
+#stage-wrap {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+}
+
+#stage {
+  position: relative;
+  width: 1080px; height: 1920px;
+  flex: none;
+  background: var(--bg);
+  overflow: hidden;
+  transform-origin: center center;
+  transform: scale(var(--s, 0.5));
+}
+
+/* The reserved bands, drawn faintly so you can SEE what YouTube will cover
+   while building. Delete these two rules before a real capture (or leave them
+   at 0 opacity — they are pure guide). */
+#guide-top, #guide-bot {
+  position: absolute; left: 0; right: 0; height: 380px;
+  background: repeating-linear-gradient(45deg,
+    rgba(255,0,204,0.05) 0 12px, transparent 12px 24px);
+  border-bottom: 1px solid rgba(255,0,204,0.15);
+  pointer-events: none;
+}
+#guide-top { top: 0; }
+#guide-bot { bottom: 0; border-bottom: none; border-top: 1px solid rgba(255,0,204,0.15); }
+
+/* EVERYTHING THAT MUST BE SEEN GOES IN HERE. */
+#safe {
+  position: absolute;
+  left: var(--safe-x); top: var(--safe-y);
+  width: var(--safe-w); height: var(--safe-h);
+  display: flex; flex-direction: column;
+}
+
+/* ── Scaffold content — replace all of this ─────────────────────────────── */
+#s2-title {
+  font-size: 54px; font-weight: 800; letter-spacing: 0.02em;
+  color: var(--accent);
+  text-shadow: 0 0 18px var(--accent), 3px 3px 0 rgba(0,0,0,0.85);
+}
+#s2-sub {
+  margin-top: 14px;
+  font-size: 24px; color: var(--text-mid); letter-spacing: 0.06em;
+}
+
+#s2-body {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* The heartbeat exists so you can tell, from the BROADCAST, that the page is
+   actually live and painting — not a frozen screenshot. This is the failure
+   mode the Blob stream's watchdog was built around: ffmpeg happily encodes a
+   dead frame and every other signal reads green. Keep something moving. */
+#s2-beat {
+  width: 220px; height: 220px; border-radius: 50%;
+  border: 6px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; color: var(--text-hi);
+}
+
+#s2-foot {
+  font-size: 20px; color: var(--text-dim); letter-spacing: 0.1em;
+}
+
+/* Last viewer event — proof the shared stream_events bus reaches this app too.
+   Donations/subs work here with no infrastructure change; see CLAUDE.md
+   "Stream Infrastructure Is Multi-App". */
+#s2-event {
+  margin-top: 10px;
+  font-size: 26px; color: var(--accent2); min-height: 32px;
+  text-shadow: 0 0 12px var(--accent2);
+}

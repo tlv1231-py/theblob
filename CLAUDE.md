@@ -233,6 +233,57 @@ Prerequisites before building:
 
 ---
 
+## Stream Infrastructure Is Multi-App (architecture — read before adding a stream)
+
+**The stream host is not "the Blob's". It captures a URL.** Nothing in Xvfb,
+Chromium, ffmpeg, `switch.py`, `watchdog.py`, `agent.py`, `chat.py`,
+`streamlabs.py` or `deploy.sh` knows what a trade or a Blob is. The page is
+chosen by ONE env var on the VM:
+
+```
+STREAM_URL=https://<app>.streamlit.app/?page=Stream&yt=0&live=1
+```
+
+**The intended shape:** several vertical "stream apps" live as ordinary pages of
+this same Streamlit app (`?page=Stream`, `?page=Stream2`, …), and **Stream HQ
+picks which one is on air**. The switcher is the same mechanism the ON AIR button
+already uses — HQ writes a param, `switch.py` polls it and acts — just rewriting
+`STREAM_URL` + restarting `blob-chromium` instead of starting ffmpeg.
+
+**THE TWO RULES, and they are opposites. Get these wrong and two apps corrupt
+each other:**
+
+1. **CONFIG IS NAMESPACED PER APP.** Everything in `strategy_params` today is
+   `strategy='stream'` — `bg_enabled`, `bg_opacity`, `potions`, `afk_phrases`,
+   `ticker_colors`. Two apps sharing that namespace fight over each other's
+   settings. The primary key is `(strategy, param)`, so namespacing is FREE and
+   needs no migration: use `strategy='stream:blob'`, `'stream:app2'`, … Decide
+   this before the second app exists; retrofitting is miserable.
+2. **EVENTS ARE SHARED, DELIBERATELY.** `stream_events` has no app column and
+   should not get one. A tip is a tip regardless of which app is on screen, so
+   one bus means the donation chain keeps working straight through a switch.
+   `streamlabs.py` / `chat.py` are decoupled from presentation entirely — same
+   account, same token, same bus, and whichever page is rendering reacts. The
+   same $5 can drive Blobby's potion chain on one app and something completely
+   different on another; that is each page's own rendering code, not infra.
+
+**ONE STREAM AT A TIME — this is a hardware fact, not a design choice.** Measured
+on the 4-core ARM host: a single 810x1440 render pegs `chrome --type=gpu-process`
+at ~98% of one core doing SOFTWARE compositing (no GPU), and that cost is
+per-PIXEL, not per-animation (proven by an A/B that switched a full-screen 24fps
+starfield off and moved it 0.1%). Two concurrent broadcasts do not fit on this
+box; a second needs a second VM. Switching pages costs a ~90s Chromium restart —
+it is "changing the channel", not a crossfade.
+
+**Every hard-won constraint in `dashboard/stream.css` / `stream.js` applies to any
+new stream page** — the 1080x1920 letterboxed stage, the YouTube safe zone
+(870x1160 at 90,380), and above all: **`requestAnimationFrame` and CSS
+transitions/animations are INERT inside the component iframe. Anything that must
+move uses `setInterval`.** `dashboard/views/stream2.py` is the scaffold that
+already encodes all of this — start from it, do not start from scratch.
+
+---
+
 ## Pending Infrastructure Tasks
 
 - [ ] Dashboard cosmetic overhaul — hyper-tech, modern, premium fintech aesthetic.
