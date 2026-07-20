@@ -446,6 +446,22 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
      in a room rather than a black screen. Amber is the retro-CRT accent.
    - Previous palettes are recorded verbatim in the `:root` comment — reverting
      or re-trying either is one paste.
+   - **The backdrop is tinted to the shell** by `scripts/tint_bg.py`, from
+     `dashboard/art/bg_source.png` (the original blue art, kept so this is
+     reproducible and revertible). It matters more than it sounds: the safe box
+     is 51% of the canvas, so **nearly half of what a viewer sees is backdrop**.
+     Two things that were not obvious —
+     **(a) receding is LOW CONTRAST + LOW SATURATION, not "darker".** The
+     luminance range is squeezed into a narrow warm band topping out below
+     `--lit`, so nothing in the backdrop is as bright as a panel's bevel edge.
+     Crushing it to black works too and leaves half the frame an empty rectangle.
+     **(b) find the lights by WARMTH, not brightness.** Window lights and water
+     reflections are warm against a cool sky; a luminance threshold picks the
+     brightest thing in frame, which here is flat sky — the first pass selected
+     nothing and flattened every light into grey, losing most of what made the
+     art work. Measured: 24→16 colours, mean saturation 0.525→0.245, 0% blue-
+     dominant, and <1% of pixels above `--lit` (point lights only, which is how
+     night-city art reads depth).
    - **EVERY panel is BEVELLED.** One logical pixel of light on the top-left, one
      of shadow on the bottom-right, plus a hard outline — four flat rectangles,
      which is how the hardware faked depth. Raised (`.bevel`) for things that sit
