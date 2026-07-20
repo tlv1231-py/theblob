@@ -545,9 +545,11 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    - **Banded gradients are allowed** — in visible hard steps, never smooth ramps.
    - Still no blur, no radius, no anti-aliasing, no soft shadow. Type gets a
      1-logical-px hard offset shadow, never a glow.
-6. **Every tile carries a SEGMENTED COUNTDOWN** in its head, top-left
-   (`.rn-pips`): six pips **FILLING** over the dwell, the final one blinking
-   **green** (`--go`, the partner to `--alert`). It fills rather than drains
+6. **Every tile carries a SEGMENTED COUNTDOWN GAUGE** in its head, top-left
+   (`.rn-pips`): a handheld status bar — **16 cells FILLING** over the dwell,
+   the last quarter blinking **green** (`--go`, the partner to `--alert`),
+   inside a RECESSED bevelled casing with tick divisions every 4 cells and a
+   gloss band on the fill. 34x10 logical. It fills rather than drains
    because charging up to something reads as anticipation where emptying reads as
    running out — and running out is the wrong feeling for a channel that simply
    moves on. The fill is WHITE (`--scr-ink`), not gold: gold is the tile
@@ -556,8 +558,30 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    cleanest jump — neutral to hue — which survives phone-sized viewing where a
    brightness change would not. Segments, **not a sliding meter**:
    discrete by construction, so there is nothing for a 24fps software compositor
-   to interpolate. Six over a 15s dwell is one step every 2.5s, which is
-   deliberately *general* — it says roughly-how-long, not seconds.
+   to interpolate.
+
+   **SIXTEEN CELLS, NOT SIX — the count decides what the thing IS.** Six read as
+   six pips, i.e. a counter you are invited to read. Sixteen at 2 logical each
+   read as a BAR, which is the handheld idiom, while still being discrete. It
+   remains deliberately *general* — roughly-how-long, not seconds.
+
+   **THE FILL IS WHITE WITH A SHADED UNDERSIDE**, a hard-stop gradient (75%
+   `--scr-ink` / 25% `--scr-dim`). Built the other way round first — a dim body
+   with a white stripe through the middle — and the bar read as light BLUE with
+   a highlight. **The larger area decides the perceived colour**, so the gloss
+   has to be the minority band.
+
+   **TWO BLINK CLOCKS, AND THEY MUST STAY DIFFERENT.** The leading cell pulses
+   fast (6 frames) — that is the gauge visibly *charging*, which is what makes it
+   feel alive without moving anything. The green full state blinks slower (12
+   frames), matching the alert bar rather than inventing a third rate. The edge
+   pulse stops once the green arrives, or two effects are pulsing over each other
+   and it reads as fighting rather than as one gauge.
+
+   **A BLINK MAY CHANGE HUE BUT NEVER LENGTH.** The green off-beat was the empty
+   colour, which made the bar visibly SHORTEN by four cells twice a second — a
+   countdown appearing to run *backwards* at the exact moment it is announcing it
+   is done. The off-beat is now the fill's own shadow tone.
    **Driven off the slot's own `lastCut` inside the existing rotate tick**, never
    its own timer: a second clock drifts against the one that actually decides the
    cut, and the bar would empty at a different moment than the change it predicts.
@@ -584,8 +608,23 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    steps, the tile is swapped at full cover behind a one-frame pulse, then it
    uncovers. Quantised by construction, which is both the authentic hardware
    effect and the only motion a 24fps software compositor renders cleanly.
-   ~935ms ≈ 22 frames — comfortably above the 6-frame floor. **Never add a CSS
+   ~1100ms ≈ 26 frames — comfortably above the 6-frame floor. **Never add a CSS
    fade or slide**; they are inert in the iframe anyway.
+
+   **⚠ `retronews.js` IS ONE FLAT `var` SCOPE, SO A DUPLICATE NAME SILENTLY
+   RETUNES SOMETHING ELSE.** The host-strip animation declared its own
+   `WIPE_STEPS` / `WIPE_MS` at the same depth as the dissolve's, 360 lines
+   apart. `var` redeclaration overwrites in place, so the strip quietly reset
+   the tile dissolve from 6 steps x 84ms to 4 x 336ms — **2688ms per tile change
+   against an intended ~1100**, a 2.4x slowdown with nothing thrown and no
+   plausible culprit in the transition code. It presented only as "the
+   transitions feel sluggish", which is indistinguishable from a design
+   complaint, and the obvious response — tuning the dissolve constants — would
+   have edited numbers that were already being overwritten.
+   The strip's are named `STRIP_*` now. **Keep prefixes disjoint per subsystem**;
+   two unrelated things both being "a wipe" is exactly how this recurs. This is
+   the same family as the four hoisting bugs already logged here: in this file,
+   a name is a global.
 
    **The pattern varies — five of them, and they CYCLE** (`WIPE_PATTERNS` /
    `wipeOrder()`, with `Slot.reorder()` called at the top of every `cutTo`):

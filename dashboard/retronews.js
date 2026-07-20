@@ -550,27 +550,38 @@
   // Clamped at zero because the dwell is a FLOOR, not a promise — rotate() also
   // waits for any dissolve to finish and takes one slot per tick, so the real
   // interval can run past `dwell` and a naive count would go negative.
-  var PIPS = 6;
+  var PIPS = 16;
+  var PIP_HOT = 4;                    // the last quarter goes green
   function updatePips() {
     var sl = slots[0];
     if (!sl) return;
     var frac = Math.max(0, Math.min(1, (Date.now() - sl.lastCut) / dwell));
-    // FILLS, not drains. ceil() rather than floor() so the final pip lights for
-    // the whole last 1/6 of the dwell — with floor() it would arrive only at
+    // FILLS, not drains. ceil() rather than floor() so the final cell lights for
+    // its whole share of the dwell — with floor() it would arrive only at
     // frac === 1, a single frame, and the green would never be seen.
     var filled = Math.ceil(frac * PIPS);
-    // The last pip blinks GREEN — bar full, cut imminent. Class toggle only, so
-    // it is palette motion and costs the compositor nothing. 504ms matches the
-    // alert bar rather than inventing a third blink rate.
-    var blinkOn = Math.floor(Date.now() / (FRAME_MS * 12)) % 2 === 0;
+    // TWO blink clocks, and they are deliberately different speeds.
+    // The leading edge ticks fast (6 frames) — it is the gauge charging. The
+    // green full state blinks slower (12 frames), matching the alert bar rather
+    // than inventing a third rate. Both are floor(now / n) so they are derived
+    // from wall-clock and cannot drift.
+    var edgeOn = Math.floor(Date.now() / (FRAME_MS * 6)) % 2 === 0;
+    var hotOn  = Math.floor(Date.now() / (FRAME_MS * 12)) % 2 === 0;
     var bars = document.querySelectorAll('.rn-pips');
     for (var b = 0; b < bars.length; b++) {
       var kids = bars[b].children;
       for (var i = 0; i < kids.length; i++) {
         var on = i < filled;
-        var last = (i === PIPS - 1);
-        kids[i].classList.toggle('hot', last && on);
-        kids[i].classList.toggle('on', last && on ? blinkOn : on);
+        var hot = on && i >= PIPS - PIP_HOT;
+        // The leading cell only pulses while the bar is still CHARGING. Once the
+        // green has arrived the edge would be pulsing inside the blink, which
+        // reads as two things fighting rather than as one gauge.
+        var edge = on && !hot && i === filled - 1;
+        var k = kids[i];
+        k.classList.toggle('on', on && !hot && !edge);
+        k.classList.toggle('edge', edge);
+        k.classList.toggle('hot', hot);
+        k.classList.toggle('dim', (edge && !edgeOn) || (hot && !hotOn));
       }
     }
   }
@@ -709,15 +720,24 @@
   // 92 logical = 368 stage px; 368/5 = 73.6, a FRACTIONAL offset, which lands
   // pixel art on sub-pixel positions and makes it shimmer as it moves. 368/4 =
   // 92 stage = 23 logical = 69 device px — whole in all three spaces.
-  var WIPE_STEPS = 4;
-  var WIPE_STEP_MS = FRAME_MS * 2;
-  var bobOn = false, wipeStep = WIPE_STEPS, wipeT = null;
+  //
+  // NAMED STRIP_*, NOT WIPE_*, AND THAT PREFIX IS LOAD-BEARING. These were called
+  // WIPE_STEPS / WIPE_MS, which are ALSO the tile dissolve's constants declared
+  // at the same scope 360 lines up. `var` redeclaration overwrites in place, so
+  // the host strip silently reset the dissolve from 6 steps x 84ms to 4 x 336ms
+  // — a 2.7x slower tile change, with nothing thrown and no obvious culprit. It
+  // presented purely as "the transitions feel sluggish".
+  // Two unrelated things both being "a wipe" is exactly how this happens; keep
+  // the prefixes disjoint.
+  var STRIP_STEPS = 4;
+  var STRIP_STEP_MS = FRAME_MS * 2;
+  var bobOn = false, wipeStep = STRIP_STEPS, wipeT = null;
 
   // ONE WRITER for both transforms. The bob rides INSIDE the panel, so it lands
   // on the sprite while the wipe lands on the two panel columns — separate
   // elements, one function, so neither can silently overwrite the other.
   function stripApply() {
-    var down = (WIPE_STEPS - wipeStep) / WIPE_STEPS * 92 * 4;   // 92 logical
+    var down = (STRIP_STEPS - wipeStep) / STRIP_STEPS * 92 * 4;   // 92 logical
     ['rn-portrait', 'rn-host-right'].forEach(function (id) {
       var el = $(id);
       if (el) el.style.transform = down ? 'translateY(' + down + 'px)' : '';
@@ -732,18 +752,18 @@
   }
   function stripWipe(inward) {
     clearInterval(wipeT);
-    var t0 = Date.now(), from = wipeStep, to = inward ? WIPE_STEPS : 0;
+    var t0 = Date.now(), from = wipeStep, to = inward ? STRIP_STEPS : 0;
     if (from === to) return;
     wipeT = setInterval(function () {
       // TIME-BASED, so a stalled tick lands on the right step rather than
       // wiping slower on the broadcast than in preview.
-      var k = Math.floor((Date.now() - t0) / WIPE_STEP_MS);
+      var k = Math.floor((Date.now() - t0) / STRIP_STEP_MS);
       var next = to > from ? Math.min(to, from + k) : Math.max(to, from - k);
       if (next !== wipeStep) { wipeStep = next; stripApply(); }
       if (wipeStep === to) clearInterval(wipeT);
     }, FRAME_MS);
   }
-  var WIPE_MS = WIPE_STEPS * WIPE_STEP_MS;
+  var STRIP_MS = STRIP_STEPS * STRIP_STEP_MS;
 
   // ── GEN-1 DIALOGUE BOX ───────────────────────────────────────────────────
   // Pokemon Red's box cuts in; the remembered "animation" is the typewriter and
@@ -839,7 +859,7 @@
     if (!sayEls()) return;
     var el = Date.now() - sayT0;
     if (sayPhase === 'open') {
-      if (el >= WIPE_MS) {
+      if (el >= STRIP_MS) {
         sayPhase = 'type'; sayT0 = Date.now();
         // Box open, delivery starts — drop out of smug for the line itself.
         setHostMood(sayMid, sayFull.length * CHAR_MS + 2000);
@@ -951,7 +971,7 @@
       setTimeout(function () {
         hostShow(false);
         if (say && say._introOwned) { say._introOwned = false; }
-      }, WIPE_MS);
+      }, STRIP_MS);
     }, INTRO_MS);
   }
 

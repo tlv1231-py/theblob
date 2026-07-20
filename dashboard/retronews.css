@@ -628,11 +628,29 @@ html, body {
 
    Content tier (--gold / --scr*), because it lives INSIDE a tile. Recessed like
    a gauge set into the panel rather than raised like a button. */
+/* ── TILE COUNTDOWN GAUGE ──────────────────────────────────────────────────
+   A handheld status bar: a RECESSED casing holding a fill that charges up over
+   the dwell. Modelled on the segmented HP/EXP gauge — hard outline, bevel, a
+   gloss band along the top of the fill, and tick divisions every quarter.
+
+   SIXTEEN CELLS, NOT SIX. Six read as six pips — a counter. Sixteen at 2
+   logical each read as a BAR while still being discrete by construction, which
+   is the whole point: a 24fps software compositor has nothing to interpolate
+   and cannot judder. Nothing here slides.
+
+   WHITE, not gold. Gold is the tile header and the temperatures; a gauge in the
+   same colour reads as another piece of data rather than as chrome. White also
+   gives the green its cleanest jump — neutral to hue — which survives phone-
+   sized viewing where a brightness change alone would not.
+
+   Width: 16 x 2 + 2 padding = 34 logical. Height: 8 + 2 = 10. */
 .rn-pips {
   flex: none;
-  display: flex; gap: var(--px);
+  display: flex; gap: 0;
   padding: var(--px);
   background: var(--scr-shade);
+  /* RECESSED — the gauge is set INTO the screen, so light falls top-left as
+     shadow and bottom-right as highlight. The inverse of a raised panel. */
   box-shadow:
     inset var(--px) var(--px) 0 0 var(--scr-shade),
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--scr3),
@@ -641,11 +659,37 @@ html, body {
 }
 .rn-pips i {
   display: block;
-  width: calc(var(--px) * 4); height: calc(var(--px) * 6);
+  width: calc(var(--px) * 2); height: calc(var(--px) * 8);
   background: var(--scr1);           /* spent */
 }
-.rn-pips i.on { background: var(--scr-ink); }
-.rn-pips i.hot.on { background: var(--go); }
+/* Tick divisions every 4 cells, so the bar reads as a graduated gauge rather
+   than as a plain block. A hairline of the casing colour, drawn on the cell
+   itself — no extra elements. */
+.rn-pips i:nth-child(4n) { box-shadow: inset calc(var(--px) * -1) 0 0 0 var(--scr-shade); }
+
+/* THE FILL IS WHITE WITH A SHADED UNDERSIDE. A banded gradient with HARD stops
+   — allowed, and how the hardware faked a lit bar: the body takes the light,
+   the bottom quarter falls into shadow. Built the other way round first (a dim
+   body with a white stripe through it) and the bar read as light BLUE with a
+   highlight rather than as white. The larger area decides the colour. */
+.rn-pips i.on {
+  background: linear-gradient(180deg,
+    var(--scr-ink) 0%,   var(--scr-ink) 75%,
+    var(--scr-dim) 75%,  var(--scr-dim) 100%);
+}
+/* THE LEADING CELL PULSES — the gauge is visibly charging rather than merely
+   being a length. One class toggle at 6 frames, so it is palette motion and
+   costs the compositor nothing. */
+.rn-pips i.edge { background: var(--scr-ink); }
+.rn-pips i.edge.dim { background: var(--scr-dim); }
+/* Full, cut imminent: the last quarter goes green and blinks.
+   THE BLINK CHANGES HUE, NEVER LENGTH. Dropping the green cells to the empty
+   colour on the off-beat made the bar visibly SHORTEN four cells twice a second
+   — a countdown that appears to run backwards at the exact moment it is telling
+   you it is done. The off-beat is the fill's own shadow tone, so the bar keeps
+   its full length throughout and only its colour pulses. */
+.rn-pips i.hot { background: var(--go); }
+.rn-pips i.hot.dim { background: var(--scr-dim); }
 
 
 /* ── EXTENDED FORECAST ─────────────────────────────────────────────────────

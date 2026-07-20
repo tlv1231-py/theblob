@@ -131,7 +131,7 @@ _STAGE_HTML = """
         <!-- LIVE: national conditions, Open-Meteo, no API key. -->
         <div class="rn-tile" data-tile="wx">
           <div class="rn-tile-head">
-            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <div class="rn-tile-title">NATIONAL CONDITIONS</div>
             <div class="rn-tile-sub rn-wx-sub">UPDATING</div>
           </div>
@@ -144,7 +144,7 @@ _STAGE_HTML = """
              board does, so it still costs no extra request. -->
         <div class="rn-tile" data-tile="city">
           <div class="rn-tile-head">
-            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <div class="rn-tile-title">EXTENDED FORECAST</div>
             <div class="rn-tile-sub" id="cf-sub">- OF -</div>
           </div>
@@ -188,7 +188,7 @@ _STAGE_HTML = """
         <!-- PLACEHOLDER: top donors, infomercial chrome. -->
         <div class="rn-tile" data-tile="donors">
           <div class="rn-tile-head">
-            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <div class="rn-tile-title">TOP CONTRIBUTORS</div>
             <div class="rn-tile-sub">THIS BROADCAST</div>
           </div>
@@ -203,7 +203,7 @@ _STAGE_HTML = """
         <!-- PLACEHOLDER: market crawl. -->
         <div class="rn-tile" data-tile="market">
           <div class="rn-tile-head">
-            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <div class="rn-tile-title">MARKET WATCH</div>
             <div class="rn-tile-sub">DELAYED</div>
           </div>
@@ -217,7 +217,7 @@ _STAGE_HTML = """
         <!-- PLACEHOLDER: now playing (the host's music bed). -->
         <div class="rn-tile" data-tile="nowplaying">
           <div class="rn-tile-head">
-            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
             <div class="rn-tile-title">NOW PLAYING</div>
             <div class="rn-tile-sub">SMOOTH JAZZ</div>
           </div>
