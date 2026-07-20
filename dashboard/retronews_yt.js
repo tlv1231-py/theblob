@@ -1,214 +1,194 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // YOUTUBE VERTICAL LIVE — measuring overlay for RetroNews
 //
-// TEMPORARY. A design aid, not a feature. Self-contained on purpose: it injects
-// its own <style> and DOM, touches nothing else, and is removed by deleting this
-// file plus the two-line hook in views/retronews.py. Never let it reach a real
+// TEMPORARY. A design aid, not a feature. Self-contained: it injects its own
+// <style> and DOM, touches nothing else, and is removed by deleting this file
+// plus the two-line hook in views/retronews.py. Never let it reach a real
 // capture — it renders only when toggled on.
 //
-// ── WHAT "ACCURATE" CAN AND CANNOT MEAN HERE ────────────────────────────────
-// It CANNOT mean one confident rectangle. Measured against the public guides in
-// July 2026, they disagree by 260px on the top margin alone:
+// ── THIS IS NOW MEASURED, NOT RECONSTRUCTED ─────────────────────────────────
+// Calibrated 2026-07-20 against a real YouTube mobile livestream screenshot
+// (1080x2340 phone, immersive layout, chat expanded). Every number in CAL below
+// came off that image. The previous version drew three published SHORTS
+// readings that disagreed by 260px on the top margin; all three turned out to
+// be wrong about live, in the same direction and by a lot.
 //
-//     reading        top   bottom   left   right   safe box
-//     A (strict)     380      380     60     120    900 x 1160
-//     B (loose)      120      300     60      96    888 x 1500
-//     C (mid)        180      390     60      60    900 x 1350
+// WHAT THE MEASUREMENT OVERTURNED:
+//   * There is NO vertical action rail on live. Shorts stacks like / dislike /
+//     comment / share down the right edge; a livestream does not. The right side
+//     carries ONE react button. The old overlay drew a 130px rail that does not
+//     exist, which is the single biggest error it had.
+//   * The reserved bands are FAR smaller than any Shorts guide claims. The top
+//     chrome row ends at stage y111 (guides said 120-380). The chat INPUT starts
+//     at y1786 (guides said the bottom 300-390 was gone).
+//   * The real bottom constraint is not the input, it is the CHAT MESSAGES,
+//     which climb to y1529 when chat is expanded.
+//   * The dangerous intrusions are on the LEFT, and no guide mentions them: the
+//     back arrow (x57-110) and a crown/membership button (x68-111) sit in the
+//     left margin, which is exactly where the layout was pushed to reclaim room.
+//   * The app's bottom nav bar sits BELOW the video, not over it, so it costs
+//     nothing. Same for the phone's status bar above.
 //
-// Worse, ALL THREE describe SHORTS, and a Short is not a livestream. None of
-// them model the chrome that only exists on live and that never goes away: the
-// chat input, the LIVE badge, the viewer count. A Shorts template will therefore
-// always be optimistic about the bottom band.
+// HOW SCREEN PIXELS BECAME STAGE PIXELS. The reference video occupied screen
+// y81-2051 (1970 tall, 1080 wide = 1:1.824). Ours is a true 9:16 (1:1.778), so
+// positions are mapped as a FRACTION of the player box height rather than
+// copied: chrome anchors to the player container's edges, so the fraction is
+// what transfers. x maps 1:1 — both are 1080 wide.
 //
-// So this overlay draws the DISAGREEMENT instead of hiding it. Three reserved
-// bands, layered; where they overlap, the hatching compounds and the region is
-// unsafe under every reading. The UNION (top 380 / bottom 390 / left 60 /
-// right 120) is drawn as the solid red line: content outside it is safe no
-// matter which guide is right. That is the only honest "safe" on offer without
-// a real measurement.
-//
-// ── HOW TO MAKE IT ACTUALLY ACCURATE ────────────────────────────────────────
-// Screenshot any YouTube vertical LIVE stream on the phone you watch on, and
-// measure it. Every number below is a CSS variable on #ryt for exactly this
-// reason — calibration is editing YT.cal, not rewriting the file. Until that
-// happens the CHROME ART is honest-but-reconstructed: the footprints are right,
-// the pixel placement inside them is not published anywhere.
+// STILL ASSUMED, in honesty:
+//   * One device, one screenshot, chat EXPANDED. Collapsed chat almost certainly
+//     frees the y1529-1786 band; that is the next thing worth a screenshot.
+//   * The reference stream is 1:1.824, not a true 9:16 — hence the fractional
+//     mapping rather than direct copy.
 // ═══════════════════════════════════════════════════════════════════════════
 (function () {
   var stage = document.getElementById('stage');
   if (!stage) return;
 
-  // ── The calibration table ────────────────────────────────────────────────
-  // Stage px on the 1080x1920 canvas. Replace with real measurements the moment
-  // a screenshot exists; nothing else in this file needs to change.
+  // ── Measured, in STAGE px on the 1080x1920 canvas ────────────────────────
   var CAL = {
-    // Reserved-band readings. `u` is the union used for the verdict line.
-    strict: { top: 380, bot: 380, left: 60, right: 120 },
-    loose:  { top: 120, bot: 300, left: 60, right: 96 },
-    mid:    { top: 180, bot: 390, left: 60, right: 60 },
-    // Live-only chrome, which no Shorts guide covers. Reconstructed.
-    osBar:      60,     // carrier/clock strip
-    topRow:     150,    // collapse chevron + cast + overflow
-    liveBadge:  250,    // LIVE pill + viewer count baseline
-    railTop:    980,    // first rail item
-    railW:      130,    // action rail footprint against the right edge
-    chatTop:    1560,   // first visible chat message
-    metaTop:    1700,   // channel row + title
-    inputTop:   1790,   // chat input — PERMANENT on live, the real bottom edge
-    inputH:     84
-  };
-  var U = {
-    top:   Math.max(CAL.strict.top,   CAL.loose.top,   CAL.mid.top),
-    bot:   Math.max(CAL.strict.bot,   CAL.loose.bot,   CAL.mid.bot),
-    left:  Math.max(CAL.strict.left,  CAL.loose.left,  CAL.mid.left),
-    right: Math.max(CAL.strict.right, CAL.loose.right, CAL.mid.right)
+    backArrow:  { x: 57,  y: 47,   w: 53,  h: 46 },
+    channel:    { x: 302, y: 31,   w: 261, h: 85 },
+    subscribe:  { x: 667, y: 23,   w: 232, h: 92 },
+    overflow:   { x: 962, y: 63,   w: 55,  h: 13 },
+    crown:      { x: 68,  y: 214,  w: 43,  h: 38 },
+    heart:      { x: 945, y: 1665, w: 64,  h: 61 },
+    chatPill:   { x: 86,  y: 1786, w: 379, h: 93 },
+    emoji:      { x: 660, y: 1810, w: 59,  h: 57 },
+    gift:       { x: 804, y: 1814, w: 55,  h: 50 },
+    dollar:     { x: 945, y: 1816, w: 65,  h: 46 },
+    chatMsgTop: 1529          // chat text climbs to here with chat EXPANDED
   };
 
-  function band(o, hue, a) {
-    // Four rects rather than one inverted box, so overlapping readings COMPOUND
-    // visually — that compounding is the whole point.
-    return ''
-      + '<div class="ryb" style="left:0;top:0;width:1080px;height:' + o.top + 'px;'
-      +   '--h:' + hue + ';--a:' + a + '"></div>'
-      + '<div class="ryb" style="left:0;top:' + (1920 - o.bot) + 'px;width:1080px;height:'
-      +   o.bot + 'px;--h:' + hue + ';--a:' + a + '"></div>'
-      + '<div class="ryb" style="left:0;top:' + o.top + 'px;width:' + o.left + 'px;height:'
-      +   (1920 - o.top - o.bot) + 'px;--h:' + hue + ';--a:' + a + '"></div>'
-      + '<div class="ryb" style="right:0;top:' + o.top + 'px;width:' + o.right + 'px;height:'
-      +   (1920 - o.top - o.bot) + 'px;--h:' + hue + ';--a:' + a + '"></div>';
-  }
+  // The verdict bands, derived from the measurements above rather than typed.
+  var RES = {
+    top:    CAL.crown.y + CAL.crown.h,             // 252 — crown is the deepest
+    bottom: 1920 - CAL.chatMsgTop,                 // 391 — expanded chat
+    left:   Math.max(CAL.backArrow.x + CAL.backArrow.w,
+                     CAL.crown.x + CAL.crown.w),   // 111
+    right:  1080 - Math.min(CAL.heart.x, CAL.dollar.x)  // 135
+  };
+
+  function px(o) { return 'left:' + o.x + 'px;top:' + o.y + 'px;width:' + o.w
+                        + 'px;height:' + o.h + 'px'; }
 
   var css = ''
     + '#ryt{position:absolute;inset:0;z-index:100;pointer-events:none;'
     +   'font-family:Roboto,"Segoe UI",system-ui,Arial,sans-serif;color:#fff}'
     + '#ryt .ryb{position:absolute;background:repeating-linear-gradient(45deg,'
-    +   'hsla(var(--h),100%,55%,var(--a)) 0 12px,transparent 12px 24px)}'
-    + '#ryt .rline{position:absolute;pointer-events:none}'
-    + '#ryt .rtag{position:absolute;font:700 15px Consolas,monospace;letter-spacing:.12em;'
+    +   'rgba(255,45,85,.17) 0 12px,transparent 12px 24px);'
+    +   'outline:1px solid rgba(255,45,85,.35)}'
+    + '#ryt .rtag{position:absolute;font:700 15px Consolas,monospace;letter-spacing:.1em;'
     +   'background:rgba(4,2,10,.9);padding:5px 10px;white-space:nowrap}'
-
-    // Verdict box — the union. Outside this is safe under EVERY reading.
-    + '#ryt .runion{position:absolute;left:' + U.left + 'px;top:' + U.top + 'px;'
-    +   'width:' + (1080 - U.left - U.right) + 'px;height:' + (1920 - U.top - U.bot) + 'px;'
-    +   'border:3px solid #ff2d55}'
-    // Where OUR box actually is, read live from the page's own variables.
+    // Measured chrome footprints — solid, because these are real.
+    + '#ryt .rel{position:absolute;border:2px solid #ffd23f;'
+    +   'background:rgba(255,210,63,.14)}'
+    + '#ryt .rel span{position:absolute;left:0;top:100%;font:700 12px Consolas,monospace;'
+    +   'color:#ffd23f;background:rgba(4,2,10,.88);padding:2px 5px;white-space:nowrap}'
+    + '#ryt .rusable{position:absolute;left:' + RES.left + 'px;top:' + RES.top + 'px;'
+    +   'width:' + (1080 - RES.left - RES.right) + 'px;'
+    +   'height:' + (1920 - RES.top - RES.bottom) + 'px;border:3px solid #ff2d55}'
     + '#ryt .rours{position:absolute;border:3px dashed #00ff9d}'
-
-    // ── chrome ──────────────────────────────────────────────────────────────
-    + '#ryt .rscrim-t{position:absolute;top:0;left:0;right:0;height:340px;'
-    +   'background:linear-gradient(180deg,rgba(0,0,0,.72),transparent)}'
-    + '#ryt .rscrim-b{position:absolute;bottom:0;left:0;right:0;height:520px;'
-    +   'background:linear-gradient(0deg,rgba(0,0,0,.82),transparent)}'
-    + '#ryt .ros{position:absolute;top:0;left:0;right:0;height:' + CAL.osBar + 'px;'
-    +   'display:flex;align-items:center;justify-content:space-between;padding:0 36px;'
-    +   'font:600 23px Roboto,sans-serif}'
-    + '#ryt .rtop{position:absolute;top:' + (CAL.topRow - 36) + 'px;left:0;right:0;height:72px;'
-    +   'display:flex;align-items:center;justify-content:space-between;padding:0 30px}'
-    + '#ryt .rico{width:62px;height:62px;border-radius:50%;background:rgba(0,0,0,.32);'
-    +   'display:flex;align-items:center;justify-content:center;font-size:27px}'
-    + '#ryt .rrow{display:flex;gap:14px}'
-    + '#ryt .rlive{position:absolute;top:' + CAL.liveBadge + 'px;left:30px;'
-    +   'display:flex;align-items:center;gap:12px}'
-    + '#ryt .rpill{background:#ff0033;font:700 20px Roboto,sans-serif;letter-spacing:.08em;'
-    +   'padding:7px 14px;border-radius:5px}'
-    + '#ryt .rview{background:rgba(0,0,0,.5);font:500 21px Roboto,sans-serif;'
-    +   'padding:7px 13px;border-radius:5px}'
-    + '#ryt .rrail{position:absolute;right:0;top:' + CAL.railTop + 'px;width:' + CAL.railW + 'px;'
-    +   'display:flex;flex-direction:column;align-items:center;gap:36px}'
-    + '#ryt .ritem{display:flex;flex-direction:column;align-items:center;gap:7px}'
-    + '#ryt .rglyph{font-size:42px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}'
-    + '#ryt .rcnt{font:600 18px Roboto,sans-serif}'
-    + '#ryt .rav{width:68px;height:68px;border-radius:50%;border:2px solid #fff;position:relative;'
-    +   'background:linear-gradient(135deg,#2c4494,#46dcff);display:flex;align-items:center;'
-    +   'justify-content:center;font:700 26px Consolas,monospace}'
-    + '#ryt .rchat{position:absolute;left:30px;top:' + CAL.chatTop + 'px;width:780px;'
-    +   'display:flex;flex-direction:column;gap:13px}'
-    + '#ryt .rmsg{font:400 21px Roboto,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,.85)}'
-    + '#ryt .rmsg b{color:#b9c8ea;font-weight:600;margin-right:8px}'
-    + '#ryt .rmeta{position:absolute;left:30px;top:' + CAL.metaTop + 'px;width:780px}'
-    + '#ryt .rchan{font:700 23px Roboto,sans-serif;margin-bottom:6px}'
-    + '#ryt .rtitle{font:400 21px Roboto,sans-serif;opacity:.94;white-space:nowrap;'
-    +   'overflow:hidden;text-overflow:ellipsis}'
-    + '#ryt .rbar{position:absolute;left:30px;right:30px;top:' + CAL.inputTop + 'px;'
-    +   'height:' + CAL.inputH + 'px;display:flex;align-items:center;gap:14px}'
-    + '#ryt .rbox{flex:1;height:100%;border-radius:42px;border:1px solid rgba(255,255,255,.34);'
-    +   'background:rgba(0,0,0,.45);display:flex;align-items:center;padding:0 28px;'
-    +   'font:400 21px Roboto,sans-serif;color:rgba(255,255,255,.74)}'
-    + '#ryt .rreact{width:84px;height:84px;border-radius:50%;background:rgba(0,0,0,.45);'
-    +   'border:1px solid rgba(255,255,255,.34);display:flex;align-items:center;'
-    +   'justify-content:center;font-size:34px}';
+    + '#ryt .rscrim-t{position:absolute;top:0;left:0;right:0;height:300px;'
+    +   'background:linear-gradient(180deg,rgba(0,0,0,.55),transparent)}'
+    + '#ryt .rscrim-b{position:absolute;bottom:0;left:0;right:0;height:460px;'
+    +   'background:linear-gradient(0deg,rgba(0,0,0,.62),transparent)}'
+    + '#ryt .rpill{position:absolute;background:#fff;color:#0d0d0d;border-radius:46px;'
+    +   'display:flex;align-items:center;justify-content:center;'
+    +   'font:700 34px Roboto,sans-serif}'
+    + '#ryt .rinput{position:absolute;border-radius:46px;border:2px solid rgba(255,255,255,.5);'
+    +   'background:rgba(0,0,0,.4);display:flex;align-items:center;padding:0 26px;'
+    +   'font:400 30px Roboto,sans-serif;color:rgba(255,255,255,.78)}'
+    + '#ryt .rglyph{position:absolute;display:flex;align-items:center;'
+    +   'justify-content:center;font-size:44px;line-height:1}'
+    + '#ryt .rchat{position:absolute;left:60px;top:' + CAL.chatMsgTop + 'px;width:800px;'
+    +   'font:400 30px Roboto,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,.9);'
+    +   'display:flex;flex-direction:column;gap:12px}'
+    + '#ryt .rchat b{color:#b9c8ea;font-weight:600;margin-right:8px}';
 
   var st = document.createElement('style');
   st.textContent = css;
   document.head.appendChild(st);
 
+  // Reserved bands, drawn from the derived verdict.
+  var bands = ''
+    + '<div class="ryb" style="left:0;top:0;width:1080px;height:' + RES.top + 'px"></div>'
+    + '<div class="ryb" style="left:0;top:' + (1920 - RES.bottom) + 'px;width:1080px;height:'
+    +   RES.bottom + 'px"></div>'
+    + '<div class="ryb" style="left:0;top:' + RES.top + 'px;width:' + RES.left + 'px;height:'
+    +   (1920 - RES.top - RES.bottom) + 'px"></div>'
+    + '<div class="ryb" style="right:0;top:' + RES.top + 'px;width:' + RES.right + 'px;height:'
+    +   (1920 - RES.top - RES.bottom) + 'px"></div>';
+
+  function el(o, label) {
+    return '<div class="rel" style="' + px(o) + '"><span>' + label + '</span></div>';
+  }
+
   var ov = document.createElement('div');
   ov.id = 'ryt';
   ov.innerHTML = ''
     + '<div class="rscrim-t"></div><div class="rscrim-b"></div>'
+    + bands
 
-    // Three readings, layered. Overlap compounds; solid hatch = unsafe under all.
-    + band(CAL.loose, 190, 0.10)
-    + band(CAL.mid, 40, 0.10)
-    + band(CAL.strict, 350, 0.10)
+    // Real chrome, drawn at measured size and position.
+    + '<div class="rglyph" style="' + px(CAL.backArrow) + '">←</div>'
+    + '<div class="rpill" style="' + px(CAL.subscribe) + '">Subscribe</div>'
+    + '<div class="rglyph" style="' + px(CAL.channel) + ';justify-content:flex-start;'
+    +   'font:700 34px Roboto,sans-serif">@yourchannel</div>'
+    + '<div class="rglyph" style="' + px(CAL.overflow) + '">···</div>'
+    + '<div class="rglyph" style="' + px(CAL.crown) + '">♛</div>'
+    + '<div class="rchat"><div><b>quantfan_88</b>whats the weather in denver</div>'
+    +   '<div><b>degenmike</b>this channel is so comfy</div>'
+    +   '<div><b>ada_l</b>the anchor blinked at me</div></div>'
+    + '<div class="rglyph" style="' + px(CAL.heart) + '">❤</div>'
+    + '<div class="rinput" style="' + px(CAL.chatPill) + '">Chat...</div>'
+    + '<div class="rglyph" style="' + px(CAL.emoji) + '">☺</div>'
+    + '<div class="rglyph" style="' + px(CAL.gift) + '">🎁</div>'
+    + '<div class="rglyph" style="' + px(CAL.dollar) + '">$</div>'
 
-    + '<div class="runion"><span class="rtag" style="top:8px;left:8px;color:#ff2d55">'
-    +   'UNION OF ALL READINGS — ' + (1080 - U.left - U.right) + ' x '
-    +   (1920 - U.top - U.bot) + ' @ (' + U.left + ',' + U.top + ')</span></div>'
+    + el(CAL.backArrow, 'back ' + CAL.backArrow.x + '-' + (CAL.backArrow.x + CAL.backArrow.w))
+    + el(CAL.crown, 'crown ' + CAL.crown.x + '-' + (CAL.crown.x + CAL.crown.w))
+    + el(CAL.heart, 'react')
+    + el(CAL.chatPill, 'chat input y' + CAL.chatPill.y)
+
+    + '<div class="rusable"><span class="rtag" style="top:8px;left:8px;color:#ff2d55">'
+    +   'MEASURED USABLE ' + (1080 - RES.left - RES.right) + ' x '
+    +   (1920 - RES.top - RES.bottom) + ' @ (' + RES.left + ',' + RES.top + ')</span></div>'
     + '<div class="rours"><span class="rtag" style="bottom:8px;left:8px;color:#00ff9d">'
-    +   'RETRONEWS SAFE BOX</span></div>'
-
-    // Live chrome. Footprints are the point; art inside them is reconstructed.
-    + '<div class="ros"><span>9:41</span><span>▮▮▯ ◗ 🔋</span></div>'
-    + '<div class="rtop"><div class="rico">⌄</div>'
-    +   '<div class="rrow"><div class="rico">⛶</div><div class="rico">⋮</div></div></div>'
-    + '<div class="rlive"><span class="rpill">LIVE</span>'
-    +   '<span class="rview">👁 1.2K watching</span></div>'
-    + '<div class="rrail">'
-    +   '<div class="ritem"><div class="rav">◈</div></div>'
-    +   '<div class="ritem"><div class="rglyph">👍</div><div class="rcnt">1.2K</div></div>'
-    +   '<div class="ritem"><div class="rglyph">👎</div><div class="rcnt">Dislike</div></div>'
-    +   '<div class="ritem"><div class="rglyph">💬</div><div class="rcnt">340</div></div>'
-    +   '<div class="ritem"><div class="rglyph">↗</div><div class="rcnt">Share</div></div>'
-    + '</div>'
-    + '<div class="rchat">'
-    +   '<div class="rmsg"><b>quantfan_88</b>whats the weather in denver</div>'
-    +   '<div class="rmsg"><b>degenmike</b>this channel is so comfy</div>'
-    +   '<div class="rmsg"><b>ada_l</b>the anchor blinked at me</div>'
-    + '</div>'
-    + '<div class="rmeta"><div class="rchan">◈ RetroNews</div>'
-    +   '<div class="rtitle">channel 4 · national conditions · 24/7</div></div>'
-    + '<div class="rbar"><div class="rbox">Say something...</div>'
-    +   '<div class="rreact">😀</div></div>';
+    +   'RETRONEWS</span></div>';
 
   stage.appendChild(ov);
 
-  // Our own box is read from the LIVE computed variables, never re-typed here.
-  // A measuring tool that carries its own copy of the thing it measures will
-  // eventually disagree with it, and then it is lying with a ruler in its hand.
+  // Our box is read from the LIVE --safe-* variables, never re-typed here. A
+  // measuring tool that carries its own copy of the thing it measures will
+  // eventually disagree with it, and then it lies with a ruler in its hand.
   function syncOurs() {
-    var el = ov.querySelector('.rours');
+    var box = ov.querySelector('.rours');
     var cs = getComputedStyle(document.documentElement);
     var v = function (n) { return parseFloat(cs.getPropertyValue(n)) || 0; };
     var x = v('--safe-x'), y = v('--safe-y'), w = v('--safe-w'), h = v('--safe-h');
     if (!w || !h) return;
-    el.style.cssText += ';left:' + x + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px';
-    var tag = el.querySelector('.rtag');
-    var risk = (y < U.top) || (x < U.left) ||
-               (1080 - x - w < U.right) || (1920 - y - h < U.bot);
-    tag.textContent = 'RETRONEWS ' + w + ' x ' + h + ' @ (' + x + ',' + y + ')'
-      + (risk ? '  ⚠ OUTSIDE THE UNION' : '  ✓ INSIDE EVERY READING');
-    tag.style.color = risk ? '#ffd23f' : '#00ff9d';
-    el.style.borderColor = risk ? '#ffd23f' : '#00ff9d';
+    box.style.cssText += ';left:' + x + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px';
+
+    var bad = [];
+    if (y < RES.top) bad.push('top by ' + (RES.top - y));
+    if (x < RES.left) bad.push('left by ' + (RES.left - x));
+    if (1080 - x - w < RES.right) bad.push('right by ' + (RES.right - (1080 - x - w)));
+    if (1920 - y - h < RES.bottom) bad.push('bottom by ' + (RES.bottom - (1920 - y - h)));
+
+    var tag = box.querySelector('.rtag');
+    tag.textContent = 'RETRONEWS ' + w + 'x' + h + ' @ (' + x + ',' + y + ')  '
+      + (bad.length ? '⚠ OVER ' + bad.join(', ') : '✓ CLEARS MEASURED CHROME');
+    tag.style.color = bad.length ? '#ffd23f' : '#00ff9d';
+    box.style.borderColor = bad.length ? '#ffd23f' : '#00ff9d';
   }
   syncOurs();
-  setInterval(syncOurs, 2000);          // vars can change under a live edit
+  setInterval(syncOurs, 2000);
 
   // Runtime switch — retronews.js polls the setting and calls this; RetroNews HQ
-  // writes it. Idempotent, so polling every few seconds is free. Toggled at
-  // RUNTIME rather than gated server-side because HQ and the stream page are
-  // different browsers: a server-side gate could only apply on a reload, which
-  // is useless when you are designing against the filter in the next window.
+  // writes it. Toggled at RUNTIME rather than gated server-side because HQ and
+  // the stream page are different browsers: a server-side gate could only apply
+  // on a reload, which is useless when you are designing against it live.
   var on = null;
   window._rnYtToggle = function (show) {
     show = !!show;

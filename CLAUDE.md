@@ -462,24 +462,37 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    (3x = 67.5 logical, off-grid). Collar begins at art y66.
 9. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
    shared bus. See the two rules above.
-10. **The measuring overlay (`dashboard/retronews_yt.js`) draws the DISAGREEMENT,
-    not a rectangle.** Measured July 2026, the published Shorts guides differ by
-    **260px on the top margin**: strict 380/380/60/120, loose 120/300/60/96, mid
-    180/390/60/60. All three describe SHORTS, and a Short is not a livestream —
-    none model the chat input, LIVE badge or viewer count, which never go away on
-    live, so every Shorts template is optimistic about the bottom band. The
-    overlay layers all three (overlap compounds) and draws their UNION as the
-    solid red verdict box. It reads OUR box from the live `--safe-*` variables
-    rather than carrying its own copy: a measuring tool that duplicates the thing
-    it measures eventually disagrees with it, and then it lies with a ruler in
-    its hand. Toggled from RetroNews HQ (`yt_overlay`, polled ~3s, live, no
-    reload); `?yt=1` sets the initial state and **no row = no opinion**, so the
-    URL param survives until HQ is first pressed. Defaults OFF — the opposite of
-    the Blob stream's, where defaulting ON is a standing hazard.
-    **FIRST FINDING, still open:** the brand bar [16,200,920,96] overlaps
-    YouTube's LIVE badge + viewer count by ~11,600px². Everything else clears.
-    Caveat that matters: the badge's y250 is RECONSTRUCTED, not sourced — it is
-    exactly the number a real screenshot would settle.
+10. **The measuring overlay (`dashboard/retronews_yt.js`) is MEASURED, not
+    reconstructed** — calibrated 2026-07-20 against a real YouTube mobile
+    livestream screenshot (1080x2340 phone, immersive layout, chat expanded).
+    It replaced three published *Shorts* readings that disagreed by 260px on the
+    top margin, **and all three were wrong about live, in the same direction**:
+
+    | | Shorts guides said | LIVE actually is |
+    |---|---|---|
+    | top | 120–380 | **252** (crown button is the deepest) |
+    | bottom | 300–390 | **391** (chat MESSAGES, not the input at 1786) |
+    | left | 60 | **111** (back arrow + crown — no guide mentions these) |
+    | right | 60–120 | **135** (one react button) |
+
+    **There is NO vertical action rail on live.** Shorts stacks like/dislike/
+    comment/share down the right edge; a livestream does not — it has a top bar
+    with Subscribe, a chat input, and a single react button. The old overlay drew
+    a 130px rail that does not exist.
+    **The app's bottom nav sits BELOW the video, not over it**, and the phone's
+    status bar above it — neither costs anything.
+    **The intrusions that actually bite are on the LEFT**, which is precisely
+    where the layout was pushed to reclaim room.
+    Screen px became stage px by FRACTION of the player box (reference video was
+    screen y81-2051, 1:1.824; ours is a true 9:16) because chrome anchors to the
+    container's edges. x maps 1:1 — both 1080 wide.
+    Toggled from RetroNews HQ (`yt_overlay`, polled ~3s, live, no reload);
+    `?yt=1` sets the initial state and **no row = no opinion**, so the URL param
+    survives until HQ is first pressed. Defaults OFF.
+    **Still assumed:** one device, one shot, chat EXPANDED. Collapsing chat
+    almost certainly frees y1529–1786 — the next screenshot worth taking.
+    **OPEN: the current box (16,200,920,1336) is over on three edges** — top by
+    52, left by 95, bottom by 7. Measured usable is **834 x 1277 @ (111,252)**.
 
 ---
 
