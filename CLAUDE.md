@@ -481,14 +481,21 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    second set of numbers to keep in sync. Only an explicit `'0'` hides him, so a
    missing row or a failed fetch leaves the stage as designed. It is a **CUT**:
    CSS transitions are inert in this iframe and a hard cut is the era anyway.
-   Two things must move WITH the toggle, and both are silent failures if missed:
-   **(a) type scales up** (`.no-host` bumps the faces) — growing the box while
-   leaving 8-logical text in it just adds emptiness; **(b) `WIPE_ROWS` is sized
-   for the TALLER state** (25, not 17) or the dissolve covers the small panel and
-   leaves the bottom third of the big one live.
-   **Weather rows are whole logical px per state (17 / 26), never `1fr`** — 1fr
-   divides 171 and 267 into 17.1 and 26.7, putting every alternating band edge
-   off the pixel grid to be antialiased into a soft seam. One big panel beats a split at
+   **NOTHING SCALES WITH THE PANEL — it REVEALS MORE.** Type, row height and
+   bevels are byte-identical in both states; the board simply shows more of
+   itself (10 weather rows become 15). Scaling the face with the box was built
+   and then removed: it makes the two states read as two different designs, and
+   one board rendered at two sizes is exactly what an 8-bit console never did.
+   Row height is a FIXED 17 logical and `wxRowsThatFit()` measures how many fit,
+   so the page size is a consequence of the layout rather than a constant that
+   drifts out of step with it. `CITIES` holds 15 — still ONE Open-Meteo request,
+   since it takes comma-separated coordinates.
+   **`WIPE_ROWS` must be sized for the TALLER state** (25, not 17) or the
+   dissolve covers the small panel and leaves the bottom third of the big one
+   live — a silent failure visible only in the mode being added.
+   **Weather rows are whole logical px, never `1fr`** — 1fr divides 171 and 267
+   into 17.1 and 26.7, putting every alternating band edge off the pixel grid to
+   be antialiased into a soft seam. One big panel beats a split at
    this size — a single tile is what reads across a room, which is the point of a
    channel you leave on. The `Slot` machinery in `retronews.js` is generic and
    instantiated once, so rotation, dissolve and the duplicate guard are all still

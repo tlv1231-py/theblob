@@ -128,12 +128,20 @@
   // Open-Meteo: free, NO API KEY, CORS-enabled, and it takes comma-separated
   // coordinates so ten cities cost ONE request. That matters twice over — the
   // free-tier rule, and not hammering a public endpoint from a 24/7 stream.
+  // FIFTEEN, because that is what the tall panel reveals. Still ONE request —
+  // Open-Meteo takes comma-separated coordinates, so the city count costs
+  // nothing extra against the free tier or the endpoint.
+  // Paging falls out of it: 10 fit with the host on (2 pages), all 15 fit with
+  // him off (1 page, no counter).
   var CITIES = [
-    ['SEATTLE',       47.61, -122.33], ['CHICAGO',   41.88,  -87.63],
-    ['SAN FRANCISCO', 37.77, -122.42], ['ATLANTA',   33.75,  -84.39],
-    ['LOS ANGELES',   34.05, -118.24], ['MIAMI',     25.76,  -80.19],
-    ['DENVER',        39.74, -104.99], ['NEW YORK',  40.71,  -74.01],
-    ['PHOENIX',       33.45, -112.07], ['BOSTON',    42.36,  -71.06]
+    ['SEATTLE',       47.61, -122.33], ['CHICAGO',      41.88,  -87.63],
+    ['SAN FRANCISCO', 37.77, -122.42], ['ATLANTA',      33.75,  -84.39],
+    ['LOS ANGELES',   34.05, -118.24], ['MIAMI',        25.76,  -80.19],
+    ['DENVER',        39.74, -104.99], ['NEW YORK',     40.71,  -74.01],
+    ['PHOENIX',       33.45, -112.07], ['BOSTON',       42.36,  -71.06],
+    ['DALLAS',        32.78,  -96.80], ['HOUSTON',      29.76,  -95.37],
+    ['PHILADELPHIA',  39.95,  -75.17], ['DETROIT',      42.33,  -83.05],
+    ['MINNEAPOLIS',   44.98,  -93.27]
   ];
 
   // WMO weather codes -> the short, all-caps labels a 90s CG would have shown.
@@ -152,11 +160,26 @@
     return '--';
   }
 
-  // All ten still fit: the panel body is 171 logical and rows are 17, so
-  // 10 x 17 = 170. Paging existed only because a 92-tall slot could not hold
-  // them; the page counter below goes quiet on its own when there is one page.
-  var WX_PAGE = 10;
+  // ROW HEIGHT IS FIXED; how many rows FIT is what changes. The panel is 171
+  // logical with the host on and 267 with him off, and a row is 17 either way —
+  // so 10 rows become 15. Nothing scales, the board just reveals more of itself,
+  // which is what those boards actually did.
+  //
+  // Measured rather than hardcoded: the two page sizes are a consequence of the
+  // layout, and writing 10 and 15 down here is how they end up disagreeing with
+  // it the next time a panel height moves.
+  var WX_ROW_LOGICAL = 17;
   var wxAll = [], wxPage = 0;
+
+  function wxRowsThatFit() {
+    var g = document.querySelector('.rn-wx-grid');
+    if (!g) return 10;
+    var cs = getComputedStyle(document.documentElement);
+    var s = parseFloat(cs.getPropertyValue('--s')) || 1;
+    var px = parseFloat(cs.getPropertyValue('--px')) || 4;
+    var h = g.getBoundingClientRect().height / s;      // stage px
+    return Math.max(1, Math.floor(h / (WX_ROW_LOGICAL * px)));
+  }
 
   // Writes EVERY .rn-wx-grid, not the first. There is one panel set per slot,
   // and today there is one slot — but a document-wide single lookup is exactly
@@ -185,7 +208,7 @@
     var subs = document.querySelectorAll('.rn-wx-sub');
     var stamp = 'UPDATED ' + new Date().toLocaleTimeString('en-US',
       { hour: 'numeric', minute: '2-digit' });
-    var pages = Math.max(1, Math.ceil(wxAll.length / WX_PAGE));
+    var pages = Math.max(1, Math.ceil(wxAll.length / wxRowsThatFit()));
     for (var si = 0; si < subs.length; si++) {
       subs[si].textContent = pages > 1
         ? stamp + '  ' + (wxPage + 1) + '/' + pages
@@ -195,15 +218,18 @@
 
   function paintWxPage() {
     if (!wxAll.length) return;
-    var from = wxPage * WX_PAGE;
-    renderWx(wxAll.slice(from, from + WX_PAGE));
+    var per = wxRowsThatFit();
+    var pages = Math.max(1, Math.ceil(wxAll.length / per));
+    if (wxPage >= pages) wxPage = 0;       // panel grew; old page may not exist
+    var from = wxPage * per;
+    renderWx(wxAll.slice(from, from + per));
   }
 
   // Page on the same beat the tiles cut on, so the board never has two
   // different clocks running against each other.
   setInterval(function () {
     if (!wxAll.length) return;
-    var pages = Math.ceil(wxAll.length / WX_PAGE);
+    var pages = Math.ceil(wxAll.length / wxRowsThatFit());
     if (pages < 2) return;
     wxPage = (wxPage + 1) % pages;
     paintWxPage();
@@ -433,7 +459,17 @@
         // dropping the channel's anchor. A CUT, not a transition: CSS
         // transitions are inert in this iframe and would do nothing at all.
         var stg = $('stage');
-        if (stg) stg.classList.toggle('no-host', c.host_visible === '0');
+        if (stg) {
+          var wantHide = c.host_visible === '0';
+          if (stg.classList.contains('no-host') !== wantHide) {
+            stg.classList.toggle('no-host', wantHide);
+            // The panel just changed height, so a different number of rows fits.
+            // Without this the board keeps the old page size until the next
+            // 15s page tick — visibly half-empty, or clipped, in between.
+            wxPage = 0;
+            paintWxPage();
+          }
+        }
 
         // Measuring overlay, driven live from HQ. No reload: the toggle has to
         // be usable while you are looking at the stream in the next window.
@@ -743,6 +779,10 @@
     beats: function () { return _beats; },
     tile: function () { return slots.map(function (q) { return q.current; }); },
     order: function () { return order.slice(); },
+    // Exposed so the host-toggle repaint can be exercised without writing to
+    // the live config table just to test a layout change.
+    wxRows: function () { return wxRowsThatFit(); },
+    repaintWx: function () { wxPage = 0; paintWxPage(); },
     cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id); q.lastCut = Date.now(); } },
     wiping: function () { return slots.map(function (q) { return q.wiping; }); },
     blocks: function () { return slots.map(function (q) { return q.blocks.length; }); }

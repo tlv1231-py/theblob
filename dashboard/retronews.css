@@ -459,22 +459,14 @@ html, body {
 
 
 /* ── HOST HIDDEN ───────────────────────────────────────────────────────────
-   The host strip is removed entirely and the content panel takes the space —
-   195 -> 291 logical. It is a CUT, never a transition: CSS transitions are inert
-   in this iframe (they would silently do nothing), and a hard cut is what the
-   era calls for anyway.
+   The host strip is removed and the content panel takes the space — 195 -> 291
+   logical. A CUT, never a transition: CSS transitions are inert in this iframe
+   (they would silently do nothing), and a hard cut is what the era calls for.
 
-   Type scales UP with the panel. Growing the box while leaving 8-logical text
-   in it just adds emptiness; the point of reclaiming the host's 96 logical is to
-   make the data read from further away. Every size stays a whole multiple of
-   --px, so nothing leaves the pixel grid. */
+   NOTHING SCALES. The type, the row height and the bevels are identical in both
+   states; the panel simply REVEALS MORE. Scaling the face with the box was tried
+   and removed: it makes the two states read as two different designs, and the
+   same board rendered at two sizes is exactly the inconsistency an 8-bit console
+   never had. A bigger panel shows MORE ROWS, not BIGGER ROWS — which is also
+   what the boards this is imitating actually did. */
 #stage.no-host #rn-host { display: none; }
-#stage.no-host .rn-wx-grid    { grid-auto-rows: calc(var(--px) * 26); }
-#stage.no-host .rn-tile-title { font-size: calc(var(--px) * 9); }
-#stage.no-host .rn-tile-sub   { font-size: calc(var(--px) * 6); }
-#stage.no-host .wx-city       { font-size: calc(var(--px) * 11); }
-#stage.no-host .wx-temp       { font-size: calc(var(--px) * 14); }
-#stage.no-host .wx-cond       { font-size: calc(var(--px) * 8);
-                                width: calc(var(--px) * 52); }
-#stage.no-host .rn-ph-label   { font-size: calc(var(--px) * 9); }
-#stage.no-host .rn-ph-note    { font-size: calc(var(--px) * 7); }
