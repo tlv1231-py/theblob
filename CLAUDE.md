@@ -439,9 +439,17 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
      The first quiet shell was warm charcoal at ~0.17 saturation and read as
      grimdark. Two SEPARATE levers fix it — **chroma AND light** — and the shell
      needed both: panel fill went lum 0.019→0.052 and sat 0.17→0.42.
-   - **CONTENT partners the shell.** The old sky blue went muddy on a warm
-     ground, so conditions moved to **teal**, which is near the complement and
-     stays crisp.
+   - **CONTENT PANELS ARE BLUE SCREENS SET INTO THE WARM CONSOLE** — the
+     `--scr*` variables, holding the ORIGINAL blue/gold/white. The shell going
+     quiet never meant the content should become a tint of it: a warm plastic
+     console housing a cold blue CRT is the truer object, and that palette was
+     right for the weather board all along — it was only ever wrong applied to
+     the *furniture*. The panel FRAME keeps the shell's `--lit`/`--shade`, so the
+     bezel round each screen reads as the console's own plastic catching light.
+     Type shadows and the dissolve cover inside a panel use `--scr-shade`, not
+     the shell's.
+     **Check when adding a panel:** no content selector may reference `--sky*`,
+     `--ink` or `--dim`. Those are shell. Screens use `--scr*`, `--gold`, `--cyan`.
    - **CONTENT** — what the panels are FOR: temperatures, tile headers, ad copy,
      the LIVE dot. Keeps saturated colour, and reads as loud *precisely because
      nothing around it competes*. Measured: 0.45–0.80.
@@ -623,6 +631,27 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
 ---
 
 ## Pending Infrastructure Tasks
+
+- [ ] **RetroNews — slow colour wipe across the backdrop.** Requested
+  2026-07-20: a very slow drift of chill retro colour along the background, to
+  stop the stage reading grey at rest. **This is palette-based ambient motion,
+  which era rule 2 explicitly favours** — it costs the compositor nothing and
+  needs no framerate, so it is the RIGHT kind of motion for this hardware.
+  Constraints it must respect, all already learned the hard way:
+  - `setInterval` only. CSS transitions/animations and `rAF` are INERT in the
+    component iframe and fail silently.
+  - **Time-based, not tick-based** (see the frame-budget rules). A drift
+    accumulated per tick will run slower on the broadcast VM than in preview.
+  - Steps must be whole multiples of 42ms and ≥2 frames. At "very slow" this is
+    easy — a step every few seconds is fine, and a hard cut between near
+    neighbours reads as a drift, not a jump.
+  - It must sit BEHIND the panels (below `#safe`), or it tints the screens too.
+  - Cheapest approach that fits: a single translucent wash div whose
+    `background-color` steps through a palette — one property write per step,
+    zero per-pixel cost. Pre-generating N tinted copies of the PNG also works but
+    inlines ~58KB each as base64, so a dozen is ~700KB.
+  - Keep the wash weak enough that `tint_bg.py`'s guarantee still holds: nothing
+    in the backdrop brighter than `--lit`.
 
 - [ ] **RetroNews host — remaining ChatGPT art (Tyler's queue).** Five of six
   moods are real art; SLEEPY is derived from NEUTRAL (closed eyes ARE the whole

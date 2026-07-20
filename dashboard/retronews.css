@@ -59,13 +59,26 @@
   --ink:   #f8eeda;          /* primary type */
   --dim:   #c0a884;          /* secondary type */
 
-  /* CONTENT — allowed to be loud. Used INSIDE panels, never on the shell.
-     TEAL, not the old sky blue: against a warm shell a cool blue goes muddy,
-     whereas teal is close to the complement of the ground and stays crisp. */
-  --gold:  #ffcf5c;          /* amber: temperatures, tile headers, money */
-  --gold2: #b8873a;          /* amber shadow / pressed */
-  --cyan:  #6fc8bc;          /* teal: conditions, secondary data */
-  --alert: #e86a40;          /* the one red — alerts, LIVE dot, adverts */
+  /* CONTENT SCREENS — the panels are BLUE CRTs SET INTO the warm console.
+     This is what the two-tier split was for. The shell going quiet did not mean
+     the content had to become a tint of it: a warm plastic console housing a
+     cold blue screen is the more truthful object, and it is how the hardware
+     actually looked. The screen keeps the original blue/gold/white — the palette
+     that was right for the weather board all along, and only ever wrong when it
+     was applied to the furniture as well.
+
+     The panel FRAME still uses the shell's --lit/--shade, so the bezel around
+     each screen reads as the console's own plastic catching the light. */
+  --scr1:  #141c48;          /* screen row A */
+  --scr2:  #1e2c68;          /* screen fill / row B */
+  --scr3:  #2c4494;          /* screen raised — tile headers */
+  --scr-ink:   #f4f8ff;      /* white type on screen */
+  --scr-dim:   #8fa4d8;      /* secondary type on screen */
+  --scr-shade: #060a20;      /* type shadow + dissolve cover, INSIDE screens */
+  --gold:  #ffc830;          /* the original gold: temperatures, headers, money */
+  --gold2: #c07f10;
+  --cyan:  #46dcff;          /* the original cyan: conditions */
+  --alert: #e83848;          /* alerts and the LIVE dot */
 
   /* REVERT — GBA, in this order:
      #0a1030 #141c48 #1e2c68 #2c4494 #6f9ae8 #060a20 #f4f8ff (ink) / #46dcff
@@ -247,7 +260,9 @@ html, body {
 .rn-slot {
   height: 100%; flex: 1 1 auto; min-height: 0;
   position: relative;
-  background: var(--sky2);
+  /* The SCREEN. Frame stays shell (--lit/--shade below) so the bezel reads as
+     the console's plastic; only the glass is blue. */
+  background: var(--scr2);
   box-shadow:
     inset var(--px) var(--px) 0 0 var(--shade),
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--lit),
@@ -262,12 +277,12 @@ html, body {
   display: flex; align-items: center; gap: calc(var(--px) * 3);
   padding: 0 calc(var(--px) * 4);
   background: linear-gradient(180deg,
-    var(--sky3) 0%, var(--sky3) 55%, var(--sky2) 55%, var(--sky2) 100%);
-  box-shadow: inset 0 calc(var(--px) * -1) 0 0 var(--shade);
+    var(--scr3) 0%, var(--scr3) 55%, var(--scr2) 55%, var(--scr2) 100%);
+  box-shadow: inset 0 calc(var(--px) * -1) 0 0 var(--scr-shade);
 }
 .rn-tile-title { font-size: calc(var(--px) * 7); color: var(--gold);
-                 text-shadow: var(--px) var(--px) 0 var(--shade); }
-.rn-tile-sub   { margin-left: auto; font-size: calc(var(--px) * 5); color: var(--dim); }
+                 text-shadow: var(--px) var(--px) 0 var(--scr-shade); }
+.rn-tile-sub   { margin-left: auto; font-size: calc(var(--px) * 5); color: var(--scr-dim); }
 
 /* ── National conditions: ONE column of 5 rows at 13 logical each ─────────
    Two columns forced a 5-logical face (15 device px, ~8px on the phone this is
@@ -293,16 +308,16 @@ html, body {
 .wx-cell {
   display: flex; align-items: center; gap: calc(var(--px) * 3);
   padding: 0 calc(var(--px) * 4);
-  color: var(--ink);
+  color: var(--scr-ink);
 }
 /* Alternating bands — flat, one palette step apart. */
-.wx-cell:nth-child(odd)  { background: var(--sky1); }
-.wx-cell:nth-child(even) { background: var(--sky2); }
+.wx-cell:nth-child(odd)  { background: var(--scr1); }
+.wx-cell:nth-child(even) { background: var(--scr2); }
 .wx-city { flex: 1; min-width: 0; font-size: calc(var(--px) * 8);
-           text-shadow: var(--px) var(--px) 0 var(--shade);
+           text-shadow: var(--px) var(--px) 0 var(--scr-shade);
            white-space: nowrap; overflow: hidden; }
 .wx-temp { font-size: calc(var(--px) * 10); color: var(--gold);
-           text-shadow: var(--px) var(--px) 0 var(--shade); }
+           text-shadow: var(--px) var(--px) 0 var(--scr-shade); }
 .wx-cond { width: calc(var(--px) * 40); text-align: right;
            font-size: calc(var(--px) * 6); color: var(--cyan);
            white-space: nowrap; overflow: hidden; }
@@ -329,7 +344,7 @@ html, body {
   overflow: hidden;
 }
 .rn-wipe.on { display: grid; }
-.wipe-b { background: var(--shade); visibility: hidden; }
+.wipe-b { background: var(--scr-shade); visibility: hidden; }
 .wipe-b.on { visibility: visible; }
 /* One frame of gold at full cover — the transition "sting" every GBA screen
    change had. A single frame is ~42ms; it reads as a snap, not a flash-bang. */
@@ -341,12 +356,12 @@ html, body {
   top: calc(var(--px) * 24); bottom: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: calc(var(--px) * 5);
-  background: var(--sky1);
-  color: var(--ink);
+  background: var(--scr1);
+  color: var(--scr-ink);
 }
 .rn-ph-label { font-size: calc(var(--px) * 7); color: var(--gold);
-               text-shadow: var(--px) var(--px) 0 var(--shade); }
-.rn-ph-note  { font-size: calc(var(--px) * 6); line-height: 2; color: var(--dim);
+               text-shadow: var(--px) var(--px) 0 var(--scr-shade); }
+.rn-ph-note  { font-size: calc(var(--px) * 6); line-height: 2; color: var(--cyan);
                max-width: calc(var(--px) * 170); text-align: center; }
 
 /* ── 3. HOST STRIP — 216 x 68 logical ────────────────────────────────────── */
