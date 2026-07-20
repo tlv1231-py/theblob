@@ -435,6 +435,87 @@
 
 
 
+
+  // ── VOICE ────────────────────────────────────────────────────────────────
+  // Pokemon's text sound is a short square blip per character. It is the single
+  // most recognisable thing about that dialogue, more than the box itself.
+  //
+  // The bootstrap is ported from the Blob stream's SFX rather than rewritten,
+  // because it encodes two things that took debugging to find:
+  //   * The unlock listens on the PARENT document as well as this one. This page
+  //     is an iframe inside Streamlit, and a tap only reaches the window it lands
+  //     in — on a phone nearly every tap lands on the parent chrome, so the
+  //     iframe's context stayed suspended no matter how much you prodded it.
+  //   * NOT {once:true}. A gesture that fails to unlock — context not built yet,
+  //     resume() rejected — used to consume the listener with no second chance.
+  //     resume() on a running context is free, so retrying costs nothing.
+  // The broadcast never needs any of it: chromium.sh runs with
+  // --autoplay-policy=no-user-gesture-required.
+  var VOICE = (function () {
+    var ctx = null;
+    function init() {
+      if (ctx) return;
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        ctx.resume().catch(function () {});
+      } catch (e) {}
+    }
+    function unlock() {
+      init();
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    }
+    ['pointerdown', 'keydown', 'touchstart', 'touchend', 'click'].forEach(function (ev) {
+      window.addEventListener(ev, unlock, { passive: true });
+      try {
+        if (window.parent && window.parent !== window && window.parent.document) {
+          window.parent.document.addEventListener(ev, unlock, { passive: true });
+        }
+      } catch (e) {}          // cross-origin one day: never take the page down
+    });
+    init();
+    return {
+      // Square wave, fixed pitch, ~26ms. Fixed because Gen 1's was — a blip that
+      // wanders in pitch reads as an effect rather than as a voice. The short
+      // ramps are not decoration: a square wave started and stopped at full gain
+      // clicks, and 24 clicks a second is unlistenable.
+      blip: function () {
+        if (!ctx || ctx.state !== 'running') return false;
+        try {
+          var t = ctx.currentTime;
+          var osc = ctx.createOscillator(), g = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(1380, t);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.035, t + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.026);
+          osc.connect(g); g.connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.03);
+          return true;
+        } catch (e) { return false; }
+      },
+      state: function () { return ctx ? ctx.state : 'none'; }
+    };
+  })();
+
+  // ── TALKING BOB ──────────────────────────────────────────────────────────
+  // He has no mouth-open frame — the sheet is 3 lid columns x 6 mood rows and
+  // every mouth is baked into its row, so there is nothing to animate. A 1
+  // logical px bob in time with the blips is what the hardware would have done
+  // anyway, and it is discrete BY DESIGN: this is sprite animation, not a glide,
+  // so the coarse step is the point rather than the flaw.
+  //
+  // Bobs DOWN, never up. The portrait clips at 72x90 with his shoulders already
+  // cut by the frame, so moving down hides 4px of shoulder (invisible) and opens
+  // 4px above his hair (already background). Moving up would clip his hair and
+  // expose a dark strip under him.
+  var bobOn = false;
+  function hostBob(on) {
+    var sp = $('rn-host-sprite');
+    if (!sp || on === bobOn) return;
+    bobOn = on;
+    sp.style.transform = on ? 'translateY(4px)' : '';
+  }
+
   // ── GEN-1 DIALOGUE BOX ───────────────────────────────────────────────────
   // Pokemon Red's box cuts in; the remembered "animation" is the typewriter and
   // the blinking arrow. Both are quantized by construction, which is the only
@@ -525,10 +606,22 @@
       if (n >= sayFull.length) {
         sayTxt.textContent = sayFull;
         sayPhase = 'done'; sayT0 = Date.now();
+        hostBob(false);              // land him flat on the last character
         return;
       }
-      // Only touch the DOM when the count actually changes.
-      if (sayTxt.textContent.length !== n) sayTxt.textContent = sayFull.slice(0, n);
+      // Only touch the DOM when the count actually changes — and that is also
+      // the one moment a NEW character appeared, so the blip and the bob hang
+      // off it rather than off a second timer that would drift against it.
+      if (sayTxt.textContent.length !== n) {
+        sayTxt.textContent = sayFull.slice(0, n);
+        // Every OTHER character. One blip per character at 24 chars/sec is a
+        // buzz rather than a voice, and this plays every 15 seconds forever.
+        // Spaces stay silent: Gen 1 bipped through them and it sounds mechanical
+        // in a sentence this short.
+        var ch = sayFull.charAt(n - 1);
+        if (n % 2 === 0 && ch !== ' ') VOICE.blip();
+        hostBob(n % 2 === 0);
+      }
       return;
     }
     if (sayPhase === 'done' && sayArrow) {
@@ -543,6 +636,7 @@
     clearInterval(sayTimer);
     if (sayArrow) sayArrow.classList.remove('on');
     sayPhase = 'close'; sayT0 = Date.now();
+    hostBob(false);
     sayTimer = setInterval(function () {
       var st = SAY_STEPS - Math.floor((Date.now() - sayT0) / SAY_STEP_MS);
       sayStep = Math.max(0, st); sayApplyStep();
@@ -966,6 +1060,11 @@
           beats: _beats,
           tiles: slots.map(function (q) { return q.current; }).join(','),
           mood: hostMood,
+          // chromium.sh's own comment says to verify audio via this field. A
+          // suspended context is SILENT and looks identical to a working one
+          // from outside — without this, a mute broadcast is only discoverable
+          // by listening to it.
+          audio: VOICE.state(),
           wiping: slots.some(function (q) { return q.wiping; }),
           live: !!S.live
         },
@@ -990,6 +1089,8 @@
     // The EXIT is an animation in its own right and needs to be checkable
     // without waiting out a 5s intro to see it once.
     sayClose: function () { sayClose(); },
+    voice: function () { return VOICE.state(); },
+    blip: function () { return VOICE.blip(); },
     repaintWx: function () { wxPage = 0; paintWxPage(); },
     cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id, hostIntro); q.lastCut = Date.now(); } },
     wiping: function () { return slots.map(function (q) { return q.wiping; }); },
