@@ -431,37 +431,37 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    8 logical, which is the same density AND legible.
 8. **Everything visible lives inside the safe box.** The Blob stream's known
    cost — 8 of 14 tiles sitting behind YouTube's chrome — is not repeated here.
-   **THE BOX IS ASYMMETRIC BECAUSE YOUTUBE'S CHROME IS** (revised 2026-07-20).
-   The first version reserved **88 left against 128 right** — near-symmetric —
-   but the action rail (like/share/comment) is on the **RIGHT ONLY** and nothing
-   sits on the left, so ~72px of the left edge was wasted the whole way down.
-   The 380 top figure is the conservative **Shorts feed** number; a live vertical
-   stream shows a channel row, a LIVE badge and a viewer count up there, which is
-   far shallower. The box is now **920x1336 at (16,200)**:
+   **THE BOX IS MEASURED** (2026-07-20). It got there the hard way — first a
+   near-symmetric 88 left / 128 right, then an aggressive 16 left / 200 top to
+   reclaim the margins, then a real livestream screenshot showed the published
+   guides are wrong about live in every direction and that the aggressive box was
+   over on three edges (top by 52, left by 95, bottom by 7). See rule 10.
 
    | | left | right | top | bottom | canvas |
    |---|---|---|---|---|---|
-   | was | 88 | 128 | 376 | 392 | 48.0% |
-   | now | **16** | **144** | **200** | 384 | **59.3%** |
+   | required | 111 | 135 | 252 | 391 | — |
+   | **actual** | **112** | **136** | **252** | **392** | **51.2%** |
 
-   The right margin was deliberately *increased* — that is the one edge with real
-   chrome on it. **Top and left are the numbers to re-check first if anything is
-   ever clipped on air**, since they are the two that moved and neither has been
-   verified against a real broadcast.
-   Allocation (logical, safe box = 230x334, fully packed): brand 24 · gap 4 ·
-   **content 210, ONE panel** · gap 4 · host 92. One big panel beats a split at
+   Rounded INWARD onto the 4px grid so rounding can never eat a margin; every
+   edge lands exactly 1px clear. **51.2% is LESS than the 59.3% it replaced, and
+   that is the correct direction** — the old number was optimistic, not earned.
+   **The LEFT is the one that bit and the one no guide mentions**: YouTube's back
+   arrow (x57-110) and crown (x68-111) sit exactly where the layout had been
+   pushed. The RIGHT is cheap because live has no Shorts action rail. The BOTTOM
+   is set by chat MESSAGES at y1529, not the input at y1786, so it moves if chat
+   collapses.
+   Allocation (logical, safe box = 208x319, fully packed): brand 24 · gap 4 ·
+   **content 195, ONE panel** · gap 4 · host 92. One big panel beats a split at
    this size — a single tile is what reads across a room, which is the point of a
    channel you leave on. The `Slot` machinery in `retronews.js` is generic and
-   simply instantiated once, so rotation, dissolve and the duplicate guard are
-   all still the same code path if a second is ever wanted.
+   instantiated once, so rotation, dissolve and the duplicate guard are all still
+   one code path if a second is ever wanted. The portrait is UNCLIPPED at 72x90.
    **The guides overlay is driven by the safe-box CSS vars, never by literals** —
    a guide that disagrees with the layout is worse than no guide, because it is a
    measurement you trust that is wrong. Double-tap the top-left on a phone.
-   If the strip is ever shortened again, **clip the portrait window, never scale
-   the sprite**: only whole multiples keep one art pixel on one logical pixel
+   If the strip is ever shortened, **clip the portrait window, never scale the
+   sprite**: only whole multiples keep one art pixel on one logical pixel
    (3x = 67.5 logical, off-grid). Collar begins at art y66.
-9. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
-   shared bus. See the two rules above.
 10. **The measuring overlay (`dashboard/retronews_yt.js`) is MEASURED, not
     reconstructed** — calibrated 2026-07-20 against a real YouTube mobile
     livestream screenshot (1080x2340 phone, immersive layout, chat expanded).
@@ -491,8 +491,9 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
     survives until HQ is first pressed. Defaults OFF.
     **Still assumed:** one device, one shot, chat EXPANDED. Collapsing chat
     almost certainly frees y1529–1786 — the next screenshot worth taking.
-    **OPEN: the current box (16,200,920,1336) is over on three edges** — top by
-    52, left by 95, bottom by 7. Measured usable is **834 x 1277 @ (111,252)**.
+    **RESOLVED 2026-07-20:** the layout was moved onto the measured box and now
+    reports `✓ CLEARS MEASURED CHROME` with zero collisions against every
+    measured footprint. See rule 8 for the geometry.
 
 ---
 

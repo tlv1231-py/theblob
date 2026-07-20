@@ -15,31 +15,35 @@ strategy:
   * ambient life is palette-based (blink, colour cycle) — costs zero frames
   * hard offset shadows, flat saturated colour — no blur to composite
 
-LAYOUT — arithmetic, not vibes. Everything lives in the 920x1336 safe box at
-(16,200). The Blob stream's known cost (8 of its 14 tiles sitting behind
+LAYOUT — arithmetic, not vibes. Everything lives in the 832x1276 safe box at
+(112,252), which is MEASURED (see retronews_yt.js), not guessed. The Blob stream's known cost (8 of its 14 tiles sitting behind
 YouTube's chrome) is deliberately not repeated here.
 
-    brand bar     920 x  96
+    brand bar     832 x  96
     gap                  16
-    content       920 x 840     <- ONE panel, the rotating tiles
+    content       832 x 780     <- ONE panel, the rotating tiles
     gap                  16
-    host strip    920 x 368     <- portrait 288x360 + nameplate/dialogue
+    host strip    832 x 368     <- portrait 288x360 + nameplate/dialogue
                        -----
-                        1336  ✓
+                        1276  ✓
 
-THE BOX IS ASYMMETRIC BECAUSE YOUTUBE'S CHROME IS. The first version reserved 88
-left against 128 right, which is very nearly symmetric — but the action rail
-(like / share / comment) is on the RIGHT ONLY, and nothing at all sits on the
-left. That wasted ~72px down the whole left edge. The top 376 was the
-conservative SHORTS FEED figure; a live vertical stream puts a channel row, a
-LIVE badge and a viewer count up there, which is far shallower. Pushing left and
-up takes the usable canvas from 48.0% to 59.3% (+23.5%) and buys back both the
-full unclipped portrait and a content panel LARGER than the original 164.
+THE BOX IS MEASURED. An earlier version reasoned from published Shorts guides —
+first a near-symmetric 88/128, then an aggressive 16 left / 200 top to reclaim
+the margins. A real livestream screenshot (2026-07-20) showed the guides are
+wrong about live in every direction, and that the aggressive version was over on
+three edges: top by 52, left by 95, bottom by 7.
 
-    left    16   nothing is there
-    right  144   action rail — deliberately given MORE than before
-    top    200   channel row, not a feed's worth of chrome
-    bottom 384   chat input is genuinely permanent on a live stream
+    required   left 111   right 135   top 252   bottom 391
+    actual     left 112   right 136   top 252   bottom 392    (grid-rounded in)
+
+The LEFT is the one no guide mentions and the one that bit: YouTube's back arrow
+(x57-110) and crown button (x68-111) sit exactly where the layout had been pushed.
+The RIGHT is cheap because live has no Shorts-style action rail — one react
+button. The BOTTOM is set by chat MESSAGES climbing to y1529, not by the chat
+input at y1786, so it moves if chat is collapsed.
+
+51.2% of canvas, LESS than the 59.3% it replaced. That is the correct direction:
+the previous number was optimistic, not earned.
 
 Top and left are the numbers to re-check first if anything is ever clipped on
 air; the guides overlay draws exactly these, so a double-tap on a phone shows the

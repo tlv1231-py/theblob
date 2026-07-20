@@ -152,8 +152,8 @@
     return '--';
   }
 
-  // All ten fit again: the panel body is 186 logical and rows are 18, so
-  // 10 x 18 = 180. Paging existed only because a 92-tall slot could not hold
+  // All ten still fit: the panel body is 171 logical and rows are 17, so
+  // 10 x 17 = 170. Paging existed only because a 92-tall slot could not hold
   // them; the page counter below goes quiet on its own when there is one page.
   var WX_PAGE = 10;
   var wxAll = [], wxPage = 0;
@@ -261,10 +261,10 @@
   // entirely. Two frames is the smallest unit that is guaranteed to survive.
   var FRAME_MS = 42;
   // Must COVER the panel or the dissolve leaves a live strip along an edge.
-  // The panel is 230x210 logical and blocks are 12x12, so 20x18 = 240x216 —
+  // The panel is 208x195 logical and blocks are 12x12, so 18x17 = 216x204 —
   // deliberately over, and the overflow is clipped. Square blocks are the
   // mosaic reading; anything much thinner reads as scanlines instead.
-  var WIPE_COLS = 20, WIPE_ROWS = 18, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
+  var WIPE_COLS = 18, WIPE_ROWS = 17, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
 
   function Slot(el, startIdx, startCut) {
     this.el = el;
