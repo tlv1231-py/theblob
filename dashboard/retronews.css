@@ -1,0 +1,265 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   RETRONEWS — a fake 90s cable channel, vertical.
+   Reference: WeatherSTAR 4000 (weather.com/retro) + late-night infomercial.
+
+   THE ERA RULE (CLAUDE.md "RetroNews — the era rule") governs this file:
+     * hard offset shadows, NEVER blur
+     * flat saturated colour, banded gradients only
+     * cuts, not tweens — no CSS transitions anywhere (they are inert here anyway)
+     * everything inside the safe box
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* The WeatherSTAR palette: deep blue field, gold chrome, white data. */
+  --rn-blue:    #12146e;
+  --rn-blue2:   #1e2394;
+  --rn-blue3:   #0a0b46;
+  --rn-gold:    #f5c542;
+  --rn-gold2:   #a8801a;
+  --rn-white:   #ffffff;
+  --rn-cyan:    #46e0ff;
+  --rn-red:     #e02020;
+  --rn-panel:   #191c7a;
+
+  /* The safe box — 380 + 1160 + 380 = 1920, 90 + 900 + 90 = 1080. */
+  --safe-x: 90px;
+  --safe-y: 380px;
+  --safe-w: 870px;
+  --safe-h: 1160px;
+
+  /* Broadcast type. A real bold sans with a hard offset shadow is what 90s
+     character generators actually produced — a pixel font would read as a video
+     game, which is the wrong era. Text is vector, so it is EXEMPT from the
+     pixel-grid rule; only sprite art must land on a 4x multiple. */
+  --rn-face: Arial, Helvetica, 'Liberation Sans', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: #000;
+  overflow: hidden;
+  height: 100%;
+  font-family: var(--rn-face);
+}
+
+#stage-wrap {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+}
+
+/* Always exactly 1080x1920 in its own space; only --s scales it. */
+#stage {
+  position: relative;
+  width: 1080px; height: 1920px;
+  flex: none;
+  overflow: hidden;
+  transform-origin: center center;
+  transform: scale(var(--s, 0.5));
+  /* Banded, not smooth — a 90s CG could not dither a subtle gradient. */
+  background:
+    linear-gradient(180deg,
+      var(--rn-blue3) 0%,  var(--rn-blue3) 22%,
+      var(--rn-blue)  22%,  var(--rn-blue) 62%,
+      var(--rn-blue2) 62%,  var(--rn-blue2) 100%);
+}
+
+/* Reserved-band guides (?guides=1). Build aid only — inside the broadcast frame. */
+#guide-top, #guide-bot {
+  position: absolute; left: 0; right: 0; height: 380px;
+  background: repeating-linear-gradient(45deg,
+    rgba(255,0,0,0.07) 0 12px, transparent 12px 24px);
+  pointer-events: none; z-index: 90;
+}
+#guide-top { top: 0; }
+#guide-bot { bottom: 0; }
+
+#safe {
+  position: absolute;
+  left: var(--safe-x); top: var(--safe-y);
+  width: var(--safe-w); height: var(--safe-h);
+  display: flex; flex-direction: column;
+}
+
+/* ── The hard shadow, used everywhere. No blur. ─────────────────────────── */
+.rn-sh   { text-shadow: 4px 4px 0 #000; }
+.rn-sh-s { text-shadow: 3px 3px 0 #000; }
+
+/* ── 1. BRAND BAR — 870 x 88 ─────────────────────────────────────────────── */
+#rn-brand {
+  height: 88px; flex: none;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 18px;
+  background: linear-gradient(180deg, var(--rn-gold) 0%, var(--rn-gold) 60%,
+                                      var(--rn-gold2) 60%, var(--rn-gold2) 100%);
+  border: 4px solid #000;
+}
+#rn-logo {
+  font-size: 40px; font-weight: 900; letter-spacing: -0.02em;
+  color: var(--rn-blue3);
+  text-shadow: 2px 2px 0 rgba(255,255,255,0.45);
+}
+#rn-slug {
+  font-size: 20px; font-weight: 700; letter-spacing: 0.22em;
+  color: var(--rn-blue3);
+}
+#rn-clock {
+  margin-left: auto;
+  font-size: 34px; font-weight: 900; letter-spacing: 0.04em;
+  color: var(--rn-blue3);
+}
+
+/* ── 2. CONTENT AREA — 870 x 664 ─────────────────────────────────────────── */
+#rn-content {
+  height: 664px; flex: none; margin-top: 12px;
+  position: relative;
+  border: 4px solid #000;
+  background: var(--rn-panel);
+  overflow: hidden;
+}
+/* Tiles are stacked and swapped by CUT — display none/block, never a fade. */
+.rn-tile { position: absolute; inset: 0; display: none; }
+.rn-tile.on { display: block; }
+
+.rn-tile-head {
+  height: 74px;
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 20px;
+  background: linear-gradient(180deg, var(--rn-blue2) 0%, var(--rn-blue2) 55%,
+                                      var(--rn-blue) 55%, var(--rn-blue) 100%);
+  border-bottom: 4px solid #000;
+}
+.rn-tile-title {
+  font-size: 34px; font-weight: 900; letter-spacing: 0.12em;
+  color: var(--rn-gold);
+  text-shadow: 3px 3px 0 #000;
+}
+.rn-tile-sub {
+  margin-left: auto;
+  font-size: 20px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--rn-white); text-shadow: 2px 2px 0 #000;
+}
+
+/* ── National weather grid ───────────────────────────────────────────────── */
+#rn-wx-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 108px;
+  gap: 0;
+  padding: 6px;
+}
+.wx-cell {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 14px;
+  border: 2px solid rgba(0,0,0,0.55);
+}
+.wx-city {
+  flex: 1; min-width: 0;
+  font-size: 26px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--rn-white);
+  text-shadow: 3px 3px 0 #000;
+  white-space: nowrap; overflow: hidden;
+}
+.wx-temp {
+  font-size: 46px; font-weight: 900; letter-spacing: -0.02em;
+  color: var(--rn-gold);
+  text-shadow: 3px 3px 0 #000;
+}
+.wx-cond {
+  width: 168px; text-align: right;
+  font-size: 19px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--rn-cyan);
+  text-shadow: 2px 2px 0 #000;
+  white-space: nowrap; overflow: hidden;
+}
+
+/* Placeholder body for tiles that are not built yet. */
+.rn-placeholder {
+  position: absolute; left: 0; right: 0; top: 74px; bottom: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  background: repeating-linear-gradient(45deg,
+    rgba(255,255,255,0.04) 0 18px, transparent 18px 36px);
+}
+.rn-ph-label {
+  font-size: 30px; font-weight: 900; letter-spacing: 0.16em;
+  color: var(--rn-white); text-shadow: 3px 3px 0 #000;
+}
+.rn-ph-note {
+  font-size: 19px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--rn-cyan); text-shadow: 2px 2px 0 #000;
+  max-width: 620px; text-align: center; line-height: 1.5;
+}
+
+/* ── 3. HOST STRIP — 870 x 384 ───────────────────────────────────────────── */
+#rn-host {
+  height: 384px; flex: none; margin-top: 12px;
+  display: flex; gap: 16px;
+}
+
+/* PORTRAIT BOX — 288 x 360 = a 72x90 art cell at 4x.
+   4x is not a style choice: stage x 0.75 = device, so 72*4*0.75 = 216 = 72*3,
+   an exact integer scale. Any non-multiple-of-4 resamples the sprite and the
+   whole era read collapses. See CLAUDE.md rule 4. */
+#rn-portrait {
+  width: 288px; height: 360px; flex: none;
+  align-self: center;
+  border: 4px solid #000;
+  background: linear-gradient(180deg, var(--rn-blue2), var(--rn-blue3));
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+#rn-portrait .ph {
+  text-align: center;
+  font-size: 18px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--rn-cyan); text-shadow: 2px 2px 0 #000; line-height: 1.7;
+}
+#rn-portrait .ph b { display: block; font-size: 24px; color: var(--rn-white); }
+
+#rn-host-right {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+}
+#rn-nameplate {
+  height: 66px; flex: none;
+  display: flex; align-items: center; padding: 0 18px;
+  background: linear-gradient(180deg, var(--rn-gold) 0%, var(--rn-gold) 60%,
+                                      var(--rn-gold2) 60%, var(--rn-gold2) 100%);
+  border: 4px solid #000;
+  font-size: 28px; font-weight: 900; letter-spacing: 0.1em;
+  color: var(--rn-blue3);
+}
+#rn-say {
+  flex: 1; margin-top: 12px;
+  border: 4px solid #000;
+  background: var(--rn-panel);
+  padding: 18px 20px;
+  font-size: 27px; font-weight: 700; line-height: 1.45;
+  color: var(--rn-white);
+  text-shadow: 3px 3px 0 #000;
+  overflow: hidden;
+}
+
+/* ── The crawl — bottom of the safe box ──────────────────────────────────── */
+#rn-crawl {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 0;                       /* reserved; enabled when content exists */
+  overflow: hidden;
+}
+
+/* ── ON-AIR / event flash. Blink is palette-based: it toggles a class on an
+   interval, no transition, no blur. ─────────────────────────────────────── */
+#rn-alert {
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 88px;
+  display: none;
+  align-items: center; justify-content: center;
+  background: var(--rn-red);
+  border: 4px solid #000;
+  font-size: 32px; font-weight: 900; letter-spacing: 0.14em;
+  color: var(--rn-white); text-shadow: 3px 3px 0 #000;
+  z-index: 40;
+}
+#rn-alert.on   { display: flex; }
+#rn-alert.blink { background: var(--rn-gold); color: var(--rn-blue3); text-shadow: 3px 3px 0 rgba(255,255,255,0.4); }

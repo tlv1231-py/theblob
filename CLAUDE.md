@@ -327,6 +327,33 @@ Only two things actually move the number:
 - **Budget motion in frames, not milliseconds.** A 100ms effect is 2–3 frames.
   If it needs to be seen, give it 6+.
 
+### RetroNews — the era rule (binding for `?page=RetroNews`)
+
+RetroNews is a **fake 90s cable channel** (WeatherSTAR 4000 / late-night
+infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
+**Everything on that page must obey the era AND the framerate — they agree.**
+
+1. **CUTS, NOT TWEENS.** Tiles change by hard cut or a hard wipe, never a fade
+   or slide. This is both authentic (the WeatherSTAR swapped pages on a timer)
+   and the correct motion strategy for a 24fps software compositor.
+2. **Ambient motion is palette-based, not positional.** Colour cycling, blinking,
+   a slow crawl. It costs nothing and needs no framerate. Do NOT animate position
+   to create life.
+3. **Type is a real bold sans with a HARD offset shadow** — no blur, ever. 90s
+   character generators used Helvetica/Univers with a 2–4px black offset. A pixel
+   font here reads "video game", not "cable TV", and is the wrong era.
+4. **Text is vector and exempt from the pixel-grid rule. PIXEL ART IS NOT.**
+   Any sprite (the host portrait) must display at a scale where
+   `art_px × scale × 0.75` is an integer — i.e. **a multiple of 4×**. See the
+   host spec in `retronews.py`.
+5. **Saturated flat colour and banded/dithered gradients only.** No soft shadows,
+   no glow, no blur, no modern easing. The look is cheap broadcast hardware.
+6. **Everything visible lives inside the safe box** (870×1160 at 90,380). The
+   Blob stream's known cost — 8 of 14 tiles sitting behind YouTube's chrome — is
+   not to be repeated here.
+7. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
+   shared bus. See the two rules above.
+
 ---
 
 ## Pending Infrastructure Tasks
