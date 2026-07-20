@@ -152,27 +152,63 @@
     return '--';
   }
 
+  // A slot is 92 logical tall, so the body is 68 and only FIVE rows fit at a
+  // legible 13. The other five cities are not dropped — they PAGE, which is
+  // what "Local on the 8s" actually did. Shrinking to fit ten was tried and
+  // reverted once already: it put the face under the legibility floor.
+  var WX_PAGE = 5;
+  var wxAll = [], wxPage = 0;
+
+  // Writes EVERY .rn-wx-grid. The panel set exists once per slot, so a single
+  // lookup would paint whichever copy happened to be first and leave the other
+  // permanently empty — and since the two slots rarely show weather at the same
+  // time, the blank one is exactly the one you would see on air.
   function renderWx(rows) {
-    var g = $('rn-wx-grid');
-    if (!g) return;
-    g.innerHTML = '';
-    rows.forEach(function (r) {
-      var cell = document.createElement('div');
-      cell.className = 'wx-cell';
-      var city = document.createElement('div');
-      city.className = 'wx-city'; city.textContent = r.city;
-      var temp = document.createElement('div');
-      temp.className = 'wx-temp';
-      temp.textContent = (r.t == null ? '--' : Math.round(r.t)) + '°';
-      var cond = document.createElement('div');
-      cond.className = 'wx-cond'; cond.textContent = r.cond;
-      cell.appendChild(city); cell.appendChild(temp); cell.appendChild(cond);
-      g.appendChild(cell);
-    });
-    var sub = $('rn-wx-sub');
-    if (sub) sub.textContent = 'UPDATED ' + new Date().toLocaleTimeString('en-US',
+    var grids = document.querySelectorAll('.rn-wx-grid');
+    if (!grids.length) return;
+    for (var gi = 0; gi < grids.length; gi++) {
+      var g = grids[gi];
+      g.innerHTML = '';
+      rows.forEach(function (r) {
+        var cell = document.createElement('div');
+        cell.className = 'wx-cell';
+        var city = document.createElement('div');
+        city.className = 'wx-city'; city.textContent = r.city;
+        var temp = document.createElement('div');
+        temp.className = 'wx-temp';
+        temp.textContent = (r.t == null ? '--' : Math.round(r.t)) + '°';
+        var cond = document.createElement('div');
+        cond.className = 'wx-cond'; cond.textContent = r.cond;
+        cell.appendChild(city); cell.appendChild(temp); cell.appendChild(cond);
+        g.appendChild(cell);
+      });
+    }
+    var subs = document.querySelectorAll('.rn-wx-sub');
+    var stamp = 'UPDATED ' + new Date().toLocaleTimeString('en-US',
       { hour: 'numeric', minute: '2-digit' });
+    var pages = Math.max(1, Math.ceil(wxAll.length / WX_PAGE));
+    for (var si = 0; si < subs.length; si++) {
+      subs[si].textContent = pages > 1
+        ? stamp + '  ' + (wxPage + 1) + '/' + pages
+        : stamp;
+    }
   }
+
+  function paintWxPage() {
+    if (!wxAll.length) return;
+    var from = wxPage * WX_PAGE;
+    renderWx(wxAll.slice(from, from + WX_PAGE));
+  }
+
+  // Page on the same beat the tiles cut on, so the board never has two
+  // different clocks running against each other.
+  setInterval(function () {
+    if (!wxAll.length) return;
+    var pages = Math.ceil(wxAll.length / WX_PAGE);
+    if (pages < 2) return;
+    wxPage = (wxPage + 1) % pages;
+    paintWxPage();
+  }, 15000);
 
   function pollWeather() {
     var lat = CITIES.map(function (c) { return c[1]; }).join(',');
@@ -184,39 +220,36 @@
       .then(function (j) {
         // One coord returns an object, many return an array. Normalise.
         var arr = Array.isArray(j) ? j : [j];
-        renderWx(CITIES.map(function (c, i) {
+        wxAll = CITIES.map(function (c, i) {
           var cur = (arr[i] && arr[i].current) || {};
           return { city: c[0], t: cur.temperature_2m, cond: condOf(cur.weather_code) };
-        }));
+        });
+        paintWxPage();
       })
       .catch(function () { /* a blip is not a reason to blank the board */ });
   }
   pollWeather();
   setInterval(pollWeather, 10 * 60 * 1000);   // 10min — weather does not sprint
 
-  // ── Tile rotation ────────────────────────────────────────────────────────
+  // -- Tile rotation - TWO SLOTS ---------------------------------------------
   // The schedule IS the aesthetic ("Local on the 8s"). Cuts only.
+  //
+  // Two slots each run their own cycle over the same panel list and are held
+  // apart by pickNext(), so the same panel is never on screen twice. They also
+  // never dissolve simultaneously: two ~935ms dissolves firing together reads as
+  // the whole screen glitching rather than one page turning, so slot B starts
+  // half a dwell out of phase and rotate() lets only one cut run at a time.
   var order = ['wx', 'donors', 'market', 'nowplaying'];
   var dwell = 15000;
-  var idx = 0, lastCut = 0;
 
-  function showTile(id) {
-    var tiles = document.querySelectorAll('.rn-tile');
-    for (var i = 0; i < tiles.length; i++) {
-      tiles[i].classList.toggle('on', tiles[i].getAttribute('data-tile') === id);
-    }
-  }
-
-  // ── THE DISSOLVE ─────────────────────────────────────────────────────────
-  // Tiles never fade — they dissolve in chunky blocks, cover, swap behind a
+  // -- THE DISSOLVE ----------------------------------------------------------
+  // Tiles never fade - they dissolve in chunky blocks, cover, swap behind a
   // one-frame gold flash, uncover. That is the GBA's own transition vocabulary
   // (hardware MOSAIC + window wipes), and it is quantised BY CONSTRUCTION:
   // every step is a discrete cut, so there is nothing for a 24fps software
   // compositor to fail to interpolate.
   //
-  // 8 steps x 55ms each way + the flash = ~935ms, about 22 frames. CLAUDE.md's
-  // floor is 6 frames to be seen; this is comfortably a beat you watch happen.
-  // ── FRAME BUDGET — every timed visual on this page obeys it ────────────
+  // -- FRAME BUDGET - every timed visual on this page obeys it ---------------
   // ffmpeg captures at 24fps, so ONE BROADCAST FRAME IS ~42ms and nothing
   // shorter can appear on the stream at all. Worse, a duration that is not a
   // whole MULTIPLE of the frame period beats against the capture clock: the
@@ -228,76 +261,132 @@
   // a 24fps capture (measured on the host), so a 1-frame step can be dropped
   // entirely. Two frames is the smallest unit that is guaranteed to survive.
   var FRAME_MS = 42;
-  var WIPE_COLS = 18, WIPE_ROWS = 14, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
-  var blocks = [], order2 = [], wiping = false;
+  // 7 rows, not 14: a slot is 92 logical tall now, so 92/7 = ~13 against a
+  // 12-logical column keeps the blocks roughly square. Keeping 14 would have
+  // made them 6 logical tall - fine lines rather than chunks, which loses the
+  // mosaic reading the effect exists for.
+  var WIPE_COLS = 18, WIPE_ROWS = 7, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
 
-  function buildWipe() {
-    var host = $('rn-wipe');
-    if (!host) return;
+  function Slot(el, startIdx, startCut) {
+    this.el = el;
+    this.wipe = el.querySelector('.rn-wipe');
+    this.blocks = [];
+    this.shuffle = [];
+    this.wiping = false;
+    this.idx = startIdx;
+    this.lastCut = startCut;
+    this.build();
+    this.show(order[this.idx]);
+  }
+
+  Slot.prototype.build = function () {
+    if (!this.wipe) return;
     var frag = document.createDocumentFragment();
     var n = WIPE_COLS * WIPE_ROWS;
     for (var i = 0; i < n; i++) {
       var b = document.createElement('div');
       b.className = 'wipe-b';
       frag.appendChild(b);
-      blocks.push(b);
-      order2.push(i);
+      this.blocks.push(b);
+      this.shuffle.push(i);
     }
-    host.appendChild(frag);
+    this.wipe.appendChild(frag);
     // Scatter the reveal order. A raster fill reads as a wipe; a scatter reads
-    // as a DISSOLVE, which is the mosaic feel we want.
-    for (var j = order2.length - 1; j > 0; j--) {
+    // as a DISSOLVE, which is the mosaic feel we want. Each slot shuffles
+    // separately so the two never dissolve in an identical pattern.
+    for (var j = this.shuffle.length - 1; j > 0; j--) {
       var k = Math.floor(Math.random() * (j + 1));
-      var t = order2[j]; order2[j] = order2[k]; order2[k] = t;
+      var t = this.shuffle[j]; this.shuffle[j] = this.shuffle[k]; this.shuffle[k] = t;
     }
-  }
-  buildWipe();
+  };
 
-  function cutTo(id) {
-    var host = $('rn-wipe');
+  // Scoped to THIS slot's subtree. The panel set exists twice in the DOM, so a
+  // document-wide query would toggle both slots to the same tile.
+  Slot.prototype.show = function (id) {
+    var tiles = this.el.querySelectorAll('.rn-tile');
+    for (var i = 0; i < tiles.length; i++) {
+      tiles[i].classList.toggle('on', tiles[i].getAttribute('data-tile') === id);
+    }
+    this.current = id;
+  };
+
+  Slot.prototype.cutTo = function (id) {
+    var self = this;
     // No overlapping dissolves: a second one mid-flight would strand blocks
     // visible forever. Same reasoning as the Blob stream's lane arbiter.
-    if (!host || !blocks.length || wiping) { showTile(id); return; }
-    wiping = true;
-    host.classList.add('on');
-    var n = blocks.length, step = 0;
+    if (!this.wipe || !this.blocks.length || this.wiping) { this.show(id); return; }
+    this.wiping = true;
+    this.wipe.classList.add('on');
+    var n = this.blocks.length, step = 0;
 
     var cover = setInterval(function () {
       step++;
       var upto = Math.round(n * step / WIPE_STEPS);
-      for (var i = 0; i < upto; i++) blocks[order2[i]].classList.add('on');
+      for (var i = 0; i < upto; i++) self.blocks[self.shuffle[i]].classList.add('on');
       if (step < WIPE_STEPS) return;
       clearInterval(cover);
 
       // Full cover: swap the tile behind it, flash gold for one frame.
-      host.classList.add('flash');
-      showTile(id);
+      self.wipe.classList.add('flash');
+      self.show(id);
       setTimeout(function () {
-        host.classList.remove('flash');
+        self.wipe.classList.remove('flash');
         var back = WIPE_STEPS;
         var uncover = setInterval(function () {
           back--;
           var from = Math.round(n * back / WIPE_STEPS);
-          for (var i = from; i < n; i++) blocks[order2[i]].classList.remove('on');
+          for (var i = from; i < n; i++) self.blocks[self.shuffle[i]].classList.remove('on');
           if (back > 0) return;
           clearInterval(uncover);
-          host.classList.remove('on');
-          wiping = false;
+          self.wipe.classList.remove('on');
+          self.wiping = false;
         }, WIPE_MS);
-      }, WIPE_MS);            /* flash held 2 frames — see FRAME_MS */
+      }, WIPE_MS);            /* flash held 2 frames - see FRAME_MS */
     }, WIPE_MS);
+  };
+
+  var slots = [];
+  (function initSlots() {
+    var els = document.querySelectorAll('.rn-slot');
+    var now = Date.now();
+    for (var i = 0; i < els.length; i++) {
+      // Slot B starts on a different panel AND half a dwell out of phase, so
+      // the two never show the same thing and never cut together.
+      slots.push(new Slot(els[i], i % Math.max(1, order.length),
+                          now - (i * dwell / 2)));
+    }
+  })();
+
+  // The next panel this slot may show: forward from its current index, skipping
+  // whatever another slot is already showing. Without the skip, two slots over
+  // an even-length list drift into lockstep and display identical pages.
+  function pickNext(slot) {
+    for (var step = 1; step <= order.length; step++) {
+      var i = (slot.idx + step) % order.length;
+      var taken = false;
+      for (var k = 0; k < slots.length; k++) {
+        if (slots[k] !== slot && slots[k].current === order[i]) { taken = true; break; }
+      }
+      if (!taken) return i;
+    }
+    return slot.idx;                       // fewer panels than slots - hold
   }
 
   function rotate() {
-    if (!order.length || wiping) return;
+    if (!order.length) return;
     var now = Date.now();
-    if (now - lastCut < dwell) return;
-    lastCut = now;
-    idx = (idx + 1) % order.length;
-    cutTo(order[idx]);
+    // One cut at a time across the whole board: simultaneous dissolves read as
+    // the screen glitching, not as pages turning.
+    for (var k = 0; k < slots.length; k++) if (slots[k].wiping) return;
+    for (var i = 0; i < slots.length; i++) {
+      var sl = slots[i];
+      if (now - sl.lastCut < dwell) continue;
+      sl.lastCut = now;
+      sl.idx = pickNext(sl);
+      sl.cutTo(order[sl.idx]);
+      return;                              // only one per tick
+    }
   }
-  showTile(order[0]);
-  lastCut = Date.now();
   setInterval(rotate, 250);
 
   // ── Config (namespaced to THIS app) ──────────────────────────────────────
@@ -322,7 +411,17 @@
             if (Array.isArray(o) && o.length) {
               var changed = o.join(',') !== order.join(',');
               order = o;
-              if (changed) { idx = 0; showTile(order[0]); lastCut = Date.now(); }
+              if (changed) {
+                // Re-seat EVERY slot. A single global index cannot describe two
+                // independent cycles, and leaving them where they were can put
+                // both on the same panel or off the end of a shorter list.
+                var t = Date.now();
+                for (var si = 0; si < slots.length; si++) {
+                  slots[si].idx = si % order.length;
+                  slots[si].show(order[slots[si].idx]);
+                  slots[si].lastCut = t - (si * dwell / 2);
+                }
+              }
             }
           } catch (e) {}
         }
@@ -471,9 +570,9 @@
         detail: {
           app: 'RetroNews',      // which app was rendering — the beat is shared
           beats: _beats,
-          tile: order[idx],
+          tiles: slots.map(function (q) { return q.current; }).join(','),
           mood: hostMood,
-          wiping: wiping,
+          wiping: slots.some(function (q) { return q.wiping; }),
           live: !!S.live
         },
         recorded_at: new Date().toISOString()
@@ -486,10 +585,10 @@
   window._TND_RN = {
     cfg: function () { return window._TND_RN_CFG || {}; },
     beats: function () { return _beats; },
-    tile: function () { return order[idx]; },
+    tile: function () { return slots.map(function (q) { return q.current; }); },
     order: function () { return order.slice(); },
-    cut: function (id) { cutTo(id); lastCut = Date.now(); },
-    wiping: function () { return wiping; },
-    blocks: function () { return blocks.length; }
+    cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id); q.lastCut = Date.now(); } },
+    wiping: function () { return slots.map(function (q) { return q.wiping; }); },
+    blocks: function () { return slots.map(function (q) { return q.blocks.length; }); }
   };
 })();

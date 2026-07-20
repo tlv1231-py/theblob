@@ -161,10 +161,27 @@ html, body {
 #rn-clock { margin-left: auto; font-size: calc(var(--px) * 8);
             text-shadow: var(--px) var(--px) 0 var(--shade); }
 
-/* ── 2. CONTENT — 216 x 164 logical ──────────────────────────────────────── */
+/* ── 2. CONTENT — 216 x 188 logical, TWO SLOTS of 92 ─────────────────────
+   One panel at a time meant 3 of 4 were invisible at any moment while the host
+   strip held 32% of the safe area for a mostly-idle dialogue box. Two slots
+   double the visible content for 24 logical taken off the host, who is clipped
+   at the collar rather than scaled (see #rn-portrait).
+
+   The chrome lives on the SLOT, not here: each panel must read as its own
+   bevelled console tile, and a single outer bevel around both would read as one
+   panel split by a line. ───────────────────────────────────────────────────── */
 #rn-content {
-  height: calc(var(--px) * 164); flex: none;
+  height: calc(var(--px) * 188); flex: none;
   margin-top: calc(var(--px) * 4);
+  display: flex; flex-direction: column; gap: calc(var(--px) * 4);
+  /* Load-bearing: #rn-alert is absolute top:0 and must be contained HERE. The
+     slots carry the panel chrome now, and when this rule was briefly dropped
+     the alert escaped to #stage and rendered across the top of the whole
+     screen, outside the safe box entirely. */
+  position: relative;
+}
+.rn-slot {
+  height: calc(var(--px) * 92); flex: none;
   position: relative;
   background: var(--sky2);
   box-shadow:
@@ -188,16 +205,21 @@ html, body {
                  text-shadow: var(--px) var(--px) 0 var(--shade); }
 .rn-tile-sub   { margin-left: auto; font-size: calc(var(--px) * 5); color: var(--cyan); }
 
-/* ── National conditions: ONE column of 10 rows at 14 logical each ─────────
+/* ── National conditions: ONE column of 5 rows at 13 logical each ─────────
    Two columns forced a 5-logical face (15 device px, ~8px on the phone this is
    actually watched on) which is unreadable. One column at 8 logical is the same
-   character density a handheld had across its screen, and legible. */
-#rn-wx-grid {
+   character density a handheld had across its screen, and legible.
+
+   The slot is 92 logical, so the body is 68 and only 5 rows fit. The other five
+   cities are not dropped — they PAGE, which is what "Local on the 8s" actually
+   did. Keeping 10 rows here would have meant shrinking the face below the floor
+   again, and that trade was already made and reverted once. */
+.rn-wx-grid {
   position: absolute; left: 0; right: 0;
   top: calc(var(--px) * 24); bottom: 0;
   display: grid;
   grid-template-columns: 1fr;
-  grid-auto-rows: calc(var(--px) * 14);
+  grid-auto-rows: calc(var(--px) * 13);
 }
 .wx-cell {
   display: flex; align-items: center; gap: calc(var(--px) * 3);
@@ -226,7 +248,9 @@ html, body {
    Rows overflow by design and are clipped. Blocks are flat divs toggled by a
    class — no transition, no opacity ramp, no blur. Costs the compositor
    nothing. */
-#rn-wipe {
+/* Per slot — each panel dissolves independently, so one changing does not
+   freeze or blank the other. */
+.rn-wipe {
   position: absolute; inset: 0;
   display: none;
   grid-template-columns: repeat(18, calc(var(--px) * 12));
@@ -235,12 +259,12 @@ html, body {
   pointer-events: none;
   overflow: hidden;
 }
-#rn-wipe.on { display: grid; }
+.rn-wipe.on { display: grid; }
 .wipe-b { background: var(--shade); visibility: hidden; }
 .wipe-b.on { visibility: visible; }
 /* One frame of gold at full cover — the transition "sting" every GBA screen
    change had. A single frame is ~42ms; it reads as a snap, not a flash-bang. */
-#rn-wipe.flash .wipe-b.on { background: var(--gold); }
+.rn-wipe.flash .wipe-b.on { background: var(--gold); }
 
 /* Placeholder body for tiles not yet built. */
 .rn-placeholder {
@@ -256,9 +280,9 @@ html, body {
 .rn-ph-note  { font-size: calc(var(--px) * 6); line-height: 2; color: var(--cyan);
                max-width: calc(var(--px) * 170); text-align: center; }
 
-/* ── 3. HOST STRIP — 216 x 92 logical ────────────────────────────────────── */
+/* ── 3. HOST STRIP — 216 x 68 logical ────────────────────────────────────── */
 #rn-host {
-  height: calc(var(--px) * 92); flex: none;
+  height: calc(var(--px) * 68); flex: none;
   margin-top: calc(var(--px) * 4);
   display: flex; gap: calc(var(--px) * 4);
 }
@@ -266,15 +290,22 @@ html, body {
 /* PORTRAIT — 72 x 90 logical = 288 x 360 stage = 216 x 270 device.
    One art pixel == one logical pixel, so the sheet is authored at 72x90 and is
    never resampled. Recessed bevel: he sits IN the console, not on it. */
+/* CLIPPED, NOT SCALED. The strip lost 24 logical to the second content slot,
+   and the sprite cannot shrink to fit: the art is 72x90 and only whole multiples
+   keep one art pixel on one logical pixel — 3x lands at 67.5 logical, off the
+   grid the whole page is built on, and 2x is a 36x45 thumbnail. So the WINDOW
+   is 68 tall and the bust is cut at the collar (measured: neck y62-64, collar
+   starts y66), which is how an anchor is framed anyway. The sprite element
+   stays 72x90 so retronews.js's background-position maths is untouched. */
 #rn-portrait {
-  width: calc(var(--px) * 72); height: calc(var(--px) * 90);
-  flex: none; align-self: flex-start;
+  width: calc(var(--px) * 72); height: calc(var(--px) * 68);
+  flex: none; align-self: flex-start; overflow: hidden;
   background: var(--sky0);
   box-shadow:
     inset var(--px) var(--px) 0 0 var(--shade),
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--lit),
     0 0 0 var(--px) var(--shade);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
   color: var(--cyan);
 }
 /* THE HOST. One art pixel == one logical pixel: the sheet is 72x90 per cell and

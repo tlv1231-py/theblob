@@ -431,6 +431,16 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    8 logical, which is the same density AND legible.
 8. **Everything visible lives inside the safe box.** The Blob stream's known
    cost — 8 of 14 tiles sitting behind YouTube's chrome — is not repeated here.
+   **The box is already maximal — do not go hunting for more room.** Measured
+   2026-07-20: it sits within 8px (right) and 12px (bottom) of the true Shorts
+   limits, so reclaiming those is ~2% more area against real clipping risk on a
+   boundary never verified against a live stream. Density comes from the LAYOUT
+   INSIDE the box, not from growing it.
+   Current allocation (logical, safe box = 216x288, fully packed):
+   brand 24 · gap 4 · **content 188 = two 92 slots + gap 4** · gap 4 · host 68.
+   The host was cut from 92 to 68 to buy the second slot; the portrait is
+   **clipped at the collar, never scaled**, because only whole multiples keep one
+   art pixel on one logical pixel (3x = 67.5 logical, off-grid).
 9. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
    shared bus. See the two rules above.
 

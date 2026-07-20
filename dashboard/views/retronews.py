@@ -20,16 +20,27 @@ LAYOUT — arithmetic, not vibes. Everything lives in the 870x1160 safe box at
 vertical stream. The Blob stream's known cost (8 of its 14 tiles sitting behind
 that chrome) is deliberately not repeated here.
 
-    brand bar     870 x  88
-    gap                  12
-    content       870 x 664     <- the rotating tiles
-    gap                  12
-    host strip    870 x 384     <- portrait 288x360 + nameplate/dialogue
+    brand bar     864 x  96
+    gap                  16
+    content       864 x 752     <- TWO slots of 368, gap 16
+    gap                  16
+    host strip    864 x 272     <- portrait 288x272 + nameplate/dialogue
                        -----
-                        1160  ✓
+                        1152  ✓
+
+WHY TWO SLOTS. One panel at a time meant 3 of 4 were invisible at any moment,
+while the host strip held 32% of the safe area for a dialogue box that is idle
+unless a viewer just tipped. Two slots double the visible content for 96 stage px
+taken off the host. Each cycles the same list independently and pickNext() keeps
+them off the same panel; only one dissolves at a time, because two firing
+together reads as the screen glitching rather than as pages turning.
 
 HOST PORTRAIT SPEC — 288x360 is a 72x90 art cell at 4x, and the 4x is load
-bearing. Stage x 0.75 = broadcast device pixels, so 72*4*0.75 = 216 = 72*3: an
+bearing. The strip is now 272 tall, so the portrait is CLIPPED at the collar
+(measured: neck at art y62-64, collar begins y66) rather than scaled: only whole
+multiples keep one art pixel on one logical pixel, and 3x lands at 67.5 logical —
+off the grid the page is built on. The sprite element stays 72x90 so the
+background-position maths in retronews.js is untouched; #rn-portrait clips it. Stage x 0.75 = broadcast device pixels, so 72*4*0.75 = 216 = 72*3: an
 exact integer scale, no resampling. Any scale that is not a multiple of 4 filters
 the sprite and the era read collapses. 4x also survives every resolution we might
 use (1080x1920 -> 4x, 810x1440 -> 3x, 540x960 -> 2x). Sheet: 3 lid columns x 6
@@ -84,22 +95,25 @@ _STAGE_HTML = """
         <div id="rn-clock">--:--</div>
       </div>
 
-      <!-- 2. CONTENT — 870 x 664. One tile visible at a time. -->
+      <!-- 2. CONTENT — 216 x 188 logical. TWO slots, each cycling the same
+           panel set independently and never showing the same panel twice. Each
+           slot owns its own dissolve overlay so one changing does not blank the
+           other. Tile internals are CLASS-keyed, not id-keyed: the set appears
+           twice, and duplicate ids would silently bind every lookup to the
+           first slot. -->
       <div id="rn-content">
 
         <div id="rn-alert"></div>
 
-        <!-- Block-dissolve overlay. Populated once by retronews.js; every tile
-             change covers, swaps behind a gold flash, and uncovers. -->
-        <div id="rn-wipe"></div>
-
+        <div class="rn-slot" data-slot="a">
+          <div class="rn-wipe"></div>
         <!-- LIVE: national conditions, Open-Meteo, no API key. -->
-        <div class="rn-tile on" data-tile="wx">
+        <div class="rn-tile" data-tile="wx">
           <div class="rn-tile-head">
             <div class="rn-tile-title">NATIONAL CONDITIONS</div>
-            <div class="rn-tile-sub" id="rn-wx-sub">UPDATING</div>
+            <div class="rn-tile-sub rn-wx-sub">UPDATING</div>
           </div>
-          <div id="rn-wx-grid"></div>
+          <div class="rn-wx-grid"></div>
         </div>
 
         <!-- PLACEHOLDER: top donors, infomercial chrome. -->
@@ -140,6 +154,59 @@ _STAGE_HTML = """
             <div class="rn-ph-note">The music bed the stream host already mixes
               into the broadcast (normalised to -16 LUFS on the VM).</div>
           </div>
+        </div>
+        </div>
+
+        <div class="rn-slot" data-slot="b">
+          <div class="rn-wipe"></div>
+        <!-- LIVE: national conditions, Open-Meteo, no API key. -->
+        <div class="rn-tile" data-tile="wx">
+          <div class="rn-tile-head">
+            <div class="rn-tile-title">NATIONAL CONDITIONS</div>
+            <div class="rn-tile-sub rn-wx-sub">UPDATING</div>
+          </div>
+          <div class="rn-wx-grid"></div>
+        </div>
+
+        <!-- PLACEHOLDER: top donors, infomercial chrome. -->
+        <div class="rn-tile" data-tile="donors">
+          <div class="rn-tile-head">
+            <div class="rn-tile-title">TOP CONTRIBUTORS</div>
+            <div class="rn-tile-sub">THIS BROADCAST</div>
+          </div>
+          <div class="rn-placeholder">
+            <div class="rn-ph-label">PANEL RESERVED</div>
+            <div class="rn-ph-note">Top donors, styled as a late-night
+              infomercial order screen. Data already exists on the shared
+              stream_events bus.</div>
+          </div>
+        </div>
+
+        <!-- PLACEHOLDER: market crawl. -->
+        <div class="rn-tile" data-tile="market">
+          <div class="rn-tile-head">
+            <div class="rn-tile-title">MARKET WATCH</div>
+            <div class="rn-tile-sub">DELAYED</div>
+          </div>
+          <div class="rn-placeholder">
+            <div class="rn-ph-label">PANEL RESERVED</div>
+            <div class="rn-ph-note">CNBC-style ticker. Live market data already
+              lives in this database — no new source required.</div>
+          </div>
+        </div>
+
+        <!-- PLACEHOLDER: now playing (the host's music bed). -->
+        <div class="rn-tile" data-tile="nowplaying">
+          <div class="rn-tile-head">
+            <div class="rn-tile-title">NOW PLAYING</div>
+            <div class="rn-tile-sub">SMOOTH JAZZ</div>
+          </div>
+          <div class="rn-placeholder">
+            <div class="rn-ph-label">PANEL RESERVED</div>
+            <div class="rn-ph-note">The music bed the stream host already mixes
+              into the broadcast (normalised to -16 LUFS on the VM).</div>
+          </div>
+        </div>
         </div>
 
       </div>
