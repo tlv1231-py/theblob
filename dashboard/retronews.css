@@ -24,36 +24,47 @@
 :root {
   --px: 4px;                 /* ONE LOGICAL PIXEL. Everything is a multiple. */
 
-  /* ── NES CONTROLLER PALETTE ──────────────────────────────────────────────
-     The hardware, not a game running on it: light-grey ABS body, near-black
-     faceplate, the moulded mid-grey stripes, and the two reds — button red and
-     the darker silkscreen red of the wordmark and SELECT/START. Press Start 2P
-     was already NES-era type, so the font needs no change.
+  /* ── TWO-TIER PALETTE: a CALM shell holding LOUD content ─────────────────
+     Both previous palettes (GBA blue/gold, then NES grey/red) applied ONE
+     intensity to everything, and that was the actual complaint — saturation is
+     right for the weather board and the mock adverts, and wrong for the chrome
+     around them. A real channel's station furniture is understated; the weather
+     map and the infomercial are where the shouting belongs.
 
-     THE ONE THING THAT MUST NOT BE COPIED LITERALLY: on the controller, RED
-     SITS ON THE LIGHT BODY. The first attempt mapped red onto the mid-grey
-     stripes and put secondary type in mid-grey too — titles went muddy and every
-     label ("CHANNEL 4", "UPDATED", the condition column) all but vanished. Red
-     needs a DARK ground here, and secondary type has to be light grey, not mid.
+     So the split is by ROLE, not by hue:
 
-     Rows alternate sky1/sky2 and that gap is deliberately wide: at #1c1c1c
-     against #262626 the banding was invisible, which is the whole mechanism the
-     weather board uses to stay readable.
+       SHELL   brand bar, panel frames, bevels, host strip, crawl.
+               Warm charcoal, off-white type, and NO ACCENT COLOUR AT ALL.
+               If a chrome element is coloured, that is the bug.
+       CONTENT what the panels are FOR — temperatures, tile headers, ad copy,
+               the LIVE dot. Keeps saturated colour, and reads as loud precisely
+               because nothing around it competes.
 
-     REVERT: the GBA palette this replaced, in the same order —
-     #0a1030 #141c48 #1e2c68 #2c4494 #6f9ae8 #060a20 #ffc830 #c07f10 #f4f8ff
-     #46dcff #e83848 */
-  --sky0:  #0e0e0e;          /* deepest field — the faceplate */
-  --sky1:  #1a1a1a;          /* row A */
-  --sky2:  #2c2c2c;          /* panel fill / row B */
-  --sky3:  #4a4a4a;          /* raised panel — the moulded grey stripe */
-  --lit:   #b4b4ac;          /* bevel highlight — the light body grey */
-  --shade: #000000;          /* bevel shadow + outline */
-  --gold:  #e0342c;          /* BUTTON RED — the accent, on dark grounds */
-  --gold2: #8c1219;          /* silkscreen red — pressed/secondary */
-  --ink:   #ececE4;          /* type on dark — off-white body grey */
-  --cyan:  #9c9c94;          /* secondary type — light grey, NOT mid */
-  --alert: #e0342c;
+     Warm, not neutral: the greys carry a little red/yellow so the stage reads as
+     aged plastic in a room rather than a black screen. Amber is the retro-CRT
+     colour and stays the primary content accent. */
+
+  /* SHELL — quiet. */
+  --sky0:  #191714;          /* deepest field */
+  --sky1:  #211e1a;          /* row A */
+  --sky2:  #282521;          /* panel fill / row B */
+  --sky3:  #37332d;          /* raised panel */
+  --lit:   #5b554a;          /* bevel highlight (top-left) */
+  --shade: #0d0c0a;          /* bevel shadow (bottom-right) + outline */
+  --ink:   #ded7c7;          /* primary type */
+  --dim:   #8b8478;          /* secondary type — replaces chrome's use of cyan */
+
+  /* CONTENT — allowed to be loud. Used INSIDE panels, never on the shell. */
+  --gold:  #e0982c;          /* amber: temperatures, tile headers, money */
+  --gold2: #b06f18;          /* amber shadow / pressed */
+  --cyan:  #6fb0c8;          /* muted sky: conditions, secondary data */
+  --alert: #c8503c;          /* the one red — alerts, LIVE dot, adverts */
+
+  /* REVERT — GBA, in this order:
+     #0a1030 #141c48 #1e2c68 #2c4494 #6f9ae8 #060a20 #f4f8ff (ink) / #46dcff
+     (cyan) #ffc830 #c07f10 #e83848
+     NES:  #0e0e0e #1a1a1a #2c2c2c #4a4a4a #b4b4ac #000000 #ececE4 / #9c9c94
+     #e0342c #8c1219 #e0342c */
 
   /* THE SAFE BOX IS MEASURED, not derived from published guides.
      Calibrated 2026-07-20 off a real YouTube mobile livestream screenshot; see
@@ -192,9 +203,9 @@ html, body {
     0 0 0 var(--px) var(--shade);
   color: var(--ink);
 }
-#rn-logo  { font-size: calc(var(--px) * 10); color: var(--gold);
+#rn-logo  { font-size: calc(var(--px) * 10); color: var(--ink);
             text-shadow: var(--px) var(--px) 0 var(--shade); }
-#rn-slug  { font-size: calc(var(--px) * 6); color: var(--cyan); }
+#rn-slug  { font-size: calc(var(--px) * 6); color: var(--dim); }
 #rn-clock { margin-left: auto; font-size: calc(var(--px) * 8);
             text-shadow: var(--px) var(--px) 0 var(--shade); }
 
@@ -244,7 +255,7 @@ html, body {
 }
 .rn-tile-title { font-size: calc(var(--px) * 7); color: var(--gold);
                  text-shadow: var(--px) var(--px) 0 var(--shade); }
-.rn-tile-sub   { margin-left: auto; font-size: calc(var(--px) * 5); color: var(--cyan); }
+.rn-tile-sub   { margin-left: auto; font-size: calc(var(--px) * 5); color: var(--dim); }
 
 /* ── National conditions: ONE column of 5 rows at 13 logical each ─────────
    Two columns forced a 5-logical face (15 device px, ~8px on the phone this is
@@ -323,7 +334,7 @@ html, body {
 }
 .rn-ph-label { font-size: calc(var(--px) * 7); color: var(--gold);
                text-shadow: var(--px) var(--px) 0 var(--shade); }
-.rn-ph-note  { font-size: calc(var(--px) * 6); line-height: 2; color: var(--cyan);
+.rn-ph-note  { font-size: calc(var(--px) * 6); line-height: 2; color: var(--dim);
                max-width: calc(var(--px) * 170); text-align: center; }
 
 /* ── 3. HOST STRIP — 216 x 68 logical ────────────────────────────────────── */
@@ -371,13 +382,15 @@ html, body {
   height: calc(var(--px) * 16); flex: none;
   display: flex; align-items: center;
   padding: 0 calc(var(--px) * 3);
+  /* Raised SHELL, not an accent bar. This was a solid gold slab and it was one
+     of the two loudest objects on the stage despite being pure chrome. */
   background: linear-gradient(180deg,
-    var(--gold) 0%, var(--gold) 55%, var(--gold2) 55%, var(--gold2) 100%);
+    var(--sky3) 0%, var(--sky3) 55%, var(--sky2) 55%, var(--sky2) 100%);
   box-shadow:
-    inset var(--px) var(--px) 0 0 #ffe89a,
+    inset var(--px) var(--px) 0 0 var(--lit),
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--shade),
     0 0 0 var(--px) var(--shade);
-  color: var(--shade);
+  color: var(--ink);
   font-size: calc(var(--px) * 5);
 }
 #rn-say {
@@ -446,17 +459,19 @@ html, body {
   flex: none; width: calc(var(--px) * 46);
   display: flex; align-items: center; justify-content: center;
   gap: calc(var(--px) * 3);
+  /* Raised SHELL, not an accent bar. This was a solid gold slab and it was one
+     of the two loudest objects on the stage despite being pure chrome. */
   background: linear-gradient(180deg,
-    var(--gold) 0%, var(--gold) 55%, var(--gold2) 55%, var(--gold2) 100%);
+    var(--sky3) 0%, var(--sky3) 55%, var(--sky2) 55%, var(--sky2) 100%);
   box-shadow: inset calc(var(--px) * -1) 0 0 0 var(--shade);
-  color: var(--shade);
+  color: var(--ink);
   font-size: calc(var(--px) * 6);
 }
 #rn-crawl-dot {
   width: calc(var(--px) * 4); height: calc(var(--px) * 4);
   background: var(--alert); box-shadow: 0 0 0 var(--px) var(--shade);
 }
-#rn-crawl-dot.off { background: var(--gold2); }
+#rn-crawl-dot.off { background: var(--sky3); }
 
 #rn-crawl-win { flex: 1; min-width: 0; position: relative; overflow: hidden; }
 /* The track GLIDES in stage px via transform rather than stepping a character
@@ -471,10 +486,10 @@ html, body {
   color: var(--ink);
   text-shadow: var(--px) var(--px) 0 var(--shade);
 }
-.cr-sep  { color: var(--gold); margin: 0 calc(var(--px) * 5); }
-.cr-who  { color: var(--cyan); }
+.cr-sep  { color: var(--dim); margin: 0 calc(var(--px) * 5); }
+.cr-who  { color: var(--dim); }
 .cr-amt  { color: var(--gold); }
-.cr-idle { color: var(--lit); }
+.cr-idle { color: var(--dim); }
 
 
 /* ── HOST HIDDEN ───────────────────────────────────────────────────────────

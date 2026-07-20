@@ -425,10 +425,27 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    **864×1152 at (88, 376)**, which is *safer* than the raw numbers (128px right
    margin vs 90, 392 bottom vs 380). The host portrait is 72×90 logical, one art
    pixel per logical pixel, never resampled.
-5. **GBA palette and GBA panel treatment** (upscaled from DMG 2026-07-19):
-   - A **saturated 15-bit-era palette**, defined once in `retronews.css` `:root`.
-     The saturation is deliberate — the original hardware had no backlight, so
-     its games pushed brightness and chroma hard, and that is the remembered look.
+5. **TWO-TIER PALETTE — a CALM shell holding LOUD content** (revised
+   2026-07-20). Defined once in `retronews.css` `:root`. Two palettes were built
+   and rejected first — GBA blue/gold, then NES grey/red — and **both failed the
+   same way: one intensity applied to everything.** Saturation is right for the
+   weather board and the mock adverts and wrong for the chrome around them. A
+   real channel's station furniture is understated; the weather map and the
+   infomercial are where the shouting belongs. The split is by **ROLE, not hue**:
+   - **SHELL** — brand bar, panel frames, bevels, host strip, crawl. Warm
+     charcoal, off-white type, and **NO ACCENT COLOUR AT ALL. A coloured chrome
+     element is a bug.** Measured: chrome saturation 0.00–0.14.
+   - **CONTENT** — what the panels are FOR: temperatures, tile headers, ad copy,
+     the LIVE dot. Keeps saturated colour, and reads as loud *precisely because
+     nothing around it competes*. Measured: 0.45–0.80.
+   - The two loudest objects on the old stage were the **nameplate** and the
+     **crawl plate**, both solid gold slabs and both pure chrome. They are raised
+     shell now. The wordmark was gold too; one element like that sets the tone
+     for the whole stage.
+   - Greys are **warm** (a little red/yellow), so the stage reads as aged plastic
+     in a room rather than a black screen. Amber is the retro-CRT accent.
+   - Previous palettes are recorded verbatim in the `:root` comment — reverting
+     or re-trying either is one paste.
    - **EVERY panel is BEVELLED.** One logical pixel of light on the top-left, one
      of shadow on the bottom-right, plus a hard outline — four flat rectangles,
      which is how the hardware faked depth. Raised (`.bevel`) for things that sit
