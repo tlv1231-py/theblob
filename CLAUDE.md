@@ -489,8 +489,21 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
     Toggled from RetroNews HQ (`yt_overlay`, polled ~3s, live, no reload);
     `?yt=1` sets the initial state and **no row = no opinion**, so the URL param
     survives until HQ is first pressed. Defaults OFF.
-    **Still assumed:** one device, one shot, chat EXPANDED. Collapsing chat
-    almost certainly frees y1529–1786 — the next screenshot worth taking.
+    **Covered area is split HARD vs VARIABLE, and the distinction is worth
+    257px.** HARD is chrome that is always there — top row, the two left buttons,
+    the react button, and the chat INPUT (pinned to the player bottom, never goes
+    away) = top 252 · bottom 134 · left 111 · right 135. VARIABLE is the chat
+    MESSAGE feed, **y1529–1786**, present only while chat is expanded. So there
+    are two honest boxes: **ALWAYS SAFE 834x1277** and **IF CHAT COLLAPSED
+    834x1534**. Entering the variable band is a TRADE-OFF, not an error — the
+    verdict says "uses Npx of the chat band", and only breaking HARD chrome reads
+    as over. Put anything that must always read outside the band; anything that
+    can afford intermittent occlusion may use it.
+    **Still assumed:** one device, one shot, chat expanded — that collapsing chat
+    frees the whole band is inference, not measurement. The top row may also
+    auto-hide on idle, which would make it variable too; deliberately NOT
+    modelled, since inventing a second variable zone would undo the point of
+    measuring.
     **RESOLVED 2026-07-20:** the layout was moved onto the measured box and now
     reports `✓ CLEARS MEASURED CHROME` with zero collisions against every
     measured footprint. See rule 8 for the geometry.
