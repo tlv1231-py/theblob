@@ -397,6 +397,41 @@ Only two things actually move the number:
   effect time-based; anything measured in stage px divided by `--s` so it is
   identical at 1080x1920 and the broadcast's 810x1440.
 
+### RetroNews — vocabulary (settled 2026-07-20)
+
+Written down because three words had drifted apart in conversation and only one
+of them existed in the code, which is how a rename ends up meaning two things.
+
+```
+#stage              the 1080x1920 canvas
+ └ #safe            the MEASURED safe box, 832x1276 @ (112,252)
+    ├ #rn-brand         ┐
+    ├ #rn-content       │  the four PANELS
+    │   └ .rn-slot      │
+    │       └ .rn-tile  │      wx | donors | market | nowplaying
+    ├ #rn-host          │
+    └ #rn-crawl         ┘   (#rn-crawl is OUTSIDE #safe — variable band)
+```
+
+| word | means | in code |
+|---|---|---|
+| **stage** | the whole 1080x1920 canvas | `#stage` |
+| **safe box** | the measured area everything important lives in | `#safe` |
+| **panel** | one of the four foreground regions | **no identifier** — a collective noun for `#rn-brand`, `#rn-content`, `#rn-host`, `#rn-crawl` |
+| **tile** | a rotating page inside the content panel | `.rn-tile`, `data-tile="…"` |
+| **screen** | the blue-CRT palette TREATMENT applied to tiles. An **adjective, not an object** — do not call a tile "a screen" | the `--scr*` variables |
+| **slot** | the swap container between the content panel and its tiles | `.rn-slot` |
+
+**`.rn-slot` is a leftover from a two-slot experiment and is now always exactly
+one.** Keep it: a second content area is a one-line change, and the `Slot`
+machinery in `retronews.js` is already generic (rotation, dissolve and the
+duplicate guard all run through it). It is otherwise an invisible layer, which is
+why it needs an entry here.
+
+**PANEL vs TILE is the distinction that matters for palettes.** Panels are SHELL
+(`--sky*`, `--ink`, `--dim`); tiles are SCREEN (`--scr*`, `--gold`, `--cyan`).
+A content selector referencing a shell variable is a bug — see rule 5.
+
 ### RetroNews — the era rule (binding for `?page=RetroNews`)
 
 RetroNews is a **fake 90s cable channel** (WeatherSTAR 4000 / late-night
@@ -432,13 +467,15 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    weather board and the mock adverts and wrong for the chrome around them. A
    real channel's station furniture is understated; the weather map and the
    infomercial are where the shouting belongs. The split is by **ROLE, not hue**:
-   - **SHELL** — brand bar, panel frames, bevels, host strip, crawl. Sun-faded
-     **Kodachrome** warm browns, cream type, and **NO ACCENT COLOUR AT ALL. A
-     coloured chrome element is a bug.**
-     **"Quiet" is not the same as "grey", and getting that wrong cost a round.**
-     The first quiet shell was warm charcoal at ~0.17 saturation and read as
-     grimdark. Two SEPARATE levers fix it — **chroma AND light** — and the shell
-     needed both: panel fill went lum 0.019→0.052 and sat 0.17→0.42.
+   - **SHELL (the panels) — GREYTONE.** Warm charcoal, cream type, and **NO
+     ACCENT COLOUR AT ALL. A coloured panel element is a bug.**
+     This grey was tried, called grim, replaced with a lifted Kodachrome, and
+     then **deliberately restored** — because it was only grim when it was the
+     ONLY thing on screen. With blue screens set into it and (planned) colour
+     drifting behind it, grey is the correct role for furniture: the thing that
+     does not compete. **The lesson is that a shell cannot be judged alone.**
+     If it ever needs lifting again, note that chroma and light are SEPARATE
+     levers and a "warm" grey at ~0.17 saturation still reads as dead.
    - **CONTENT PANELS ARE BLUE SCREENS SET INTO THE WARM CONSOLE** — the
      `--scr*` variables, holding the ORIGINAL blue/gold/white. The shell going
      quiet never meant the content should become a tint of it: a warm plastic

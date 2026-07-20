@@ -44,20 +44,30 @@
      aged plastic in a room rather than a black screen. Amber is the retro-CRT
      colour and stays the primary content accent. */
 
-  /* SHELL — quiet, but WARM and LIFTED. Straight greys read as grim no matter
-     how "warm" the hex is: the first pass carried only ~0.14 saturation and the
-     whole stage looked dead. Two things fix that and they are separate — more
-     CHROMA, and more LIGHT. This is the second-lightest of four candidates and
-     was picked precisely because the complaint was darkness, not just greyness.
-     Sun-faded photograph rather than dim room. */
-  --sky0:  #3a2f22;          /* deepest field */
-  --sky1:  #3e3324;          /* row A — one step DOWN from the panel */
-  --sky2:  #4c3e2c;          /* panel fill / row B */
-  --sky3:  #614f38;          /* raised panel */
-  --lit:   #9b8158;          /* bevel highlight (top-left) */
-  --shade: #201810;          /* bevel shadow (bottom-right) + outline */
-  --ink:   #f8eeda;          /* primary type */
-  --dim:   #c0a884;          /* secondary type */
+  /* SHELL — GREYTONE. Deliberately neutral and quiet, because the colour is
+     coming from ELSEWHERE: the tiles carry their own palettes (per-tile, see
+     --scr* and the per-tile work below), and the backdrop is getting a slow
+     colour wipe. A shell that is itself tinted would fight both.
+
+     This is the warm charcoal that was tried before and called grim — and it was
+     grim WHEN IT WAS THE ONLY THING ON SCREEN. With blue screens set into it and
+     colour drifting behind it, grey is the correct role for furniture: it is the
+     thing that does not compete.
+
+     KNOWN CONSEQUENCE, deliberate: the backdrop is still tinted for the previous
+     LIFTED shell, so its brightest pixels (lum 0.373) now sit well ABOVE this
+     --lit (0.092). The city no longer recedes behind the panels — the panels
+     read as dark objects against a brighter city. Re-run scripts/tint_bg.py with
+     SHELL_CEIL back under --lit to restore the old relationship, or leave it if
+     the silhouette is wanted. */
+  --sky0:  #191714;          /* deepest field */
+  --sky1:  #211e1a;
+  --sky2:  #282521;          /* panel fill */
+  --sky3:  #37332d;          /* raised panel */
+  --lit:   #5b554a;          /* bevel highlight (top-left) */
+  --shade: #0d0c0a;          /* bevel shadow (bottom-right) + outline */
+  --ink:   #ded7c7;          /* primary type */
+  --dim:   #8b8478;          /* secondary type */
 
   /* CONTENT SCREENS — the panels are BLUE CRTs SET INTO the warm console.
      This is what the two-tier split was for. The shell going quiet did not mean
@@ -89,7 +99,9 @@
      #ded7c7 / #8b8478 #e0982c #b06f18 #6fb0c8 #c8503c
      SEPIA (warm but still dark): #2a2118 #3b3024 #4e402c #8a7350 #140e08
      #f2e6ce / #b39c78
-     DUSK PLUM: #241c26 #322836 #453548 #7d6483 #120c14 #ece0ee / #a892ad */
+     DUSK PLUM: #241c26 #322836 #453548 #7d6483 #120c14 #ece0ee / #a892ad
+     KODACHROME (lifted): #3a2f22 #3e3324 #4c3e2c #614f38 #9b8158 #201810
+     #f8eeda / #c0a884 */
 
   /* THE SAFE BOX IS MEASURED, not derived from published guides.
      Calibrated 2026-07-20 off a real YouTube mobile livestream screenshot; see
