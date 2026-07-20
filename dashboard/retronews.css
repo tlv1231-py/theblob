@@ -677,6 +677,7 @@ html, body {
 .ef-day {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: calc(var(--px) * 4);
   padding: calc(var(--px) * 3) 0;
   background: var(--scr2);
   box-shadow:
@@ -702,11 +703,17 @@ html, body {
   background-position: 0 0;
   image-rendering: pixelated;
 }
+/* FIXED height, never flex:1. The panel has two heights (195 with the host on
+   screen, 291 without) and flex:1 dumped the entire 96-logical difference into
+   this one row — the condition text floated in a 138-logical void with the
+   temperatures shoved to the bottom. Everything in a column is now a fixed
+   height and the column CENTRES, so leftover space splits evenly and reads as
+   deliberate at any panel height. */
 .ef-cond {
-  flex: 1; min-height: 0;
-  display: flex; align-items: center; text-align: center;
+  height: calc(var(--px) * 26); flex: none;
+  display: flex; align-items: center; justify-content: center; text-align: center;
   padding: 0 calc(var(--px) * 2);
-  font-size: calc(var(--px) * 7); line-height: 1.4;
+  font-size: calc(var(--px) * 7); line-height: 1.3;
   color: var(--scr-ink);
 }
 .ef-t {
@@ -721,3 +728,35 @@ html, body {
 .ef-lo i { color: var(--scr-ink); }
 .ef-hi b { color: var(--gold); }
 .ef-hi i { color: var(--gold); }
+
+
+/* ── EXTENDED FORECAST title card ──────────────────────────────────────────
+   Shown while the HOST is on screen, in place of the columns. Two jobs:
+
+   1. It is the fix for a real bug. The panel is 195 logical with the host up and
+      291 without, and laying the forecast out at both meant one of them was
+      wrong. Now the forecast only ever renders at the taller size, and the
+      shorter one shows a card instead — which is what a channel would put there
+      anyway while its presenter is talking over it.
+   2. It is the GBA title treatment: letters CUT in left to right, then a
+      highlight sweeps across them. Both are palette/visibility toggles, so the
+      whole thing costs the compositor nothing and has nothing to interpolate.  */
+#stage:not(.no-host) .ef-cols { display: none; }
+.ef-card { display: none; }
+#stage:not(.no-host) .ef-card {
+  display: flex; flex: 1;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: calc(var(--px) * 6);
+}
+.ef-card-line { display: flex; justify-content: center; }
+.ef-card-line b {
+  font-weight: normal;
+  font-size: calc(var(--px) * 16);
+  color: var(--gold);
+  text-shadow: calc(var(--px) * 1) calc(var(--px) * 1) 0 var(--scr-shade);
+  visibility: hidden;
+}
+.ef-card-line b.on { visibility: visible; }
+/* The sweep: one letter at a time goes white. Palette motion in its purest
+   form — a class toggle, no movement, no blur, nothing to composite. */
+.ef-card-line b.lit { color: var(--scr-ink); }

@@ -574,6 +574,31 @@
           return true;
         } catch (e) { return false; }
       },
+      // Two-tone, and the DIRECTION carries the meaning: rising to open,
+      // falling to close. That is the Pokemon menu convention — confirm goes up,
+      // cancel goes down — and it is read instantly without being learned.
+      // Stardew does the same thing an octave down with a softer envelope, which
+      // is what the triangle wave and the longer tail are borrowed from: a square
+      // here is too brittle next to a chiptune bed.
+      tone: function (f0, f1, ms, type) {
+        if (!ctx || ctx.state !== 'running') return false;
+        try {
+          var t = ctx.currentTime, dur = ms / 1000;
+          var osc = ctx.createOscillator(), g = ctx.createGain();
+          osc.type = type || 'triangle';
+          osc.frequency.setValueAtTime(f0, t);
+          // A STEPPED pitch change, not a glide. setValueAtTime twice reads as
+          // two notes, which is the era; a linear ramp reads as a swoop, which
+          // is not.
+          osc.frequency.setValueAtTime(f1, t + dur * 0.45);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.06, t + 0.006);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          osc.connect(g); g.connect(ctx.destination);
+          osc.start(t); osc.stop(t + dur + 0.02);
+          return true;
+        } catch (e) { return false; }
+      },
       state: function () { return ctx ? ctx.state : 'none'; }
     };
   })();
@@ -589,12 +614,49 @@
   // cut by the frame, so moving down hides 4px of shoulder (invisible) and opens
   // 4px above his hair (already background). Moving up would clip his hair and
   // expose a dark strip under him.
-  var bobOn = false;
-  function hostBob(on) {
+  // ── SPRITE TRANSFORM — ONE OWNER ─────────────────────────────────────────
+  // Two things move the sprite: the talking bob, and sliding into/out of the
+  // portrait window. They must compose through a single writer, or whichever
+  // fires last wins and the other silently stops working.
+  //
+  // He ENTERS AND LEAVES SEPARATELY FROM HIS FRAME. The frame is furniture and
+  // cuts; the character slides up into it and drops back out, which is how a
+  // Pokemon trainer arrives and how a Stardew portrait enters. The portrait
+  // window is already overflow:hidden, so the slide needs no mask.
+  //
+  // STEPPED, not glided: 5 discrete positions at 84ms. This is sprite animation,
+  // so the quantisation is the point rather than a limitation.
+  var ENTER_STEPS = 5;
+  var ENTER_MS = FRAME_MS * 2;
+  var bobOn = false, enterStep = ENTER_STEPS, enterT = null;
+
+  function spriteApply() {
     var sp = $('rn-host-sprite');
-    if (!sp || on === bobOn) return;
+    if (!sp) return;
+    // 90 logical x --px = the full cell height, i.e. completely below the window.
+    var hidden = (ENTER_STEPS - enterStep) / ENTER_STEPS * 90 * 4;
+    var y = hidden + (bobOn ? 4 : 0);
+    sp.style.transform = y ? 'translateY(' + y + 'px)' : '';
+  }
+  function hostBob(on) {
+    if (on === bobOn) return;
     bobOn = on;
-    sp.style.transform = on ? 'translateY(4px)' : '';
+    spriteApply();
+  }
+  function spriteEnter(inward) {
+    clearInterval(enterT);
+    var t0 = Date.now();
+    var from = enterStep;
+    var to = inward ? ENTER_STEPS : 0;
+    enterT = setInterval(function () {
+      // TIME-BASED, so a stalled tick lands on the right step rather than
+      // sliding slower on the broadcast than in preview.
+      var k = Math.floor((Date.now() - t0) / ENTER_MS);
+      var next = from + (to > from ? k : -k);
+      next = to > from ? Math.min(to, next) : Math.max(to, next);
+      if (next !== enterStep) { enterStep = next; spriteApply(); }
+      if (enterStep === to) clearInterval(enterT);
+    }, FRAME_MS);
   }
 
   // ── GEN-1 DIALOGUE BOX ───────────────────────────────────────────────────
@@ -609,6 +671,10 @@
   // Smug while it opens, neutral for the delivery, smug again on the last
   // character. Constants because they are CHOICES, not facts — per-tile or
   // per-line arcs are a small change from here.
+  // Box sounds. Up to open, down to close.
+  var SFX_OPEN  = [660, 990, 90];
+  var SFX_CLOSE = [880, 587, 110];
+
   var SPEECH_MOOD = 'SMUG';       // the bookends
   var SPEECH_MID  = 'NEUTRAL';    // the delivery
   var sayMid = SPEECH_MID;        // overridden per utterance by viewer events
@@ -687,6 +753,7 @@
     // Held past the whole utterance: open + typing + the read, so nothing
     // reverts him to NEUTRAL mid-sentence.
     setHostMood(SPEECH_MOOD, SAY_STEPS * SAY_STEP_MS + sayFull.length * CHAR_MS + 4000);
+    VOICE.tone(SFX_OPEN[0], SFX_OPEN[1], SFX_OPEN[2]);
     sayPhase = 'open'; sayStep = 0; sayApplyStep();
     sayT0 = Date.now();
     sayTimer = setInterval(sayTick, FRAME_MS);
@@ -749,6 +816,7 @@
     sayPhase = 'close'; sayT0 = Date.now();
     hostBob(false);
     setTalk(false);
+    VOICE.tone(SFX_CLOSE[0], SFX_CLOSE[1], SFX_CLOSE[2]);
     sayTimer = setInterval(function () {
       var st = SAY_STEPS - Math.floor((Date.now() - sayT0) / SAY_STEP_MS);
       sayStep = Math.max(0, st); sayApplyStep();
@@ -797,6 +865,7 @@
     clearTimeout(introT);
     if (!hostMaster) { hostShow(false); return; }
     hostShow(true);
+    spriteEnter(true);          // frame cuts in, character climbs into it
 
     // Do NOT talk over a viewer. pollEvents locks the say box for 12s when
     // someone tips, and a thank-you outranks a programming link every time.
@@ -811,10 +880,13 @@
       // Box leaves BEFORE he does, so the beat reads as him finishing a line and
       // then stepping aside rather than both vanishing at once.
       sayClose();
+      // Box, then character, then frame — in that order, so he is seen to leave
+      // rather than being deleted along with the furniture.
+      setTimeout(function () { spriteEnter(false); }, SAY_STEPS * SAY_STEP_MS);
       setTimeout(function () {
         hostShow(false);
         if (say && say._introOwned) { say._introOwned = false; }
-      }, SAY_STEPS * SAY_STEP_MS);
+      }, SAY_STEPS * SAY_STEP_MS + ENTER_STEPS * ENTER_MS);
     }, INTRO_MS);
   }
 
@@ -916,6 +988,61 @@
     }
   }
   setInterval(cfTick, FRAME_MS);
+
+
+  // ── EXTENDED FORECAST title card ─────────────────────────────────────────
+  // Runs while the host is on screen. Letters cut in left to right, then a
+  // highlight sweeps across them forever. Both are class toggles.
+  var EF_TITLE = ['EXTENDED', 'FORECAST'];
+  var EF_IN_MS = FRAME_MS * 2;      // 84ms per letter arriving
+  var EF_SWEEP = FRAME_MS * 3;      // 126ms per letter of the sweep
+  var efBuilt = false, efT0 = 0;
+
+  function efBuildCard() {
+    var host = $('ef-card');
+    if (!host || efBuilt) return;
+    EF_TITLE.forEach(function (word) {
+      var line = document.createElement('div');
+      line.className = 'ef-card-line';
+      for (var i = 0; i < word.length; i++) {
+        var b = document.createElement('b');
+        b.textContent = word.charAt(i);
+        line.appendChild(b);
+      }
+      host.appendChild(line);
+    });
+    efBuilt = true;
+  }
+
+  function efCardTick() {
+    var host = $('ef-card');
+    if (!host) return;
+    // Only runs while it is actually on screen — no point animating a card
+    // behind display:none, and this page already pays for a busy compositor.
+    var stg = $('stage');
+    if (!stg || stg.classList.contains('no-host')) { efT0 = 0; return; }
+    efBuildCard();
+    if (!efT0) efT0 = Date.now();
+
+    var letters = host.querySelectorAll('b');
+    var since = Date.now() - efT0;
+    var arrived = Math.floor(since / EF_IN_MS);
+    var total = letters.length;
+    // Sweep starts once every letter is in, and repeats with a gap so it reads
+    // as a pass rather than a strobe.
+    var sweepAt = -1;
+    if (arrived >= total) {
+      var cycle = total + 6;
+      sweepAt = Math.floor((since - total * EF_IN_MS) / EF_SWEEP) % cycle;
+    }
+    for (var i = 0; i < total; i++) {
+      var on = i < arrived;
+      if (letters[i].classList.contains('on') !== on) letters[i].classList.toggle('on', on);
+      var lit = (i === sweepAt);
+      if (letters[i].classList.contains('lit') !== lit) letters[i].classList.toggle('lit', lit);
+    }
+  }
+  setInterval(efCardTick, FRAME_MS);
 
   // ── Config (namespaced to THIS app) ──────────────────────────────────────
   // strategy_params' PK is (strategy, param), so 'stream:retronews' is a free
@@ -1336,6 +1463,7 @@
     // without waiting out a 5s intro to see it once.
     sayClose: function () { sayClose(); },
     voice: function () { return VOICE.state(); },
+    enter: function () { return enterStep; },
     blip: function () { return VOICE.blip(); },
     repaintWx: function () { wxPage = 0; paintWxPage(); },
     cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id, hostIntro); q.lastCut = Date.now(); } },

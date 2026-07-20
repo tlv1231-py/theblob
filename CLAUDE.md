@@ -698,6 +698,15 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
     Each pair carries ONE idea: rays pulse, drops fall a row, and STORM's second
     cel lights the whole cloud so the bolt illuminates it. **All three icons run
     off one shared clock** — three sprites swapping out of phase reads as noise.
+    **THE COLUMNS ARE HIDDEN WHILE THE HOST IS ON SCREEN**, replaced by an
+    animated title card (`.ef-card`, letters cutting in then a highlight
+    sweeping). That is not decoration — it is the fix for a real bug. The panel
+    is 195 logical with the host up and 291 without, `.ef-cond` was `flex:1`, and
+    the entire 96-logical difference landed in the condition row: the text
+    floated in a 138-logical void with the temperatures shoved to the bottom.
+    Now the forecast only ever lays out at ONE height, and every element in a
+    column has a FIXED height with the column centred, so leftover space splits
+    evenly and cannot balloon again.
     **Columns CUT in left to right** (168ms apart) and each temperature counts up
     once its column lands. Cuts and integer steps, so nothing interpolates.
     Layout budget of the 208x171 body: city plate 20 · gap 4 · columns 147, each

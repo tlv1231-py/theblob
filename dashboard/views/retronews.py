@@ -150,6 +150,9 @@ _STAGE_HTML = """
           </div>
           <div class="ef">
             <div class="ef-city" id="cf-city">- - -</div>
+            <!-- Shown INSTEAD of the columns while the host is on screen. The
+                 forecast then only ever lays out at one panel height. -->
+            <div class="ef-card" id="ef-card"></div>
             <div class="ef-cols">
             <div class="ef-day" data-col="0">
               <div class="ef-name">- - -</div>
