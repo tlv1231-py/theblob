@@ -192,6 +192,15 @@ _STAGE_HTML = """
       </div>
 
     </div>
+
+      <!-- 4. CRAWL — in the VARIABLE band, OUTSIDE #safe.
+           Deliberately not inside the always-safe box: this is the one surface
+           allowed to be occluded, because when chat covers it chat is showing
+           the same events. See retronews.css. -->
+    <div id="rn-crawl">
+      <div id="rn-crawl-plate"><span id="rn-crawl-dot"></span>LIVE</div>
+      <div id="rn-crawl-win"><div id="rn-crawl-track"></div></div>
+    </div>
   </div>
 </div>
 """

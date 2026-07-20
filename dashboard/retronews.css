@@ -383,3 +383,67 @@ html, body {
 }
 #rn-alert.on { display: flex; }
 #rn-alert.blink { background: var(--gold); color: var(--shade); text-shadow: none; }
+
+
+/* ── THE CRAWL — lives in the VARIABLE band ─────────────────────────────────
+   The one thing whose occlusion is SELF-CANCELLING: when YouTube's chat covers
+   it, YouTube's chat is showing the same events. Nothing is lost, which is what
+   makes it the right tenant for space we do not reliably own.
+
+   Sits at the TOP of the band (y1532) on purpose. Chat fills from the bottom
+   upward, so the top is the part that is free most often — and the 142px left
+   bare below is not waste, it is somewhere for chat to land that costs us
+   nothing.
+
+   Outside #safe deliberately: #safe is the ALWAYS-safe box and nothing that must
+   always read may live here. */
+#rn-crawl {
+  position: absolute;
+  left: var(--safe-x);
+  top: 1532px;
+  width: var(--safe-w);
+  height: calc(var(--px) * 28);
+  display: flex; align-items: stretch;
+  background: var(--sky1);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 var(--lit),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--shade),
+    0 0 0 var(--px) var(--shade);
+  overflow: hidden;
+  z-index: 5;
+}
+/* Fixed plate. The dot BLINKS — palette-based ambient motion, which costs the
+   compositor nothing and needs no framerate (era rule 2). */
+#rn-crawl-plate {
+  flex: none; width: calc(var(--px) * 46);
+  display: flex; align-items: center; justify-content: center;
+  gap: calc(var(--px) * 3);
+  background: linear-gradient(180deg,
+    var(--gold) 0%, var(--gold) 55%, var(--gold2) 55%, var(--gold2) 100%);
+  box-shadow: inset calc(var(--px) * -1) 0 0 0 var(--shade);
+  color: var(--shade);
+  font-size: calc(var(--px) * 6);
+}
+#rn-crawl-dot {
+  width: calc(var(--px) * 4); height: calc(var(--px) * 4);
+  background: var(--alert); box-shadow: 0 0 0 var(--px) var(--shade);
+}
+#rn-crawl-dot.off { background: var(--gold2); }
+
+#rn-crawl-win { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+/* The track GLIDES in stage px via transform rather than stepping a character
+   cell at a time. CLAUDE.md: the ART steps, the POSITION glides — a coarse
+   position grid reads as choppy at ANY framerate, which is a separate axis from
+   fps. A 32px character-cell jump would judder badly; 4px does not. */
+#rn-crawl-track {
+  position: absolute; top: 0; left: 0; height: 100%;
+  display: flex; align-items: center;
+  white-space: nowrap;
+  font-size: calc(var(--px) * 8);
+  color: var(--ink);
+  text-shadow: var(--px) var(--px) 0 var(--shade);
+}
+.cr-sep  { color: var(--gold); margin: 0 calc(var(--px) * 5); }
+.cr-who  { color: var(--cyan); }
+.cr-amt  { color: var(--gold); }
+.cr-idle { color: var(--lit); }

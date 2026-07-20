@@ -516,6 +516,116 @@
     set: setHostMood
   };
 
+
+  // ── THE CRAWL ────────────────────────────────────────────────────────────
+  // Lives in the VARIABLE band, and is the only surface allowed to: when chat
+  // covers it, chat is showing the same events, so the occlusion cancels out.
+  //
+  // Motion is a GLIDE in stage px, not a step per character cell. CLAUDE.md is
+  // explicit that a coarse position grid reads as choppy at any framerate — the
+  // ART steps, the POSITION glides. 5 stage px/frame is ~119px/s (~3.7 chars/s
+  // at the 8-logical face) — a readable chyron pace. transform on the element,
+  // capture-safe, driven by setInterval because CSS animation is inert here.
+  //
+  // SPEED AND CONTENT LENGTH ARE ONE DECISION, not two. New content is applied
+  // at the WRAP (rebuilding mid-scroll visibly jumps the line), so the loop time
+  // IS the worst-case latency for a tip reaching the crawl. The first version
+  // ran 4px/frame over all four idents: a 7515px track, a 79-SECOND loop, and
+  // therefore up to 79s before a donation appeared. Fixed by carrying ONE ident
+  // per build and capping events, not by dropping the wrap-sync.
+  var CRAWL_PX = 5;
+  var CRAWL_EVENTS = 4;
+  var crawlTrack = $('rn-crawl-track');
+  var crawlX = 0, crawlHalf = 0, crawlPending = null, crawlKey = '';
+
+  // Station idents, so the crawl is never empty on a quiet stream. Same job as
+  // the Blob stream's AFK lines: silence should read as programming, not death.
+  var IDENTS = [
+    'RETRONEWS &#9670; CHANNEL 4 &#9670; BROADCASTING 24 HOURS A DAY',
+    'NATIONAL CONDITIONS UPDATED CONTINUOUSLY FROM OUR WEATHER CENTER',
+    'YOU ARE WATCHING RETRONEWS &#9670; THANK YOU FOR STAYING WITH US',
+    'STAY TUNED FOR MARKET WATCH, TOP CONTRIBUTORS AND MORE'
+  ];
+
+  function esc(t) {
+    return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function evText(row) {
+    var p = row.payload || {};
+    var who = '<span class="cr-who">' + esc((p.from || 'SOMEONE').toUpperCase()) + '</span>';
+    var t = (row.event_type || '').toLowerCase();
+    if (p.amount != null) {
+      return who + ' TIPPED <span class="cr-amt">$'
+             + Number(p.amount).toFixed(2) + '</span>';
+    }
+    if (t.indexOf('sub') === 0) return who + ' SUBSCRIBED';
+    if (t.indexOf('follow') === 0) return who + ' FOLLOWED';
+    if (t.indexOf('raid') === 0) {
+      return who + ' RAIDED WITH ' + esc(p.viewers || '?') + ' VIEWERS';
+    }
+    if (p.text) return who + ': ' + esc(String(p.text).toUpperCase());
+    return who + ' &#9670; ' + esc(t.toUpperCase());
+  }
+
+  function buildCrawl(items) {
+    if (!crawlTrack) return;
+    var SEP = '<span class="cr-sep">&#9670;</span>';
+    var one = items.join(SEP);
+    // Doubled so the wrap is seamless: when the first copy has fully scrolled
+    // past, resetting by exactly its width lands on the identical frame.
+    crawlTrack.innerHTML = '<span>' + one + SEP + '</span><span>' + one + SEP + '</span>';
+    crawlHalf = crawlTrack.firstChild.getBoundingClientRect().width /
+                (parseFloat(getComputedStyle(document.documentElement)
+                  .getPropertyValue('--s')) || 1);
+    crawlX = 0;
+  }
+
+  function crawlTick() {
+    if (!crawlTrack || !crawlHalf) return;
+    crawlX -= CRAWL_PX;
+    if (-crawlX >= crawlHalf) {
+      crawlX += crawlHalf;
+      // Content changes are applied HERE, at the wrap, not the moment they
+      // arrive. Rebuilding mid-scroll resets the transform and the whole line
+      // visibly jumps; at the wrap the seam is already invisible.
+      if (crawlPending) { buildCrawl(crawlPending); crawlPending = null; return; }
+      if (!crawlKey) { idleCrawl(); return; }   // still idle — show the next ident
+    }
+    crawlTrack.style.transform = 'translateX(' + crawlX + 'px)';
+  }
+  // Idle: ONE ident per loop, rotating. Keeps the quiet-stream loop near 17s
+  // instead of 79, so the channel identifies itself often rather than rarely.
+  var identI = 0;
+  function idleCrawl() {
+    buildCrawl(['<span class="cr-idle">' + IDENTS[identI % IDENTS.length] + '</span>']);
+    identI++;
+  }
+  idleCrawl();
+  setInterval(crawlTick, FRAME_MS);
+
+  // Blinking dot — palette motion, one class toggle, zero compositor cost.
+  var crawlDot = $('rn-crawl-dot'), dotOn = true;
+  setInterval(function () {
+    dotOn = !dotOn;
+    if (crawlDot) crawlDot.classList.toggle('off', !dotOn);
+  }, 700);
+
+  function setCrawlEvents(rows) {
+    var items = [];
+    for (var i = 0; i < rows.length && items.length < CRAWL_EVENTS; i++) {
+      items.push(evText(rows[i]));
+    }
+    // Exactly ONE ident, so a busy stream still says what channel it is without
+    // tripling the loop time. Four idents was the whole 79-second problem.
+    items.push('<span class="cr-idle">' + IDENTS[Math.floor(Math.random() * IDENTS.length)]
+               + '</span>');
+    var key = items.join('|');
+    if (key === crawlKey) return;      // nothing changed; do not disturb the scroll
+    crawlKey = key;
+    if (!crawlHalf) buildCrawl(items); else crawlPending = items;
+  }
+
   // ── Viewer events (the SHARED bus) ───────────────────────────────────────
   // streamlabs.py / chat.py have no idea this page exists; they just write
   // stream_events and whatever is rendering reacts. A tip therefore works here
@@ -530,6 +640,7 @@
       .then(function (r) { return r.json(); })
       .then(function (rows) {
         if (!Array.isArray(rows) || !rows.length) return;
+        setCrawlEvents(rows);          // the crawl shows the whole recent list
         var top = rows[0];
         if (seenTs === top.created_at) return;
         var first = seenTs === null;
