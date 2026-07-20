@@ -365,9 +365,18 @@ html, body {
 .rn-wipe.on { display: grid; }
 .wipe-b { background: var(--scr-shade); visibility: hidden; }
 .wipe-b.on { visibility: visible; }
-/* One frame of gold at full cover — the transition "sting" every GBA screen
-   change had. A single frame is ~42ms; it reads as a snap, not a flash-bang. */
-.rn-wipe.flash .wipe-b.on { background: var(--gold); }
+/* The transition "sting" at full cover — a PULSE, not a colour.
+   It was --gold, and it outgrew its own justification: the comment here used to
+   say "a single frame, reads as a snap, not a flash-bang", but it is held two
+   frames (84ms) and the panel has roughly doubled since, to 291 logical with the
+   host hidden. Measured, that was 832x1164 stage — 46.7% OF THE CANVAS — going
+   from rgb(6,10,32) to rgb(255,200,48) and back: a x174 luminance jump across
+   half the screen, twice per tile change. It read as a fullscreen yellow flash
+   because that is what it was.
+   Now it brightens to the screen's own raised blue, so the sting survives as the
+   panel pulsing rather than as a colour arriving from nowhere. Same duration,
+   same 2-frame floor — only the amplitude changed. */
+.rn-wipe.flash .wipe-b.on { background: var(--scr3); }
 
 /* Placeholder body for tiles not yet built. */
 .rn-placeholder {

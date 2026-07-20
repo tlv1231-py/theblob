@@ -566,6 +566,19 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    exceed `dwell`. Fill uses `ceil()`, not `floor()`: with `floor()` the final pip
    arrives only at `frac === 1`, a single frame, and the green is never seen.
 
+   **THE STING IS A PULSE, NOT A COLOUR.** The full-cover flash was `--gold`,
+   justified in a comment as "a single frame, reads as a snap, not a
+   flash-bang" — and it outgrew that: it is held TWO frames (84ms), and the
+   panel roughly doubled to 291 logical once the host became hideable. Measured,
+   that was **832x1164 stage — 46.7% of the canvas** — jumping rgb(6,10,32) to
+   rgb(255,200,48) and back, a **x174 luminance swing across half the screen,
+   twice per tile change**. It read as a fullscreen yellow flash because that is
+   what it was. It now brightens to `--scr3`, the screen's own raised blue: same
+   duration, same 2-frame floor, amplitude cut 9x (x174 → x19), so the sting
+   survives as the panel pulsing rather than a colour arriving from nowhere.
+   **Any full-cover effect needs re-checking whenever the panel resizes** — area
+   is half the perceived intensity and it is not in the constant.
+
 7. **Tile changes use the DISSOLVE, never a fade** (`cutTo()` in
    `retronews.js`): a chunky block dissolve covers the panel in 8 discrete
    steps, the tile is swapped at full cover behind a one-frame gold flash, then
