@@ -1,26 +1,32 @@
 #!/usr/bin/env python3
-"""Build the RetroNews host sheet from ONE prepared 72x90 portrait.
+"""Build the RetroNews host sheet from per-mood 72x90 portraits.
 
-The base art is the approved concept, downscaled to spec by prep_art.py. This
-DERIVES the other cells from it rather than regenerating anything, which is the
-only way registration survives: the skull, hair, headset and shirt are byte-
-identical in every cell because they are literally the same pixels. Regenerate
-per expression and a 1px drift becomes a visible 3px twitch at device scale
-every time his mood changes.
-
-    python scripts/build_host_sheet.py base.png dashboard/retronews_host.png
+    python scripts/build_host_sheet.py dashboard/retronews_host.png \
+        NEUTRAL=art/neutral.png HAPPY=art/happy.png ...
 
 Sheet: 3 lid columns x 6 mood rows of 72x90 = 216x540, indexed by retronews.js
-as column = eyelid, row = mood.
+as column = eyelid, row = mood. Row order is fixed by MOOD_ROW in retronews.js.
 
-WHAT IS AND IS NOT DERIVED
-The BLINK is derived honestly — the eye band is found by scanning for the row
-with the most near-white sclera pixels, then lids are closed by pulling skin
-down over it and stamping a lash line. That is real animation.
-Mood rows currently reuse the neutral face: the sheet is structurally complete
-and the mood system works, but only NEUTRAL is truly drawn. Hand-editing eyes
-and mouth on the base is what fills the rest in, and it must be done ON THE BASE
-so registration is preserved.
+REGISTRATION IS THE WHOLE GAME.
+Each mood is a separate image, so the skull/hair/headset/shirt are NOT
+automatically identical the way they were when every cell came from one base.
+They must be EDITS of the same portrait, and they still land a few source pixels
+off — measured -1..-2 x, +2..+3 y across all four variants, i.e. a systematic
+reframe rather than per-image wobble. That offset is corrected at CROP time in
+prep_art.py (before the downscale), which is the only place sub-output-pixel
+precision exists: once you are at 72x90 a 1px shift is 3 device pixels and there
+is nothing left to align with. Feed this script art that is already aligned.
+
+WHAT IS DERIVED, AND WHAT REFUSES TO BE
+The BLINK is derived per mood: the eye band is found by scanning for sclera-
+bright pixels, then lids close per COLUMN (a bounding box would swallow the nose
+bridge and read as a band across his face).
+Moods whose eyes are ALREADY shut have no sclera to find — HAPPY is squeezed
+into arcs, SLEEPY is closed outright. For those, blink derivation is SKIPPED and
+all three lid columns hold the same cell. That is not a fallback, it is correct:
+you do not blink with your eyes already closed.
+SLEEPY itself is derived from NEUTRAL by closing the lids fully, rather than
+generated. Closed eyes at this size ARE the whole expression.
 """
 from __future__ import annotations
 
@@ -29,8 +35,11 @@ from collections import Counter
 from PIL import Image
 
 W, H = 72, 90
-MOODS = 6
 LIDS = 3
+# Must match MOOD_ROW in dashboard/retronews.js.
+ROWS = ["NEUTRAL", "HAPPY", "SURPRISED", "SMUG", "WORRIED", "SLEEPY"]
+# Too few eye columns to trust the scan => eyes are already closed.
+MIN_EYE_COLS = 8
 
 
 def dominant_skin(img: Image.Image) -> tuple[int, int, int, int]:
@@ -45,10 +54,15 @@ def dominant_skin(img: Image.Image) -> tuple[int, int, int, int]:
     return c.most_common(1)[0][0] if c else (240, 175, 110, 255)
 
 
-def find_eye_band(img: Image.Image) -> tuple[int, int, int, int]:
+def find_eye_band(img: Image.Image) -> tuple[int, int, int, int] | None:
     """Row range + x extent of the eyes, found by counting sclera-bright pixels
     in the upper-middle of the face rather than by hardcoding coordinates —
-    hardcoding breaks the moment the art is re-cropped."""
+    hardcoding breaks the moment the art is re-cropped.
+
+    Returns None when the face has NO sclera at all. That is not an error case
+    to paper over — it is how a shut-eyed mood identifies itself, and HAPPY hit
+    it immediately (its eyes are lash arcs, no white anywhere).
+    """
     px = img.load()
     rows = []
     for y in range(int(H * 0.28), int(H * 0.60)):
@@ -60,9 +74,18 @@ def find_eye_band(img: Image.Image) -> tuple[int, int, int, int]:
         rows.append((n, y, xs))
     rows.sort(reverse=True)
     best = rows[0]
-    ys = sorted(y for n, y, _ in rows[:5] if n >= max(2, best[0] // 3))
-    x0 = min(best[2]) if best[2] else int(W * 0.25)
-    x1 = max(best[2]) if best[2] else int(W * 0.75)
+    if best[0] == 0:
+        return None
+    keep = [(n, y, xs) for n, y, xs in rows[:5] if n >= max(2, best[0] // 3)]
+    ys = sorted(y for _, y, _ in keep)
+    # x extent must come from EVERY kept row, not just the brightest one. Taking
+    # it from `best` alone gave the width of the eye at its widest SINGLE line,
+    # so the tapering outer corners fell outside the mask and kept their sclera:
+    # the "fully shut" lid left slivers of eye-white behind, and derived-SLEEPY
+    # reported 8 still-open columns, which is what exposed this.
+    xs_all = [x for _, _, xs in keep for x in xs]
+    x0 = min(xs_all) if xs_all else int(W * 0.25)
+    x1 = max(xs_all) if xs_all else int(W * 0.75)
     return min(ys), max(ys), x0, x1
 
 
@@ -76,6 +99,13 @@ def eye_mask(base: Image.Image, y0: int, y1: int, x0: int, x1: int):
     which is also what real eyelids do.
     """
     px = base.load()
+
+    def dark(y: int, x: int) -> bool:
+        if not (0 <= y < H):
+            return False
+        r, g, b, a = px[x, y]
+        return bool(a) and r < 110 and g < 110 and b < 140
+
     cols = {}
     for x in range(x0, x1 + 1):
         ys = []
@@ -86,62 +116,173 @@ def eye_mask(base: Image.Image, y0: int, y1: int, x0: int, x1: int):
             if not a:
                 continue
             bright = r > 205 and g > 205 and b > 195          # sclera
-            dark = r < 90 and g < 90 and b < 120              # pupil / lash
-            if bright or dark:
+            if bright or dark(y, x):
                 ys.append(y)
-        if len(ys) >= 2:
-            # Dilate 1px. The eye KEYLINE sits just outside the sclera/pupil the
-            # scan detects, so without this a shut lid leaves an outline ring
-            # behind and reads as "eyes with rings" rather than closed.
-            cols[x] = (max(0, min(ys) - 1), min(H - 1, max(ys) + 1))
+        if len(ys) < 2:
+            continue
+        # GROW through the eye KEYLINE instead of dilating a fixed amount.
+        # A fixed 1px dilation was not enough: the dark outline is 2-3px thick
+        # at this scale and sits outside the sclera rows the band scan finds, so
+        # the lid filled the white and left the ring — reading as a blank
+        # staring oval, which is far creepier than an open eye. Growing while
+        # pixels stay dark swallows the whole outline and stops at cheek skin,
+        # so it cannot run up into the EYEBROW (there is a skin gap between).
+        top, bot = min(ys), max(ys)
+        while dark(top - 1, x):
+            top -= 1
+        while dark(bot + 1, x):
+            bot += 1
+        cols[x] = (max(0, top), min(H - 1, bot))
+    return cols
+
+
+def eye_region(base: Image.Image, y0: int, y1: int, x0: int, x1: int, skin):
+    """Per-column extent of the WHOLE eye blob, flood-filled from the sclera.
+
+    Replaces a per-column scan of the sclera's own columns, which could not
+    close the eye: the keyline is a RING, so its left and right arcs live in
+    columns that contain no sclera and no pupil at all. Those columns were never
+    in the mask, the lid filled everything except them, and the result was an
+    empty socket outline — visibly worse than leaving the eye open.
+
+    Flooding over non-skin pixels from the sclera follows the ring because the
+    ring touches what it encloses. The upward bound is y0-3, which stops it
+    reaching the EYEBROW: brow and eye are separated by a row of cheek skin, but
+    they nearly touch at the outer corner and a leak there would erase his brows.
+    """
+    px = base.load()
+
+    def nonskin(x: int, y: int) -> bool:
+        p = px[x, y]
+        return bool(p[3]) and (abs(p[0] - skin[0]) + abs(p[1] - skin[1])
+                               + abs(p[2] - skin[2])) > 60
+
+    ylo, yhi = max(0, y0 - 3), min(H - 1, y1 + 5)
+    xlo, xhi = max(0, x0 - 3), min(W - 1, x1 + 3)
+    stack = [(x, y) for x in range(xlo, xhi + 1) for y in range(ylo, yhi + 1)
+             if px[x, y][3] and px[x, y][0] > 205 and px[x, y][1] > 205
+             and px[x, y][2] > 195]
+    seen = set(stack)
+    while stack:
+        x, y = stack.pop()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if (xlo <= nx <= xhi and ylo <= ny <= yhi
+                    and (nx, ny) not in seen and nonskin(nx, ny)):
+                seen.add((nx, ny)); stack.append((nx, ny))
+
+    cols: dict[int, tuple[int, int]] = {}
+    for x, y in seen:
+        a, b = cols.get(x, (y, y))
+        cols[x] = (min(a, y), max(b, y))
     return cols
 
 
 def close_eyes(base: Image.Image, amount: float, skin, lash) -> Image.Image:
     """amount 0 = open, ~0.55 = half, 1 = shut. Closes each eye per column."""
     img = base.copy()
-    if amount <= 0:
-        return img
-    y0, y1, x0, x1 = find_eye_band(base)
-    cols = eye_mask(base, y0, y1, x0, x1)
+    band = find_eye_band(base)
+    if amount <= 0 or band is None:
+        return img                      # no open eye to close
+    y0, y1, x0, x1 = band
+    cols = eye_region(base, y0, y1, x0, x1, skin[:3])
     px = img.load()
     for x, (ey0, ey1) in cols.items():
         h = ey1 - ey0 + 1
-        cover = max(1, int(round(h * amount)))
-        for y in range(ey0, ey0 + cover):
-            px[x, y] = skin
-        px[x, min(ey0 + cover - 1, ey1)] = lash      # lash line rides the lid edge
+        if amount >= 1.0:
+            # Erase the eye outright, then lay ONE lash line across the middle.
+            # Filling top-down and stopping short is what left the lower arc of
+            # the ring in place; a shut eye keeps no part of the open drawing.
+            for y in range(ey0, ey1 + 1):
+                px[x, y] = skin
+            px[x, (ey0 + ey1) // 2] = lash
+        else:
+            cover = max(1, int(round(h * amount)))
+            for y in range(ey0, ey0 + cover):
+                px[x, y] = skin
+            px[x, min(ey0 + cover - 1, ey1)] = lash  # lash rides the lid edge
     return img
+
+
+def sclera_cols(img: Image.Image) -> int:
+    """Columns containing VISIBLE WHITE OF THE EYE.
+
+    Deliberately not `len(eye_mask(...))`: that counts dark pixels too, and a
+    squeezed-shut happy eye is a dark LASH ARC, so it scored 9 columns against
+    neutral's 10 and the two were indistinguishable. Sclera is the only signal
+    that actually means "this eye is open" — HAPPY and SLEEPY have none.
+    """
+    band = find_eye_band(img)
+    if band is None:
+        return 0
+    px = img.load()
+    y0, y1, _, _ = band
+    n = 0
+    for x in range(W):
+        for y in range(max(0, y0 - 2), min(H, y1 + 3)):
+            r, g, b, a = px[x, y]
+            if a and r > 205 and g > 205 and b > 195:
+                n += 1
+                break
+    return n
+
+
+def lid_cells(img: Image.Image, name: str) -> list[Image.Image]:
+    """Three lid states, or three copies when the eyes are already shut."""
+    n = sclera_cols(img)
+    if n < MIN_EYE_COLS:
+        print(f"  {name:10s} eyes already closed ({n} cols) — blink skipped")
+        return [img, img, img]
+    skin, lash = dominant_skin(img), (38, 36, 72, 255)
+    print(f"  {name:10s} blink derived from {n} eye columns")
+    return [img, close_eyes(img, 0.55, skin, lash), close_eyes(img, 1.0, skin, lash)]
 
 
 def main() -> int:
     if len(sys.argv) < 3:
         print(__doc__); return 2
-    base = Image.open(sys.argv[1]).convert("RGBA")
-    if base.size != (W, H):
-        print(f"base must be {W}x{H}, got {base.size}"); return 1
+    dst = sys.argv[1]
+    src = {}
+    for arg in sys.argv[2:]:
+        k, _, v = arg.partition("=")
+        src[k.upper()] = v
 
-    skin = dominant_skin(base)
-    y0, y1, x0, x1 = find_eye_band(base)
-    lash = (38, 36, 72, 255)
-    print(f"skin {skin[:3]}   eye band y{y0}..{y1}  x{x0}..{x1}")
+    if "NEUTRAL" not in src:
+        print("NEUTRAL is required — SLEEPY is derived from it"); return 1
 
-    cells = [base, close_eyes(base, 0.55, skin, lash), close_eyes(base, 1.0, skin, lash)]
+    moods: dict[str, Image.Image] = {}
+    for name, path in src.items():
+        im = Image.open(path).convert("RGBA")
+        if im.size != (W, H):
+            print(f"{name}: must be {W}x{H}, got {im.size}"); return 1
+        moods[name] = im
 
-    sheet = Image.new("RGBA", (W * LIDS, H * MOODS), (0, 0, 0, 0))
-    for row in range(MOODS):
-        for col in range(LIDS):
-            sheet.alpha_composite(cells[col], (col * W, row * H))
-    sheet.save(sys.argv[2])
+    # SLEEPY is closed eyes on the neutral face. Deriving it beats generating it:
+    # it cannot drift, because it IS the neutral pixels.
+    if "SLEEPY" not in moods:
+        n = moods["NEUTRAL"]
+        moods["SLEEPY"] = close_eyes(n, 1.0, dominant_skin(n), (38, 36, 72, 255))
+        print("  SLEEPY     derived from NEUTRAL (lids fully closed)")
+
+    sheet = Image.new("RGBA", (W * LIDS, H * len(ROWS)), (0, 0, 0, 0))
+    missing = []
+    for row, name in enumerate(ROWS):
+        img = moods.get(name)
+        if img is None:
+            missing.append(name)
+            img = moods["NEUTRAL"]
+            print(f"  {name:10s} MISSING — falls back to NEUTRAL")
+        for col, cell in enumerate(lid_cells(img, name)):
+            sheet.alpha_composite(cell, (col * W, row * H))
+    sheet.save(dst)
 
     data = list(sheet.getdata())
     cols = {p[:3] for p in data if p[3] > 0}
     semi = sum(1 for p in data if 0 < p[3] < 255)
+    ok = semi == 0 and len(cols) <= 40 and not missing
     print(f"sheet {sheet.size[0]}x{sheet.size[1]}  colours={len(cols)}  semi-alpha={semi}")
-    print("  " + ("PASS" if semi == 0 and len(cols) <= 32 else "FAIL"))
-    print("  NOTE: blink is derived; mood rows still reuse NEUTRAL until the eyes"
-          "\n        and mouth are hand-edited ON THE BASE (keeps registration).")
-    return 0
+    print("  " + ("PASS — all six moods drawn" if ok
+                  else f"FAIL — missing {missing}" if missing else "FAIL — check above"))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

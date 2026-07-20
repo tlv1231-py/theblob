@@ -72,6 +72,9 @@ def main() -> int:
     ap.add_argument("--crop", help="LEFT,TOP,RIGHT,BOTTOM in source pixels")
     ap.add_argument("--key-corners", action="store_true",
                     help="make a flat corner-matched background transparent")
+    ap.add_argument("--palette-from",
+                    help="quantize onto THIS image's palette instead of picking "
+                         "a fresh one — required for sprite sheet cells")
     a = ap.parse_args()
 
     W, H = parse_size(a.size)
@@ -92,9 +95,21 @@ def main() -> int:
 
     # 2. Quantize. This is what makes it hard-edged — every pixel becomes one of
     #    N palette entries, so no blended edge values remain.
+    #
+    #    --palette-from exists because MEDIANCUT picks a palette FROM THE IMAGE.
+    #    Run it independently on six expressions of the same character and you
+    #    get six different palettes: the union was measured at 98 colours, and
+    #    the visible symptom is his SKIN TONE SHIFTING every time his mood
+    #    changes. Cells of one sprite sheet must be quantized onto one palette.
     alpha = img.getchannel("A")
-    rgb = img.convert("RGB").quantize(colors=a.colors, method=Image.MEDIANCUT,
-                                      dither=Image.NONE).convert("RGB")
+    if a.palette_from:
+        ref = Image.open(a.palette_from).convert("RGB").quantize(
+            colors=a.colors, method=Image.MEDIANCUT, dither=Image.NONE)
+        rgb = img.convert("RGB").quantize(palette=ref, dither=Image.NONE).convert("RGB")
+        print(f"  palette: borrowed from {a.palette_from}")
+    else:
+        rgb = img.convert("RGB").quantize(colors=a.colors, method=Image.MEDIANCUT,
+                                          dither=Image.NONE).convert("RGB")
     out = rgb.convert("RGBA")
     # 3. Alpha is binarised: a semi-transparent pixel IS an anti-aliased pixel.
     out.putalpha(alpha.point(lambda v: 255 if v >= 128 else 0))
