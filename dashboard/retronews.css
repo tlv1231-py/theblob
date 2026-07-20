@@ -1,37 +1,42 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   RETRONEWS — a fake 90s cable channel, vertical.
-   Reference: WeatherSTAR 4000 (weather.com/retro) + late-night infomercial.
+   RETRONEWS — a GAME BOY rendering of a 90s Weather Channel.
 
-   THE ERA RULE (CLAUDE.md "RetroNews — the era rule") governs this file:
-     * hard offset shadows, NEVER blur
-     * flat saturated colour, banded gradients only
-     * cuts, not tweens — no CSS transitions anywhere (they are inert here anyway)
-     * everything inside the safe box
+   The conceit: a DMG handheld is displaying cable television. That mashup is
+   what makes a pixel font CORRECT here — for a straight 90s-cable homage it
+   would read as "video game, wrong era", but the whole joke is that this IS
+   being rendered by a video game machine.
+
+   THE PIXEL GRID IS THE WHOLE THING.
+   Stage is 1080x1920 and broadcasts at 810x1440 (x0.75), so a logical pixel
+   must be a whole number in BOTH spaces. gcd(1080,810) = 270, giving:
+
+       270 x 480 logical   ->   1 logical px = 4px stage = 3px device
+
+   EVERY size in this file is a multiple of --px. Anything off-grid lands on a
+   fractional device pixel and the illusion dies instantly — that is the same
+   rule that governs the Blob's sprite, applied to an entire page.
+
+   The safe box is snapped to the grid at 864x1152 (216x288 logical), which is
+   SAFER than the raw YouTube numbers: 128px right margin vs 90, 392 bottom
+   vs 380.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* The WeatherSTAR palette: deep blue field, gold chrome, white data. */
-  --rn-blue:    #12146e;
-  --rn-blue2:   #1e2394;
-  --rn-blue3:   #0a0b46;
-  --rn-gold:    #f5c542;
-  --rn-gold2:   #a8801a;
-  --rn-white:   #ffffff;
-  --rn-cyan:    #46e0ff;
-  --rn-red:     #e02020;
-  --rn-panel:   #191c7a;
+  --px: 4px;                 /* ONE LOGICAL PIXEL. Everything is a multiple. */
 
-  /* The safe box — 380 + 1160 + 380 = 1920, 90 + 900 + 90 = 1080. */
-  --safe-x: 90px;
-  --safe-y: 380px;
-  --safe-w: 870px;
-  --safe-h: 1160px;
+  /* The DMG palette. Four shades, no more, ever. */
+  --gb0: #0f380f;            /* darkest — type, outlines */
+  --gb1: #306230;            /* dark    — fills, shadow */
+  --gb2: #8bac0f;            /* light   — panel fill */
+  --gb3: #9bbc0f;            /* lightest— screen background */
 
-  /* Broadcast type. A real bold sans with a hard offset shadow is what 90s
-     character generators actually produced — a pixel font would read as a video
-     game, which is the wrong era. Text is vector, so it is EXEMPT from the
-     pixel-grid rule; only sprite art must land on a 4x multiple. */
-  --rn-face: Arial, Helvetica, 'Liberation Sans', sans-serif;
+  /* Snapped safe box: 216 x 288 logical at (22, 94). */
+  --safe-x: 88px;
+  --safe-y: 376px;
+  --safe-w: 864px;
+  --safe-h: 1152px;
+
+  --face: 'Press Start 2P', 'Courier New', monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,7 +45,10 @@ html, body {
   background: #000;
   overflow: hidden;
   height: 100%;
-  font-family: var(--rn-face);
+  font-family: var(--face);
+  /* Crisp everything. No smoothing anywhere on this page. */
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
 }
 
 #stage-wrap {
@@ -49,7 +57,6 @@ html, body {
   background: #000;
 }
 
-/* Always exactly 1080x1920 in its own space; only --s scales it. */
 #stage {
   position: relative;
   width: 1080px; height: 1920px;
@@ -57,19 +64,16 @@ html, body {
   overflow: hidden;
   transform-origin: center center;
   transform: scale(var(--s, 0.5));
-  /* Banded, not smooth — a 90s CG could not dither a subtle gradient. */
-  background:
-    linear-gradient(180deg,
-      var(--rn-blue3) 0%,  var(--rn-blue3) 22%,
-      var(--rn-blue)  22%,  var(--rn-blue) 62%,
-      var(--rn-blue2) 62%,  var(--rn-blue2) 100%);
+  background: var(--gb1);
 }
 
-/* Reserved-band guides (?guides=1). Build aid only — inside the broadcast frame. */
+/* The dead LCD area outside the safe box — darkest green, like an unlit
+   handheld bezel. Cheap, and it makes the lit panel read as a screen. */
 #guide-top, #guide-bot {
   position: absolute; left: 0; right: 0; height: 380px;
   background: repeating-linear-gradient(45deg,
-    rgba(255,0,0,0.07) 0 12px, transparent 12px 24px);
+    rgba(15,56,15,0.35) 0 calc(var(--px) * 3),
+    transparent calc(var(--px) * 3) calc(var(--px) * 6));
   pointer-events: none; z-index: 90;
 }
 #guide-top { top: 0; }
@@ -80,186 +84,156 @@ html, body {
   left: var(--safe-x); top: var(--safe-y);
   width: var(--safe-w); height: var(--safe-h);
   display: flex; flex-direction: column;
+  background: var(--gb3);
+  /* A 2px (logical) hard border, DMG style — no radius, no blur. */
+  box-shadow:
+    0 0 0 calc(var(--px) * 2) var(--gb0);
 }
 
-/* ── The hard shadow, used everywhere. No blur. ─────────────────────────── */
-.rn-sh   { text-shadow: 4px 4px 0 #000; }
-.rn-sh-s { text-shadow: 3px 3px 0 #000; }
+/* ── The dither. A 2x2 logical checkerboard is how a 4-shade machine makes a
+   fifth tone. This replaces every gradient — gradients are the one thing a
+   DMG could not do, and they are also what a software compositor pays for. */
+.dither-1 {
+  background-image:
+    repeating-conic-gradient(var(--gb2) 0% 25%, var(--gb3) 0% 50%);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+}
+.dither-2 {
+  background-image:
+    repeating-conic-gradient(var(--gb1) 0% 25%, var(--gb2) 0% 50%);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+}
 
-/* ── 1. BRAND BAR — 870 x 88 ─────────────────────────────────────────────── */
+/* ── 1. BRAND BAR — 216 x 24 logical (864 x 96) ──────────────────────────── */
 #rn-brand {
-  height: 88px; flex: none;
-  display: flex; align-items: center; gap: 18px;
-  padding: 0 18px;
-  background: linear-gradient(180deg, var(--rn-gold) 0%, var(--rn-gold) 60%,
-                                      var(--rn-gold2) 60%, var(--rn-gold2) 100%);
-  border: 4px solid #000;
+  height: calc(var(--px) * 24); flex: none;
+  display: flex; align-items: center; gap: calc(var(--px) * 4);
+  padding: 0 calc(var(--px) * 4);
+  background: var(--gb0);
+  color: var(--gb3);
 }
-#rn-logo {
-  font-size: 40px; font-weight: 900; letter-spacing: -0.02em;
-  color: var(--rn-blue3);
-  text-shadow: 2px 2px 0 rgba(255,255,255,0.45);
-}
-#rn-slug {
-  font-size: 20px; font-weight: 700; letter-spacing: 0.22em;
-  color: var(--rn-blue3);
-}
-#rn-clock {
-  margin-left: auto;
-  font-size: 34px; font-weight: 900; letter-spacing: 0.04em;
-  color: var(--rn-blue3);
-}
+#rn-logo   { font-size: calc(var(--px) * 10); letter-spacing: 0; }
+#rn-slug   { font-size: calc(var(--px) * 6); color: var(--gb2); }
+#rn-clock  { margin-left: auto; font-size: calc(var(--px) * 8); }
 
-/* ── 2. CONTENT AREA — 870 x 664 ─────────────────────────────────────────── */
+/* ── 2. CONTENT — 216 x 164 logical (864 x 656) ──────────────────────────── */
 #rn-content {
-  height: 664px; flex: none; margin-top: 12px;
+  height: calc(var(--px) * 164); flex: none;
+  margin-top: calc(var(--px) * 4);
   position: relative;
-  border: 4px solid #000;
-  background: var(--rn-panel);
+  background: var(--gb3);
+  box-shadow: inset 0 0 0 var(--px) var(--gb0);
   overflow: hidden;
 }
-/* Tiles are stacked and swapped by CUT — display none/block, never a fade. */
 .rn-tile { position: absolute; inset: 0; display: none; }
 .rn-tile.on { display: block; }
 
 .rn-tile-head {
-  height: 74px;
-  display: flex; align-items: center; gap: 16px;
-  padding: 0 20px;
-  background: linear-gradient(180deg, var(--rn-blue2) 0%, var(--rn-blue2) 55%,
-                                      var(--rn-blue) 55%, var(--rn-blue) 100%);
-  border-bottom: 4px solid #000;
+  height: calc(var(--px) * 24);
+  display: flex; align-items: center; gap: calc(var(--px) * 3);
+  padding: 0 calc(var(--px) * 4);
+  background: var(--gb0);
+  color: var(--gb3);
 }
-.rn-tile-title {
-  font-size: 34px; font-weight: 900; letter-spacing: 0.12em;
-  color: var(--rn-gold);
-  text-shadow: 3px 3px 0 #000;
-}
-.rn-tile-sub {
-  margin-left: auto;
-  font-size: 20px; font-weight: 700; letter-spacing: 0.14em;
-  color: var(--rn-white); text-shadow: 2px 2px 0 #000;
-}
+.rn-tile-title { font-size: calc(var(--px) * 7); }
+.rn-tile-sub   { margin-left: auto; font-size: calc(var(--px) * 5); color: var(--gb2); }
 
-/* ── National weather grid ───────────────────────────────────────────────── */
+/* ── National conditions: 5 rows x 2 cols of 28 logical px ───────────────── */
+/* ONE column of 10 rows, not two of five.
+   A Game Boy fit ~20 characters across its 160px screen with an 8px font. Our
+   safe box is 216 logical wide, so an 8-logical face gives 27 across — the same
+   density, and legible. Two columns forced a 5-logical face (15 device px,
+   roughly 8px on the phone this is actually watched on) which is unreadable.
+   A single column is also what the WeatherSTAR's own conditions pages did. */
 #rn-wx-grid {
+  position: absolute; left: 0; right: 0;
+  top: calc(var(--px) * 24); bottom: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: 108px;
-  gap: 0;
-  padding: 6px;
+  grid-template-columns: 1fr;
+  grid-auto-rows: calc(var(--px) * 14);
 }
 .wx-cell {
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 14px;
-  border: 2px solid rgba(0,0,0,0.55);
+  display: flex; align-items: center; gap: calc(var(--px) * 3);
+  padding: 0 calc(var(--px) * 4);
+  color: var(--gb0);
 }
-.wx-city {
-  flex: 1; min-width: 0;
-  font-size: 26px; font-weight: 700; letter-spacing: 0.06em;
-  color: var(--rn-white);
-  text-shadow: 3px 3px 0 #000;
-  white-space: nowrap; overflow: hidden;
+/* Alternating dithered banding — a 4-shade machine's way of ruling a table. */
+.wx-cell:nth-child(odd) {
+  background-image: repeating-conic-gradient(var(--gb2) 0% 25%, var(--gb3) 0% 50%);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
 }
-.wx-temp {
-  font-size: 46px; font-weight: 900; letter-spacing: -0.02em;
-  color: var(--rn-gold);
-  text-shadow: 3px 3px 0 #000;
-}
-.wx-cond {
-  width: 168px; text-align: right;
-  font-size: 19px; font-weight: 700; letter-spacing: 0.08em;
-  color: var(--rn-cyan);
-  text-shadow: 2px 2px 0 #000;
-  white-space: nowrap; overflow: hidden;
-}
+.wx-city { flex: 1; min-width: 0; font-size: calc(var(--px) * 8);
+           white-space: nowrap; overflow: hidden; }
+.wx-temp { font-size: calc(var(--px) * 10); }
+.wx-cond { width: calc(var(--px) * 40); text-align: right;
+           font-size: calc(var(--px) * 6); color: var(--gb1);
+           white-space: nowrap; overflow: hidden; }
 
-/* Placeholder body for tiles that are not built yet. */
+/* Placeholder body for tiles not yet built. */
 .rn-placeholder {
-  position: absolute; left: 0; right: 0; top: 74px; bottom: 0;
+  position: absolute; left: 0; right: 0;
+  top: calc(var(--px) * 24); bottom: 0;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 14px;
-  background: repeating-linear-gradient(45deg,
-    rgba(255,255,255,0.04) 0 18px, transparent 18px 36px);
+  align-items: center; justify-content: center; gap: calc(var(--px) * 4);
+  background-image: repeating-conic-gradient(var(--gb2) 0% 25%, var(--gb3) 0% 50%);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  color: var(--gb0);
 }
-.rn-ph-label {
-  font-size: 30px; font-weight: 900; letter-spacing: 0.16em;
-  color: var(--rn-white); text-shadow: 3px 3px 0 #000;
-}
-.rn-ph-note {
-  font-size: 19px; font-weight: 700; letter-spacing: 0.06em;
-  color: var(--rn-cyan); text-shadow: 2px 2px 0 #000;
-  max-width: 620px; text-align: center; line-height: 1.5;
-}
+.rn-ph-label { font-size: calc(var(--px) * 7); }
+.rn-ph-note  { font-size: calc(var(--px) * 6); line-height: 2;
+               max-width: calc(var(--px) * 170); text-align: center; }
 
-/* ── 3. HOST STRIP — 870 x 384 ───────────────────────────────────────────── */
+/* ── 3. HOST STRIP — 216 x 92 logical (864 x 368) ────────────────────────── */
 #rn-host {
-  height: 384px; flex: none; margin-top: 12px;
-  display: flex; gap: 16px;
+  height: calc(var(--px) * 92); flex: none;
+  margin-top: calc(var(--px) * 4);
+  display: flex; gap: calc(var(--px) * 4);
 }
 
-/* PORTRAIT BOX — 288 x 360 = a 72x90 art cell at 4x.
-   4x is not a style choice: stage x 0.75 = device, so 72*4*0.75 = 216 = 72*3,
-   an exact integer scale. Any non-multiple-of-4 resamples the sprite and the
-   whole era read collapses. See CLAUDE.md rule 4. */
+/* PORTRAIT — 72 x 90 logical = 288 x 360 stage = 216 x 270 device.
+   One art pixel == one logical pixel, so the sheet is authored at 72x90 and
+   never resampled. This is the same integer-scale rule as the Blob's sprite. */
 #rn-portrait {
-  width: 288px; height: 360px; flex: none;
-  align-self: center;
-  border: 4px solid #000;
-  background: linear-gradient(180deg, var(--rn-blue2), var(--rn-blue3));
-  position: relative;
+  width: calc(var(--px) * 72); height: calc(var(--px) * 90);
+  flex: none; align-self: flex-start;
+  background: var(--gb2);
+  box-shadow: inset 0 0 0 var(--px) var(--gb0);
   display: flex; align-items: center; justify-content: center;
+  color: var(--gb0);
 }
-#rn-portrait .ph {
-  text-align: center;
-  font-size: 18px; font-weight: 700; letter-spacing: 0.1em;
-  color: var(--rn-cyan); text-shadow: 2px 2px 0 #000; line-height: 1.7;
-}
-#rn-portrait .ph b { display: block; font-size: 24px; color: var(--rn-white); }
+#rn-portrait .ph { text-align: center; font-size: calc(var(--px) * 4);
+                   line-height: 2.4; }
+#rn-portrait .ph b { display: block; font-size: calc(var(--px) * 5);
+                     margin-bottom: calc(var(--px) * 3); }
 
-#rn-host-right {
-  flex: 1; min-width: 0;
-  display: flex; flex-direction: column;
-}
+#rn-host-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #rn-nameplate {
-  height: 66px; flex: none;
-  display: flex; align-items: center; padding: 0 18px;
-  background: linear-gradient(180deg, var(--rn-gold) 0%, var(--rn-gold) 60%,
-                                      var(--rn-gold2) 60%, var(--rn-gold2) 100%);
-  border: 4px solid #000;
-  font-size: 28px; font-weight: 900; letter-spacing: 0.1em;
-  color: var(--rn-blue3);
+  height: calc(var(--px) * 16); flex: none;
+  display: flex; align-items: center;
+  padding: 0 calc(var(--px) * 3);
+  background: var(--gb0); color: var(--gb3);
+  font-size: calc(var(--px) * 5);
 }
 #rn-say {
-  flex: 1; margin-top: 12px;
-  border: 4px solid #000;
-  background: var(--rn-panel);
-  padding: 18px 20px;
-  font-size: 27px; font-weight: 700; line-height: 1.45;
-  color: var(--rn-white);
-  text-shadow: 3px 3px 0 #000;
+  flex: 1; margin-top: calc(var(--px) * 4);
+  padding: calc(var(--px) * 4);
+  background: var(--gb2);
+  box-shadow: inset 0 0 0 var(--px) var(--gb0);
+  color: var(--gb0);
+  font-size: calc(var(--px) * 5); line-height: 1.9;
   overflow: hidden;
 }
 
-/* ── The crawl — bottom of the safe box ──────────────────────────────────── */
-#rn-crawl {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  height: 0;                       /* reserved; enabled when content exists */
-  overflow: hidden;
-}
-
-/* ── ON-AIR / event flash. Blink is palette-based: it toggles a class on an
-   interval, no transition, no blur. ─────────────────────────────────────── */
+/* ── Breaking bar. Blink is a CLASS TOGGLE on an interval — palette-based
+   ambient motion, which costs zero frames and is the only kind a 24fps
+   software compositor does cleanly. ─────────────────────────────────────── */
 #rn-alert {
   position: absolute; left: 0; right: 0; top: 0;
-  height: 88px;
-  display: none;
-  align-items: center; justify-content: center;
-  background: var(--rn-red);
-  border: 4px solid #000;
-  font-size: 32px; font-weight: 900; letter-spacing: 0.14em;
-  color: var(--rn-white); text-shadow: 3px 3px 0 #000;
+  height: calc(var(--px) * 24);
+  display: none; align-items: center; justify-content: center;
+  background: var(--gb0); color: var(--gb3);
+  font-size: calc(var(--px) * 6);
   z-index: 40;
 }
-#rn-alert.on   { display: flex; }
-#rn-alert.blink { background: var(--rn-gold); color: var(--rn-blue3); text-shadow: 3px 3px 0 rgba(255,255,255,0.4); }
+#rn-alert.on { display: flex; }
+#rn-alert.blink { background: var(--gb3); color: var(--gb0); }

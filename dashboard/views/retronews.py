@@ -165,9 +165,21 @@ def _build_html(show_guides: bool) -> str:
     js = (_DASHBOARD / "retronews.js").read_text("utf-8")
     guide_css = "" if show_guides else "#guide-top,#guide-bot{display:none!important;}"
 
+    # Press Start 2P — an 8x8 bitmap face. Correct HERE, and only here: the
+    # conceit is a Game Boy rendering a cable channel, so the machine's own font
+    # is the joke. For a straight 90s-broadcast homage this would be the wrong
+    # era and a bold sans would be right.
+    fonts = (
+        '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        '<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P'
+        '&display=swap" rel="stylesheet">'
+    )
+
     # Not an f-string: CSS/JS brace density makes escaping a liability.
     return (
-        "<style>" + css + guide_css + "</style>"
+        fonts
+        + "<style>" + css + guide_css + "</style>"
         + _STAGE_HTML
         + "<script>window._TND_RETRONEWS = " + json.dumps(payload, default=str) + ";</script>"
         + "<script>" + js + "</script>"

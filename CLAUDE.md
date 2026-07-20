@@ -339,19 +339,34 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
 2. **Ambient motion is palette-based, not positional.** Colour cycling, blinking,
    a slow crawl. It costs nothing and needs no framerate. Do NOT animate position
    to create life.
-3. **Type is a real bold sans with a HARD offset shadow** — no blur, ever. 90s
-   character generators used Helvetica/Univers with a 2–4px black offset. A pixel
-   font here reads "video game", not "cable TV", and is the wrong era.
-4. **Text is vector and exempt from the pixel-grid rule. PIXEL ART IS NOT.**
-   Any sprite (the host portrait) must display at a scale where
-   `art_px × scale × 0.75` is an integer — i.e. **a multiple of 4×**. See the
-   host spec in `retronews.py`.
-5. **Saturated flat colour and banded/dithered gradients only.** No soft shadows,
-   no glow, no blur, no modern easing. The look is cheap broadcast hardware.
-6. **Everything visible lives inside the safe box** (870×1160 at 90,380). The
-   Blob stream's known cost — 8 of 14 tiles sitting behind YouTube's chrome — is
-   not to be repeated here.
-7. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
+3. **THE CONCEIT IS A GAME BOY RENDERING A CABLE CHANNEL** — not a cable channel.
+   That mashup decides everything below, and it **reverses** the rule that was
+   here first. A straight 90s-broadcast homage wants a real bold sans with a hard
+   offset shadow, and a pixel font would read "video game, wrong era". Here the
+   machine IS a video game machine, so **Press Start 2P is correct** and a smooth
+   sans would break the joke. If the concept ever shifts back, flip this rule too
+   — it follows the conceit, it is not an absolute.
+4. **EVERYTHING lives on the pixel grid — the whole page, not just sprites.**
+   Stage is 1080×1920 broadcasting at 810×1440 (×0.75), so a logical pixel must
+   be whole in BOTH spaces. `gcd(1080, 810) = 270`, so the grid is
+   **270×480 logical, 1 logical px = 4px stage = 3px device**. `--px: 4px` in
+   `retronews.css`; every size is a multiple of it. The safe box is snapped to
+   **864×1152 at (88, 376)**, which is *safer* than the raw numbers (128px right
+   margin vs 90, 392 bottom vs 380). The host portrait is 72×90 logical, one art
+   pixel per logical pixel, never resampled.
+5. **Four shades, no more** — the DMG palette (`#0f380f #306230 #8bac0f #9bbc0f`).
+   No gradients: a 4-shade machine makes a fifth tone by **dithering**, so fills
+   are 2×2 logical checkerboards. This is also free for the compositor, which
+   pays for blur and gradients but not for flat colour.
+6. **Type has a legibility floor.** Vertical video is watched on phones, and
+   stage px × 0.75 = device px, then the phone shrinks it again. Anything under
+   ~24px stage is unreadable on air — measured: a 20px face came out around 8px
+   on a phone. Body/data ≥ 8 logical (32px stage); labels ≥ 6 logical (24px).
+   A Game Boy fit ~20 characters across; our 216-logical safe box fits 27 at
+   8 logical, which is the same density AND legible.
+7. **Everything visible lives inside the safe box.** The Blob stream's known
+   cost — 8 of 14 tiles sitting behind YouTube's chrome — is not repeated here.
+8. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
    shared bus. See the two rules above.
 
 ---
