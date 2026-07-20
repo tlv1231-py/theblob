@@ -490,6 +490,34 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    so the page size is a consequence of the layout rather than a constant that
    drifts out of step with it. `CITIES` holds 15 — still ONE Open-Meteo request,
    since it takes comma-separated coordinates.
+   **EVERY NEW TILE MUST DECLARE WHAT HAPPENS TO THE EXTRA 96 LOGICAL.** The
+   panel has two heights and a tile that never considered the taller one will
+   look broken in exactly one of them. Three valid answers, one banned:
+
+   | strategy | the extra space becomes | use when |
+   |---|---|---|
+   | **REVEAL** | more items, same size | the tile has more data than fits — weather (10→15), donors, market |
+   | **ANCHOR** | empty panel below | fixed item count — now-playing |
+   | **CENTER** | padding, content drifts down | almost never; see below |
+   | ~~RESCALE~~ | bigger type | **BANNED** |
+
+   **The governing rule is: EXISTING CONTENT NEVER MOVES.** Weather reveals by
+   keeping rows 1–10 exactly where they were and adding 11–15 beneath. A CENTERED
+   tile instead slides content that was already on screen — so toggling the host
+   would drift the donors list down half a panel while the weather list stayed
+   put, which is two different mental models on one board. **ANCHOR (top-aligned)
+   is the safe default; REVEAL is the opt-in.**
+   RESCALE is banned because it makes the two states read as two different
+   designs, and one board rendered at two sizes is what the hardware being
+   imitated never did. NON-TYPE elements (a progress bar's height, a rule) may
+   stretch — **type never scales.**
+   `.rn-placeholder` is currently CENTER, and that is deliberate but
+   placeholder-only: a lone "PANEL RESERVED" label reads correctly centred and
+   these tiles are scaffolding. **Do not inherit it when the real tile is built.**
+   For REVEAL, MEASURE how many items fit (`wxRowsThatFit()`) rather than storing
+   the two counts — they are consequences of the panel heights, and written down
+   they drift out of step the next time a height moves.
+
    **`WIPE_ROWS` must be sized for the TALLER state** (25, not 17) or the
    dissolve covers the small panel and leaves the bottom third of the big one
    live — a silent failure visible only in the mode being added.
