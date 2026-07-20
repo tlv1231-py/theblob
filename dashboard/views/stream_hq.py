@@ -110,7 +110,8 @@ def _switch_state() -> dict:
 
     Returns the raw facts; the caller decides how loud to be.
     """
-    out = {"alive": False, "desired": None, "encoder": None, "unit": None, "age": None}
+    out = {"alive": False, "desired": None, "encoder": None, "unit": None,
+           "age": None, "app": None, "warming": None}
     try:
         with get_session() as s:
             r = s.execute(text("""
@@ -127,6 +128,10 @@ def _switch_state() -> dict:
         out["desired"] = d.get("desired")
         out["encoder"] = d.get("encoder")
         out["unit"] = d.get("unit")
+        # What the HOST says is on air, read back from its own .env — not what
+        # we asked for. The gap between the two IS the switch in progress.
+        out["app"] = d.get("app")
+        out["warming"] = d.get("warming")
         return out
     except Exception:
         return out
@@ -567,6 +572,62 @@ def _render_potions() -> None:
         st.rerun()
 
 
+# The pages that may go on air. MUST stay in step with STREAM_APPS in
+# infra/stream-host/switch.py — that allowlist is the one that actually enforces
+# it, and a name only present here writes a row the host will refuse.
+_STREAM_APPS = {"Stream": "The Blob", "RetroNews": "RetroNews"}
+
+
+def _render_channel(pol: dict, sw: dict) -> None:
+    """Which stream app is on air.
+
+    ONE STREAM AT A TIME is a hardware fact, not a policy: a single 810x1440
+    render already pegs the software compositor at ~98% of one core, so this is a
+    channel selector, not a mixer. Switching costs a ~90s Chromium cold start —
+    it is changing the channel, not a crossfade.
+
+    HQ writes `active_app`; switch.py rewrites STREAM_URL and restarts BOTH the
+    browser and the encoder (the music bed derives from ?page= and is read once
+    at ffmpeg start). The switch itself lives under strategy='stream' rather than
+    a per-app namespace on purpose: per-app CONFIG is namespaced, but "what is on
+    air" is global and there is exactly one of it.
+    """
+    want = pol.get("active_app", "Stream")
+    live = sw.get("app")                       # what the host reports it is on
+    warming = sw.get("warming")
+
+    c1, c2 = st.columns([1, 3])
+    choice = c1.selectbox(
+        "Channel", list(_STREAM_APPS), index=list(_STREAM_APPS).index(want)
+        if want in _STREAM_APPS else 0,
+        format_func=lambda k: _STREAM_APPS[k],
+        disabled=not sw["alive"],
+        help="Which stream app the broadcast host renders. Switching restarts the "
+             "browser AND the encoder — about 90 seconds of downtime. One at a "
+             "time: the host has capacity for exactly one render.")
+    if choice != want:
+        _set_policy("active_app", choice, "Stream app on air")
+        st.rerun()
+
+    if not sw["alive"]:
+        c2.warning("Switch daemon is not reporting — this would write the row and "
+                   "nothing would change the channel.", icon="⚠️")
+    elif live is None:
+        c2.info("Host has not reported a channel yet. It reports one every ~30s "
+                "once switch.py is running the current build.", icon="ℹ️")
+    elif live != want:
+        c2.warning(f"Switching to **{_STREAM_APPS.get(want, want)}** — host is still "
+                   f"on {_STREAM_APPS.get(live, live)}."
+                   + (f" Render warming, ~{warming}s until the encoder returns."
+                      if warming else ""), icon="🔄")
+    elif warming:
+        c2.info(f"**{_STREAM_APPS.get(live, live)}** render is warming — encoder "
+                f"returns in ~{warming}s.", icon="🔄")
+    else:
+        c2.caption(f"Host confirms **{_STREAM_APPS.get(live, live)}** is the page "
+                   f"being captured.")
+
+
 def _render_policy() -> None:
     pol = _get_policy()
     auto = pol.get("auto_release", "1") == "1"
@@ -940,6 +1001,8 @@ def render() -> None:
                       "real capture."):
         _set_policy("yt_overlay", "0" if yt_on else "1", "Temp YouTube safe-zone filter")
         st.rerun()
+
+    _render_channel(pol, sw)
 
     # ── Background ────────────────────────────────────────────────────────────
     # The animated cyberpunk background on the Stream page, controllable live so

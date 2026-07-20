@@ -250,6 +250,28 @@ picks which one is on air**. The switcher is the same mechanism the ON AIR butto
 already uses — HQ writes a param, `switch.py` polls it and acts — just rewriting
 `STREAM_URL` + restarting `blob-chromium` instead of starting ffmpeg.
 
+**BUILT (2026-07-20), NOT YET DEPLOYED.** HQ has a **Channel** selector writing
+`strategy_params (strategy='stream', param='active_app')`; `switch.py` polls it,
+rewrites `page=` inside `STREAM_URL` in `/opt/blob-stream/.env`, and restarts the
+render chain. Notes that matter:
+- **`STREAM_APPS` in `switch.py` is an ALLOWLIST and is the security boundary.**
+  The value arrives from a DB row and is interpolated into the URL Chromium
+  loads and the path the music bed derives from. Membership is the only way to
+  be on air; adding an app is a deliberate code change. HQ's `_STREAM_APPS` must
+  stay in step — a name only in HQ writes a row the host refuses.
+- **It restarts BOTH units.** Picture and music must move together (rule 2).
+- **The encoder is held for `SWITCH_WARMUP` (100s) after a switch**, because
+  Chromium cold-starts a Streamlit page in 60–90s and the poll loop would
+  otherwise broadcast ~90s of an empty X display.
+- **This is the one thing on the host that writes `.env`** — `deploy.sh`
+  explicitly refuses to. The file holds the stream key, so its mode is copied
+  onto the replacement rather than inherited from a fresh temp file.
+- **Switching is ~90s of downtime.** A channel change, not a crossfade.
+- The switch reports `app` (read back from `.env`) in its health detail, so HQ
+  shows what the host actually obeyed rather than echoing the click. Deploy with
+  `./deploy.sh`; until then the control writes a row nothing obeys, and HQ says
+  so.
+
 **THE TWO RULES, and they are opposites. Get these wrong and two apps corrupt
 each other:**
 
@@ -270,7 +292,21 @@ each other:**
    `sudo ./normalize-music.sh /tmp/incoming /opt/blob-stream/music/retronews`.
    **Read once at ffmpeg start — switching apps must restart `blob-ffmpeg` as
    well as `blob-chromium`, or the picture changes and the music does not.**
-3. **EVENTS ARE SHARED, DELIBERATELY.** `stream_events` has no app column and
+3. **EVERY STREAM APP MUST SEND THE `stream_page` HEARTBEAT.** Not optional and
+   not just for the health strip: `watchdog.py` restarts Chromium whenever the
+   newest **live** `stream_page` beat is older than 75s. An app that does not
+   beat is therefore restarted *forever* — the reload takes ~90s to come back,
+   still says nothing, trips the watchdog again. It presents as a mysterious
+   90-second reboot loop **with every systemd unit reporting healthy**, which is
+   about the worst failure signature available. Post every 15s with
+   `detail.live` set from `?live=1` (the watchdog filters on it, because every
+   open copy of the page beats — a phone, a preview tab — and the newest beat of
+   *any* of them would mask a frozen broadcast). Use the SAME component name:
+   the question is "is the captured render alive", which is about the render,
+   not which app is in it, and only one is ever on air. Carry `detail.app` so
+   you can still tell them apart. RetroNews shipped without this and could never
+   have stayed on air; see the beat at the end of `retronews.js`.
+4. **EVENTS ARE SHARED, DELIBERATELY.** `stream_events` has no app column and
    should not get one. A tip is a tip regardless of which app is on screen, so
    one bus means the donation chain keeps working straight through a switch.
    `streamlabs.py` / `chat.py` are decoupled from presentation entirely — same
@@ -401,6 +437,28 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
 ---
 
 ## Pending Infrastructure Tasks
+
+- [ ] **RetroNews host — remaining ChatGPT art (Tyler's queue).** Five of six
+  moods are real art; SLEEPY is derived from NEUTRAL (closed eyes ARE the whole
+  expression at 72x90, and deriving it cannot drift). Generate in the SAME
+  ChatGPT thread as EDITS of the existing portrait — never regenerations —
+  changing ONLY eyes/eyebrows/mouth, and say "exaggerate it clearly" every time
+  (at 72x90 each eye is ~6px, so naturalistic expressions vanish in the
+  downscale). Wanted, in value order:
+  1. **TALKING** (open mouth mid-speech) — buys the most: nothing currently
+     animates while the ticker narrates. Needs a new row + `MOOD_ROW` entry.
+  2. SLEEPY as real art, if the derived version ever looks weak on air.
+  Prep each with
+  `python scripts/prep_art.py IN.png dashboard/art/host/NAME.png --size 72x90
+  --colors 22 --key-corners --crop 228,3,1141,1145 --palette-from
+  dashboard/art/host/NEUTRAL.png`
+  then rebuild the sheet with `scripts/build_host_sheet.py`. **`--palette-from`
+  is mandatory** — MEDIANCUT picks a palette from the image, so quantizing
+  expressions independently gave six palettes (98 colours) and the visible
+  symptom is his skin tone shifting whenever his mood changes.
+  Expect a systematic crop offset (measured -1..-2 x, +2..+3 y); correct it in
+  `--crop`, before the downscale, which is the only place sub-output-pixel
+  precision exists.
 
 - [ ] Dashboard cosmetic overhaul — hyper-tech, modern, premium fintech aesthetic.
   Direction: dark theme, tight data density, monospace numbers, minimal chrome,

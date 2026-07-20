@@ -161,11 +161,16 @@ _STAGE_HTML = """
 """
 
 
-def _build_html(show_guides: bool) -> str:
+def _build_html(show_guides: bool, live: bool) -> str:
     payload = {
         "stage": {"w": _STAGE_W, "h": _STAGE_H},
         "ns": _CONFIG_NS,
         "supa": {"url": _SUPA_URL, "key": _SUPA_KEY},
+        # ?live=1 marks THE render the encoder is capturing. The watchdog filters
+        # its freeze check on detail->>live, because every open copy of this page
+        # beats — a phone, a preview tab — and the newest beat of ANY of them
+        # would keep the watchdog happy straight through a frozen broadcast.
+        "live": live,
     }
     css = (_DASHBOARD / "retronews.css").read_text("utf-8")
 
@@ -239,7 +244,10 @@ def render() -> None:
     # ?guides=1 draws YouTube's reserved bands. MUST be off for a real capture.
     show_guides = st.query_params.get("guides") == "1"
 
-    components.html(_build_html(show_guides), height=_STAGE_H, scrolling=False)
+    # ?live=1 is set by STREAM_URL on the broadcast host and by nothing else.
+    live = st.query_params.get("live") == "1"
+
+    components.html(_build_html(show_guides, live), height=_STAGE_H, scrolling=False)
 
     # Size the stage iframe to the REAL viewport.
     #

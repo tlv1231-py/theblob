@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import time
 import urllib.request
@@ -46,6 +48,129 @@ POLL_SECONDS = int(os.environ.get("SWITCH_POLL", "5"))
 # grows ~11.5k rows/day against a 500MB free tier; a 5s heartbeat would add 17k/day
 # on its own to report a value that changes when a human clicks something.
 REPORT_SECONDS = int(os.environ.get("SWITCH_REPORT", "30"))
+
+# ── CHANGING THE CHANNEL ─────────────────────────────────────────────────────
+# The stream host captures a URL and knows nothing about what is on it, so
+# switching apps is entirely "rewrite STREAM_URL and restart the render". The
+# page is chosen by Stream HQ writing `active_app`, exactly like the ON AIR
+# button writes `broadcast_enabled`.
+ENV_PATH = os.environ.get("STREAM_ENV", "/opt/blob-stream/.env")
+CHROMIUM_UNIT = os.environ.get("CHROMIUM_UNIT", "blob-chromium.service")
+
+# AN ALLOWLIST, NOT VALIDATION — this is the security boundary of the whole
+# switch. `active_app` arrives from a database row and is interpolated into the
+# URL that Chromium loads and that stream.sh derives the music path from. Anything
+# permissive (a regex, an escape, a "sanitise") is one clever value away from
+# pointing the broadcast at an arbitrary page. Membership in this dict is the
+# only way to be on air, and adding an app is a deliberate code change.
+STREAM_APPS = ("Stream", "RetroNews")
+
+# Chromium cold-starts a Streamlit page in 60-90s. Without a gate, the poll loop
+# would see want=on / ffmpeg=down 5s after the restart and immediately broadcast
+# ~90s of an empty X display. Holding the encoder until the render is warm turns
+# a switch into a clean cut instead of a minute and a half of black.
+WARMUP_SECONDS = int(os.environ.get("SWITCH_WARMUP", "100"))
+
+_PAGE_RE = re.compile(r"([?&]page=)([^&\s\"']*)")
+
+
+def desired_app() -> str | None:
+    """Which page HQ wants on air. None = no opinion (see desired_state)."""
+    url = (f"{SUPA_URL}/rest/v1/strategy_params"
+           "?strategy=eq.stream&param=eq.active_app&select=value&limit=1")
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+    except Exception as e:
+        print(f"[switch] cannot read active_app: {e}", flush=True)
+        return None
+    if not rows:
+        return None                 # never set — leave whatever .env says alone
+    want = str(rows[0].get("value", "")).strip()
+    if want not in STREAM_APPS:
+        print(f"[switch] REFUSING unknown app {want!r} — not in {STREAM_APPS}",
+              flush=True)
+        return None
+    return want
+
+
+def _env_text() -> str | None:
+    try:
+        with open(ENV_PATH, encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        print(f"[switch] cannot read {ENV_PATH}: {e}", flush=True)
+        return None
+
+
+def current_app() -> str | None:
+    """The page actually configured on this host, read from .env.
+
+    Deliberately reads the FILE rather than this process's environment: systemd
+    injected STREAM_URL at start, so os.environ holds whatever was true when the
+    switch booted and would go stale the first time we changed it.
+    """
+    txt = _env_text()
+    if txt is None:
+        return None
+    for line in txt.splitlines():
+        if line.strip().startswith("STREAM_URL="):
+            m = _PAGE_RE.search(line)
+            return m.group(2) if m else None
+    return None
+
+
+def switch_app(app: str) -> bool:
+    """Point STREAM_URL at `app` and restart the render chain.
+
+    RESTARTS BOTH UNITS, and that is not belt-and-braces. stream.sh derives the
+    music bed from ?page= and reads it ONCE at ffmpeg start, so restarting only
+    Chromium changes the picture and leaves the previous app's music playing
+    underneath it, with nothing on screen to explain why.
+
+    This is the one thing on the host that writes .env — deploy.sh explicitly
+    refuses to. The file holds the stream key, so its mode is copied onto the
+    replacement rather than inherited from a fresh temp file.
+    """
+    if app not in STREAM_APPS:                     # belt: callers are trusted,
+        return False                               # this costs nothing
+    txt = _env_text()
+    if txt is None:
+        return False
+
+    out, hit = [], False
+    for line in txt.splitlines(keepends=True):
+        if line.strip().startswith("STREAM_URL=") and _PAGE_RE.search(line):
+            line, n = _PAGE_RE.subn(lambda m: m.group(1) + app, line, count=1)
+            hit = hit or bool(n)
+        out.append(line)
+    if not hit:
+        print(f"[switch] no STREAM_URL with a ?page= in {ENV_PATH} — not switching",
+              flush=True)
+        return False
+
+    tmp = ENV_PATH + ".switch.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write("".join(out))
+        shutil.copymode(ENV_PATH, tmp)   # .env holds the stream key — keep 0600
+        os.replace(tmp, ENV_PATH)
+    except Exception as e:
+        print(f"[switch] failed writing {ENV_PATH}: {e}", flush=True)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return False
+
+    print(f"[switch] APP -> {app}; restarting render chain", flush=True)
+    # Encoder DOWN first. Chromium is about to disappear for ~90s and there is no
+    # value in shipping that to YouTube; the warm-up gate brings it back.
+    subprocess.run(["systemctl", "stop", FFMPEG_UNIT], check=False)
+    subprocess.run(["systemctl", "restart", CHROMIUM_UNIT], check=False)
+    return True
 
 
 def desired_state() -> bool | None:
@@ -128,12 +253,26 @@ def main() -> None:
     print(f"[switch] polling broadcast_enabled every {POLL_SECONDS}s "
           f"-> {FFMPEG_UNIT}", flush=True)
     last_report = 0.0
+    warm_until = 0.0                   # encoder held off until the render is up
     while True:
         want = desired_state()
         state = unit_state()
 
+        # Channel change is checked BEFORE the on-air logic, so a switch and the
+        # warm-up gate it sets are both visible to this same iteration rather
+        # than racing a 5s poll.
+        want_app, have_app = desired_app(), current_app()
+        if want_app and have_app and want_app != have_app:
+            if switch_app(want_app):
+                warm_until = time.time() + WARMUP_SECONDS
+                state = unit_state()   # we just stopped it; don't act on a stale read
+
         if want is None:
             pass                       # no opinion — see desired_state
+        elif want and state not in LIVE_STATES and time.time() < warm_until:
+            # Wanted on air, encoder down, render still cold. Not an error state
+            # and not something to correct — it is the switch working.
+            pass
         elif want and state not in LIVE_STATES:
             # Not already up or coming up. Deliberately does NOT fire while
             # state=="activating": ExecStartPre sleeps 8s, so re-issuing `start`
@@ -164,6 +303,12 @@ def main() -> None:
                 # a crash loop and is worth being able to see from HQ.
                 "encoder": unit_state(),
                 "unit": FFMPEG_UNIT,
+                # What is ACTUALLY on air, read back from .env — not what HQ
+                # asked for. Same principle as reporting the real systemd state:
+                # HQ can then show that the host obeyed, instead of showing its
+                # own click back to itself.
+                "app": current_app(),
+                "warming": max(0, int(warm_until - time.time())) or None,
             })
             last_report = now
 

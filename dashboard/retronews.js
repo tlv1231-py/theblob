@@ -444,8 +444,48 @@
   pollEvents();
   setInterval(pollEvents, 2000);
 
+  // ── Heartbeat ────────────────────────────────────────────────────────────
+  // NOT optional, and not merely "nice for the health strip". watchdog.py
+  // restarts Chromium when the newest live stream_page beat is older than 75s.
+  // A stream app that does not beat is therefore restarted forever: the reload
+  // takes ~90s to come back, still says nothing, and trips the watchdog again.
+  // RetroNews could never have stayed on air without this — it would have looked
+  // like a mysterious 90-second reboot loop with every unit reporting healthy.
+  //
+  // Same component name as the Blob stream ON PURPOSE. The watchdog is asking
+  // "is the page the encoder captures still alive", which is a question about
+  // the render, not about which app is in it — and only one is ever on air.
+  var _beats = 0;
+  function beat() {
+    if (!S.supa || !S.supa.url) return;
+    _beats++;
+    fetch(S.supa.url + '/rest/v1/stream_health', {
+      method: 'POST',
+      headers: {
+        apikey: S.supa.key, Authorization: 'Bearer ' + S.supa.key,
+        'Content-Type': 'application/json', Prefer: 'return=minimal'
+      },
+      body: JSON.stringify({
+        component: 'stream_page',
+        status: 'ok',
+        detail: {
+          app: 'RetroNews',      // which app was rendering — the beat is shared
+          beats: _beats,
+          tile: order[idx],
+          mood: hostMood,
+          wiping: wiping,
+          live: !!S.live
+        },
+        recorded_at: new Date().toISOString()
+      })
+    }).catch(function () {});
+  }
+  beat();
+  setInterval(beat, 15000);      // matches stream.js and the 75s stale window
+
   window._TND_RN = {
     cfg: function () { return window._TND_RN_CFG || {}; },
+    beats: function () { return _beats; },
     tile: function () { return order[idx]; },
     order: function () { return order.slice(); },
     cut: function (id) { cutTo(id); lastCut = Date.now(); },
