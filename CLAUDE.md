@@ -339,7 +339,8 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
 2. **Ambient motion is palette-based, not positional.** Colour cycling, blinking,
    a slow crawl. It costs nothing and needs no framerate. Do NOT animate position
    to create life.
-3. **THE CONCEIT IS A GAME BOY RENDERING A CABLE CHANNEL** — not a cable channel.
+3. **THE CONCEIT IS A GAME BOY ADVANCE RENDERING A CABLE CHANNEL** — not a cable
+   channel.
    That mashup decides everything below, and it **reverses** the rule that was
    here first. A straight 90s-broadcast homage wants a real bold sans with a hard
    offset shadow, and a pixel font would read "video game, wrong era". Here the
@@ -354,19 +355,36 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    **864×1152 at (88, 376)**, which is *safer* than the raw numbers (128px right
    margin vs 90, 392 bottom vs 380). The host portrait is 72×90 logical, one art
    pixel per logical pixel, never resampled.
-5. **Four shades, no more** — the DMG palette (`#0f380f #306230 #8bac0f #9bbc0f`).
-   No gradients: a 4-shade machine makes a fifth tone by **dithering**, so fills
-   are 2×2 logical checkerboards. This is also free for the compositor, which
-   pays for blur and gradients but not for flat colour.
-6. **Type has a legibility floor.** Vertical video is watched on phones, and
+5. **GBA palette and GBA panel treatment** (upscaled from DMG 2026-07-19):
+   - A **saturated 15-bit-era palette**, defined once in `retronews.css` `:root`.
+     The saturation is deliberate — the original hardware had no backlight, so
+     its games pushed brightness and chroma hard, and that is the remembered look.
+   - **EVERY panel is BEVELLED.** One logical pixel of light on the top-left, one
+     of shadow on the bottom-right, plus a hard outline — four flat rectangles,
+     which is how the hardware faked depth. Raised (`.bevel`) for things that sit
+     ON the console; recessed (`.bevel-in`) for things set INTO it (the host
+     portrait, the dialogue box). **A new tile that is not bevelled will not look
+     like it belongs.**
+   - **Banded gradients are allowed** — in visible hard steps, never smooth ramps.
+   - Still no blur, no radius, no anti-aliasing, no soft shadow. Type gets a
+     1-logical-px hard offset shadow, never a glow.
+6. **Tile changes use the DISSOLVE, never a fade** (`cutTo()` in
+   `retronews.js`): a chunky block dissolve covers the panel in 8 discrete
+   steps, the tile is swapped at full cover behind a one-frame gold flash, then
+   it uncovers in 8 steps. Quantised by construction, which is both the
+   authentic hardware effect (mosaic/window wipes) and the only motion a 24fps
+   software compositor renders cleanly. ~935ms ≈ 22 frames — comfortably above
+   the 6-frame floor. **Never add a CSS fade or slide**; they are inert in the
+   iframe anyway.
+7. **Type has a legibility floor.** Vertical video is watched on phones, and
    stage px × 0.75 = device px, then the phone shrinks it again. Anything under
    ~24px stage is unreadable on air — measured: a 20px face came out around 8px
    on a phone. Body/data ≥ 8 logical (32px stage); labels ≥ 6 logical (24px).
    A Game Boy fit ~20 characters across; our 216-logical safe box fits 27 at
    8 logical, which is the same density AND legible.
-7. **Everything visible lives inside the safe box.** The Blob stream's known
+8. **Everything visible lives inside the safe box.** The Blob stream's known
    cost — 8 of 14 tiles sitting behind YouTube's chrome — is not repeated here.
-8. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
+9. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
    shared bus. See the two rules above.
 
 ---

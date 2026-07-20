@@ -207,13 +207,82 @@
     }
   }
 
+  // ── THE DISSOLVE ─────────────────────────────────────────────────────────
+  // Tiles never fade — they dissolve in chunky blocks, cover, swap behind a
+  // one-frame gold flash, uncover. That is the GBA's own transition vocabulary
+  // (hardware MOSAIC + window wipes), and it is quantised BY CONSTRUCTION:
+  // every step is a discrete cut, so there is nothing for a 24fps software
+  // compositor to fail to interpolate.
+  //
+  // 8 steps x 55ms each way + the flash = ~935ms, about 22 frames. CLAUDE.md's
+  // floor is 6 frames to be seen; this is comfortably a beat you watch happen.
+  var WIPE_COLS = 18, WIPE_ROWS = 14, WIPE_STEPS = 8, WIPE_MS = 55;
+  var blocks = [], order2 = [], wiping = false;
+
+  function buildWipe() {
+    var host = $('rn-wipe');
+    if (!host) return;
+    var frag = document.createDocumentFragment();
+    var n = WIPE_COLS * WIPE_ROWS;
+    for (var i = 0; i < n; i++) {
+      var b = document.createElement('div');
+      b.className = 'wipe-b';
+      frag.appendChild(b);
+      blocks.push(b);
+      order2.push(i);
+    }
+    host.appendChild(frag);
+    // Scatter the reveal order. A raster fill reads as a wipe; a scatter reads
+    // as a DISSOLVE, which is the mosaic feel we want.
+    for (var j = order2.length - 1; j > 0; j--) {
+      var k = Math.floor(Math.random() * (j + 1));
+      var t = order2[j]; order2[j] = order2[k]; order2[k] = t;
+    }
+  }
+  buildWipe();
+
+  function cutTo(id) {
+    var host = $('rn-wipe');
+    // No overlapping dissolves: a second one mid-flight would strand blocks
+    // visible forever. Same reasoning as the Blob stream's lane arbiter.
+    if (!host || !blocks.length || wiping) { showTile(id); return; }
+    wiping = true;
+    host.classList.add('on');
+    var n = blocks.length, step = 0;
+
+    var cover = setInterval(function () {
+      step++;
+      var upto = Math.round(n * step / WIPE_STEPS);
+      for (var i = 0; i < upto; i++) blocks[order2[i]].classList.add('on');
+      if (step < WIPE_STEPS) return;
+      clearInterval(cover);
+
+      // Full cover: swap the tile behind it, flash gold for one frame.
+      host.classList.add('flash');
+      showTile(id);
+      setTimeout(function () {
+        host.classList.remove('flash');
+        var back = WIPE_STEPS;
+        var uncover = setInterval(function () {
+          back--;
+          var from = Math.round(n * back / WIPE_STEPS);
+          for (var i = from; i < n; i++) blocks[order2[i]].classList.remove('on');
+          if (back > 0) return;
+          clearInterval(uncover);
+          host.classList.remove('on');
+          wiping = false;
+        }, WIPE_MS);
+      }, WIPE_MS);
+    }, WIPE_MS);
+  }
+
   function rotate() {
-    if (!order.length) return;
+    if (!order.length || wiping) return;
     var now = Date.now();
     if (now - lastCut < dwell) return;
     lastCut = now;
     idx = (idx + 1) % order.length;
-    showTile(order[idx]);
+    cutTo(order[idx]);
   }
   showTile(order[0]);
   lastCut = Date.now();
@@ -308,6 +377,8 @@
     cfg: function () { return window._TND_RN_CFG || {}; },
     tile: function () { return order[idx]; },
     order: function () { return order.slice(); },
-    cut: function (id) { showTile(id); lastCut = Date.now(); }
+    cut: function (id) { cutTo(id); lastCut = Date.now(); },
+    wiping: function () { return wiping; },
+    blocks: function () { return blocks.length; }
   };
 })();

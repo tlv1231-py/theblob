@@ -216,6 +216,32 @@ html, body {
            font-size: calc(var(--px) * 6); color: var(--cyan);
            white-space: nowrap; overflow: hidden; }
 
+/* ── THE DISSOLVE ────────────────────────────────────────────────────────────
+   Tiles never fade — they DISSOLVE, in chunky blocks. This is the GBA's own
+   transition vocabulary (hardware MOSAIC and window wipes), and it is also the
+   only motion a 24fps software compositor renders cleanly: every step is a
+   discrete cut, nothing is interpolated.
+
+   18 columns of 12 logical px = 216 = the full content width, exactly on-grid.
+   Rows overflow by design and are clipped. Blocks are flat divs toggled by a
+   class — no transition, no opacity ramp, no blur. Costs the compositor
+   nothing. */
+#rn-wipe {
+  position: absolute; inset: 0;
+  display: none;
+  grid-template-columns: repeat(18, calc(var(--px) * 12));
+  grid-auto-rows: calc(var(--px) * 12);
+  z-index: 30;
+  pointer-events: none;
+  overflow: hidden;
+}
+#rn-wipe.on { display: grid; }
+.wipe-b { background: var(--shade); visibility: hidden; }
+.wipe-b.on { visibility: visible; }
+/* One frame of gold at full cover — the transition "sting" every GBA screen
+   change had. A single frame is ~42ms; it reads as a snap, not a flash-bang. */
+#rn-wipe.flash .wipe-b.on { background: var(--gold); }
+
 /* Placeholder body for tiles not yet built. */
 .rn-placeholder {
   position: absolute; left: 0; right: 0;

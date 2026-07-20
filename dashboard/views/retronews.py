@@ -88,6 +88,10 @@ _STAGE_HTML = """
 
         <div id="rn-alert"></div>
 
+        <!-- Block-dissolve overlay. Populated once by retronews.js; every tile
+             change covers, swaps behind a gold flash, and uncovers. -->
+        <div id="rn-wipe"></div>
+
         <!-- LIVE: national conditions, Open-Meteo, no API key. -->
         <div class="rn-tile on" data-tile="wx">
           <div class="rn-tile-head">
