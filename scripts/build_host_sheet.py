@@ -207,6 +207,43 @@ def close_eyes(base: Image.Image, amount: float, skin, lash) -> Image.Image:
     return img
 
 
+def lower_brows(img: Image.Image, n: int = 1) -> Image.Image:
+    """Drop NEUTRAL's eyebrows one pixel, closer to the eye.
+
+    As generated, NEUTRAL's brows sit at y31-33 with the lash at y36 — a wide
+    gap, held high, and thinning to the OUTER ends so the inner ends read as
+    raised. That is the startled/worried brow, and next to SURPRISED in the same
+    sheet it is nearly the same pose: he looked frightened at rest, which is a
+    poor face for an anchor who is on screen most of the time.
+
+    One pixel is the whole fix. Two was tried and merges the brow into the lash
+    line, which reads as a glare rather than a neutral.
+
+    NEUTRAL ONLY, and applied at BUILD time rather than to the source art:
+    SURPRISED and WORRIED are supposed to have raised brows, and leaving
+    art/host/NEUTRAL.png as generated keeps this reversible if better art arrives.
+    TALK and SLEEPY both derive FROM NEUTRAL, so they inherit the fix for free —
+    which is the argument for doing it here and not in three places.
+
+    Zone is y31-34, x24-48: tight to the brow. A looser box caught the hair
+    fringe hanging at y29-30 and shifted that down too, leaving specks on the
+    forehead.
+    """
+    g = img.copy()
+    px, src = g.load(), img.load()
+    skin = dominant_skin(img)
+    Y0, Y1, X0, X1 = 31, 34, 24, 48
+    pts = [(x, y) for y in range(Y0, Y1 + 1) for x in range(X0, X1 + 1)
+           if src[x, y][3] and src[x, y][0] < 130 and src[x, y][1] < 125]
+    if not pts:
+        return g
+    for x, y in pts:
+        px[x, y] = skin
+    for x, y in pts:
+        px[x, y + n] = src[x, y]
+    return g
+
+
 # The headset mic is a solid dark block starting here. It sits at the same
 # height as the mouth and would otherwise be read as part of it.
 MIC_X = 41
@@ -311,6 +348,11 @@ def main() -> int:
 
     # SLEEPY is closed eyes on the neutral face. Deriving it beats generating it:
     # it cannot drift, because it IS the neutral pixels.
+    # Calm his brows FIRST, so TALK and SLEEPY inherit it — both derive from
+    # NEUTRAL and would otherwise keep the startled pose.
+    moods["NEUTRAL"] = lower_brows(moods["NEUTRAL"], 1)
+    print("  NEUTRAL    brows lowered 1px (was reading as startled)")
+
     # TALK is NEUTRAL with the mouth open — derived, never generated, so it
     # cannot drift from the face it belongs to.
     if "TALK" not in moods:
