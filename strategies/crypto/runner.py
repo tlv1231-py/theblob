@@ -242,6 +242,33 @@ def _prune_telemetry(min_interval_s: int = 3600) -> None:
                 r = s.execute(text(f"DELETE FROM {table} WHERE {where}"))
                 if r.rowcount:
                     logger.info(f"[retention] pruned {r.rowcount:,} from {table}")
+
+            # SELF-HEALING COLLAPSE. _write_snapshot upserts, so this should find
+            # nothing — it exists because "should" is doing real work there. Any
+            # writer still on older code (the runner is a GitHub Actions loop
+            # that only re-checks out at job start, so a fix takes hours to land)
+            # reintroduces duplicates, and without this they persist forever
+            # since nothing else ages portfolio_snapshots out.
+            r = s.execute(text("""
+                DELETE FROM portfolio_snapshots
+                 WHERE id NOT IN (
+                    SELECT DISTINCT ON (snapshot_date, strategy) id
+                      FROM portfolio_snapshots
+                     ORDER BY snapshot_date, strategy, recorded_at DESC)
+            """))
+            if r.rowcount:
+                logger.info(f"[retention] collapsed {r.rowcount:,} duplicate snapshots")
+
+            # Same for the heartbeat: one UPDATE row per day, newest wins.
+            r = s.execute(text("""
+                DELETE FROM pipeline_events
+                 WHERE event_type = 'UPDATE' AND id NOT IN (
+                    SELECT DISTINCT ON (run_date) id
+                      FROM pipeline_events WHERE event_type = 'UPDATE'
+                     ORDER BY run_date, recorded_at DESC)
+            """))
+            if r.rowcount:
+                logger.info(f"[retention] collapsed {r.rowcount:,} duplicate heartbeats")
             s.commit()
     except Exception as e:
         logger.warning(f"Retention sweep failed: {e}")
