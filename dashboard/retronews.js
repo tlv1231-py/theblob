@@ -466,8 +466,32 @@
     return !!(sayBox && sayTxt);
   }
 
+  // WHICH EDGE MOVES IS THE WHOLE EFFECT, and height alone does not control it.
+  // The box is pinned by its TOP in normal flow, so shrinking height lifts the
+  // bottom edge and it collapses UPWARD. Compensating margin-top by exactly the
+  // height lost holds the BOTTOM still and walks the top down instead — the box
+  // wipes DOWN and out, like a shade being let go.
+  //
+  // Total occupied space stays marginTop + height = SAY_MARGIN + SAY_H, so the
+  // host strip's fixed 92 logical is never overrun and nothing below shifts.
+  //
+  // OPEN keeps the top pinned (it unrolls downward); only CLOSE compensates.
   function sayApplyStep() {
-    sayBox.style.height = Math.round(SAY_H * sayStep / SAY_STEPS) + 'px';
+    var px = parseFloat(getComputedStyle(document.documentElement)
+                          .getPropertyValue('--px')) || 4;
+    var base = 4 * px;                                   // #rn-say margin-top
+    var h = Math.round(SAY_H * sayStep / SAY_STEPS);
+    sayBox.style.height = h + 'px';
+    sayBox.style.marginTop = (base + (sayPhase === 'close' ? SAY_H - h : 0)) + 'px';
+    // VERTICAL PADDING SCALES WITH THE STEP, or the box never actually leaves.
+    // box-sizing is border-box, so height:0 still renders the 16px top and
+    // bottom padding — the close bottomed out at a 32px sliver AND pushed 32px
+    // past the host strip, since margin was compensating for a height the box
+    // refused to reach. Horizontal padding is untouched: scaling it would reflow
+    // the text mid-animation.
+    var padV = Math.round(base * sayStep / SAY_STEPS);
+    sayBox.style.paddingTop = padV + 'px';
+    sayBox.style.paddingBottom = padV + 'px';
   }
 
   // The ONE entry point. Everything that speaks goes through here so the box can
@@ -963,6 +987,9 @@
     // Speak an arbitrary line, so copy length can be checked against the
     // auto-fit without editing the config table to try a sentence.
     say: function (t) { saySpeak(t); return sayFull; },
+    // The EXIT is an animation in its own right and needs to be checkable
+    // without waiting out a 5s intro to see it once.
+    sayClose: function () { sayClose(); },
     repaintWx: function () { wxPage = 0; paintWxPage(); },
     cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id, hostIntro); q.lastCut = Date.now(); } },
     wiping: function () { return slots.map(function (q) { return q.wiping; }); },
