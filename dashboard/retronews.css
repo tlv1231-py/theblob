@@ -606,9 +606,11 @@ html, body {
    on purpose — this says roughly-how-long, not seconds.
 
    The FINAL pip lights GREEN and blinks: the bar is full, the cut is imminent,
-   and that last stretch is where the eye should be. Green against the gold fill
-   is also the biggest hue jump available in the content tier, so it reads at
-   phone size where a brightness change would not.
+   and that last stretch is where the eye should be. The fill is WHITE
+   (--scr-ink), not gold — gold is the tile header and the temperatures, and a
+   progress bar in the same colour reads as another piece of data rather than as
+   chrome. White also gives the green the cleanest possible jump: neutral to hue,
+   which survives phone-sized viewing where a brightness change would not.
 
    Content tier (--gold / --scr*), because it lives INSIDE a tile. Recessed like
    a gauge set into the panel rather than raised like a button. */
@@ -628,5 +630,5 @@ html, body {
   width: calc(var(--px) * 4); height: calc(var(--px) * 6);
   background: var(--scr1);           /* spent */
 }
-.rn-pips i.on { background: var(--gold); }
+.rn-pips i.on { background: var(--scr-ink); }
 .rn-pips i.hot.on { background: var(--go); }

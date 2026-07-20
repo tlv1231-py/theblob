@@ -550,9 +550,11 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    **green** (`--go`, the partner to `--alert`). It fills rather than drains
    because charging up to something reads as anticipation where emptying reads as
    running out — and running out is the wrong feeling for a channel that simply
-   moves on. Green on the last pip is the biggest hue jump available in the
-   content tier, so it survives phone-sized viewing where a brightness change
-   would not. Segments, **not a sliding meter**:
+   moves on. The fill is WHITE (`--scr-ink`), not gold: gold is the tile
+   header and the temperatures, and a progress bar in the same colour reads as
+   another piece of data rather than as chrome. White also gives the green the
+   cleanest jump — neutral to hue — which survives phone-sized viewing where a
+   brightness change would not. Segments, **not a sliding meter**:
    discrete by construction, so there is nothing for a 24fps software compositor
    to interpolate. Six over a 15s dwell is one step every 2.5s, which is
    deliberately *general* — it says roughly-how-long, not seconds.
