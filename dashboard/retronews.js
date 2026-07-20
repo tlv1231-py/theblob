@@ -539,11 +539,15 @@
   // Both edges are CUTS. A panel that grows by 96 logical cannot be animated
   // here anyway (CSS transitions are inert in this iframe), and a cut is the era.
   var INTRO_MS = FRAME_MS * 120;          // 5040ms = 120 frames exactly
+  // SENTENCE CASE. These were written in all caps back when dialogue used the
+  // SIGNAGE face, whose lowercase reads as caps anyway — so caps cost nothing
+  // and matched the headers. The speech face has true lowercase now, and a
+  // presenter talking should not read like a station ident. Budget is 63 chars.
   var INTRO = {
-    wx:         'AND NOW, YOUR NATIONAL FORECAST.',
-    donors:     "LET'S THANK TONIGHT'S CONTRIBUTORS.",
-    market:     'NEXT UP: HOW THE MARKETS CLOSED.',
-    nowplaying: "AND HERE'S WHAT WE'VE BEEN PLAYING."
+    wx:         'And now, your national forecast.',
+    donors:     "Let's thank tonight's contributors.",
+    market:     'Next up: how the markets closed.',
+    nowplaying: "And here's what we've been playing."
   };
   var introT = null;
   var hostMaster = true;                  // HQ can switch him off entirely
@@ -888,12 +892,16 @@
         seenTs = top.created_at;
         if (first) return;                       // never replay history on load
         var p = top.payload || {};
-        var who = (p.from || 'SOMEONE').toUpperCase();
+        // Viewer names keep the case THEY chose. Upper-casing someone's handle
+        // to match the old all-caps copy was rewriting their name to suit our
+        // layout. The crawl still upper-cases, and should: that is a chyron in
+        // the signage face, not speech.
+        var who = p.from || 'Someone';
         var amt = (p.amount != null) ? ' $' + Number(p.amount).toFixed(2) : '';
         // "We interrupt this broadcast" — the interruption IS the format.
         var say = $('rn-say');
         if (say) {
-          saySpeak(who + amt + ' — THANK YOU!');
+          saySpeak(who + amt + ' - thank you!');
           say._locked = true;
           setTimeout(function () { say._locked = false; }, 12000);
         }
