@@ -416,7 +416,39 @@
     return slot.idx;                       // fewer panels than slots - hold
   }
 
+
+  // ── TILE COUNTDOWN ───────────────────────────────────────────────────────
+  // Six pips draining over the dwell. TIME-BASED off the slot's own lastCut, not
+  // a counter of its own: a second timer would drift against the one that
+  // actually decides when the tile changes, and the bar would empty at a
+  // different moment than the cut it is predicting.
+  //
+  // Clamped at zero because the dwell is a FLOOR, not a promise — rotate() also
+  // waits for any dissolve to finish and takes one slot per tick, so the real
+  // interval can run past `dwell` and a naive count would go negative.
+  var PIPS = 6;
+  function updatePips() {
+    var sl = slots[0];
+    if (!sl) return;
+    var frac = Math.max(0, Math.min(1, (Date.now() - sl.lastCut) / dwell));
+    var left = Math.ceil((1 - frac) * PIPS);
+    // Last pip blinks — the low-health tell every handheld had. A class toggle,
+    // so it is palette motion and costs the compositor nothing. 504ms matches
+    // the alert bar rather than inventing a third blink rate.
+    var lastOn = Math.floor(Date.now() / (FRAME_MS * 12)) % 2 === 0;
+    var bars = document.querySelectorAll('.rn-pips');
+    for (var b = 0; b < bars.length; b++) {
+      var kids = bars[b].children;
+      for (var i = 0; i < kids.length; i++) {
+        var lit = i < left;
+        if (lit && left === 1) lit = lastOn;
+        kids[i].classList.toggle('on', lit);
+      }
+    }
+  }
+
   function rotate() {
+    updatePips();                        // same tick that decides the cut
     if (!order.length) return;
     var now = Date.now();
     // One cut at a time across the whole board: simultaneous dissolves read as
@@ -1083,6 +1115,11 @@
     // Exposed so the host-toggle repaint can be exercised without writing to
     // the live config table just to test a layout change.
     wxRows: function () { return wxRowsThatFit(); },
+    pips: function () {
+      var b = document.querySelector('.rn-tile.on .rn-pips');
+      return b ? [].map.call(b.children, function (k) {
+        return k.classList.contains('on') ? 1 : 0; }) : null;
+    },
     // Speak an arbitrary line, so copy length can be checked against the
     // auto-fit without editing the config table to try a sentence.
     say: function (t) { saySpeak(t); return sayFull; },

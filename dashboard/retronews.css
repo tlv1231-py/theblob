@@ -591,3 +591,32 @@ html, body {
   display: none;
 }
 #rn-say-arrow.on { display: block; }
+
+
+/* ── TILE COUNTDOWN ────────────────────────────────────────────────────────
+   Roughly how long this tile has left, as a segmented bar — the shape every
+   handheld used for health, time and charge. SEGMENTS, not a sliding meter:
+   discrete by construction, so there is nothing for a 24fps software compositor
+   to interpolate and no motion to judder. Six pips over a 15s dwell is one step
+   every 2.5s, which is "general" on purpose — this says roughly-how-long, not
+   seconds.
+
+   Content tier (--gold / --scr*), because it lives INSIDE a tile. Recessed like
+   a gauge set into the panel rather than raised like a button. */
+.rn-pips {
+  flex: none;
+  display: flex; gap: var(--px);
+  padding: var(--px);
+  background: var(--scr-shade);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 var(--scr-shade),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--scr3),
+    0 0 0 var(--px) var(--scr-shade);
+  margin-right: calc(var(--px) * 2);
+}
+.rn-pips i {
+  display: block;
+  width: calc(var(--px) * 4); height: calc(var(--px) * 6);
+  background: var(--scr1);           /* spent */
+}
+.rn-pips i.on { background: var(--gold); }

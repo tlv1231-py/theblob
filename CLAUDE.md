@@ -545,7 +545,20 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    - **Banded gradients are allowed** — in visible hard steps, never smooth ramps.
    - Still no blur, no radius, no anti-aliasing, no soft shadow. Type gets a
      1-logical-px hard offset shadow, never a glow.
-6. **Tile changes use the DISSOLVE, never a fade** (`cutTo()` in
+6. **Every tile carries a SEGMENTED COUNTDOWN** in its head, top-left
+   (`.rn-pips`): six pips draining over the dwell, last one blinking at 504ms —
+   the low-health tell every handheld had. Segments, **not a sliding meter**:
+   discrete by construction, so there is nothing for a 24fps software compositor
+   to interpolate. Six over a 15s dwell is one step every 2.5s, which is
+   deliberately *general* — it says roughly-how-long, not seconds.
+   **Driven off the slot's own `lastCut` inside the existing rotate tick**, never
+   its own timer: a second clock drifts against the one that actually decides the
+   cut, and the bar would empty at a different moment than the change it predicts.
+   Clamped at zero because **the dwell is a FLOOR, not a promise** — `rotate()`
+   also waits out any dissolve and takes one slot per tick, so the real interval
+   can exceed `dwell`.
+
+7. **Tile changes use the DISSOLVE, never a fade** (`cutTo()` in
    `retronews.js`): a chunky block dissolve covers the panel in 8 discrete
    steps, the tile is swapped at full cover behind a one-frame gold flash, then
    it uncovers in 8 steps. Quantised by construction, which is both the
@@ -553,13 +566,13 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    software compositor renders cleanly. ~935ms ≈ 22 frames — comfortably above
    the 6-frame floor. **Never add a CSS fade or slide**; they are inert in the
    iframe anyway.
-7. **Type has a legibility floor.** Vertical video is watched on phones, and
+8. **Type has a legibility floor.** Vertical video is watched on phones, and
    stage px × 0.75 = device px, then the phone shrinks it again. Anything under
    ~24px stage is unreadable on air — measured: a 20px face came out around 8px
    on a phone. Body/data ≥ 8 logical (32px stage); labels ≥ 6 logical (24px).
    A Game Boy fit ~20 characters across; our 216-logical safe box fits 27 at
    8 logical, which is the same density AND legible.
-8. **Everything visible lives inside the safe box.** The Blob stream's known
+9. **Everything visible lives inside the safe box.** The Blob stream's known
    cost — 8 of 14 tiles sitting behind YouTube's chrome — is not repeated here.
    **THE BOX IS MEASURED** (2026-07-20). It got there the hard way — first a
    near-symmetric 88 left / 128 right, then an aggressive 16 left / 200 top to
@@ -657,7 +670,7 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    If the strip is ever shortened, **clip the portrait window, never scale the
    sprite**: only whole multiples keep one art pixel on one logical pixel
    (3x = 67.5 logical, off-grid). Collar begins at art y66.
-10. **The measuring overlay (`dashboard/retronews_yt.js`) is MEASURED, not
+11. **The measuring overlay (`dashboard/retronews_yt.js`) is MEASURED, not
     reconstructed** — calibrated 2026-07-20 against a real YouTube mobile
     livestream screenshot (1080x2340 phone, immersive layout, chat expanded).
     It replaced three published *Shorts* readings that disagreed by 260px on the
