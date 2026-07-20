@@ -434,6 +434,95 @@
   setInterval(rotate, 250);
 
 
+
+  // ── GEN-1 DIALOGUE BOX ───────────────────────────────────────────────────
+  // Pokemon Red's box cuts in; the remembered "animation" is the typewriter and
+  // the blinking arrow. Both are quantized by construction, which is the only
+  // kind of motion this hardware renders cleanly.
+  //
+  // TIME-BASED, not tick-based — the same rule the crawl obeys. Characters are
+  // derived from elapsed wall-clock, so a delayed timer on the loaded broadcast
+  // VM jumps to the right character instead of typing slower than in preview.
+  var SAY_STEPS   = 5;                 // stepped open/close
+  var SAY_STEP_MS = FRAME_MS * 2;      // 84ms per step = 420ms, ~10 frames
+  var SAY_H       = 72 * 4;            // 72 logical x --px, the box's full height
+  var CHAR_MS     = FRAME_MS;          // ~24 chars/sec, close to Gen-1 medium
+  var ARROW_MS    = FRAME_MS * 12;     // 504ms blink, matching the alert bar
+
+  var sayBox, sayTxt, sayArrow;
+  var sayFull = '', sayT0 = 0, sayPhase = 'shut', sayStep = 0, sayTimer = null;
+
+  function sayEls() {
+    if (!sayBox) {
+      sayBox = $('rn-say'); sayTxt = $('rn-say-txt'); sayArrow = $('rn-say-arrow');
+    }
+    return !!(sayBox && sayTxt);
+  }
+
+  function sayApplyStep() {
+    sayBox.style.height = Math.round(SAY_H * sayStep / SAY_STEPS) + 'px';
+  }
+
+  // The ONE entry point. Everything that speaks goes through here so the box can
+  // never be half-typed by one writer and overwritten by another.
+  function saySpeak(text) {
+    if (!sayEls()) return;
+    clearInterval(sayTimer);
+    sayFull = String(text == null ? '' : text);
+    sayTxt.textContent = '';
+    if (sayArrow) sayArrow.classList.remove('on');
+
+    if (!sayFull) {                       // nothing to say: close and stay shut
+      sayPhase = 'shut'; sayStep = 0; sayApplyStep(); return;
+    }
+    sayPhase = 'open'; sayStep = 0; sayApplyStep();
+    sayT0 = Date.now();
+    sayTimer = setInterval(sayTick, FRAME_MS);
+  }
+
+  function sayTick() {
+    if (!sayEls()) return;
+    var el = Date.now() - sayT0;
+    if (sayPhase === 'open') {
+      var st = Math.min(SAY_STEPS, Math.floor(el / SAY_STEP_MS) + 1);
+      if (st !== sayStep) { sayStep = st; sayApplyStep(); }
+      if (st >= SAY_STEPS) { sayPhase = 'type'; sayT0 = Date.now(); }
+      return;
+    }
+    if (sayPhase === 'type') {
+      var n = Math.floor(el / CHAR_MS);
+      if (n >= sayFull.length) {
+        sayTxt.textContent = sayFull;
+        sayPhase = 'done'; sayT0 = Date.now();
+        return;
+      }
+      // Only touch the DOM when the count actually changes.
+      if (sayTxt.textContent.length !== n) sayTxt.textContent = sayFull.slice(0, n);
+      return;
+    }
+    if (sayPhase === 'done' && sayArrow) {
+      // Blink by class toggle — palette motion, zero compositor cost.
+      sayArrow.classList.toggle('on', Math.floor(el / ARROW_MS) % 2 === 0);
+    }
+  }
+
+  // Stepped close, so the box leaves the way it arrived.
+  function sayClose() {
+    if (!sayEls()) return;
+    clearInterval(sayTimer);
+    if (sayArrow) sayArrow.classList.remove('on');
+    sayPhase = 'close'; sayT0 = Date.now();
+    sayTimer = setInterval(function () {
+      var st = SAY_STEPS - Math.floor((Date.now() - sayT0) / SAY_STEP_MS);
+      sayStep = Math.max(0, st); sayApplyStep();
+      if (sayStep <= 0) {
+        clearInterval(sayTimer);
+        sayTxt.textContent = '';
+        sayPhase = 'shut';
+      }
+    }, FRAME_MS);
+  }
+
   // ── HOST INTRO — the default tile transition ─────────────────────────────
   // He appears WITH the new tile (both arrive behind the dissolve), introduces
   // it, then steps aside and the board takes his space — 10 weather rows become
@@ -473,14 +562,19 @@
     var say = $('rn-say');
     var line = INTRO[tileId];
     if (say && !say._locked && line) {
-      say.textContent = line;
+      saySpeak(line);
       say._introOwned = true;             // so pollConfig does not clobber it
     }
     setHostMood('NEUTRAL', INTRO_MS);
 
     introT = setTimeout(function () {
-      hostShow(false);
-      if (say && say._introOwned) { say._introOwned = false; }
+      // Box leaves BEFORE he does, so the beat reads as him finishing a line and
+      // then stepping aside rather than both vanishing at once.
+      sayClose();
+      setTimeout(function () {
+        hostShow(false);
+        if (say && say._introOwned) { say._introOwned = false; }
+      }, SAY_STEPS * SAY_STEP_MS);
     }, INTRO_MS);
   }
 
@@ -547,7 +641,14 @@
         var np = $('rn-nameplate');
         if (np) np.textContent = c.host_name || 'YOUR HOST';
         var say = $('rn-say');
-        if (say && !say._locked && !say._introOwned) say.textContent = c.host_say || '';
+        // Only speak when he is actually ON SCREEN. Once the intro ends he is
+        // hidden, and without this the config poll keeps re-typing its line into
+        // an invisible box every few seconds — a 42ms interval doing nothing a
+        // viewer can ever see, on a host whose compositor is already pegged.
+        var stgV = $('stage');
+        var hostOnScreen = stgV && !stgV.classList.contains('no-host');
+        if (say && hostOnScreen && !say._locked && !say._introOwned
+            && (c.host_say || '') !== sayFull) saySpeak(c.host_say || '');
 
         // Alert bar. Empty string = off. Blink is a class toggle, no transition.
         var al = $('rn-alert');
@@ -785,7 +886,7 @@
         // "We interrupt this broadcast" — the interruption IS the format.
         var say = $('rn-say');
         if (say) {
-          say.textContent = who + amt + ' — THANK YOU!';
+          saySpeak(who + amt + ' — THANK YOU!');
           say._locked = true;
           setTimeout(function () { say._locked = false; }, 12000);
         }

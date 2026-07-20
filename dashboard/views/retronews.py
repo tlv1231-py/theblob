@@ -187,7 +187,10 @@ _STAGE_HTML = """
         </div>
         <div id="rn-host-right">
           <div id="rn-nameplate">YOUR HOST</div>
-          <div id="rn-say"></div>
+          <!-- Gen-1 dialogue box: text types in, a blinking arrow marks the end.
+               The text lives in its own node because the arrow is a SIBLING —
+               writing textContent on #rn-say would delete the arrow. -->
+          <div id="rn-say"><span id="rn-say-txt"></span><span id="rn-say-arrow"></span></div>
         </div>
       </div>
 

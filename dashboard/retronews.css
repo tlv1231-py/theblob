@@ -432,8 +432,13 @@ html, body {
   color: var(--ink);
   font-size: calc(var(--px) * 5);
 }
+/* HEIGHT IS EXPLICIT, not flex: the box opens in discrete steps and JS drives
+   the height directly. 72 logical is what is left of the 92-logical host strip
+   after the 16-logical nameplate and the 4-logical gap — deterministic, so the
+   open animation has a known target and never has to measure. */
 #rn-say {
-  flex: 1; margin-top: calc(var(--px) * 4);
+  flex: none; height: calc(var(--px) * 72);
+  margin-top: calc(var(--px) * 4);
   padding: calc(var(--px) * 4);
   background: var(--sky0);
   box-shadow:
@@ -543,3 +548,24 @@ html, body {
    never had. A bigger panel shows MORE ROWS, not BIGGER ROWS — which is also
    what the boards this is imitating actually did. */
 #stage.no-host #rn-host { display: none; }
+
+
+/* ── GEN-1 DIALOGUE ────────────────────────────────────────────────────────
+   Pokemon Red's textbox does NOT slide or fade — it cuts in, and what everyone
+   remembers as the animation is the TEXT: characters typing one at a time and a
+   ▼ blinking when the line lands. That is fortunate here: quantized text and a
+   hard cut are exactly what a 24fps software compositor renders cleanly, and a
+   fade would be inert in this iframe regardless.
+
+   The box open is stepped rather than instant — the same trick the Blob stream's
+   boxOpen uses — so it reads as "coming in" without being a tween. */
+#rn-say-arrow {
+  position: absolute;
+  right: calc(var(--px) * 4); bottom: calc(var(--px) * 3);
+  width: 0; height: 0;
+  border-left: calc(var(--px) * 3) solid transparent;
+  border-right: calc(var(--px) * 3) solid transparent;
+  border-top: calc(var(--px) * 3) solid var(--ink);
+  display: none;
+}
+#rn-say-arrow.on { display: block; }
