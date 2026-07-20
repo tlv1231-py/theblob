@@ -560,6 +560,17 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    collapses.
    Allocation (logical, safe box = 208x319, fully packed): brand 24 · gap 4 ·
    **content 195, ONE panel** · gap 4 · host 92.
+   **THE HOST INTRODUCES EVERY TILE, THEN STEPS ASIDE — the default transition.**
+   He and the new tile arrive together *behind the dissolve* (`cutTo` takes an
+   `onSwap` callback that fires at FULL COVER — the one moment the panel is
+   hidden, which is where anything that changes panel geometry belongs, since the
+   host appearing shrinks it by 96 logical). He holds `INTRO_MS` (120 frames =
+   5040ms), then hides and the board REVEALS more of itself. Copy lives in
+   `INTRO` keyed by tile id. He will not talk over a viewer: a tip locks the say
+   box for 12s and a thank-you outranks a programming link.
+   `host_visible` is now a MASTER switch over that cycle rather than a direct
+   show/hide — `'0'` means he never appears at all.
+
    **The host strip is TOGGLEABLE** (`host_visible`, RetroNews HQ, polled ~3s).
    Hidden, the content panel absorbs his 96 and runs **291** logical. This works
    because `#rn-content` is a **flex filler, not a fixed height** — there is no
@@ -602,6 +613,11 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    For REVEAL, MEASURE how many items fit (`wxRowsThatFit()`) rather than storing
    the two counts — they are consequences of the panel heights, and written down
    they drift out of step the next time a height moves.
+   **Measure off the SLOT, never off an element inside a tile.** A tile that is
+   not currently showing is `display:none`, so anything in it measures ZERO
+   height and the row count clamps to 1 — a one-row board. That fires exactly
+   when a repaint happens during a transition to a *different* tile, which is
+   most of the time.
 
    **`WIPE_ROWS` must be sized for the TALLER state** (25, not 17) or the
    dissolve covers the small panel and leaves the bottom third of the big one

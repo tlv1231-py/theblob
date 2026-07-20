@@ -171,14 +171,20 @@
   var WX_ROW_LOGICAL = 17;
   var wxAll = [], wxPage = 0;
 
+  // Measured off the SLOT, which is always visible — NOT off the weather grid.
+  // The grid lives inside a tile that is display:none whenever another tile is
+  // showing, so it measures ZERO height, floor(0/68) clamps to 1, and the board
+  // repaints with a SINGLE row. That bites exactly when the host intro repaints
+  // during a transition to a different tile, i.e. most of the time.
+  var WX_HEAD_LOGICAL = 24;               // .rn-tile-head, above the grid
   function wxRowsThatFit() {
-    var g = document.querySelector('.rn-wx-grid');
-    if (!g) return 10;
+    var slot = document.querySelector('.rn-slot');
+    if (!slot) return 10;
     var cs = getComputedStyle(document.documentElement);
     var s = parseFloat(cs.getPropertyValue('--s')) || 1;
     var px = parseFloat(cs.getPropertyValue('--px')) || 4;
-    var h = g.getBoundingClientRect().height / s;      // stage px
-    return Math.max(1, Math.floor(h / (WX_ROW_LOGICAL * px)));
+    var body = slot.getBoundingClientRect().height / s - WX_HEAD_LOGICAL * px;
+    return Math.max(1, Math.floor(body / (WX_ROW_LOGICAL * px)));
   }
 
   // Writes EVERY .rn-wx-grid, not the first. There is one panel set per slot,
@@ -339,11 +345,19 @@
     this.current = id;
   };
 
-  Slot.prototype.cutTo = function (id) {
+  // onSwap fires at FULL COVER, the one moment the panel is completely hidden.
+  // Anything that changes the panel's geometry belongs there: the host appearing
+  // shrinks it by 96 logical, and doing that in the open would be a visible jump
+  // rather than a cut.
+  Slot.prototype.cutTo = function (id, onSwap) {
     var self = this;
     // No overlapping dissolves: a second one mid-flight would strand blocks
     // visible forever. Same reasoning as the Blob stream's lane arbiter.
-    if (!this.wipe || !this.blocks.length || this.wiping) { this.show(id); return; }
+    if (!this.wipe || !this.blocks.length || this.wiping) {
+      this.show(id);
+      if (onSwap) onSwap(id);
+      return;
+    }
     this.wiping = true;
     this.wipe.classList.add('on');
     var n = this.blocks.length, step = 0;
@@ -358,6 +372,7 @@
       // Full cover: swap the tile behind it, flash gold for one frame.
       self.wipe.classList.add('flash');
       self.show(id);
+      if (onSwap) onSwap(id);
       setTimeout(function () {
         self.wipe.classList.remove('flash');
         var back = WIPE_STEPS;
@@ -412,11 +427,64 @@
       if (now - sl.lastCut < dwell) continue;
       sl.lastCut = now;
       sl.idx = pickNext(sl);
-      sl.cutTo(order[sl.idx]);
+      sl.cutTo(order[sl.idx], hostIntro);
       return;                              // only one per tick
     }
   }
   setInterval(rotate, 250);
+
+
+  // ── HOST INTRO — the default tile transition ─────────────────────────────
+  // He appears WITH the new tile (both arrive behind the dissolve), introduces
+  // it, then steps aside and the board takes his space — 10 weather rows become
+  // 15. That is the REVEAL behaviour already built for the host toggle, now
+  // driven by the schedule instead of by hand.
+  //
+  // Both edges are CUTS. A panel that grows by 96 logical cannot be animated
+  // here anyway (CSS transitions are inert in this iframe), and a cut is the era.
+  var INTRO_MS = FRAME_MS * 120;          // 5040ms = 120 frames exactly
+  var INTRO = {
+    wx:         'AND NOW, YOUR NATIONAL FORECAST.',
+    donors:     "LET'S THANK TONIGHT'S CONTRIBUTORS.",
+    market:     'NEXT UP — HOW THE MARKETS CLOSED.',
+    nowplaying: "AND HERE'S WHAT WE'VE BEEN PLAYING."
+  };
+  var introT = null;
+  var hostMaster = true;                  // HQ can switch him off entirely
+
+  function hostShow(on) {
+    var stg = $('stage');
+    if (!stg) return;
+    if (stg.classList.contains('no-host') === !on) return;   // already there
+    stg.classList.toggle('no-host', !on);
+    // The panel just changed height, so a different number of rows fits. Without
+    // this the board keeps the old page size until the next 15s page tick.
+    wxPage = 0;
+    paintWxPage();
+  }
+
+  function hostIntro(tileId) {
+    clearTimeout(introT);
+    if (!hostMaster) { hostShow(false); return; }
+    hostShow(true);
+
+    // Do NOT talk over a viewer. pollEvents locks the say box for 12s when
+    // someone tips, and a thank-you outranks a programming link every time.
+    var say = $('rn-say');
+    var line = INTRO[tileId];
+    if (say && !say._locked && line) {
+      say.textContent = line;
+      say._introOwned = true;             // so pollConfig does not clobber it
+    }
+    setHostMood('NEUTRAL', INTRO_MS);
+
+    introT = setTimeout(function () {
+      hostShow(false);
+      if (say && say._introOwned) { say._introOwned = false; }
+    }, INTRO_MS);
+  }
+
+
 
   // ── Config (namespaced to THIS app) ──────────────────────────────────────
   // strategy_params' PK is (strategy, param), so 'stream:retronews' is a free
@@ -454,21 +522,15 @@
             }
           } catch (e) {}
         }
-        // HOST ON/OFF. Only an explicit '0' hides him — a missing row, or a
-        // failed fetch, must leave the stage as designed rather than silently
-        // dropping the channel's anchor. A CUT, not a transition: CSS
-        // transitions are inert in this iframe and would do nothing at all.
-        var stg = $('stage');
-        if (stg) {
-          var wantHide = c.host_visible === '0';
-          if (stg.classList.contains('no-host') !== wantHide) {
-            stg.classList.toggle('no-host', wantHide);
-            // The panel just changed height, so a different number of rows fits.
-            // Without this the board keeps the old page size until the next
-            // 15s page tick — visibly half-empty, or clipped, in between.
-            wxPage = 0;
-            paintWxPage();
-          }
+        // HOST — now a MASTER switch over the intro cycle, not a direct
+        // show/hide. '0' means he never appears at all; anything else means he
+        // introduces each tile and then steps aside. Only an explicit '0'
+        // suppresses him, so a missing row or a failed fetch leaves the stage as
+        // designed rather than silently dropping the channel's anchor.
+        var master = c.host_visible !== '0';
+        if (master !== hostMaster) {
+          hostMaster = master;
+          if (!master) { clearTimeout(introT); hostShow(false); }
         }
 
         // Measuring overlay, driven live from HQ. No reload: the toggle has to
@@ -485,7 +547,7 @@
         var np = $('rn-nameplate');
         if (np) np.textContent = c.host_name || 'YOUR HOST';
         var say = $('rn-say');
-        if (say && !say._locked) say.textContent = c.host_say || '';
+        if (say && !say._locked && !say._introOwned) say.textContent = c.host_say || '';
 
         // Alert bar. Empty string = off. Blink is a class toggle, no transition.
         var al = $('rn-alert');
@@ -783,8 +845,24 @@
     // the live config table just to test a layout change.
     wxRows: function () { return wxRowsThatFit(); },
     repaintWx: function () { wxPage = 0; paintWxPage(); },
-    cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id); q.lastCut = Date.now(); } },
+    cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id, hostIntro); q.lastCut = Date.now(); } },
     wiping: function () { return slots.map(function (q) { return q.wiping; }); },
     blocks: function () { return slots.map(function (q) { return q.blocks.length; }); }
   };
+
+  // ── First tile gets an introduction too ──────────────────────────────────
+  // Otherwise the channel opens with the anchor already gone, which reads as him
+  // having walked off before the show started.
+  //
+  // THIS CALL LIVES AT THE VERY END OF THE FILE, AND THAT IS NOT STYLE.
+  // It walks the whole machine — hostShow -> paintWxPage -> wxRowsThatFit, and
+  // setHostMood -> MOOD_ROW — and those live in blocks further down the file.
+  // Function declarations hoist; the `var`s they close over do NOT. Placed up
+  // beside setInterval(rotate) it read hostMaster as undefined and silently took
+  // the master-off branch; moved just below hostMaster it then hit
+  // `m in MOOD_ROW` with MOOD_ROW undefined, threw a TypeError, and killed
+  // everything after it — the config poll, the crawl, the heartbeat and the
+  // debug API all stopped existing. Anything that touches several blocks at
+  // startup belongs here, after all of them.
+  hostIntro(slots.length ? slots[0].current : order[0]);
 })();
