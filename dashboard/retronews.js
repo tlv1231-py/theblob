@@ -666,6 +666,7 @@
         sayTxt.textContent = sayFull;
         sayPhase = 'done'; sayT0 = Date.now();
         hostBob(false);              // land him flat on the last character
+        setTalk(false);              // ...and shut his mouth
         // ...and land him back on SMUG. Re-asserted rather than assumed: a
         // donation arriving mid-sentence sets its own mood, and without this he
         // would finish the line wearing it.
@@ -682,8 +683,10 @@
         // Spaces stay silent: Gen 1 bipped through them and it sounds mechanical
         // in a sentence this short.
         var ch = sayFull.charAt(n - 1);
-        if (n % 2 === 0 && ch !== ' ') VOICE.blip();
-        hostBob(n % 2 === 0);
+        var beat = (n % 2 === 0);
+        if (beat && ch !== ' ') VOICE.blip();
+        hostBob(beat);
+        setTalk(beat);          // mouth flaps on the same beat as the blip
       }
       return;
     }
@@ -700,6 +703,7 @@
     if (sayArrow) sayArrow.classList.remove('on');
     sayPhase = 'close'; sayT0 = Date.now();
     hostBob(false);
+    setTalk(false);
     sayTimer = setInterval(function () {
       var st = SAY_STEPS - Math.floor((Date.now() - sayT0) / SAY_STEP_MS);
       sayStep = Math.max(0, st); sayApplyStep();
@@ -865,15 +869,30 @@
   // Everything is frame-aligned (see FRAME_MS) so no state lasts less than one
   // captured frame — a blink that falls between frames simply never happened as
   // far as the broadcast is concerned.
-  var MOOD_ROW = { NEUTRAL: 0, HAPPY: 1, SURPRISED: 2, SMUG: 3, WORRIED: 4, SLEEPY: 5 };
+  var MOOD_ROW = { NEUTRAL: 0, HAPPY: 1, SURPRISED: 2, SMUG: 3, WORRIED: 4,
+                   SLEEPY: 5, TALK: 6 };
   var CELL_W = 72, CELL_H = 90, ART = 4;          // 4x -> 288x360 stage
   var hostMood = 'NEUTRAL', hostLid = 0;
   var moodUntil = 0, nextBlink = 0, blinkSeq = null, blinkI = 0;
+
+  // TALK is a MOUTH state, not a mood — it never enters hostMood, so nothing
+  // in the mood system (holds, reverts, viewer reactions) has to know about it.
+  // That is how GBA portraits worked: the face is static and the mouth is an
+  // independent swap over the top of it.
+  var talkFlap = false;
+  function setTalk(on) {
+    if (on === talkFlap) return;
+    talkFlap = on;
+    drawHost();
+  }
 
   function drawHost() {
     var el = $('rn-host-sprite');
     if (!el) return;
     var row = MOOD_ROW[hostMood] || 0;
+    // Only NEUTRAL has a derived open mouth, and only NEUTRAL ever talks — the
+    // speech arc puts every typed character inside the NEUTRAL beat.
+    if (talkFlap && hostMood === 'NEUTRAL') row = MOOD_ROW.TALK;
     el.style.backgroundPosition =
       (-hostLid * CELL_W * ART) + 'px ' + (-row * CELL_H * ART) + 'px';
   }

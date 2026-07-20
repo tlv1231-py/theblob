@@ -418,7 +418,7 @@ html, body {
 #rn-host-sprite {
   width: calc(var(--px) * 72); height: calc(var(--px) * 90);
   background-repeat: no-repeat;
-  background-size: calc(var(--px) * 216) calc(var(--px) * 540);  /* 3 cols x 6 rows */
+  background-size: calc(var(--px) * 216) calc(var(--px) * 630);  /* 3 cols x 7 rows */
   background-position: 0 0;
   image-rendering: pixelated;
 }

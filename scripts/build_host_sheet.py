@@ -4,8 +4,12 @@
     python scripts/build_host_sheet.py dashboard/retronews_host.png \
         NEUTRAL=art/neutral.png HAPPY=art/happy.png ...
 
-Sheet: 3 lid columns x 6 mood rows of 72x90 = 216x540, indexed by retronews.js
-as column = eyelid, row = mood. Row order is fixed by MOOD_ROW in retronews.js.
+Sheet: 3 lid columns x 7 rows of 72x90 = 216x630, indexed by retronews.js as
+column = eyelid, row = mood. Row order is fixed by MOOD_ROW in retronews.js.
+
+The 7th row is TALK — NEUTRAL with the mouth open. It is a MOUTH state, not a
+mood, and never enters hostMood: the face is static and the mouth swaps over the
+top of it, which is how GBA portraits animated speech.
 
 REGISTRATION IS THE WHOLE GAME.
 Each mood is a separate image, so the skull/hair/headset/shirt are NOT
@@ -37,7 +41,7 @@ from PIL import Image
 W, H = 72, 90
 LIDS = 3
 # Must match MOOD_ROW in dashboard/retronews.js.
-ROWS = ["NEUTRAL", "HAPPY", "SURPRISED", "SMUG", "WORRIED", "SLEEPY"]
+ROWS = ["NEUTRAL", "HAPPY", "SURPRISED", "SMUG", "WORRIED", "SLEEPY", "TALK"]
 # Too few eye columns to trust the scan => eyes are already closed.
 MIN_EYE_COLS = 8
 
@@ -203,6 +207,55 @@ def close_eyes(base: Image.Image, amount: float, skin, lash) -> Image.Image:
     return img
 
 
+# The headset mic is a solid dark block starting here. It sits at the same
+# height as the mouth and would otherwise be read as part of it.
+MIC_X = 41
+
+
+def mouth_pixels(img: Image.Image):
+    """The closed mouth: dark ink in the lower face, LEFT of the mic."""
+    px = img.load()
+    out = []
+    for y in range(50, 59):
+        for x in range(28, MIC_X):
+            p = px[x, y]
+            if p[3] and p[0] < 140 and p[1] < 130:
+                out.append((x, y))
+    return out
+
+
+def open_mouth(img: Image.Image, rows: int = 1) -> Image.Image:
+    """Hang a cavity under the lip line.
+
+    His mouth is FOUR PIXELS WIDE, so "open" is one dark row beneath the lip —
+    not a drawn cavity. Two rows was tried and reads as a black box.
+
+    This is derivation by ADDITION, which is why it is riskier than the blink
+    (removal): closing an eye covers something that exists, opening a mouth
+    invents geometry. It is kept to the minimum that reads as movement, and only
+    under columns that already HAVE a lip, so the shape follows the mouth rather
+    than stamping a rectangle.
+
+    NEUTRAL only, deliberately. SMUG's smirk is diagonal and a rectangular cavity
+    below it reads as two disconnected shapes — and he never talks in SMUG
+    anyway: the speech arc puts every typed character inside the NEUTRAL beat.
+    """
+    g = img.copy()
+    px = g.load()
+    m = mouth_pixels(img)
+    if not m:
+        return g
+    ink = img.load()[m[0][0], m[0][1]]
+    lowest = {}
+    for x, y in m:
+        lowest[x] = max(lowest.get(x, -1), y)
+    for x, ylow in lowest.items():
+        for k in range(1, rows + 1):
+            if ylow + k < H:
+                px[x, ylow + k] = ink
+    return g
+
+
 def sclera_cols(img: Image.Image) -> int:
     """Columns containing VISIBLE WHITE OF THE EYE.
 
@@ -258,6 +311,12 @@ def main() -> int:
 
     # SLEEPY is closed eyes on the neutral face. Deriving it beats generating it:
     # it cannot drift, because it IS the neutral pixels.
+    # TALK is NEUTRAL with the mouth open — derived, never generated, so it
+    # cannot drift from the face it belongs to.
+    if "TALK" not in moods:
+        moods["TALK"] = open_mouth(moods["NEUTRAL"], 1)
+        print("  TALK       derived from NEUTRAL (mouth opened 1px)")
+
     if "SLEEPY" not in moods:
         n = moods["NEUTRAL"]
         moods["SLEEPY"] = close_eyes(n, 1.0, dominant_skin(n), (38, 36, 72, 255))
@@ -280,7 +339,7 @@ def main() -> int:
     semi = sum(1 for p in data if 0 < p[3] < 255)
     ok = semi == 0 and len(cols) <= 40 and not missing
     print(f"sheet {sheet.size[0]}x{sheet.size[1]}  colours={len(cols)}  semi-alpha={semi}")
-    print("  " + ("PASS — all six moods drawn" if ok
+    print("  " + (f"PASS — all {len(ROWS)} rows drawn" if ok
                   else f"FAIL — missing {missing}" if missing else "FAIL — check above"))
     return 0 if ok else 1
 
