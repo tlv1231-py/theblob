@@ -44,27 +44,39 @@
      aged plastic in a room rather than a black screen. Amber is the retro-CRT
      colour and stays the primary content accent. */
 
-  /* SHELL — quiet. */
-  --sky0:  #191714;          /* deepest field */
-  --sky1:  #211e1a;          /* row A */
-  --sky2:  #282521;          /* panel fill / row B */
-  --sky3:  #37332d;          /* raised panel */
-  --lit:   #5b554a;          /* bevel highlight (top-left) */
-  --shade: #0d0c0a;          /* bevel shadow (bottom-right) + outline */
-  --ink:   #ded7c7;          /* primary type */
-  --dim:   #8b8478;          /* secondary type — replaces chrome's use of cyan */
+  /* SHELL — quiet, but WARM and LIFTED. Straight greys read as grim no matter
+     how "warm" the hex is: the first pass carried only ~0.14 saturation and the
+     whole stage looked dead. Two things fix that and they are separate — more
+     CHROMA, and more LIGHT. This is the second-lightest of four candidates and
+     was picked precisely because the complaint was darkness, not just greyness.
+     Sun-faded photograph rather than dim room. */
+  --sky0:  #3a2f22;          /* deepest field */
+  --sky1:  #3e3324;          /* row A — one step DOWN from the panel */
+  --sky2:  #4c3e2c;          /* panel fill / row B */
+  --sky3:  #614f38;          /* raised panel */
+  --lit:   #9b8158;          /* bevel highlight (top-left) */
+  --shade: #201810;          /* bevel shadow (bottom-right) + outline */
+  --ink:   #f8eeda;          /* primary type */
+  --dim:   #c0a884;          /* secondary type */
 
-  /* CONTENT — allowed to be loud. Used INSIDE panels, never on the shell. */
-  --gold:  #e0982c;          /* amber: temperatures, tile headers, money */
-  --gold2: #b06f18;          /* amber shadow / pressed */
-  --cyan:  #6fb0c8;          /* muted sky: conditions, secondary data */
-  --alert: #c8503c;          /* the one red — alerts, LIVE dot, adverts */
+  /* CONTENT — allowed to be loud. Used INSIDE panels, never on the shell.
+     TEAL, not the old sky blue: against a warm shell a cool blue goes muddy,
+     whereas teal is close to the complement of the ground and stays crisp. */
+  --gold:  #ffcf5c;          /* amber: temperatures, tile headers, money */
+  --gold2: #b8873a;          /* amber shadow / pressed */
+  --cyan:  #6fc8bc;          /* teal: conditions, secondary data */
+  --alert: #e86a40;          /* the one red — alerts, LIVE dot, adverts */
 
   /* REVERT — GBA, in this order:
      #0a1030 #141c48 #1e2c68 #2c4494 #6f9ae8 #060a20 #f4f8ff (ink) / #46dcff
      (cyan) #ffc830 #c07f10 #e83848
      NES:  #0e0e0e #1a1a1a #2c2c2c #4a4a4a #b4b4ac #000000 #ececE4 / #9c9c94
-     #e0342c #8c1219 #e0342c */
+     #e0342c #8c1219 #e0342c
+     WARM CHARCOAL (too grim): #191714 #211e1a #282521 #37332d #5b554a #0d0c0a
+     #ded7c7 / #8b8478 #e0982c #b06f18 #6fb0c8 #c8503c
+     SEPIA (warm but still dark): #2a2118 #3b3024 #4e402c #8a7350 #140e08
+     #f2e6ce / #b39c78
+     DUSK PLUM: #241c26 #322836 #453548 #7d6483 #120c14 #ece0ee / #a892ad */
 
   /* THE SAFE BOX IS MEASURED, not derived from published guides.
      Calibrated 2026-07-20 off a real YouTube mobile livestream screenshot; see

@@ -432,9 +432,16 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    weather board and the mock adverts and wrong for the chrome around them. A
    real channel's station furniture is understated; the weather map and the
    infomercial are where the shouting belongs. The split is by **ROLE, not hue**:
-   - **SHELL** — brand bar, panel frames, bevels, host strip, crawl. Warm
-     charcoal, off-white type, and **NO ACCENT COLOUR AT ALL. A coloured chrome
-     element is a bug.** Measured: chrome saturation 0.00–0.14.
+   - **SHELL** — brand bar, panel frames, bevels, host strip, crawl. Sun-faded
+     **Kodachrome** warm browns, cream type, and **NO ACCENT COLOUR AT ALL. A
+     coloured chrome element is a bug.**
+     **"Quiet" is not the same as "grey", and getting that wrong cost a round.**
+     The first quiet shell was warm charcoal at ~0.17 saturation and read as
+     grimdark. Two SEPARATE levers fix it — **chroma AND light** — and the shell
+     needed both: panel fill went lum 0.019→0.052 and sat 0.17→0.42.
+   - **CONTENT partners the shell.** The old sky blue went muddy on a warm
+     ground, so conditions moved to **teal**, which is near the complement and
+     stays crisp.
    - **CONTENT** — what the panels are FOR: temperatures, tile headers, ad copy,
      the LIVE dot. Keeps saturated colour, and reads as loud *precisely because
      nothing around it competes*. Measured: 0.45–0.80.

@@ -15,8 +15,8 @@ bevels and high-contrast type, so a backdrop with a NARROW tonal range sits
 behind them even at a similar mean brightness. Crushing the city to near-black
 would also work, but half the frame would then be an empty rectangle.
 
-So: map luminance into a narrow warm band whose top stays BELOW --lit (#5b554a,
-the panel bevel highlight). Nothing in the backdrop is ever as bright as the edge
+So: map luminance into a narrow warm band whose top stays BELOW --lit (the panel
+bevel highlight). Nothing in the backdrop is ever as bright as the edge
 of a panel, which is what keeps the panels reading as objects on top of it.
 
 Window lights and water reflections are found by WARMTH, not brightness. They
@@ -40,9 +40,12 @@ from collections import Counter
 from PIL import Image
 
 # Derived from retronews.css :root so the backdrop cannot drift from the shell.
-SHELL_FLOOR = (0x12, 0x10, 0x0e)     # just above --shade
-SHELL_CEIL  = (0x3a, 0x34, 0x2c)     # deliberately BELOW --lit #5b554a
-GLOW        = (0x9a, 0x7c, 0x44)     # amber for window lights and reflections
+# Track the shell. These are not free constants — the ceiling MUST stay below
+# --lit or the backdrop stops receding, and the floor sits just above --shade so
+# the darkest part of the city is not blacker than a panel outline.
+SHELL_FLOOR = (0x24, 0x1c, 0x12)     # just above --shade #201810
+SHELL_CEIL  = (0x5e, 0x4d, 0x36)     # deliberately BELOW --lit #9b8158
+GLOW        = (0xc8, 0xa0, 0x58)     # amber for window lights and reflections
 GLOW_WARMTH = 18                     # r-b in the SOURCE that marks a light
 COLORS      = 16
 
@@ -117,7 +120,7 @@ def main() -> int:
     sat_after = sum(((max(c) - min(c)) / max(1, max(c))) * n
                     for c, n in after.items()) / max(1, sum(after.values()))
     semi = sum(1 for p in data if 0 < p[3] < 255)
-    lit_lum = lum((0x5b, 0x55, 0x4a, 255))
+    lit_lum = lum((0x9b, 0x81, 0x58, 255))   # --lit
     brightest = max(lum(c + (255,)) for c in after)
     over = sum(n for c, n in after.items() if lum(c + (255,)) > lit_lum)
     over_pct = 100.0 * over / max(1, sum(after.values()))
