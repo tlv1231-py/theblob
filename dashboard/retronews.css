@@ -446,12 +446,21 @@ html, body {
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--lit),
     0 0 0 var(--px) var(--shade);
   color: var(--ink);
-  /* SIZE IS SET BY JS — sayFit() picks the largest whole-logical size the whole
-     message fits at, floor 8 (CLAUDE.md rule 7). The 5 logical that was here is
-     20px stage = 15px on a phone, i.e. under the legibility floor and unreadable
-     on air. This value is only the pre-script fallback.
-     line-height 1.5, not 1.9: tighter leading buys a whole size step. */
-  font-size: calc(var(--px) * 8); line-height: 1.5;
+  /* ONE FIXED SIZE. Auto-fitting per message was built and REMOVED: sizing text
+     to the space means a short line renders huge, and on a dialogue box that
+     reads as SHOUTING rather than as good use of space. Type size is voice, and
+     the voice should not change with sentence length.
+
+     9 logical is chosen, not guessed. The content area is 124x64 logical, so at
+     1.5 leading:
+         11+  ->  33 chars   cannot fit the 35-char intro lines at all
+         10   ->  48 chars   clips the 50-char host line already in the config
+         9    ->  52 chars   fits everything currently written        <-- this
+         8    ->  75 chars   more room, but 24px on a phone
+     9 logical = 36px stage = 27px device, comfortably over rule 7's floor.
+     THE COPY BUDGET IS 52 CHARACTERS and RetroNews HQ enforces it at the input.
+     line-height 1.5, not 1.9: tighter leading is what makes 9 fit 52. */
+  font-size: calc(var(--px) * 9); line-height: 1.5;
   overflow: hidden;
   position: relative;
 }

@@ -173,8 +173,13 @@ def render() -> None:
 
         name = st.text_input("Nameplate", value=cfg.get("host_name") or "YOUR HOST",
                              max_chars=28)
+        # 52 IS THE BOX'S ACTUAL CAPACITY, not a round number. The say box is a
+        # fixed 9 logical (see retronews.css) over a 124x64 logical content area,
+        # which holds 4 lines of 13 characters. Enforcing it HERE, where the copy
+        # is written, is the only place the limit is visible — past it the text
+        # simply clips on air with nothing to say so.
         say = st.text_area("What he's saying", value=cfg.get("host_say") or "",
-                           max_chars=160, height=100,
+                           max_chars=52, height=100,
                            help="Cleared automatically when a viewer event "
                                 "takes over the dialogue box for ~12s.")
         if st.button("SAVE HOST", type="primary", use_container_width=True):
