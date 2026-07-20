@@ -431,16 +431,35 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    8 logical, which is the same density AND legible.
 8. **Everything visible lives inside the safe box.** The Blob stream's known
    cost — 8 of 14 tiles sitting behind YouTube's chrome — is not repeated here.
-   **The box is already maximal — do not go hunting for more room.** Measured
-   2026-07-20: it sits within 8px (right) and 12px (bottom) of the true Shorts
-   limits, so reclaiming those is ~2% more area against real clipping risk on a
-   boundary never verified against a live stream. Density comes from the LAYOUT
-   INSIDE the box, not from growing it.
-   Current allocation (logical, safe box = 216x288, fully packed):
-   brand 24 · gap 4 · **content 188 = two 92 slots + gap 4** · gap 4 · host 68.
-   The host was cut from 92 to 68 to buy the second slot; the portrait is
-   **clipped at the collar, never scaled**, because only whole multiples keep one
-   art pixel on one logical pixel (3x = 67.5 logical, off-grid).
+   **THE BOX IS ASYMMETRIC BECAUSE YOUTUBE'S CHROME IS** (revised 2026-07-20).
+   The first version reserved **88 left against 128 right** — near-symmetric —
+   but the action rail (like/share/comment) is on the **RIGHT ONLY** and nothing
+   sits on the left, so ~72px of the left edge was wasted the whole way down.
+   The 380 top figure is the conservative **Shorts feed** number; a live vertical
+   stream shows a channel row, a LIVE badge and a viewer count up there, which is
+   far shallower. The box is now **920x1336 at (16,200)**:
+
+   | | left | right | top | bottom | canvas |
+   |---|---|---|---|---|---|
+   | was | 88 | 128 | 376 | 392 | 48.0% |
+   | now | **16** | **144** | **200** | 384 | **59.3%** |
+
+   The right margin was deliberately *increased* — that is the one edge with real
+   chrome on it. **Top and left are the numbers to re-check first if anything is
+   ever clipped on air**, since they are the two that moved and neither has been
+   verified against a real broadcast.
+   Allocation (logical, safe box = 230x334, fully packed): brand 24 · gap 4 ·
+   **content 210, ONE panel** · gap 4 · host 92. One big panel beats a split at
+   this size — a single tile is what reads across a room, which is the point of a
+   channel you leave on. The `Slot` machinery in `retronews.js` is generic and
+   simply instantiated once, so rotation, dissolve and the duplicate guard are
+   all still the same code path if a second is ever wanted.
+   **The guides overlay is driven by the safe-box CSS vars, never by literals** —
+   a guide that disagrees with the layout is worse than no guide, because it is a
+   measurement you trust that is wrong. Double-tap the top-left on a phone.
+   If the strip is ever shortened again, **clip the portrait window, never scale
+   the sprite**: only whole multiples keep one art pixel on one logical pixel
+   (3x = 67.5 logical, off-grid). Collar begins at art y66.
 9. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
    shared bus. See the two rules above.
 

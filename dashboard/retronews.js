@@ -152,17 +152,16 @@
     return '--';
   }
 
-  // A slot is 92 logical tall, so the body is 68 and only FIVE rows fit at a
-  // legible 13. The other five cities are not dropped — they PAGE, which is
-  // what "Local on the 8s" actually did. Shrinking to fit ten was tried and
-  // reverted once already: it put the face under the legibility floor.
-  var WX_PAGE = 5;
+  // All ten fit again: the panel body is 186 logical and rows are 18, so
+  // 10 x 18 = 180. Paging existed only because a 92-tall slot could not hold
+  // them; the page counter below goes quiet on its own when there is one page.
+  var WX_PAGE = 10;
   var wxAll = [], wxPage = 0;
 
-  // Writes EVERY .rn-wx-grid. The panel set exists once per slot, so a single
-  // lookup would paint whichever copy happened to be first and leave the other
-  // permanently empty — and since the two slots rarely show weather at the same
-  // time, the blank one is exactly the one you would see on air.
+  // Writes EVERY .rn-wx-grid, not the first. There is one panel set per slot,
+  // and today there is one slot — but a document-wide single lookup is exactly
+  // the bug that would come back the moment a second is added: it paints
+  // whichever copy sorts first and leaves the other permanently blank.
   function renderWx(rows) {
     var grids = document.querySelectorAll('.rn-wx-grid');
     if (!grids.length) return;
@@ -261,11 +260,11 @@
   // a 24fps capture (measured on the host), so a 1-frame step can be dropped
   // entirely. Two frames is the smallest unit that is guaranteed to survive.
   var FRAME_MS = 42;
-  // 7 rows, not 14: a slot is 92 logical tall now, so 92/7 = ~13 against a
-  // 12-logical column keeps the blocks roughly square. Keeping 14 would have
-  // made them 6 logical tall - fine lines rather than chunks, which loses the
-  // mosaic reading the effect exists for.
-  var WIPE_COLS = 18, WIPE_ROWS = 7, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
+  // Must COVER the panel or the dissolve leaves a live strip along an edge.
+  // The panel is 230x210 logical and blocks are 12x12, so 20x18 = 240x216 —
+  // deliberately over, and the overflow is clipped. Square blocks are the
+  // mosaic reading; anything much thinner reads as scanlines instead.
+  var WIPE_COLS = 20, WIPE_ROWS = 18, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
 
   function Slot(el, startIdx, startCut) {
     this.el = el;

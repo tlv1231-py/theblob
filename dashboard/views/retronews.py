@@ -15,32 +15,42 @@ strategy:
   * ambient life is palette-based (blink, colour cycle) — costs zero frames
   * hard offset shadows, flat saturated colour — no blur to composite
 
-LAYOUT — arithmetic, not vibes. Everything lives in the 870x1160 safe box at
-(90,380); the top and bottom 380 are covered by YouTube's own chrome on a live
-vertical stream. The Blob stream's known cost (8 of its 14 tiles sitting behind
-that chrome) is deliberately not repeated here.
+LAYOUT — arithmetic, not vibes. Everything lives in the 920x1336 safe box at
+(16,200). The Blob stream's known cost (8 of its 14 tiles sitting behind
+YouTube's chrome) is deliberately not repeated here.
 
-    brand bar     864 x  96
+    brand bar     920 x  96
     gap                  16
-    content       864 x 752     <- TWO slots of 368, gap 16
+    content       920 x 840     <- ONE panel, the rotating tiles
     gap                  16
-    host strip    864 x 272     <- portrait 288x272 + nameplate/dialogue
+    host strip    920 x 368     <- portrait 288x360 + nameplate/dialogue
                        -----
-                        1152  ✓
+                        1336  ✓
 
-WHY TWO SLOTS. One panel at a time meant 3 of 4 were invisible at any moment,
-while the host strip held 32% of the safe area for a dialogue box that is idle
-unless a viewer just tipped. Two slots double the visible content for 96 stage px
-taken off the host. Each cycles the same list independently and pickNext() keeps
-them off the same panel; only one dissolves at a time, because two firing
-together reads as the screen glitching rather than as pages turning.
+THE BOX IS ASYMMETRIC BECAUSE YOUTUBE'S CHROME IS. The first version reserved 88
+left against 128 right, which is very nearly symmetric — but the action rail
+(like / share / comment) is on the RIGHT ONLY, and nothing at all sits on the
+left. That wasted ~72px down the whole left edge. The top 376 was the
+conservative SHORTS FEED figure; a live vertical stream puts a channel row, a
+LIVE badge and a viewer count up there, which is far shallower. Pushing left and
+up takes the usable canvas from 48.0% to 59.3% (+23.5%) and buys back both the
+full unclipped portrait and a content panel LARGER than the original 164.
+
+    left    16   nothing is there
+    right  144   action rail — deliberately given MORE than before
+    top    200   channel row, not a feed's worth of chrome
+    bottom 384   chat input is genuinely permanent on a live stream
+
+Top and left are the numbers to re-check first if anything is ever clipped on
+air; the guides overlay draws exactly these, so a double-tap on a phone shows the
+real margins rather than a remembered constant.
 
 HOST PORTRAIT SPEC — 288x360 is a 72x90 art cell at 4x, and the 4x is load
-bearing. The strip is now 272 tall, so the portrait is CLIPPED at the collar
-(measured: neck at art y62-64, collar begins y66) rather than scaled: only whole
-multiples keep one art pixel on one logical pixel, and 3x lands at 67.5 logical —
-off the grid the page is built on. The sprite element stays 72x90 so the
-background-position maths in retronews.js is untouched; #rn-portrait clips it. Stage x 0.75 = broadcast device pixels, so 72*4*0.75 = 216 = 72*3: an
+bearing. Reclaiming the top band gave the strip its full 368 back, so he is
+UNCLIPPED again. If the strip is ever shortened, clip the window rather than
+scaling the sprite: only whole multiples keep one art pixel on one logical pixel,
+and 3x lands at 67.5 logical — off the grid the page is built on.
+Stage x 0.75 = broadcast device pixels, so 72*4*0.75 = 216 = 72*3: an
 exact integer scale, no resampling. Any scale that is not a multiple of 4 filters
 the sprite and the era read collapses. 4x also survives every resolution we might
 use (1080x1920 -> 4x, 810x1440 -> 3x, 540x960 -> 2x). Sheet: 3 lid columns x 6
@@ -77,8 +87,13 @@ _STAGE_HTML = """
 <div id="stage-wrap">
   <div id="stage" class="__GUIDES__">
 
+    <!-- Reserved-band guides. Driven by the safe-box CSS vars, so they can
+         never drift from the layout they are supposed to be checking. The RIGHT
+         one exists because the action rail is the asymmetry the box is built
+         around. -->
     <div id="guide-top"></div>
     <div id="guide-bot"></div>
+    <div id="guide-right"></div>
 
     <!-- Invisible double-tap target, top-left. Enters fullscreen so the stage
          frames at a true 9:16 — what a YouTube vertical live stream gives you —
@@ -88,76 +103,26 @@ _STAGE_HTML = """
 
     <div id="safe">
 
-      <!-- 1. BRAND BAR — 870 x 88 -->
+      <!-- 1. BRAND BAR — 230 x 24 logical -->
       <div id="rn-brand">
         <div id="rn-logo">RETRONEWS</div>
         <div id="rn-slug">CHANNEL 4</div>
         <div id="rn-clock">--:--</div>
       </div>
 
-      <!-- 2. CONTENT — 216 x 188 logical. TWO slots, each cycling the same
-           panel set independently and never showing the same panel twice. Each
-           slot owns its own dissolve overlay so one changing does not blank the
-           other. Tile internals are CLASS-keyed, not id-keyed: the set appears
-           twice, and duplicate ids would silently bind every lookup to the
-           first slot. -->
+      <!-- 2. CONTENT — 230 x 210 logical, ONE panel.
+           Deliberately one big panel, not a split: at this size a single tile is
+           the thing you can actually read across a room, which is the whole
+           point of a channel you leave on. The Slot machinery still runs — it
+           is simply instantiated once, so the rotation, the dissolve and the
+           duplicate guard are all the same code path. Tile internals stay
+           CLASS-keyed so a second slot can be added back without the id
+           collision that would silently bind every lookup to the first. -->
       <div id="rn-content">
 
         <div id="rn-alert"></div>
 
         <div class="rn-slot" data-slot="a">
-          <div class="rn-wipe"></div>
-        <!-- LIVE: national conditions, Open-Meteo, no API key. -->
-        <div class="rn-tile" data-tile="wx">
-          <div class="rn-tile-head">
-            <div class="rn-tile-title">NATIONAL CONDITIONS</div>
-            <div class="rn-tile-sub rn-wx-sub">UPDATING</div>
-          </div>
-          <div class="rn-wx-grid"></div>
-        </div>
-
-        <!-- PLACEHOLDER: top donors, infomercial chrome. -->
-        <div class="rn-tile" data-tile="donors">
-          <div class="rn-tile-head">
-            <div class="rn-tile-title">TOP CONTRIBUTORS</div>
-            <div class="rn-tile-sub">THIS BROADCAST</div>
-          </div>
-          <div class="rn-placeholder">
-            <div class="rn-ph-label">PANEL RESERVED</div>
-            <div class="rn-ph-note">Top donors, styled as a late-night
-              infomercial order screen. Data already exists on the shared
-              stream_events bus.</div>
-          </div>
-        </div>
-
-        <!-- PLACEHOLDER: market crawl. -->
-        <div class="rn-tile" data-tile="market">
-          <div class="rn-tile-head">
-            <div class="rn-tile-title">MARKET WATCH</div>
-            <div class="rn-tile-sub">DELAYED</div>
-          </div>
-          <div class="rn-placeholder">
-            <div class="rn-ph-label">PANEL RESERVED</div>
-            <div class="rn-ph-note">CNBC-style ticker. Live market data already
-              lives in this database — no new source required.</div>
-          </div>
-        </div>
-
-        <!-- PLACEHOLDER: now playing (the host's music bed). -->
-        <div class="rn-tile" data-tile="nowplaying">
-          <div class="rn-tile-head">
-            <div class="rn-tile-title">NOW PLAYING</div>
-            <div class="rn-tile-sub">SMOOTH JAZZ</div>
-          </div>
-          <div class="rn-placeholder">
-            <div class="rn-ph-label">PANEL RESERVED</div>
-            <div class="rn-ph-note">The music bed the stream host already mixes
-              into the broadcast (normalised to -16 LUFS on the VM).</div>
-          </div>
-        </div>
-        </div>
-
-        <div class="rn-slot" data-slot="b">
           <div class="rn-wipe"></div>
         <!-- LIVE: national conditions, Open-Meteo, no API key. -->
         <div class="rn-tile" data-tile="wx">

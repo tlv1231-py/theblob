@@ -36,10 +36,17 @@
   --cyan:  #46dcff;
   --alert: #e83848;
 
-  --safe-x: 88px;
-  --safe-y: 376px;
-  --safe-w: 864px;
-  --safe-h: 1152px;
+  /* THE SAFE BOX IS ASYMMETRIC, because YouTube's chrome is. The action rail is
+     on the RIGHT only and nothing sits on the left, so 88/128 wasted ~72px down
+     the left edge; 376 on top was the conservative SHORTS FEED figure, while a
+     live vertical stream shows only a channel row up there. Everything stays a
+     multiple of 4 (one logical px). Derived: right 144, bottom 384.
+     48.0% -> 59.3% of the canvas. The guides overlay draws these exact numbers,
+     so the phone preview shows the real margins, not a remembered constant. */
+  --safe-x: 16px;
+  --safe-y: 200px;
+  --safe-w: 920px;
+  --safe-h: 1336px;
 
   --face: 'Press Start 2P', 'Courier New', monospace;
 }
@@ -98,17 +105,24 @@ html, body {
 /* YouTube's reserved bands. Hidden by default (they are inside the broadcast
    frame); shown by a class so the fullscreen preview can switch them at
    runtime. */
-#guide-top, #guide-bot {
+#guide-top, #guide-bot, #guide-right {
   display: none;
-  position: absolute; left: 0; right: 0; height: 380px;
+  position: absolute;
   background: repeating-linear-gradient(45deg,
     rgba(232,56,72,0.16) 0 calc(var(--px) * 3),
     transparent calc(var(--px) * 3) calc(var(--px) * 6));
   pointer-events: none; z-index: 90;
 }
-#stage.guides-on #guide-top, #stage.guides-on #guide-bot { display: block; }
-#guide-top { top: 0; }
-#guide-bot { bottom: 0; }
+#stage.guides-on #guide-top,
+#stage.guides-on #guide-bot,
+#stage.guides-on #guide-right { display: block; }
+/* Driven by the safe-box vars, NOT by literals: a guide that disagrees with the
+   layout is worse than no guide — it is a measurement you trust that is wrong. */
+#guide-top   { top: 0; left: 0; right: 0; height: var(--safe-y); }
+#guide-bot   { bottom: 0; left: 0; right: 0;
+               height: calc(1920px - var(--safe-y) - var(--safe-h)); }
+#guide-right { top: 0; bottom: 0; right: 0;
+               width: calc(1080px - var(--safe-x) - var(--safe-w)); }
 
 /* ── The fullscreen tap target ───────────────────────────────────────────────
    Double-tap the TOP-LEFT corner: fullscreen frames the stage at a true 9:16
@@ -171,7 +185,7 @@ html, body {
    bevelled console tile, and a single outer bevel around both would read as one
    panel split by a line. ───────────────────────────────────────────────────── */
 #rn-content {
-  height: calc(var(--px) * 188); flex: none;
+  height: calc(var(--px) * 210); flex: none;
   margin-top: calc(var(--px) * 4);
   display: flex; flex-direction: column; gap: calc(var(--px) * 4);
   /* Load-bearing: #rn-alert is absolute top:0 and must be contained HERE. The
@@ -181,7 +195,7 @@ html, body {
   position: relative;
 }
 .rn-slot {
-  height: calc(var(--px) * 92); flex: none;
+  height: 100%; flex: 1 1 auto; min-height: 0;
   position: relative;
   background: var(--sky2);
   box-shadow:
@@ -219,7 +233,7 @@ html, body {
   top: calc(var(--px) * 24); bottom: 0;
   display: grid;
   grid-template-columns: 1fr;
-  grid-auto-rows: calc(var(--px) * 13);
+  grid-auto-rows: calc(var(--px) * 18);
 }
 .wx-cell {
   display: flex; align-items: center; gap: calc(var(--px) * 3);
@@ -253,7 +267,7 @@ html, body {
 .rn-wipe {
   position: absolute; inset: 0;
   display: none;
-  grid-template-columns: repeat(18, calc(var(--px) * 12));
+  grid-template-columns: repeat(20, calc(var(--px) * 12));
   grid-auto-rows: calc(var(--px) * 12);
   z-index: 30;
   pointer-events: none;
@@ -282,7 +296,7 @@ html, body {
 
 /* ── 3. HOST STRIP — 216 x 68 logical ────────────────────────────────────── */
 #rn-host {
-  height: calc(var(--px) * 68); flex: none;
+  height: calc(var(--px) * 92); flex: none;
   margin-top: calc(var(--px) * 4);
   display: flex; gap: calc(var(--px) * 4);
 }
@@ -298,7 +312,7 @@ html, body {
    starts y66), which is how an anchor is framed anyway. The sprite element
    stays 72x90 so retronews.js's background-position maths is untouched. */
 #rn-portrait {
-  width: calc(var(--px) * 72); height: calc(var(--px) * 68);
+  width: calc(var(--px) * 72); height: calc(var(--px) * 90);
   flex: none; align-self: flex-start; overflow: hidden;
   background: var(--sky0);
   box-shadow:
