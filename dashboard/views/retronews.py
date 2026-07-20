@@ -138,6 +138,36 @@ _STAGE_HTML = """
           <div class="rn-wx-grid"></div>
         </div>
 
+
+        <!-- LIVE: one city at a time, the WeatherSTAR "Local on the 8s" page.
+             Reads the SAME wxAll the national board does — no second request. -->
+        <div class="rn-tile" data-tile="city">
+          <div class="rn-tile-head">
+            <div class="rn-pips"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="rn-tile-title">CITY FORECAST</div>
+            <div class="rn-tile-sub" id="cf-sub">LOCAL ON THE 8s</div>
+          </div>
+          <div class="cf">
+            <div class="cf-city" id="cf-city">- - -</div>
+            <div class="cf-main">
+              <div class="cf-icon" id="cf-icon"></div>
+              <div class="cf-read">
+                <div class="cf-temp"><span id="cf-temp">--</span><b>&deg;</b></div>
+                <div class="cf-cond" id="cf-cond">- - -</div>
+                <div class="cf-hilo">
+                  <span class="cf-hi">HI <i id="cf-hi">--</i></span>
+                  <span class="cf-lo">LO <i id="cf-lo">--</i></span>
+                </div>
+              </div>
+            </div>
+            <div class="cf-stats">
+              <div class="cf-stat"><b>WIND</b><span class="cf-bar" id="cf-bar-wind"></span><i id="cf-val-wind">--</i></div>
+              <div class="cf-stat"><b>HUM</b><span class="cf-bar" id="cf-bar-hum"></span><i id="cf-val-hum">--</i></div>
+              <div class="cf-stat"><b>RAIN</b><span class="cf-bar" id="cf-bar-rain"></span><i id="cf-val-rain">--</i></div>
+            </div>
+          </div>
+        </div>
+
         <!-- PLACEHOLDER: top donors, infomercial chrome. -->
         <div class="rn-tile" data-tile="donors">
           <div class="rn-tile-head">
@@ -244,6 +274,16 @@ def _build_html(show_guides: bool, live: bool, yt: bool) -> str:
         b64 = base64.b64encode(_host.read_bytes()).decode("ascii")
         host_css = ("#rn-host-sprite{background-image:url(data:image/png;base64,"
                     + b64 + ");}")
+    # Weather sprites, inlined for the same reason the host sheet is: the stage
+    # is one HTML blob inside a component iframe with no route to a static asset.
+    # 8 conditions x 2 frames at 14x14 — under 1KB.
+    _wx = _DASHBOARD / "retronews_wx.png"
+    wx_css = ""
+    if _wx.exists():
+        b64wx = base64.b64encode(_wx.read_bytes()).decode("ascii")
+        wx_css = ("#cf-icon{background-image:url(data:image/png;base64,"
+                  + b64wx + ");}")
+
     js = (_DASHBOARD / "retronews.js").read_text("utf-8")
 
     # TEMP measuring overlay. Always SHIPPED, starts hidden unless asked for, and
@@ -278,7 +318,7 @@ def _build_html(show_guides: bool, live: bool, yt: bool) -> str:
     # Not an f-string: CSS/JS brace density makes escaping a liability.
     return (
         fonts
-        + "<style>" + css + bg_css + host_css + "</style>"
+        + "<style>" + css + bg_css + host_css + wx_css + "</style>"
         + _STAGE_HTML.replace("__GUIDES__", stage_cls)
         + "<script>window._TND_RETRONEWS = " + json.dumps(payload, default=str) + ";</script>"
         + "<script>window._TND_RN_YT_INITIAL = " + ("true" if yt else "false") + ";</script>"

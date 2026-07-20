@@ -244,23 +244,49 @@
   function pollWeather() {
     var lat = CITIES.map(function (c) { return c[1]; }).join(',');
     var lon = CITIES.map(function (c) { return c[2]; }).join(',');
+    // STILL ONE REQUEST. Open-Meteo takes comma-separated coordinates and
+    // returns an array, so 15 cities and six fields cost exactly what two fields
+    // did — which is what lets the CITY FORECAST tile exist without a second
+    // endpoint, a key, or another thing to rate-limit.
     fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat +
           '&longitude=' + lon +
-          '&current=temperature_2m,weather_code&temperature_unit=fahrenheit')
+          '&current=temperature_2m,weather_code,wind_speed_10m,' +
+          'relative_humidity_2m,apparent_temperature' +
+          '&daily=temperature_2m_max,temperature_2m_min,' +
+          'precipitation_probability_max' +
+          '&temperature_unit=fahrenheit&wind_speed_unit=mph' +
+          '&forecast_days=1&timezone=auto')
       .then(function (r) { return r.json(); })
       .then(function (j) {
         // One coord returns an object, many return an array. Normalise.
         var arr = Array.isArray(j) ? j : [j];
         wxAll = CITIES.map(function (c, i) {
           var cur = (arr[i] && arr[i].current) || {};
-          return { city: c[0], t: cur.temperature_2m, cond: condOf(cur.weather_code) };
+          var day = (arr[i] && arr[i].daily) || {};
+          function d0(k) { return (day[k] && day[k][0] != null) ? day[k][0] : null; }
+          return {
+            city: c[0],
+            t: cur.temperature_2m,
+            cond: condOf(cur.weather_code),
+            code: cur.weather_code,
+            feels: cur.apparent_temperature,
+            wind: cur.wind_speed_10m,
+            hum: cur.relative_humidity_2m,
+            hi: d0('temperature_2m_max'),
+            lo: d0('temperature_2m_min'),
+            rain: d0('precipitation_probability_max')
+          };
         });
         paintWxPage();
+        cityPaint(true);            // the forecast tile shares this data
       })
       .catch(function () { /* a blip is not a reason to blank the board */ });
   }
   pollWeather();
   setInterval(pollWeather, 10 * 60 * 1000);   // 10min — weather does not sprint
+
+
+
 
   // -- Tile rotation - TWO SLOTS ---------------------------------------------
   // The schedule IS the aesthetic ("Local on the 8s"). Cuts only.
@@ -270,7 +296,7 @@
   // never dissolve simultaneously: two ~935ms dissolves firing together reads as
   // the whole screen glitching rather than one page turning, so slot B starts
   // half a dwell out of phase and rotate() lets only one cut run at a time.
-  var order = ['wx', 'donors', 'market', 'nowplaying'];
+  var order = ['wx', 'city', 'donors', 'market', 'nowplaying'];
   var dwell = 15000;
 
   // -- THE DISSOLVE ----------------------------------------------------------
@@ -775,6 +801,121 @@
 
 
 
+  // ── CITY FORECAST ────────────────────────────────────────────────────────
+  // One city at a time, as an RPG stat sheet: the city is the character, the
+  // condition is its sprite, wind/humidity/rain are stat bars. Everything here
+  // is a CEL SWAP or a SEGMENT COUNT — nothing interpolates, which is both the
+  // era and the only motion a 24fps software compositor renders cleanly.
+  // MUST live below the dissolve block: every constant here is derived from
+  // FRAME_MS, and `var` hoists as undefined. Placed above it, CF_DWELL,
+  // CF_CEL_MS and CF_FILL_MS all evaluated to NaN, which propagated silently
+  // into every number on the card — the temperature rendered "NaN", the bars
+  // never lit, and the sprite never swapped cel. Nothing threw.
+  var CF_SEGS   = 14;                  // segments per stat bar
+  var CF_DWELL  = FRAME_MS * 120;      // 5040ms per city = 3 cities per tile dwell
+  var CF_CEL_MS = FRAME_MS * 6;        // 252ms per sprite cel — 6 frames, unmissable
+  var CF_FILL_MS= FRAME_MS * 2;        // 84ms per segment/tick as a card populates
+
+  // Row order is the contract with scripts/gen_wx_icons.py.
+  var CF_ICON = { CLEAR: 0, FAIR: 0, 'P CLOUDY': 1, CLOUDY: 2, FOG: 3,
+                  DRIZZLE: 4, RAIN: 4, SHOWERS: 5, SNOW: 6, 'SNOW SHWRS': 6,
+                  'T-STORM': 7 };
+  // Full-scale for each bar, i.e. what "all 14 lit" means. Wind is capped at 30
+  // rather than scaled to the observed max: a bar whose meaning changes with the
+  // data is not a gauge, it is a chart with no axis.
+  var CF_SCALE = { wind: 30, hum: 100, rain: 100 };
+  var CF_HOT   = 0.75;                 // fraction above which segments run red
+
+  var cfIdx = 0, cfT0 = 0, cfCel = 0, cfShown = null;
+  var cfTarget = { t: 0, wind: 0, hum: 0, rain: 0 };
+
+  function cfEl(id) { return $(id); }
+
+  function cfBuildBars() {
+    ['wind', 'hum', 'rain'].forEach(function (k) {
+      var bar = cfEl('cf-bar-' + k);
+      if (!bar || bar.children.length) return;
+      for (var i = 0; i < CF_SEGS; i++) bar.appendChild(document.createElement('i'));
+    });
+  }
+
+  // Cards POPULATE rather than appear: segments light one at a time and the
+  // temperature counts up. That is the single most video-game thing on the page
+  // and it is free — both are integer steps on an 84ms tick, so there is nothing
+  // to interpolate and nothing to drop.
+  function cfPaintProgress(p) {
+    var temp = cfEl('cf-temp');
+    if (temp) temp.textContent = Math.round(cfTarget.t * p);
+    ['wind', 'hum', 'rain'].forEach(function (k) {
+      var bar = cfEl('cf-bar-' + k), val = cfEl('cf-val-' + k);
+      if (!bar) return;
+      var frac = Math.max(0, Math.min(1, cfTarget[k] / CF_SCALE[k]));
+      var lit = Math.round(frac * CF_SEGS * p);
+      for (var i = 0; i < bar.children.length; i++) {
+        var on = i < lit;
+        bar.children[i].classList.toggle('on', on);
+        bar.children[i].classList.toggle('hot', on && i >= CF_SEGS * CF_HOT);
+      }
+      if (val) val.textContent = Math.round(cfTarget[k] * p);
+    });
+  }
+
+  function cityPaint(force) {
+    if (!wxAll.length) return;
+    cfBuildBars();
+    var c = wxAll[cfIdx % wxAll.length];
+    if (!force && cfShown === c.city) return;
+    cfShown = c.city;
+    cfT0 = Date.now();
+
+    var set = function (id, v) { var e = cfEl(id); if (e) e.textContent = v; };
+    set('cf-city', c.city);
+    set('cf-cond', c.cond);
+    set('cf-hi', c.hi == null ? '--' : Math.round(c.hi));
+    set('cf-lo', c.lo == null ? '--' : Math.round(c.lo));
+    var sub = cfEl('cf-sub');
+    if (sub) sub.textContent = (cfIdx % wxAll.length + 1) + ' OF ' + wxAll.length;
+
+    cfTarget = {
+      t: c.t == null ? 0 : c.t,
+      wind: c.wind == null ? 0 : c.wind,
+      hum: c.hum == null ? 0 : c.hum,
+      rain: c.rain == null ? 0 : c.rain
+    };
+    var icon = cfEl('cf-icon');
+    if (icon) icon._row = CF_ICON[c.cond] != null ? CF_ICON[c.cond] : 2;
+    cfPaintProgress(0);
+  }
+
+  function cfTick() {
+    var icon = cfEl('cf-icon');
+    if (!icon || !wxAll.length) return;
+    var now = Date.now();
+
+    // Sprite cel. Two cels, swapped — the whole animation. A third would need a
+    // third drawing, and two already reads as motion at this hold length.
+    var cel = Math.floor(now / CF_CEL_MS) % 2;
+    var row = icon._row || 0;
+    if (cel !== cfCel || icon._drawn !== row) {
+      cfCel = cel; icon._drawn = row;
+      icon.style.backgroundPosition =
+        (-cel * 14 * 4 * 4) + 'px ' + (-row * 14 * 4 * 4) + 'px';
+    }
+
+    // Populate, then hold. TIME-BASED so a stalled tick lands on the right
+    // segment instead of filling slower on the broadcast than in preview.
+    var since = now - cfT0;
+    var steps = CF_SEGS;
+    var p = Math.min(1, Math.floor(since / CF_FILL_MS) / steps);
+    if (p !== cfTick._p) { cfTick._p = p; cfPaintProgress(p); }
+
+    if (since > CF_DWELL) {
+      cfIdx = (cfIdx + 1) % wxAll.length;
+      cityPaint(false);
+    }
+  }
+  setInterval(cfTick, FRAME_MS);
+
   // ── Config (namespaced to THIS app) ──────────────────────────────────────
   // strategy_params' PK is (strategy, param), so 'stream:retronews' is a free
   // namespace and cannot collide with the Blob's settings.
@@ -1167,6 +1308,11 @@
     // Exposed so the host-toggle repaint can be exercised without writing to
     // the live config table just to test a layout change.
     wxRows: function () { return wxRowsThatFit(); },
+    city: function () {
+      return { idx: cfIdx, shown: cfShown, target: cfTarget,
+               cel: cfCel, row: (cfEl('cf-icon') || {})._row };
+    },
+    cityNext: function () { cfIdx = (cfIdx + 1) % wxAll.length; cityPaint(false); },
     pips: function () {
       var b = document.querySelector('.rn-tile.on .rn-pips');
       return b ? [].map.call(b.children, function (k) {

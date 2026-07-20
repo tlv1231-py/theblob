@@ -30,13 +30,14 @@ _NS = "stream:retronews"
 # Tile ids must match data-tile in retronews.py's markup.
 _TILES = {
     "wx":         "National Conditions (LIVE — Open-Meteo)",
+    "city":       "City Forecast (LIVE — one city at a time)",
     "donors":     "Top Contributors (placeholder)",
     "market":     "Market Watch (placeholder)",
     "nowplaying": "Now Playing (placeholder)",
 }
 
 _DEFAULTS = {
-    "rotation": json.dumps(["wx", "donors", "market", "nowplaying"]),
+    "rotation": json.dumps(["wx", "city", "donors", "market", "nowplaying"]),
     "dwell_s":  "15",
     "host_name": "YOUR HOST",
     "host_say": "",
