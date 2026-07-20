@@ -446,14 +446,18 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    to create life.
 3. **TWO FACES, WITH DISTINCT JOBS — signage vs speech.**
    `--face` **Press Start 2P** for headers, labels and data. `--dialogue`
-   **DotGothic16** for the host's speech, and ONLY that.
+   **VT323** for the host's speech, and ONLY that.
    Press Start 2P is monospace at one em per glyph (36px/char at dialogue size,
    12 to a line), so it renders a sentence as signage rather than as someone
    talking, and its lowercase is blocky enough to read as caps. A dot-matrix face
-   is what handhelds actually drew text with, has TRUE sentence case (measured:
-   cap height 34 vs x-height 24), and at ~18px/char holds twice the copy — which
-   is what let dialogue go from 9 logical to **12** (36px device) while the
-   budget still ROSE from 48 to 57 characters.
+   VT323 is a DEC terminal face with TRUE sentence case (measured: cap height 22
+   vs x-height 16) and a very narrow advance, which let dialogue go from 9 logical
+   to **14** (42px device) while the budget still ROSE from 48 to **63**
+   characters. It began this session at 5 logical = 15px on a phone.
+   **Size is chosen by binary search on realistically-wrapping sentences, with
+   the host strip VISIBLE.** Measuring it hidden returns 0 for every dimension and
+   silently reports that any length fits — the same `display:none` trap that bit
+   `wxRowsThatFit`, hit twice now.
    **Silkscreen was the obvious pixel candidate and was rejected on measurement:
    its lowercase is SMALL CAPS**, i.e. the exact problem being solved. Check any
    replacement by rendering `Aa Ee` and comparing heights, not by reading a

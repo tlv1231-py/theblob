@@ -257,18 +257,18 @@ def _build_html(show_guides: bool, live: bool, yt: bool) -> str:
     # Press Start 2P for SIGNAGE — headers, labels, data. An 8x8 arcade bitmap,
     # correct because the conceit is a game machine rendering a cable channel.
     #
-    # DotGothic16 for SPEECH. Press Start 2P is monospace at font-size per glyph,
-    # so it renders dialogue as 12-characters-a-line signage rather than as
-    # someone talking, and its lowercase is blocky enough to read as caps. A
-    # dot-matrix face is what handhelds ACTUALLY drew text with, it has true
-    # sentence case, and at 18px/char against 36 it holds twice the copy.
+    # VT323 for SPEECH. Press Start 2P is monospace at font-size per glyph, so it
+    # renders dialogue as 12-characters-a-line signage rather than as someone
+    # talking, and its lowercase is blocky enough to read as caps. VT323 is a DEC
+    # terminal face with true sentence case and a very narrow advance, so the same
+    # box holds far more copy at a LARGER size.
     # Silkscreen was the obvious pixel candidate and was rejected on measurement:
     # its lowercase is SMALL CAPS, which is the exact problem being solved.
     fonts = (
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         '<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P'
-        '&family=DotGothic16&display=swap" rel="stylesheet">'
+        '&family=VT323&display=swap" rel="stylesheet">'
     )
 
     # Not an f-string: CSS/JS brace density makes escaping a liability.

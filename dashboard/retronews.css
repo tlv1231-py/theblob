@@ -124,7 +124,7 @@
      rather than the same one: --face is monospace at one em per glyph, which
      renders a sentence as 12-character signage, and its lowercase reads as caps.
      Dialogue is the only thing that uses this. */
-  --dialogue: 'DotGothic16', 'Courier New', monospace;
+  --dialogue: 'VT323', 'Courier New', monospace;
 }
 
 /* ── THE BEVEL — the single most GBA thing in this file. ───────────────────
@@ -457,16 +457,17 @@ html, body {
      rather than as good use of space. Type size is voice, and the voice must not
      change with sentence length.
 
-     12 logical is possible only because the face changed. Press Start 2P is
-     monospace at one em per glyph — 36px/char at this size, 12 to a line — so it
-     capped out at 9 logical / 48 characters. DotGothic16 runs ~18px/char, so the
-     same box holds far more and the type can be BIGGER:
-         Press Start 2P @ 9   ->  12 chars/line, 48 capacity, 27px device
-         DotGothic16    @ 12  ->  19 chars/line, 57 capacity, 36px device
-     THE COPY BUDGET IS 57 CHARACTERS and RetroNews HQ enforces it at the input.
-     line-height 1.5 stays: it is what makes the third line fit. */
+     14 logical is the LARGEST size that still holds the longest copy in use (the
+     50-character host line). Measured by binary search on realistically-wrapping
+     sentences, with the host strip VISIBLE — measuring it hidden returns 0 for
+     everything and silently reports that any length fits:
+         11 -> 78 chars   12 -> 76   13 -> 65   [14 -> 63]   15 -> 41  (too tight)
+     14 logical = 56px stage = 42px device. The box began this session at 5
+     logical, which was 15px on a phone.
+     THE COPY BUDGET IS 63 CHARACTERS, enforced on the HQ input. A single word
+     longer than ~20 characters can still break the wrap; ordinary copy cannot. */
   font-family: var(--dialogue);
-  font-size: calc(var(--px) * 12); line-height: 1.5;
+  font-size: calc(var(--px) * 14); line-height: 1.5;
   overflow: hidden;
   position: relative;
 }
