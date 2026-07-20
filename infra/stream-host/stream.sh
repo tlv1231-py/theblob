@@ -16,7 +16,37 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 : "${YOUTUBE_KEY:?YOUTUBE_KEY missing — put it in infra/stream-host/.env}"
 DISPLAY_NUM="${DISPLAY_NUM:-:99}"
-MUSIC_DIR="${MUSIC_DIR:-$HERE/music}"
+# ── Which app is on air, and therefore which music bed? ──────────────────────
+# DERIVED FROM STREAM_URL, deliberately — not a second variable in .env. The URL
+# is already the single source of truth for which app is broadcasting, and a
+# separate STREAM_APP would sooner or later drift out of sync with it and play
+# the Blob's bed under RetroNews with nothing to explain why.
+#
+#   ...?page=RetroNews&yt=0&live=1   ->   retronews
+#
+# Beds live in per-app subdirectories, falling back to the shared root, so the
+# existing setup keeps working untouched:
+#   $MUSIC_ROOT/retronews/*.wav   <- played when RetroNews is live
+#   $MUSIC_ROOT/*.wav             <- the shared bed / fallback
+#
+# The glob below only matches FILES, so a subdirectory is invisible to the
+# fallback and the two cannot bleed into each other.
+#
+# NOTE: this is read once, at ffmpeg start. Switching apps must restart
+# blob-ffmpeg as well as blob-chromium or the picture changes and the music
+# does not.
+MUSIC_ROOT="${MUSIC_ROOT:-$HERE/music}"
+APP_SLUG="$(printf '%s' "${STREAM_URL:-}" | sed -n 's|.*[?&]page=\([^&]*\).*|\1|p' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
+
+if [[ -n "${MUSIC_DIR:-}" ]]; then
+  echo "[stream] music bed: MUSIC_DIR override -> $MUSIC_DIR"
+elif [[ -n "$APP_SLUG" && -d "$MUSIC_ROOT/$APP_SLUG" ]]; then
+  MUSIC_DIR="$MUSIC_ROOT/$APP_SLUG"
+  echo "[stream] music bed: per-app '$APP_SLUG' -> $MUSIC_DIR"
+else
+  MUSIC_DIR="$MUSIC_ROOT"
+  echo "[stream] music bed: shared -> $MUSIC_DIR (no $MUSIC_ROOT/${APP_SLUG:-?})"
+fi
 PROGRESS="${FFMPEG_PROGRESS:-/run/blob-stream/progress}"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_KEY}"
 

@@ -259,7 +259,18 @@ each other:**
    settings. The primary key is `(strategy, param)`, so namespacing is FREE and
    needs no migration: use `strategy='stream:blob'`, `'stream:app2'`, … Decide
    this before the second app exists; retrofitting is miserable.
-2. **EVENTS ARE SHARED, DELIBERATELY.** `stream_events` has no app column and
+2. **THE MUSIC BED SWITCHES WITH THE APP, derived from `STREAM_URL`.**
+   `stream.sh` parses `?page=X` out of the URL and looks for
+   `music/<x>/` — so `?page=RetroNews` plays `music/retronews/`, and anything
+   without its own folder falls back to the shared `music/` root. Deliberately
+   DERIVED rather than a second `.env` variable: the URL is already the single
+   source of truth for what is on air, and a separate `STREAM_APP` would
+   eventually drift and play the wrong bed with nothing to explain why.
+   Normalise into the per-app folder:
+   `sudo ./normalize-music.sh /tmp/incoming /opt/blob-stream/music/retronews`.
+   **Read once at ffmpeg start — switching apps must restart `blob-ffmpeg` as
+   well as `blob-chromium`, or the picture changes and the music does not.**
+3. **EVENTS ARE SHARED, DELIBERATELY.** `stream_events` has no app column and
    should not get one. A tip is a tip regardless of which app is on screen, so
    one bus means the donation chain keeps working straight through a switch.
    `streamlabs.py` / `chat.py` are decoupled from presentation entirely — same
