@@ -81,6 +81,29 @@ def render() -> None:
 
     cfg = _get()
 
+    # ── YT FILTER ─────────────────────────────────────────────────────────
+    # In the header, not behind a tab, for the same reason the Blob stream's is:
+    # leaving it on during a real capture puts fake YouTube chrome on the actual
+    # broadcast, so it must be visible at a glance rather than discoverable.
+    yt_on = cfg.get("yt_overlay", "0") == "1"
+    c1, c2 = st.columns([1, 3])
+    if c1.button("YT FILTER: " + ("ON" if yt_on else "OFF"),
+                 use_container_width=True,
+                 type="primary" if yt_on else "secondary",
+                 help="Overlays YouTube's vertical-LIVE chrome and every published "
+                      "reading of the safe area on the RetroNews page. Applies live "
+                      "(~3s), no reload. MUST be off for a real capture."):
+        _set("yt_overlay", "0" if yt_on else "1", "YouTube measuring overlay")
+        st.rerun()
+    if yt_on:
+        c2.warning("Measuring overlay is ON — it renders on the broadcast page. "
+                   "Turn it off before going to air.", icon="⚠️")
+    else:
+        c2.caption("Draws the live chrome plus all three published safe-area "
+                   "readings, which disagree by 260px on the top margin. The "
+                   "solid red box is their union — outside it is safe under every "
+                   "reading. Green means our box clears it; amber means it does not.")
+
     tab_sched, tab_host, tab_alert, tab_live = st.tabs(
         ["Schedule", "Host", "Breaking", "Go Live"])
 

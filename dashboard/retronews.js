@@ -424,6 +424,17 @@
             }
           } catch (e) {}
         }
+        // Measuring overlay, driven live from HQ. No reload: the toggle has to
+        // be usable while you are looking at the stream in the next window.
+        //
+        // NO ROW = NO OPINION, the same rule switch.py uses for broadcast_enabled.
+        // Without the guard the poll fires ~2s after load with undefined !== '1'
+        // and switches off whatever ?yt=1 just asked for, so the URL param looks
+        // broken. HQ wins the moment it has ever been pressed, and not before.
+        if (window._rnYtToggle && c.yt_overlay !== undefined) {
+          window._rnYtToggle(c.yt_overlay === '1');
+        }
+
         var np = $('rn-nameplate');
         if (np) np.textContent = c.host_name || 'YOUR HOST';
         var say = $('rn-say');

@@ -193,7 +193,7 @@ _STAGE_HTML = """
 """
 
 
-def _build_html(show_guides: bool, live: bool) -> str:
+def _build_html(show_guides: bool, live: bool, yt: bool) -> str:
     payload = {
         "stage": {"w": _STAGE_W, "h": _STAGE_H},
         "ns": _CONFIG_NS,
@@ -225,6 +225,13 @@ def _build_html(show_guides: bool, live: bool) -> str:
         host_css = ("#rn-host-sprite{background-image:url(data:image/png;base64,"
                     + b64 + ");}")
     js = (_DASHBOARD / "retronews.js").read_text("utf-8")
+
+    # TEMP measuring overlay. Always SHIPPED, starts hidden unless asked for, and
+    # toggled at runtime by RetroNews HQ — HQ and the stream are different
+    # browsers, so a server-side gate could only take effect on a reload. Remove
+    # by deleting retronews_yt.js and these lines.
+    _yt = _DASHBOARD / "retronews_yt.js"
+    yt_js = _yt.read_text("utf-8") if _yt.exists() else ""
     # Guides are hidden by CSS default and revealed by a class, so the runtime
     # fullscreen preview can switch them on without re-rendering the page.
     stage_cls = "guides-on" if show_guides else ""
@@ -246,7 +253,9 @@ def _build_html(show_guides: bool, live: bool) -> str:
         + "<style>" + css + bg_css + host_css + "</style>"
         + _STAGE_HTML.replace("__GUIDES__", stage_cls)
         + "<script>window._TND_RETRONEWS = " + json.dumps(payload, default=str) + ";</script>"
+        + "<script>window._TND_RN_YT_INITIAL = " + ("true" if yt else "false") + ";</script>"
         + "<script>" + js + "</script>"
+        + ("<script>" + yt_js + "</script>" if yt_js else "")
     )
 
 
@@ -279,7 +288,13 @@ def render() -> None:
     # ?live=1 is set by STREAM_URL on the broadcast host and by nothing else.
     live = st.query_params.get("live") == "1"
 
-    components.html(_build_html(show_guides, live), height=_STAGE_H, scrolling=False)
+    # ?yt=1 starts the measuring overlay ON. It is normally driven live from
+    # RetroNews HQ instead; this is only the initial state. MUST be off for a
+    # real capture, which is why it defaults off here — the opposite of the Blob
+    # stream, where defaulting ON has to be remembered as a hazard.
+    yt = st.query_params.get("yt") == "1"
+
+    components.html(_build_html(show_guides, live, yt), height=_STAGE_H, scrolling=False)
 
     # Size the stage iframe to the REAL viewport.
     #

@@ -462,6 +462,24 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    (3x = 67.5 logical, off-grid). Collar begins at art y66.
 9. **Config is namespaced** `strategy='stream:retronews'`. Events stay on the
    shared bus. See the two rules above.
+10. **The measuring overlay (`dashboard/retronews_yt.js`) draws the DISAGREEMENT,
+    not a rectangle.** Measured July 2026, the published Shorts guides differ by
+    **260px on the top margin**: strict 380/380/60/120, loose 120/300/60/96, mid
+    180/390/60/60. All three describe SHORTS, and a Short is not a livestream —
+    none model the chat input, LIVE badge or viewer count, which never go away on
+    live, so every Shorts template is optimistic about the bottom band. The
+    overlay layers all three (overlap compounds) and draws their UNION as the
+    solid red verdict box. It reads OUR box from the live `--safe-*` variables
+    rather than carrying its own copy: a measuring tool that duplicates the thing
+    it measures eventually disagrees with it, and then it lies with a ruler in
+    its hand. Toggled from RetroNews HQ (`yt_overlay`, polled ~3s, live, no
+    reload); `?yt=1` sets the initial state and **no row = no opinion**, so the
+    URL param survives until HQ is first pressed. Defaults OFF — the opposite of
+    the Blob stream's, where defaulting ON is a standing hazard.
+    **FIRST FINDING, still open:** the brand bar [16,200,920,96] overlaps
+    YouTube's LIVE badge + viewer count by ~11,600px². Everything else clears.
+    Caveat that matters: the badge's y250 is RECONSTRUCTED, not sourced — it is
+    exactly the number a real screenshot would settle.
 
 ---
 
