@@ -216,7 +216,19 @@
   //
   // 8 steps x 55ms each way + the flash = ~935ms, about 22 frames. CLAUDE.md's
   // floor is 6 frames to be seen; this is comfortably a beat you watch happen.
-  var WIPE_COLS = 18, WIPE_ROWS = 14, WIPE_STEPS = 8, WIPE_MS = 55;
+  // ── FRAME BUDGET — every timed visual on this page obeys it ────────────
+  // ffmpeg captures at 24fps, so ONE BROADCAST FRAME IS ~42ms and nothing
+  // shorter can appear on the stream at all. Worse, a duration that is not a
+  // whole MULTIPLE of the frame period beats against the capture clock: the
+  // first version of this dissolve used 55ms = 1.32 frames, so steps drifted in
+  // and out of phase and some were merged into a single captured frame and
+  // simply never appeared.
+  //
+  // TWO frames per step, not one. The render paints ~22-23.6 unique fps against
+  // a 24fps capture (measured on the host), so a 1-frame step can be dropped
+  // entirely. Two frames is the smallest unit that is guaranteed to survive.
+  var FRAME_MS = 42;
+  var WIPE_COLS = 18, WIPE_ROWS = 14, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
   var blocks = [], order2 = [], wiping = false;
 
   function buildWipe() {
@@ -272,7 +284,7 @@
           host.classList.remove('on');
           wiping = false;
         }, WIPE_MS);
-      }, WIPE_MS);
+      }, WIPE_MS);            /* flash held 2 frames — see FRAME_MS */
     }, WIPE_MS);
   }
 
@@ -336,7 +348,7 @@
   setInterval(function () {
     var al = $('rn-alert');
     if (al && al.classList.contains('on')) al.classList.toggle('blink');
-  }, 500);
+  }, FRAME_MS * 12);      /* 504ms = 12 frames exactly, not 500 */
 
   // ── Viewer events (the SHARED bus) ───────────────────────────────────────
   // streamlabs.py / chat.py have no idea this page exists; they just write
