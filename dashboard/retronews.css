@@ -634,29 +634,30 @@ html, body {
 .rn-pips i.hot.on { background: var(--go); }
 
 
-/* ── CITY FORECAST ─────────────────────────────────────────────────────────
-   The WeatherSTAR "Local on the 8s" page, read as an RPG stat sheet: the city
-   is the character, the condition is its sprite, and wind / humidity / rain are
-   segmented stat bars. That mapping is the gamification — it is not decoration
-   over a table, it is the same data in the shape a handheld would have used, and
-   segmented bars are readable at phone size where a number alone is not.
+/* ── EXTENDED FORECAST ─────────────────────────────────────────────────────
+   The WeatherSTAR 4000 three-day page: a title bar, then three identical day
+   panels side by side. The layout IS the reference — day name above an icon
+   above the condition above Lo/Hi — and the GBA reading comes from how each
+   panel is built rather than from restyling it: every column is a bevelled
+   panel set into the tile, the type is the signage face, and the only colours
+   are gold for the day and the high, cyan for the low, white for the words.
+
+   Gold on the HIGH and cyan on the LOW is not decoration: it is the one piece
+   of information a viewer takes from this page at a glance, and hue carries it
+   at phone size where a label does not.
 
    Budget of the 208 x 171 logical body:
-     city plate 24 · gap 4 · main row 56 · gap 4 · 3 stat rows 20 (gap 4) = 156
-   15 logical spare, which is deliberate slack — a longer city name or a
-   three-digit wind must not push the bars off the tile. */
-.cf {
+     city plate 20 · gap 4 · columns 147
+   Columns are 64 wide with 4 gaps: 3*64 + 2*4 = 200, inside 4 padding = 208. */
+.ef {
   position: absolute; left: 0; right: 0;
   top: calc(var(--px) * 24); bottom: 0;
   padding: calc(var(--px) * 4);
   display: flex; flex-direction: column; gap: calc(var(--px) * 4);
 }
-
-/* The city is the headline. Raised plate, gold on the panel's own raise. */
-.cf-city {
-  height: calc(var(--px) * 24); flex: none;
-  display: flex; align-items: center;
-  padding: 0 calc(var(--px) * 4);
+.ef-city {
+  height: calc(var(--px) * 20); flex: none;
+  display: flex; align-items: center; justify-content: center;
   background: linear-gradient(180deg,
     var(--scr3) 0%, var(--scr3) 55%, var(--scr2) 55%, var(--scr2) 100%);
   box-shadow:
@@ -664,70 +665,59 @@ html, body {
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--scr-shade),
     0 0 0 var(--px) var(--scr-shade);
   color: var(--gold);
-  font-size: calc(var(--px) * 9);
+  font-size: calc(var(--px) * 8);
   text-shadow: var(--px) var(--px) 0 var(--scr-shade);
   white-space: nowrap; overflow: hidden;
 }
 
-.cf-main { height: calc(var(--px) * 56); flex: none; display: flex;
-           gap: calc(var(--px) * 4); }
+.ef-cols { flex: 1; display: flex; gap: calc(var(--px) * 4); min-height: 0; }
 
-/* 14x14 art shown at 4 logical per art pixel — an exact integer scale, so the
-   sprite is never resampled. background-position picks the cel: column = frame,
-   row = condition, the same indexing the host sheet uses. */
-.cf-icon {
+/* Each day is its own RAISED panel — the reference's three blue cards. Hidden
+   until the reveal reaches it; the columns cut in left to right. */
+.ef-day {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center;
+  padding: calc(var(--px) * 3) 0;
+  background: var(--scr2);
+  box-shadow:
+    inset var(--px) var(--px) 0 0 var(--lit),
+    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--scr-shade),
+    0 0 0 var(--px) var(--scr-shade);
+  visibility: hidden;
+}
+.ef-day.on { visibility: visible; }
+
+.ef-name {
+  height: calc(var(--px) * 16); flex: none;
+  font-size: calc(var(--px) * 10); color: var(--gold);
+  text-shadow: var(--px) var(--px) 0 var(--scr-shade);
+}
+/* 14x14 art at 4 logical per art pixel — exact integer scale, never resampled.
+   background-position picks the cel: column = frame, row = condition. */
+.ef-icon {
   width: calc(var(--px) * 56); height: calc(var(--px) * 56);
   flex: none;
   background-repeat: no-repeat;
-  background-size: calc(var(--px) * 112) calc(var(--px) * 448); /* 2 x 8 cels */
+  background-size: calc(var(--px) * 112) calc(var(--px) * 448);  /* 2 x 8 cels */
   background-position: 0 0;
   image-rendering: pixelated;
-  background-color: var(--scr1);
-  box-shadow:
-    inset var(--px) var(--px) 0 0 var(--scr-shade),
-    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--scr3),
-    0 0 0 var(--px) var(--scr-shade);
 }
-
-.cf-read { flex: 1; min-width: 0; display: flex; flex-direction: column;
-           justify-content: center; gap: calc(var(--px) * 2);
-           padding-left: calc(var(--px) * 2); }
-.cf-temp { font-size: calc(var(--px) * 22); color: var(--scr-ink);
-           line-height: 1; text-shadow: calc(var(--px) * 1) calc(var(--px) * 1) 0 var(--scr-shade); }
-.cf-temp b { font-size: calc(var(--px) * 12); color: var(--gold); font-weight: normal; }
-.cf-cond { font-size: calc(var(--px) * 7); color: var(--cyan);
-           white-space: nowrap; overflow: hidden; }
-.cf-hilo { display: flex; gap: calc(var(--px) * 6); font-size: calc(var(--px) * 7); }
-.cf-hilo i { font-style: normal; }
-.cf-hi { color: var(--alert); }          /* warm end */
-.cf-lo { color: var(--cyan); }           /* cool end */
-
-/* ── stat bars ─────────────────────────────────────────────────────────────
-   Segmented, like the countdown and like every handheld gauge: discrete by
-   construction, so a 24fps software compositor has nothing to interpolate.
-   Segments are BUILT BY JS so the count lives in one place. */
-.cf-stats { flex: 1; display: flex; flex-direction: column;
-            justify-content: space-between; }
-.cf-stat { height: calc(var(--px) * 20); display: flex; align-items: center;
-           gap: calc(var(--px) * 4); }
-.cf-stat b { width: calc(var(--px) * 30); flex: none; font-weight: normal;
-             font-size: calc(var(--px) * 7); color: var(--scr-dim); }
-.cf-stat i { width: calc(var(--px) * 30); flex: none; font-style: normal;
-             text-align: right; font-size: calc(var(--px) * 8);
-             color: var(--scr-ink); }
-.cf-bar {
-  flex: 1; min-width: 0;
-  display: flex; gap: var(--px);
-  padding: var(--px);
-  background: var(--scr-shade);
-  box-shadow:
-    inset var(--px) var(--px) 0 0 var(--scr-shade),
-    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--scr3),
-    0 0 0 var(--px) var(--scr-shade);
+.ef-cond {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; text-align: center;
+  padding: 0 calc(var(--px) * 2);
+  font-size: calc(var(--px) * 7); line-height: 1.4;
+  color: var(--scr-ink);
 }
-.cf-bar i { flex: 1; height: calc(var(--px) * 10); background: var(--scr1);
-            width: auto; }
-.cf-bar i.on { background: var(--scr-ink); }
-/* The top of the bar runs hot — the same traffic-light pairing the countdown
-   uses, so a high reading is legible without reading the number. */
-.cf-bar i.on.hot { background: var(--alert); }
+.ef-t {
+  flex: none; display: flex; gap: calc(var(--px) * 4);
+  align-items: flex-end;
+}
+.ef-t span { display: flex; flex-direction: column; align-items: center; }
+.ef-t b { font-weight: normal; font-size: calc(var(--px) * 6); }
+.ef-t i { font-style: normal; font-size: calc(var(--px) * 13);
+          text-shadow: var(--px) var(--px) 0 var(--scr-shade); }
+.ef-lo b { color: var(--scr-dim); }
+.ef-lo i { color: var(--scr-ink); }
+.ef-hi b { color: var(--gold); }
+.ef-hi i { color: var(--gold); }

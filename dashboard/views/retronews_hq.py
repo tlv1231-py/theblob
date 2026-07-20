@@ -30,7 +30,7 @@ _NS = "stream:retronews"
 # Tile ids must match data-tile in retronews.py's markup.
 _TILES = {
     "wx":         "National Conditions (LIVE — Open-Meteo)",
-    "city":       "City Forecast (LIVE — one city at a time)",
+    "city":       "Extended Forecast (LIVE — 3 days, one city at a time)",
     "donors":     "Top Contributors (placeholder)",
     "market":     "Market Watch (placeholder)",
     "nowplaying": "Now Playing (placeholder)",

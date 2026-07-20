@@ -678,31 +678,30 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    If the strip is ever shortened, **clip the portrait window, never scale the
    sprite**: only whole multiples keep one art pixel on one logical pixel
    (3x = 67.5 logical, off-grid). Collar begins at art y66.
-11. **CITY FORECAST (`?page=RetroNews`, tile `city`) is the WeatherSTAR "Local
-    on the 8s" page read as an RPG STAT SHEET** — the city is the character, the
-    condition is its sprite, and wind/humidity/rain are segmented stat bars. That
-    mapping IS the gamification: it is not decoration over a table, it is the same
-    data in the shape a handheld would have used, and segmented bars are readable
-    at phone size where a bare number is not.
+11. **EXTENDED FORECAST (tile `city`) is the WeatherSTAR 4000 three-day page** —
+    a title bar, a city plate, then three identical day panels: day name, icon,
+    condition, Lo/Hi. Built from the real reference rather than invented, and the
+    GBA reading comes from HOW each panel is built, not from restyling it: every
+    column is a bevelled panel set into the tile, type is the signage face, and
+    the only colours are gold for the day and the high, cyan/white for the low.
+    **Gold on the HIGH and dim on the LOW is information, not decoration** — it
+    is the one thing a viewer takes from this page at a glance, and hue carries
+    it at phone size where a label does not.
     **It costs NO extra request.** Open-Meteo takes comma-separated coordinates,
-    so 15 cities x 6 fields costs exactly what 2 fields did — the tile shares
-    `wxAll` with the national board.
+    so 15 cities x 3 days costs what 2 fields did; the tile shares `wxAll` with
+    the national board. `timezone=auto` matters here: the weekday must belong to
+    the CITY, not to whoever is watching.
     **Sprites are `scripts/gen_wx_icons.py`** — 8 conditions x 2 cels at 14x14,
     hand-authored as character grids because PIL's primitives quantize to mush at
-    that size. Two cels, not more: handheld sprites held two or three cels for
-    several frames, and one swap held 252ms is unmistakable for a single property
-    write. Each pair carries ONE legible idea — rays pulse, drops fall a row, and
-    STORM's frame B lights the whole cloud so the bolt illuminates it.
-    **Cards POPULATE rather than appear**: segments light one at a time and the
-    temperature counts up, 14 steps at 84ms. Both are integer steps, so nothing
-    interpolates. Time-based, per the continuous-motion rule.
-    **Bar scales are FIXED** (`CF_SCALE`: wind 30, hum 100, rain 100), never
-    scaled to the observed range — a bar whose meaning changes with the data is
-    not a gauge, it is a chart with no axis. The top quarter runs red, the same
-    traffic-light pairing the countdown uses.
-    Layout budget of the 208x171 body: city 24 · main 56 · 3 stat rows 20 = 156,
-    **15 logical spare on purpose** so a long city name or a three-digit wind
-    cannot push the bars off the tile.
+    that size. Two cels, because handheld sprites held two or three for several
+    frames and one swap at 252ms is unmistakable for a single property write.
+    Each pair carries ONE idea: rays pulse, drops fall a row, and STORM's second
+    cel lights the whole cloud so the bolt illuminates it. **All three icons run
+    off one shared clock** — three sprites swapping out of phase reads as noise.
+    **Columns CUT in left to right** (168ms apart) and each temperature counts up
+    once its column lands. Cuts and integer steps, so nothing interpolates.
+    Layout budget of the 208x171 body: city plate 20 · gap 4 · columns 147, each
+    64 wide (3*64 + 2*4 + 8 padding = 208).
 
 12. **The measuring overlay (`dashboard/retronews_yt.js`) is MEASURED, not
     reconstructed** — calibrated 2026-07-20 against a real YouTube mobile

@@ -252,10 +252,10 @@
           '&longitude=' + lon +
           '&current=temperature_2m,weather_code,wind_speed_10m,' +
           'relative_humidity_2m,apparent_temperature' +
-          '&daily=temperature_2m_max,temperature_2m_min,' +
+          '&daily=temperature_2m_max,temperature_2m_min,weather_code,' +
           'precipitation_probability_max' +
           '&temperature_unit=fahrenheit&wind_speed_unit=mph' +
-          '&forecast_days=1&timezone=auto')
+          '&forecast_days=3&timezone=auto')
       .then(function (r) { return r.json(); })
       .then(function (j) {
         // One coord returns an object, many return an array. Normalise.
@@ -264,6 +264,24 @@
           var cur = (arr[i] && arr[i].current) || {};
           var day = (arr[i] && arr[i].daily) || {};
           function d0(k) { return (day[k] && day[k][0] != null) ? day[k][0] : null; }
+          // Three days, named from their own dates. timezone=auto is already on
+          // the request, so the date belongs to the CITY rather than to whoever
+          // is watching — a Seattle forecast labelled with a Chicago weekday
+          // would be wrong in exactly the way nobody would notice.
+          var DAYN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+          var days = [];
+          for (var k = 0; k < 3; k++) {
+            var iso = day.time && day.time[k];
+            if (!iso) continue;
+            var parts = iso.split('-');
+            var dt = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+            days.push({
+              name: DAYN[dt.getDay()],
+              hi: day.temperature_2m_max ? day.temperature_2m_max[k] : null,
+              lo: day.temperature_2m_min ? day.temperature_2m_min[k] : null,
+              cond: condOf(day.weather_code ? day.weather_code[k] : null)
+            });
+          }
           return {
             city: c[0],
             t: cur.temperature_2m,
@@ -274,7 +292,8 @@
             hum: cur.relative_humidity_2m,
             hi: d0('temperature_2m_max'),
             lo: d0('temperature_2m_min'),
-            rain: d0('precipitation_probability_max')
+            rain: d0('precipitation_probability_max'),
+            days: days
           };
         });
         paintWxPage();
@@ -801,113 +820,95 @@
 
 
 
-  // ── CITY FORECAST ────────────────────────────────────────────────────────
-  // One city at a time, as an RPG stat sheet: the city is the character, the
-  // condition is its sprite, wind/humidity/rain are stat bars. Everything here
-  // is a CEL SWAP or a SEGMENT COUNT — nothing interpolates, which is both the
-  // era and the only motion a 24fps software compositor renders cleanly.
-  // MUST live below the dissolve block: every constant here is derived from
-  // FRAME_MS, and `var` hoists as undefined. Placed above it, CF_DWELL,
-  // CF_CEL_MS and CF_FILL_MS all evaluated to NaN, which propagated silently
-  // into every number on the card — the temperature rendered "NaN", the bars
-  // never lit, and the sprite never swapped cel. Nothing threw.
-  var CF_SEGS   = 14;                  // segments per stat bar
-  var CF_DWELL  = FRAME_MS * 120;      // 5040ms per city = 3 cities per tile dwell
-  var CF_CEL_MS = FRAME_MS * 6;        // 252ms per sprite cel — 6 frames, unmissable
-  var CF_FILL_MS= FRAME_MS * 2;        // 84ms per segment/tick as a card populates
+  // ── EXTENDED FORECAST ────────────────────────────────────────────────────
+  // The WeatherSTAR three-day page, one city at a time. Everything moves by CEL
+  // SWAP or by CUT — no interpolation anywhere, which is both the era and the
+  // only motion a 24fps software compositor renders cleanly.
+  //
+  // MUST live below the dissolve block: every constant here derives from
+  // FRAME_MS, and `var` hoists as undefined. Placed above it these all evaluated
+  // to NaN, and nothing threw — the temperatures rendered "NaN" and the sprites
+  // never swapped cel. Fourth time that pattern has bitten in this file.
+  var CF_DWELL   = FRAME_MS * 120;   // 5040ms per city = 3 cities per tile dwell
+  var CF_CEL_MS  = FRAME_MS * 6;     // 252ms per sprite cel — 6 frames, unmissable
+  var CF_COL_MS  = FRAME_MS * 4;     // 168ms between columns cutting in
+  var CF_COUNT   = 10;               // steps a temperature counts up over
 
   // Row order is the contract with scripts/gen_wx_icons.py.
   var CF_ICON = { CLEAR: 0, FAIR: 0, 'P CLOUDY': 1, CLOUDY: 2, FOG: 3,
                   DRIZZLE: 4, RAIN: 4, SHOWERS: 5, SNOW: 6, 'SNOW SHWRS': 6,
                   'T-STORM': 7 };
-  // Full-scale for each bar, i.e. what "all 14 lit" means. Wind is capped at 30
-  // rather than scaled to the observed max: a bar whose meaning changes with the
-  // data is not a gauge, it is a chart with no axis.
-  var CF_SCALE = { wind: 30, hum: 100, rain: 100 };
-  var CF_HOT   = 0.75;                 // fraction above which segments run red
 
-  var cfIdx = 0, cfT0 = 0, cfCel = 0, cfShown = null;
-  var cfTarget = { t: 0, wind: 0, hum: 0, rain: 0 };
+  var cfIdx = 0, cfT0 = 0, cfShown = null, cfDays = [];
 
-  function cfEl(id) { return $(id); }
-
-  function cfBuildBars() {
-    ['wind', 'hum', 'rain'].forEach(function (k) {
-      var bar = cfEl('cf-bar-' + k);
-      if (!bar || bar.children.length) return;
-      for (var i = 0; i < CF_SEGS; i++) bar.appendChild(document.createElement('i'));
-    });
-  }
-
-  // Cards POPULATE rather than appear: segments light one at a time and the
-  // temperature counts up. That is the single most video-game thing on the page
-  // and it is free — both are integer steps on an 84ms tick, so there is nothing
-  // to interpolate and nothing to drop.
-  function cfPaintProgress(p) {
-    var temp = cfEl('cf-temp');
-    if (temp) temp.textContent = Math.round(cfTarget.t * p);
-    ['wind', 'hum', 'rain'].forEach(function (k) {
-      var bar = cfEl('cf-bar-' + k), val = cfEl('cf-val-' + k);
-      if (!bar) return;
-      var frac = Math.max(0, Math.min(1, cfTarget[k] / CF_SCALE[k]));
-      var lit = Math.round(frac * CF_SEGS * p);
-      for (var i = 0; i < bar.children.length; i++) {
-        var on = i < lit;
-        bar.children[i].classList.toggle('on', on);
-        bar.children[i].classList.toggle('hot', on && i >= CF_SEGS * CF_HOT);
-      }
-      if (val) val.textContent = Math.round(cfTarget[k] * p);
-    });
-  }
+  function cfCols() { return document.querySelectorAll('.ef-day'); }
 
   function cityPaint(force) {
     if (!wxAll.length) return;
-    cfBuildBars();
     var c = wxAll[cfIdx % wxAll.length];
     if (!force && cfShown === c.city) return;
     cfShown = c.city;
     cfT0 = Date.now();
+    cfDays = c.days || [];
 
-    var set = function (id, v) { var e = cfEl(id); if (e) e.textContent = v; };
-    set('cf-city', c.city);
-    set('cf-cond', c.cond);
-    set('cf-hi', c.hi == null ? '--' : Math.round(c.hi));
-    set('cf-lo', c.lo == null ? '--' : Math.round(c.lo));
-    var sub = cfEl('cf-sub');
+    var city = $('cf-city');
+    if (city) city.textContent = c.city;
+    var sub = $('cf-sub');
     if (sub) sub.textContent = (cfIdx % wxAll.length + 1) + ' OF ' + wxAll.length;
 
-    cfTarget = {
-      t: c.t == null ? 0 : c.t,
-      wind: c.wind == null ? 0 : c.wind,
-      hum: c.hum == null ? 0 : c.hum,
-      rain: c.rain == null ? 0 : c.rain
-    };
-    var icon = cfEl('cf-icon');
-    if (icon) icon._row = CF_ICON[c.cond] != null ? CF_ICON[c.cond] : 2;
-    cfPaintProgress(0);
+    var cols = cfCols();
+    for (var i = 0; i < cols.length; i++) {
+      var d = cfDays[i];
+      var col = cols[i];
+      col.classList.remove('on');                 // re-cut on every city
+      col.querySelector('.ef-name').textContent = d ? d.name : '- - -';
+      col.querySelector('.ef-cond').textContent = d ? d.cond : '- - -';
+      var icon = col.querySelector('.ef-icon');
+      icon._row = d && CF_ICON[d.cond] != null ? CF_ICON[d.cond] : 2;
+      icon._drawn = null;                         // force a redraw at the new row
+      col.querySelector('.ef-lo i').textContent = '--';
+      col.querySelector('.ef-hi i').textContent = '--';
+    }
   }
 
   function cfTick() {
-    var icon = cfEl('cf-icon');
-    if (!icon || !wxAll.length) return;
-    var now = Date.now();
+    if (!wxAll.length) return;
+    var now = Date.now(), since = now - cfT0;
+    var cols = cfCols();
 
-    // Sprite cel. Two cels, swapped — the whole animation. A third would need a
-    // third drawing, and two already reads as motion at this hold length.
+    // Sprite cel, shared clock so all three animate in step — three icons
+    // swapping out of phase reads as noise rather than as weather.
     var cel = Math.floor(now / CF_CEL_MS) % 2;
-    var row = icon._row || 0;
-    if (cel !== cfCel || icon._drawn !== row) {
-      cfCel = cel; icon._drawn = row;
-      icon.style.backgroundPosition =
-        (-cel * 14 * 4 * 4) + 'px ' + (-row * 14 * 4 * 4) + 'px';
-    }
 
-    // Populate, then hold. TIME-BASED so a stalled tick lands on the right
-    // segment instead of filling slower on the broadcast than in preview.
-    var since = now - cfT0;
-    var steps = CF_SEGS;
-    var p = Math.min(1, Math.floor(since / CF_FILL_MS) / steps);
-    if (p !== cfTick._p) { cfTick._p = p; cfPaintProgress(p); }
+    for (var i = 0; i < cols.length; i++) {
+      var col = cols[i], d = cfDays[i];
+      if (!d) continue;
+
+      // Columns CUT in left to right. A cut per column is the reference's own
+      // behaviour and needs no interpolation.
+      var appear = i * CF_COL_MS;
+      var on = since >= appear;
+      if (col.classList.contains('on') !== on) col.classList.toggle('on', on);
+      if (!on) continue;
+
+      var icon = col.querySelector('.ef-icon');
+      var row = icon._row || 0;
+      if (icon._cel !== cel || icon._drawn !== row) {
+        icon._cel = cel; icon._drawn = row;
+        icon.style.backgroundPosition =
+          (-cel * 14 * 4 * 4) + 'px ' + (-row * 14 * 4 * 4) + 'px';
+      }
+
+      // Temperatures count up once the column is in. TIME-BASED, so a stalled
+      // tick lands on the right number rather than counting slower on air.
+      var p = Math.min(1, Math.floor((since - appear) / FRAME_MS) / CF_COUNT);
+      if (icon._p !== p) {
+        icon._p = p;
+        var lo = col.querySelector('.ef-lo i'), hi = col.querySelector('.ef-hi i');
+        lo.textContent = d.lo == null ? '--' : Math.round(d.lo * p);
+        hi.textContent = d.hi == null ? '--' : Math.round(d.hi * p);
+      }
+    }
 
     if (since > CF_DWELL) {
       cfIdx = (cfIdx + 1) % wxAll.length;
@@ -1309,8 +1310,14 @@
     // the live config table just to test a layout change.
     wxRows: function () { return wxRowsThatFit(); },
     city: function () {
-      return { idx: cfIdx, shown: cfShown, target: cfTarget,
-               cel: cfCel, row: (cfEl('cf-icon') || {})._row };
+      return { idx: cfIdx, shown: cfShown, days: cfDays,
+               cols: [].map.call(document.querySelectorAll('.ef-day'), function (c) {
+                 return { on: c.classList.contains('on'),
+                          name: c.querySelector('.ef-name').textContent,
+                          cond: c.querySelector('.ef-cond').textContent,
+                          lo: c.querySelector('.ef-lo i').textContent,
+                          hi: c.querySelector('.ef-hi i').textContent,
+                          row: c.querySelector('.ef-icon')._row }; }) };
     },
     cityNext: function () { cfIdx = (cfIdx + 1) % wxAll.length; cityPaint(false); },
     pips: function () {
