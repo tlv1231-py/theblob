@@ -548,8 +548,12 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
 6. **Every tile carries a SEGMENTED COUNTDOWN GAUGE** in its head, top-left
    (`.rn-pips`): a handheld status bar — **16 cells FILLING** over the dwell,
    the last quarter blinking **green** (`--go`, the partner to `--alert`),
-   inside a RECESSED bevelled casing with tick divisions every 4 cells and a
-   gloss band on the fill. 34x10 logical. It fills rather than drains
+   inside a RECESSED bevelled casing, with a gloss band on the fill.
+   34x10 logical. **NO TICK DIVISIONS** — hairlines every 4 cells were tried and
+   removed: the eye takes a solid run of colour as ONE quantity and a divided
+   one as four separate things, which is the opposite of what a fill says. The
+   16 cells are still discrete; the steps live in the FILL, which is the part
+   the compositor cares about. It fills rather than drains
    because charging up to something reads as anticipation where emptying reads as
    running out — and running out is the wrong feeling for a channel that simply
    moves on. The fill is WHITE (`--scr-ink`), not gold: gold is the tile

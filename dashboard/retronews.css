@@ -630,8 +630,8 @@ html, body {
    a gauge set into the panel rather than raised like a button. */
 /* ── TILE COUNTDOWN GAUGE ──────────────────────────────────────────────────
    A handheld status bar: a RECESSED casing holding a fill that charges up over
-   the dwell. Modelled on the segmented HP/EXP gauge — hard outline, bevel, a
-   gloss band along the top of the fill, and tick divisions every quarter.
+   the dwell. Modelled on the handheld XP/HP gauge — hard outline, bevel, and a
+   gloss band along the top of the fill.
 
    SIXTEEN CELLS, NOT SIX. Six read as six pips — a counter. Sixteen at 2
    logical each read as a BAR while still being discrete by construction, which
@@ -662,10 +662,13 @@ html, body {
   width: calc(var(--px) * 2); height: calc(var(--px) * 8);
   background: var(--scr1);           /* spent */
 }
-/* Tick divisions every 4 cells, so the bar reads as a graduated gauge rather
-   than as a plain block. A hairline of the casing colour, drawn on the cell
-   itself — no extra elements. */
-.rn-pips i:nth-child(4n) { box-shadow: inset calc(var(--px) * -1) 0 0 0 var(--scr-shade); }
+/* NO TICK DIVISIONS. There were hairlines of the casing colour every 4 cells,
+   on the theory that they read as a graduated gauge. They read as gridlines
+   chopping the bar into four — the eye takes a solid run of colour as ONE
+   quantity and a divided one as four separate things, which is the opposite of
+   what a fill is saying.
+   The bar is still 16 discrete cells; the steps live in the FILL, which is what
+   the compositor cares about. Nothing about removing them makes it interpolate. */
 
 /* THE FILL IS WHITE WITH A SHADED UNDERSIDE. A banded gradient with HARD stops
    — allowed, and how the hardware faked a lit bar: the body takes the light,
