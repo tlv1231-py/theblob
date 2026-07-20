@@ -447,6 +447,39 @@
   var SAY_STEP_MS = FRAME_MS * 2;      // 84ms per step = 420ms, ~10 frames
   var SAY_H       = 72 * 4;            // 72 logical x --px, the box's full height
   var CHAR_MS     = FRAME_MS;          // ~24 chars/sec, close to Gen-1 medium
+  // AUTO-FIT bounds, in logical px. The floor is CLAUDE.md rule 7's legibility
+  // floor and is not negotiable — the box shipped at 5 logical, which is 20px
+  // stage and ~15px on the phone this is actually watched on.
+  var SAY_MIN_L = 8, SAY_MAX_L = 14;
+
+  // KEEP DIALOGUE ASCII. Press Start 2P is a narrow bitmap face; a character it
+  // lacks silently falls back to Courier New MID-SENTENCE, which is exactly the
+  // inconsistency that looks like a font bug. An em dash was doing this.
+  function sayAscii(t) {
+    return String(t).replace(/[—–]/g, '-')
+                    .replace(/[‘’]/g, "'")
+                    .replace(/[“”]/g, '"');
+  }
+
+  // Largest whole-logical size the WHOLE message fits at. Measured, not
+  // computed: word wrapping is the browser's business and a character-count
+  // estimate gets it wrong on the last line.
+  function sayFit(text) {
+    var px = parseFloat(getComputedStyle(document.documentElement)
+                          .getPropertyValue('--px')) || 4;
+    var prevH = sayBox.style.height;
+    sayBox.style.height = SAY_H + 'px';      // measure at FULL height, always
+    sayTxt.textContent = text;
+    var chosen = SAY_MIN_L;
+    for (var s = SAY_MAX_L; s >= SAY_MIN_L; s--) {
+      sayBox.style.fontSize = (s * px) + 'px';
+      if (sayBox.scrollHeight <= sayBox.clientHeight) { chosen = s; break; }
+    }
+    sayBox.style.fontSize = (chosen * px) + 'px';
+    sayTxt.textContent = '';
+    sayBox.style.height = prevH;
+    return chosen;
+  }
   var ARROW_MS    = FRAME_MS * 12;     // 504ms blink, matching the alert bar
 
   var sayBox, sayTxt, sayArrow;
@@ -468,13 +501,16 @@
   function saySpeak(text) {
     if (!sayEls()) return;
     clearInterval(sayTimer);
-    sayFull = String(text == null ? '' : text);
+    sayFull = sayAscii(text == null ? '' : text);
     sayTxt.textContent = '';
     if (sayArrow) sayArrow.classList.remove('on');
 
     if (!sayFull) {                       // nothing to say: close and stay shut
       sayPhase = 'shut'; sayStep = 0; sayApplyStep(); return;
     }
+    // Fit BEFORE the open starts, so the size is settled and the text never
+    // reflows mid-typewriter.
+    sayFit(sayFull);
     sayPhase = 'open'; sayStep = 0; sayApplyStep();
     sayT0 = Date.now();
     sayTimer = setInterval(sayTick, FRAME_MS);
@@ -535,7 +571,7 @@
   var INTRO = {
     wx:         'AND NOW, YOUR NATIONAL FORECAST.',
     donors:     "LET'S THANK TONIGHT'S CONTRIBUTORS.",
-    market:     'NEXT UP — HOW THE MARKETS CLOSED.',
+    market:     'NEXT UP: HOW THE MARKETS CLOSED.',
     nowplaying: "AND HERE'S WHAT WE'VE BEEN PLAYING."
   };
   var introT = null;
@@ -945,6 +981,9 @@
     // Exposed so the host-toggle repaint can be exercised without writing to
     // the live config table just to test a layout change.
     wxRows: function () { return wxRowsThatFit(); },
+    // Speak an arbitrary line, so copy length can be checked against the
+    // auto-fit without editing the config table to try a sentence.
+    say: function (t) { saySpeak(t); return sayFull; },
     repaintWx: function () { wxPage = 0; paintWxPage(); },
     cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id, hostIntro); q.lastCut = Date.now(); } },
     wiping: function () { return slots.map(function (q) { return q.wiping; }); },

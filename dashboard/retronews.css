@@ -446,8 +446,14 @@ html, body {
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--lit),
     0 0 0 var(--px) var(--shade);
   color: var(--ink);
-  font-size: calc(var(--px) * 5); line-height: 1.9;
+  /* SIZE IS SET BY JS — sayFit() picks the largest whole-logical size the whole
+     message fits at, floor 8 (CLAUDE.md rule 7). The 5 logical that was here is
+     20px stage = 15px on a phone, i.e. under the legibility floor and unreadable
+     on air. This value is only the pre-script fallback.
+     line-height 1.5, not 1.9: tighter leading buys a whole size step. */
+  font-size: calc(var(--px) * 8); line-height: 1.5;
   overflow: hidden;
+  position: relative;
 }
 
 /* ── Breaking bar. Blink is a CLASS TOGGLE on an interval — palette-based
