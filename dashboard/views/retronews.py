@@ -63,10 +63,16 @@ _SUPA_KEY = os.environ.get("SUPA_KEY", "sb_publishable_UFnDfeRb3XFs2UuT0LPPIg_B7
 # lane arbiter never tears down a beat mid-flight.
 _STAGE_HTML = """
 <div id="stage-wrap">
-  <div id="stage">
+  <div id="stage" class="__GUIDES__">
 
     <div id="guide-top"></div>
     <div id="guide-bot"></div>
+
+    <!-- Invisible double-tap target, top-left. Enters fullscreen so the stage
+         frames at a true 9:16 — what a YouTube vertical live stream gives you —
+         and switches the reserved-band guides on. Never paints anything: this
+         corner is inside the broadcast frame. -->
+    <div id="fs-hit"></div>
 
     <div id="safe">
 
@@ -163,7 +169,9 @@ def _build_html(show_guides: bool) -> str:
     }
     css = (_DASHBOARD / "retronews.css").read_text("utf-8")
     js = (_DASHBOARD / "retronews.js").read_text("utf-8")
-    guide_css = "" if show_guides else "#guide-top,#guide-bot{display:none!important;}"
+    # Guides are hidden by CSS default and revealed by a class, so the runtime
+    # fullscreen preview can switch them on without re-rendering the page.
+    stage_cls = "guides-on" if show_guides else ""
 
     # Press Start 2P — an 8x8 bitmap face. Correct HERE, and only here: the
     # conceit is a Game Boy rendering a cable channel, so the machine's own font
@@ -179,8 +187,8 @@ def _build_html(show_guides: bool) -> str:
     # Not an f-string: CSS/JS brace density makes escaping a liability.
     return (
         fonts
-        + "<style>" + css + guide_css + "</style>"
-        + _STAGE_HTML
+        + "<style>" + css + "</style>"
+        + _STAGE_HTML.replace("__GUIDES__", stage_cls)
         + "<script>window._TND_RETRONEWS = " + json.dumps(payload, default=str) + ";</script>"
         + "<script>" + js + "</script>"
     )

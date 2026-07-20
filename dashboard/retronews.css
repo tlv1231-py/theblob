@@ -67,17 +67,44 @@ html, body {
   background: var(--gb1);
 }
 
-/* The dead LCD area outside the safe box — darkest green, like an unlit
-   handheld bezel. Cheap, and it makes the lit panel read as a screen. */
+/* YouTube's reserved bands — the top and bottom 380 that its own chrome covers
+   on a live vertical stream. HIDDEN BY DEFAULT (they are inside the broadcast
+   frame). Shown by a class, not by injected CSS, so the fullscreen preview can
+   turn them on at runtime. */
 #guide-top, #guide-bot {
+  display: none;
   position: absolute; left: 0; right: 0; height: 380px;
   background: repeating-linear-gradient(45deg,
     rgba(15,56,15,0.35) 0 calc(var(--px) * 3),
     transparent calc(var(--px) * 3) calc(var(--px) * 6));
   pointer-events: none; z-index: 90;
 }
+#stage.guides-on #guide-top, #stage.guides-on #guide-bot { display: block; }
 #guide-top { top: 0; }
 #guide-bot { bottom: 0; }
+
+/* ── The fullscreen tap target ───────────────────────────────────────────────
+   Double-tap the TOP-LEFT corner to enter fullscreen, which frames the stage at
+   a true 9:16 — the same aspect YouTube gives a vertical live stream — and
+   switches the reserved-band guides on so you can see what its chrome will
+   cover.
+
+   Completely invisible: no fill, no tap highlight. This corner is INSIDE the
+   broadcast frame, so it must never flash anything on camera.
+
+   200px is 50 logical px, on-grid. It scales with the stage, so at a phone
+   letterbox (--s ~0.37) it is still a ~74px target — comfortably above the
+   ~44px minimum. z-index 999 because being last in the DOM is not enough. */
+#fs-hit {
+  position: absolute;
+  left: 0; top: 0;
+  width: 200px; height: 200px;
+  z-index: 999;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Kills mobile double-tap-to-zoom, which would otherwise fight this gesture. */
+  touch-action: manipulation;
+}
 
 #safe {
   position: absolute;

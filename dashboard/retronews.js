@@ -23,6 +23,92 @@
   window.addEventListener('resize', fit);
   setInterval(fit, 1000);
 
+  // ── Broadcast preview: double-tap the top-left corner ────────────────────
+  // Fullscreen frames the stage at a true 9:16 — the aspect a YouTube vertical
+  // live stream gives you — and switches the reserved-band guides on, so you
+  // can see exactly what YouTube's own chrome will cover. That is the whole
+  // point of the gesture: not "make it big", but "show me the real frame".
+  //
+  // NOTE ON FIDELITY, so the preview is not trusted for the wrong thing: your
+  // phone renders this at the phone's own resolution, while the broadcast is
+  // 810x1440. LAYOUT and framing are exact here; sharpness is optimistic.
+  var DTAP_MS = 400;
+  var lastTap = 0;
+
+  function fsToggle() {
+    try {
+      var d = document;
+      if (d.fullscreenElement || d.webkitFullscreenElement) {
+        (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d);
+      } else {
+        var el = d.documentElement;
+        var req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (req) {
+          // navigationUI:'hide' asks mobile to drop its bars — advisory, and
+          // harmless as an unknown key where unsupported.
+          var p = req.call(el, { navigationUI: 'hide' });
+          // requestFullscreen REJECTS rather than throws; without this the
+          // failure is an unhandled rejection in a console nobody is watching.
+          if (p && p.catch) p.catch(function (e) {
+            console.warn('[retronews] fullscreen refused:', e);
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[retronews] fullscreen refused:', e);
+    }
+  }
+
+  var hit = $('fs-hit');
+  if (hit) {
+    // pointerdown, not click: one handler covers touch and mouse, and it fires
+    // early enough to still carry the transient activation requestFullscreen
+    // demands. Deliberately NOT preventDefault-ed — touch-action in the CSS
+    // already kills double-tap zoom, and cancelling here risks the activation.
+    hit.addEventListener('pointerdown', function () {
+      var now = Date.now();
+      if (now - lastTap > 0 && now - lastTap < DTAP_MS) {
+        lastTap = 0;                 // consume, so a third tap starts a fresh pair
+        fsToggle();
+      } else {
+        lastTap = now;
+      }
+    });
+  }
+
+  // Entering fullscreen resizes the wrap, but the box is not final on the event
+  // itself — re-fit over the next few frames. setTimeout, never rAF.
+  function fsChange() {
+    var on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    var stage = $('stage');
+    // Guides ride fullscreen: preview mode shows what YouTube covers. ?guides=1
+    // still forces them on outside fullscreen.
+    if (stage && !S.guidesPinned) stage.classList.toggle('guides-on', on);
+    fit(); setTimeout(fit, 60); setTimeout(fit, 250);
+  }
+  document.addEventListener('fullscreenchange', fsChange);
+  document.addEventListener('webkitfullscreenchange', fsChange);
+
+  // If the page was loaded with ?guides=1 the class is already on; remember that
+  // so leaving fullscreen does not strip a guide the operator explicitly asked for.
+  S.guidesPinned = !!(document.getElementById('stage') &&
+                      document.getElementById('stage').classList.contains('guides-on'));
+
+  // The iframe's own resize event does NOT reliably fire when the frame is
+  // resized from outside, and rAF/ResizeObserver ride the inert rendering loop.
+  // A timer is the only thing that can be trusted to notice. Cheap: one rect
+  // read, and it only refits when the box actually changed.
+  var lastBox = '';
+  setInterval(function () {
+    var wrap = $('stage-wrap');
+    if (!wrap) return;
+    var r = wrap.getBoundingClientRect();
+    var k = Math.round(r.width) + 'x' + Math.round(r.height);
+    if (k === lastBox) return;
+    lastBox = k;
+    fit();
+  }, 500);
+
   // ── Broadcast clock ──────────────────────────────────────────────────────
   // A channel always knows what time it is. Also doubles as proof-of-life: a
   // frozen clock on air is the tell that the render died while ffmpeg happily
