@@ -388,6 +388,11 @@ html, body {
   height: calc(var(--px) * 92); flex: none;
   margin-top: calc(var(--px) * 4);
   display: flex; gap: calc(var(--px) * 4);
+  /* The strip CLIPS, so its contents can be walked up from below as one piece.
+     The strip itself keeps its layout box the whole time — animating the box
+     would reflow the content panel five times per arrival, and that panel has
+     already caused one reflow bug. */
+  overflow: hidden;
 }
 
 /* PORTRAIT — 72 x 90 logical = 288 x 360 stage = 216 x 270 device.
@@ -439,10 +444,10 @@ html, body {
   color: var(--ink);
   font-size: calc(var(--px) * 5);
 }
-/* HEIGHT IS EXPLICIT, not flex: the box opens in discrete steps and JS drives
-   the height directly. 72 logical is what is left of the 92-logical host strip
-   after the 16-logical nameplate and the 4-logical gap — deterministic, so the
-   open animation has a known target and never has to measure. */
+/* Fixed 72 logical — what is left of the 92-logical strip after the 16-logical
+   nameplate and the 4-logical gap. It no longer animates its own height: the
+   PANEL carries the arrival now, as one motion. Three things animating in
+   separately (frame, character, box) read as three events, not one. */
 #rn-say {
   flex: none; height: calc(var(--px) * 72);
   margin-top: calc(var(--px) * 4);

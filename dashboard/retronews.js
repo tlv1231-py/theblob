@@ -614,50 +614,57 @@
   // cut by the frame, so moving down hides 4px of shoulder (invisible) and opens
   // 4px above his hair (already background). Moving up would clip his hair and
   // expose a dark strip under him.
-  // ── SPRITE TRANSFORM — ONE OWNER ─────────────────────────────────────────
-  // Two things move the sprite: the talking bob, and sliding into/out of the
-  // portrait window. They must compose through a single writer, or whichever
-  // fires last wins and the other silently stops working.
+  // ── THE PANEL ARRIVES AS ONE PIECE ───────────────────────────────────────
+  // Frame, character and dialogue box wipe up from the bottom TOGETHER, and
+  // back down together. They used to arrive separately — the frame cut, the
+  // character climbed in, the box unrolled — and three arrivals inside 900ms
+  // read as three events rather than as a presenter appearing.
   //
-  // He ENTERS AND LEAVES SEPARATELY FROM HIS FRAME. The frame is furniture and
-  // cuts; the character slides up into it and drops back out, which is how a
-  // Pokemon trainer arrives and how a Stardew portrait enters. The portrait
-  // window is already overflow:hidden, so the slide needs no mask.
+  // The strip's LAYOUT BOX never moves; only its contents translate, under
+  // overflow:hidden. Animating the box itself would reflow the content panel on
+  // every step, and that panel has already produced one reflow bug.
   //
-  // STEPPED, not glided: 5 discrete positions at 84ms. This is sprite animation,
-  // so the quantisation is the point rather than a limitation.
-  var ENTER_STEPS = 5;
-  var ENTER_MS = FRAME_MS * 2;
-  var bobOn = false, enterStep = ENTER_STEPS, enterT = null;
+  // STEPPED, not glided: 5 discrete positions at 84ms. Sprite animation, so the
+  // quantisation is the point.
+  // FOUR steps, not five, and that is arithmetic rather than taste. The strip is
+  // 92 logical = 368 stage px; 368/5 = 73.6, a FRACTIONAL offset, which lands
+  // pixel art on sub-pixel positions and makes it shimmer as it moves. 368/4 =
+  // 92 stage = 23 logical = 69 device px — whole in all three spaces.
+  var WIPE_STEPS = 4;
+  var WIPE_STEP_MS = FRAME_MS * 2;
+  var bobOn = false, wipeStep = WIPE_STEPS, wipeT = null;
 
-  function spriteApply() {
+  // ONE WRITER for both transforms. The bob rides INSIDE the panel, so it lands
+  // on the sprite while the wipe lands on the two panel columns — separate
+  // elements, one function, so neither can silently overwrite the other.
+  function stripApply() {
+    var down = (WIPE_STEPS - wipeStep) / WIPE_STEPS * 92 * 4;   // 92 logical
+    ['rn-portrait', 'rn-host-right'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.style.transform = down ? 'translateY(' + down + 'px)' : '';
+    });
     var sp = $('rn-host-sprite');
-    if (!sp) return;
-    // 90 logical x --px = the full cell height, i.e. completely below the window.
-    var hidden = (ENTER_STEPS - enterStep) / ENTER_STEPS * 90 * 4;
-    var y = hidden + (bobOn ? 4 : 0);
-    sp.style.transform = y ? 'translateY(' + y + 'px)' : '';
+    if (sp) sp.style.transform = bobOn ? 'translateY(4px)' : '';
   }
   function hostBob(on) {
     if (on === bobOn) return;
     bobOn = on;
-    spriteApply();
+    stripApply();
   }
-  function spriteEnter(inward) {
-    clearInterval(enterT);
-    var t0 = Date.now();
-    var from = enterStep;
-    var to = inward ? ENTER_STEPS : 0;
-    enterT = setInterval(function () {
+  function stripWipe(inward) {
+    clearInterval(wipeT);
+    var t0 = Date.now(), from = wipeStep, to = inward ? WIPE_STEPS : 0;
+    if (from === to) return;
+    wipeT = setInterval(function () {
       // TIME-BASED, so a stalled tick lands on the right step rather than
-      // sliding slower on the broadcast than in preview.
-      var k = Math.floor((Date.now() - t0) / ENTER_MS);
-      var next = from + (to > from ? k : -k);
-      next = to > from ? Math.min(to, next) : Math.max(to, next);
-      if (next !== enterStep) { enterStep = next; spriteApply(); }
-      if (enterStep === to) clearInterval(enterT);
+      // wiping slower on the broadcast than in preview.
+      var k = Math.floor((Date.now() - t0) / WIPE_STEP_MS);
+      var next = to > from ? Math.min(to, from + k) : Math.max(to, from - k);
+      if (next !== wipeStep) { wipeStep = next; stripApply(); }
+      if (wipeStep === to) clearInterval(wipeT);
     }, FRAME_MS);
   }
+  var WIPE_MS = WIPE_STEPS * WIPE_STEP_MS;
 
   // ── GEN-1 DIALOGUE BOX ───────────────────────────────────────────────────
   // Pokemon Red's box cuts in; the remembered "animation" is the typewriter and
@@ -711,23 +718,10 @@
   // host strip's fixed 92 logical is never overrun and nothing below shifts.
   //
   // OPEN keeps the top pinned (it unrolls downward); only CLOSE compensates.
-  function sayApplyStep() {
-    var px = parseFloat(getComputedStyle(document.documentElement)
-                          .getPropertyValue('--px')) || 4;
-    var base = 4 * px;                                   // #rn-say margin-top
-    var h = Math.round(SAY_H * sayStep / SAY_STEPS);
-    sayBox.style.height = h + 'px';
-    sayBox.style.marginTop = (base + (sayPhase === 'close' ? SAY_H - h : 0)) + 'px';
-    // VERTICAL PADDING SCALES WITH THE STEP, or the box never actually leaves.
-    // box-sizing is border-box, so height:0 still renders the 16px top and
-    // bottom padding — the close bottomed out at a 32px sliver AND pushed 32px
-    // past the host strip, since margin was compensating for a height the box
-    // refused to reach. Horizontal padding is untouched: scaling it would reflow
-    // the text mid-animation.
-    var padV = Math.round(base * sayStep / SAY_STEPS);
-    sayBox.style.paddingTop = padV + 'px';
-    sayBox.style.paddingBottom = padV + 'px';
-  }
+  // The box no longer animates itself — the PANEL carries the arrival. Left as
+  // a no-op rather than deleted so the phase machine below still reads as
+  // open -> type -> done, which is what the mood arc hangs off.
+  function sayApplyStep() {}
 
   // The ONE entry point. Everything that speaks goes through here so the box can
   // never be half-typed by one writer and overwritten by another.
@@ -754,7 +748,10 @@
     // reverts him to NEUTRAL mid-sentence.
     setHostMood(SPEECH_MOOD, SAY_STEPS * SAY_STEP_MS + sayFull.length * CHAR_MS + 4000);
     VOICE.tone(SFX_OPEN[0], SFX_OPEN[1], SFX_OPEN[2]);
-    sayPhase = 'open'; sayStep = 0; sayApplyStep();
+    // 'open' is now simply the WAIT while the panel wipes in — the box is
+    // already at full size behind the clip, so text must not start typing until
+    // it is actually on screen.
+    sayPhase = 'open'; sayStep = 0;
     sayT0 = Date.now();
     sayTimer = setInterval(sayTick, FRAME_MS);
   }
@@ -763,9 +760,7 @@
     if (!sayEls()) return;
     var el = Date.now() - sayT0;
     if (sayPhase === 'open') {
-      var st = Math.min(SAY_STEPS, Math.floor(el / SAY_STEP_MS) + 1);
-      if (st !== sayStep) { sayStep = st; sayApplyStep(); }
-      if (st >= SAY_STEPS) {
+      if (el >= WIPE_MS) {
         sayPhase = 'type'; sayT0 = Date.now();
         // Box open, delivery starts — drop out of smug for the line itself.
         setHostMood(sayMid, sayFull.length * CHAR_MS + 2000);
@@ -813,19 +808,11 @@
     if (!sayEls()) return;
     clearInterval(sayTimer);
     if (sayArrow) sayArrow.classList.remove('on');
-    sayPhase = 'close'; sayT0 = Date.now();
+    sayPhase = 'shut'; sayT0 = Date.now();
     hostBob(false);
     setTalk(false);
     VOICE.tone(SFX_CLOSE[0], SFX_CLOSE[1], SFX_CLOSE[2]);
-    sayTimer = setInterval(function () {
-      var st = SAY_STEPS - Math.floor((Date.now() - sayT0) / SAY_STEP_MS);
-      sayStep = Math.max(0, st); sayApplyStep();
-      if (sayStep <= 0) {
-        clearInterval(sayTimer);
-        sayTxt.textContent = '';
-        sayPhase = 'shut';
-      }
-    }, FRAME_MS);
+    sayTxt.textContent = '';
   }
 
   // ── HOST INTRO — the default tile transition ─────────────────────────────
@@ -865,7 +852,7 @@
     clearTimeout(introT);
     if (!hostMaster) { hostShow(false); return; }
     hostShow(true);
-    spriteEnter(true);          // frame cuts in, character climbs into it
+    stripWipe(true);            // frame, character and box arrive as ONE piece
 
     // Do NOT talk over a viewer. pollEvents locks the say box for 12s when
     // someone tips, and a thank-you outranks a programming link every time.
@@ -879,14 +866,13 @@
     introT = setTimeout(function () {
       // Box leaves BEFORE he does, so the beat reads as him finishing a line and
       // then stepping aside rather than both vanishing at once.
+      // The whole panel leaves the way it arrived: one wipe, downward.
       sayClose();
-      // Box, then character, then frame — in that order, so he is seen to leave
-      // rather than being deleted along with the furniture.
-      setTimeout(function () { spriteEnter(false); }, SAY_STEPS * SAY_STEP_MS);
+      stripWipe(false);
       setTimeout(function () {
         hostShow(false);
         if (say && say._introOwned) { say._introOwned = false; }
-      }, SAY_STEPS * SAY_STEP_MS + ENTER_STEPS * ENTER_MS);
+      }, WIPE_MS);
     }, INTRO_MS);
   }
 
@@ -1463,7 +1449,7 @@
     // without waiting out a 5s intro to see it once.
     sayClose: function () { sayClose(); },
     voice: function () { return VOICE.state(); },
-    enter: function () { return enterStep; },
+    wipe: function () { return wipeStep; },
     blip: function () { return VOICE.blip(); },
     repaintWx: function () { wxPage = 0; paintWxPage(); },
     cut: function (id, n) { var q = slots[n || 0]; if (q) { q.cutTo(id, hostIntro); q.lastCut = Date.now(); } },
