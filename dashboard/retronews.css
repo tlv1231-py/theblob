@@ -277,9 +277,17 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   color: var(--cyan);
 }
-#rn-portrait .ph { text-align: center; font-size: calc(var(--px) * 4); line-height: 2.4; }
-#rn-portrait .ph b { display: block; font-size: calc(var(--px) * 5);
-                     color: var(--gold); margin-bottom: calc(var(--px) * 3); }
+/* THE HOST. One art pixel == one logical pixel: the sheet is 72x90 per cell and
+   the box is 72 logical wide, so at --px 4 he lands at 288x360 stage / 216x270
+   device — an exact 3x, never resampled. background-position selects the cell
+   (col = lid, row = mood), which is the same indexing blob.js uses. */
+#rn-host-sprite {
+  width: calc(var(--px) * 72); height: calc(var(--px) * 90);
+  background-repeat: no-repeat;
+  background-size: calc(var(--px) * 216) calc(var(--px) * 540);  /* 3 cols x 6 rows */
+  background-position: 0 0;
+  image-rendering: pixelated;
+}
 
 #rn-host-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #rn-nameplate {

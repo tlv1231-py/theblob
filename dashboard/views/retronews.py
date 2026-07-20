@@ -40,6 +40,7 @@ Config namespace: strategy='stream:retronews'. Events stay on the shared bus.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -146,12 +147,7 @@ _STAGE_HTML = """
       <!-- 3. HOST STRIP — 870 x 384 -->
       <div id="rn-host">
         <div id="rn-portrait">
-          <div class="ph">
-            <b>HOST</b>
-            288 &times; 360<br>
-            72&times;90 art @ 4&times;<br>
-            3 lids &times; 6 moods
-          </div>
+          <div id="rn-host-sprite"></div>
         </div>
         <div id="rn-host-right">
           <div id="rn-nameplate">YOUR HOST</div>
@@ -172,6 +168,17 @@ def _build_html(show_guides: bool) -> str:
         "supa": {"url": _SUPA_URL, "key": _SUPA_KEY},
     }
     css = (_DASHBOARD / "retronews.css").read_text("utf-8")
+
+    # The host sheet is INLINED as a data URI rather than served as a file. The
+    # stage is delivered as one HTML blob inside a component iframe, which has no
+    # route to a static asset — the same reason blob.js carries its sprite sheets
+    # as base64. 9KB, so the cost is nothing.
+    _host = _DASHBOARD / "retronews_host.png"
+    host_css = ""
+    if _host.exists():
+        b64 = base64.b64encode(_host.read_bytes()).decode("ascii")
+        host_css = ("#rn-host-sprite{background-image:url(data:image/png;base64,"
+                    + b64 + ");}")
     js = (_DASHBOARD / "retronews.js").read_text("utf-8")
     # Guides are hidden by CSS default and revealed by a class, so the runtime
     # fullscreen preview can switch them on without re-rendering the page.
@@ -191,7 +198,7 @@ def _build_html(show_guides: bool) -> str:
     # Not an f-string: CSS/JS brace density makes escaping a liability.
     return (
         fonts
-        + "<style>" + css + "</style>"
+        + "<style>" + css + host_css + "</style>"
         + _STAGE_HTML.replace("__GUIDES__", stage_cls)
         + "<script>window._TND_RETRONEWS = " + json.dumps(payload, default=str) + ";</script>"
         + "<script>" + js + "</script>"

@@ -350,6 +350,63 @@
     if (al && al.classList.contains('on')) al.classList.toggle('blink');
   }, FRAME_MS * 12);      /* 504ms = 12 frames exactly, not 500 */
 
+  // ── THE HOST ─────────────────────────────────────────────────────────────
+  // One sprite sheet, indexed exactly like blob.js: column = eyelid, row = mood.
+  // Everything is frame-aligned (see FRAME_MS) so no state lasts less than one
+  // captured frame — a blink that falls between frames simply never happened as
+  // far as the broadcast is concerned.
+  var MOOD_ROW = { NEUTRAL: 0, HAPPY: 1, SURPRISED: 2, SMUG: 3, WORRIED: 4, SLEEPY: 5 };
+  var CELL_W = 72, CELL_H = 90, ART = 4;          // 4x -> 288x360 stage
+  var hostMood = 'NEUTRAL', hostLid = 0;
+  var moodUntil = 0, nextBlink = 0, blinkSeq = null, blinkI = 0;
+
+  function drawHost() {
+    var el = $('rn-host-sprite');
+    if (!el) return;
+    var row = MOOD_ROW[hostMood] || 0;
+    el.style.backgroundPosition =
+      (-hostLid * CELL_W * ART) + 'px ' + (-row * CELL_H * ART) + 'px';
+  }
+
+  function setHostMood(m, holdMs) {
+    if (!(m in MOOD_ROW)) return;
+    hostMood = m;
+    moodUntil = Date.now() + (holdMs || 6000);
+    drawHost();
+  }
+
+  // The travelling blink: half / shut / half, never a hard cut from open to
+  // closed. At this rate a two-state blink reads as the eye VANISHING for a
+  // frame rather than as a blink — the same lesson BLOB.md records.
+  var BLINK = [1, 2, 1];
+
+  function hostTick() {
+    var now = Date.now();
+    if (blinkSeq) {
+      hostLid = blinkSeq[blinkI++];
+      if (blinkI >= blinkSeq.length) { blinkSeq = null; hostLid = 0; }
+      drawHost();
+      return;
+    }
+    if (moodUntil && now > moodUntil && hostMood !== 'NEUTRAL') {
+      hostMood = 'NEUTRAL'; moodUntil = 0; drawHost();
+    }
+    if (now > nextBlink) {
+      // SLEEPY holds his eyes shut; blinking through it would fight the pose.
+      if (hostMood !== 'SLEEPY') { blinkSeq = BLINK; blinkI = 0; }
+      nextBlink = now + 2600 + Math.random() * 4200;
+    }
+  }
+  drawHost();
+  nextBlink = Date.now() + 1500;
+  setInterval(hostTick, FRAME_MS * 2);            // 84ms = 2 frames per lid state
+
+  window._TND_HOST = {
+    mood: function () { return hostMood; },
+    lid: function () { return hostLid; },
+    set: setHostMood
+  };
+
   // ── Viewer events (the SHARED bus) ───────────────────────────────────────
   // streamlabs.py / chat.py have no idea this page exists; they just write
   // stream_events and whatever is rendering reacts. A tip therefore works here
@@ -379,6 +436,8 @@
           say._locked = true;
           setTimeout(function () { say._locked = false; }, 12000);
         }
+        // He reacts. Money gets the big face; everything else is a smaller beat.
+        setHostMood(p.amount != null ? 'HAPPY' : 'SURPRISED', 12000);
       })
       .catch(function () {});
   }
