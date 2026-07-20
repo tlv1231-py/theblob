@@ -451,7 +451,21 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    is set by chat MESSAGES at y1529, not the input at y1786, so it moves if chat
    collapses.
    Allocation (logical, safe box = 208x319, fully packed): brand 24 · gap 4 ·
-   **content 195, ONE panel** · gap 4 · host 92. One big panel beats a split at
+   **content 195, ONE panel** · gap 4 · host 92.
+   **The host strip is TOGGLEABLE** (`host_visible`, RetroNews HQ, polled ~3s).
+   Hidden, the content panel absorbs his 96 and runs **291** logical. This works
+   because `#rn-content` is a **flex filler, not a fixed height** — there is no
+   second set of numbers to keep in sync. Only an explicit `'0'` hides him, so a
+   missing row or a failed fetch leaves the stage as designed. It is a **CUT**:
+   CSS transitions are inert in this iframe and a hard cut is the era anyway.
+   Two things must move WITH the toggle, and both are silent failures if missed:
+   **(a) type scales up** (`.no-host` bumps the faces) — growing the box while
+   leaving 8-logical text in it just adds emptiness; **(b) `WIPE_ROWS` is sized
+   for the TALLER state** (25, not 17) or the dissolve covers the small panel and
+   leaves the bottom third of the big one live.
+   **Weather rows are whole logical px per state (17 / 26), never `1fr`** — 1fr
+   divides 171 and 267 into 17.1 and 26.7, putting every alternating band edge
+   off the pixel grid to be antialiased into a soft seam. One big panel beats a split at
    this size — a single tile is what reads across a room, which is the point of a
    channel you leave on. The `Slot` machinery in `retronews.js` is generic and
    instantiated once, so rotation, dissolve and the duplicate guard are all still

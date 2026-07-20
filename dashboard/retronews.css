@@ -189,7 +189,11 @@ html, body {
    bevelled console tile, and a single outer bevel around both would read as one
    panel split by a line. ───────────────────────────────────────────────────── */
 #rn-content {
-  height: calc(var(--px) * 195); flex: none;
+  /* FLEX FILLER, not a fixed height. This is what makes the host toggle work
+     without a second set of numbers to keep in sync: hide #rn-host and the
+     panel absorbs its 92 + 4 gap automatically. Fixed 195 with host, 291
+     without, and neither is written down anywhere. */
+  flex: 1 1 auto; min-height: 0;
   margin-top: calc(var(--px) * 4);
   display: flex; flex-direction: column; gap: calc(var(--px) * 4);
   /* Load-bearing: #rn-alert is absolute top:0 and must be contained HERE. The
@@ -237,6 +241,11 @@ html, body {
   top: calc(var(--px) * 24); bottom: 0;
   display: grid;
   grid-template-columns: 1fr;
+  /* WHOLE logical px, per state — NOT 1fr. 1fr divides the body evenly and the
+     body is 171 with the host and 267 without, giving 17.1 and 26.7: every
+     alternating band edge then lands off the pixel grid and gets antialiased
+     into a soft seam, on a page whose entire premise is that nothing does. The
+     few logical px left over at the bottom are just panel background. */
   grid-auto-rows: calc(var(--px) * 17);
 }
 .wx-cell {
@@ -447,3 +456,25 @@ html, body {
 .cr-who  { color: var(--cyan); }
 .cr-amt  { color: var(--gold); }
 .cr-idle { color: var(--lit); }
+
+
+/* ── HOST HIDDEN ───────────────────────────────────────────────────────────
+   The host strip is removed entirely and the content panel takes the space —
+   195 -> 291 logical. It is a CUT, never a transition: CSS transitions are inert
+   in this iframe (they would silently do nothing), and a hard cut is what the
+   era calls for anyway.
+
+   Type scales UP with the panel. Growing the box while leaving 8-logical text
+   in it just adds emptiness; the point of reclaiming the host's 96 logical is to
+   make the data read from further away. Every size stays a whole multiple of
+   --px, so nothing leaves the pixel grid. */
+#stage.no-host #rn-host { display: none; }
+#stage.no-host .rn-wx-grid    { grid-auto-rows: calc(var(--px) * 26); }
+#stage.no-host .rn-tile-title { font-size: calc(var(--px) * 9); }
+#stage.no-host .rn-tile-sub   { font-size: calc(var(--px) * 6); }
+#stage.no-host .wx-city       { font-size: calc(var(--px) * 11); }
+#stage.no-host .wx-temp       { font-size: calc(var(--px) * 14); }
+#stage.no-host .wx-cond       { font-size: calc(var(--px) * 8);
+                                width: calc(var(--px) * 52); }
+#stage.no-host .rn-ph-label   { font-size: calc(var(--px) * 9); }
+#stage.no-host .rn-ph-note    { font-size: calc(var(--px) * 7); }

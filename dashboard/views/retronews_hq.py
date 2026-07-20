@@ -104,6 +104,26 @@ def render() -> None:
                    "solid red box is their union — outside it is safe under every "
                    "reading. Green means our box clears it; amber means it does not.")
 
+    # ── HOST ON AIR ───────────────────────────────────────────────────────
+    # Header, beside the YT filter: it changes what the broadcast looks like
+    # right now, so it should not be two clicks deep in a tab.
+    host_on = cfg.get("host_visible", "1") != "0"
+    h1, h2 = st.columns([1, 3])
+    if h1.button("HOST: " + ("ON" if host_on else "OFF"),
+                 use_container_width=True,
+                 type="primary" if host_on else "secondary",
+                 help="Show or hide the host strip. Hidden, the content panel "
+                      "takes the space (195 -> 291 logical) and its type scales up. "
+                      "Applies live (~3s), no reload."):
+        _set("host_visible", "0" if host_on else "1", "Host strip on screen")
+        st.rerun()
+    h2.caption("Hiding the host gives the content panel his 96 logical and scales "
+               "the type up with it — a bigger panel holding the same small text "
+               "is just more empty space. Hard cut, never a fade: CSS transitions "
+               "are inert inside the stream page's iframe."
+               if host_on else
+               "Host is OFF — the content panel is running full height.")
+
     tab_sched, tab_host, tab_alert, tab_live = st.tabs(
         ["Schedule", "Host", "Breaking", "Go Live"])
 

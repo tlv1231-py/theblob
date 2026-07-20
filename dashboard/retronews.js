@@ -261,10 +261,14 @@
   // entirely. Two frames is the smallest unit that is guaranteed to survive.
   var FRAME_MS = 42;
   // Must COVER the panel or the dissolve leaves a live strip along an edge.
-  // The panel is 208x195 logical and blocks are 12x12, so 18x17 = 216x204 —
-  // deliberately over, and the overflow is clipped. Square blocks are the
-  // mosaic reading; anything much thinner reads as scanlines instead.
-  var WIPE_COLS = 18, WIPE_ROWS = 17, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
+  // Blocks are 12x12 logical and the panel is 208 wide, so 18 columns = 216.
+  //
+  // ROWS ARE SIZED FOR THE TALLER STATE. With the host hidden the panel grows
+  // from 195 to 291 logical, and 17 rows (204) would have covered the small
+  // panel and left the bottom THIRD of the big one live during every dissolve —
+  // visible only in the mode we just added, which is exactly the kind of bug
+  // that ships. 25 rows = 300, over both, and the overflow is clipped anyway.
+  var WIPE_COLS = 18, WIPE_ROWS = 25, WIPE_STEPS = 6, WIPE_MS = FRAME_MS * 2;
 
   function Slot(el, startIdx, startCut) {
     this.el = el;
@@ -424,6 +428,13 @@
             }
           } catch (e) {}
         }
+        // HOST ON/OFF. Only an explicit '0' hides him — a missing row, or a
+        // failed fetch, must leave the stage as designed rather than silently
+        // dropping the channel's anchor. A CUT, not a transition: CSS
+        // transitions are inert in this iframe and would do nothing at all.
+        var stg = $('stage');
+        if (stg) stg.classList.toggle('no-host', c.host_visible === '0');
+
         // Measuring overlay, driven live from HQ. No reload: the toggle has to
         // be usable while you are looking at the stream in the next window.
         //
