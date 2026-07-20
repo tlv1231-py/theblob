@@ -431,18 +431,22 @@
     var sl = slots[0];
     if (!sl) return;
     var frac = Math.max(0, Math.min(1, (Date.now() - sl.lastCut) / dwell));
-    var left = Math.ceil((1 - frac) * PIPS);
-    // Last pip blinks — the low-health tell every handheld had. A class toggle,
-    // so it is palette motion and costs the compositor nothing. 504ms matches
-    // the alert bar rather than inventing a third blink rate.
-    var lastOn = Math.floor(Date.now() / (FRAME_MS * 12)) % 2 === 0;
+    // FILLS, not drains. ceil() rather than floor() so the final pip lights for
+    // the whole last 1/6 of the dwell — with floor() it would arrive only at
+    // frac === 1, a single frame, and the green would never be seen.
+    var filled = Math.ceil(frac * PIPS);
+    // The last pip blinks GREEN — bar full, cut imminent. Class toggle only, so
+    // it is palette motion and costs the compositor nothing. 504ms matches the
+    // alert bar rather than inventing a third blink rate.
+    var blinkOn = Math.floor(Date.now() / (FRAME_MS * 12)) % 2 === 0;
     var bars = document.querySelectorAll('.rn-pips');
     for (var b = 0; b < bars.length; b++) {
       var kids = bars[b].children;
       for (var i = 0; i < kids.length; i++) {
-        var lit = i < left;
-        if (lit && left === 1) lit = lastOn;
-        kids[i].classList.toggle('on', lit);
+        var on = i < filled;
+        var last = (i === PIPS - 1);
+        kids[i].classList.toggle('hot', last && on);
+        kids[i].classList.toggle('on', last && on ? blinkOn : on);
       }
     }
   }

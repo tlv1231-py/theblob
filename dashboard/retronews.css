@@ -89,6 +89,8 @@
   --gold2: #c07f10;
   --cyan:  #46dcff;          /* the original cyan: conditions */
   --alert: #e83848;          /* alerts and the LIVE dot */
+  --go:    #62d94a;          /* the green that pairs with --alert: the countdown's
+                                final pip, i.e. "about to happen" */
 
   /* REVERT — GBA, in this order:
      #0a1030 #141c48 #1e2c68 #2c4494 #6f9ae8 #060a20 #f4f8ff (ink) / #46dcff
@@ -594,12 +596,19 @@ html, body {
 
 
 /* ── TILE COUNTDOWN ────────────────────────────────────────────────────────
-   Roughly how long this tile has left, as a segmented bar — the shape every
-   handheld used for health, time and charge. SEGMENTS, not a sliding meter:
-   discrete by construction, so there is nothing for a 24fps software compositor
-   to interpolate and no motion to judder. Six pips over a 15s dwell is one step
-   every 2.5s, which is "general" on purpose — this says roughly-how-long, not
-   seconds.
+   How close this tile is to changing, as a segmented bar — the shape every
+   handheld used for health, time and charge. It FILLS rather than drains:
+   charging up to something reads as anticipation, where emptying out reads as
+   running out, and the second is the wrong feeling for a channel that simply
+   moves on. SEGMENTS, not a sliding meter: discrete by construction, so there is
+   nothing for a 24fps software compositor to interpolate and no motion to
+   judder. Six pips over a 15s dwell is one step every 2.5s, which is "general"
+   on purpose — this says roughly-how-long, not seconds.
+
+   The FINAL pip lights GREEN and blinks: the bar is full, the cut is imminent,
+   and that last stretch is where the eye should be. Green against the gold fill
+   is also the biggest hue jump available in the content tier, so it reads at
+   phone size where a brightness change would not.
 
    Content tier (--gold / --scr*), because it lives INSIDE a tile. Recessed like
    a gauge set into the panel rather than raised like a button. */
@@ -620,3 +629,4 @@ html, body {
   background: var(--scr1);           /* spent */
 }
 .rn-pips i.on { background: var(--gold); }
+.rn-pips i.hot.on { background: var(--go); }
