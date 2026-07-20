@@ -24,17 +24,36 @@
 :root {
   --px: 4px;                 /* ONE LOGICAL PIXEL. Everything is a multiple. */
 
-  --sky0:  #0a1030;          /* deepest field */
-  --sky1:  #141c48;
-  --sky2:  #1e2c68;          /* panel fill */
-  --sky3:  #2c4494;          /* raised panel */
-  --lit:   #6f9ae8;          /* bevel highlight (top-left) */
-  --shade: #060a20;          /* bevel shadow (bottom-right) + outline */
-  --gold:  #ffc830;
-  --gold2: #c07f10;
-  --ink:   #f4f8ff;          /* type on dark */
-  --cyan:  #46dcff;
-  --alert: #e83848;
+  /* ── NES CONTROLLER PALETTE ──────────────────────────────────────────────
+     The hardware, not a game running on it: light-grey ABS body, near-black
+     faceplate, the moulded mid-grey stripes, and the two reds — button red and
+     the darker silkscreen red of the wordmark and SELECT/START. Press Start 2P
+     was already NES-era type, so the font needs no change.
+
+     THE ONE THING THAT MUST NOT BE COPIED LITERALLY: on the controller, RED
+     SITS ON THE LIGHT BODY. The first attempt mapped red onto the mid-grey
+     stripes and put secondary type in mid-grey too — titles went muddy and every
+     label ("CHANNEL 4", "UPDATED", the condition column) all but vanished. Red
+     needs a DARK ground here, and secondary type has to be light grey, not mid.
+
+     Rows alternate sky1/sky2 and that gap is deliberately wide: at #1c1c1c
+     against #262626 the banding was invisible, which is the whole mechanism the
+     weather board uses to stay readable.
+
+     REVERT: the GBA palette this replaced, in the same order —
+     #0a1030 #141c48 #1e2c68 #2c4494 #6f9ae8 #060a20 #ffc830 #c07f10 #f4f8ff
+     #46dcff #e83848 */
+  --sky0:  #0e0e0e;          /* deepest field — the faceplate */
+  --sky1:  #1a1a1a;          /* row A */
+  --sky2:  #2c2c2c;          /* panel fill / row B */
+  --sky3:  #4a4a4a;          /* raised panel — the moulded grey stripe */
+  --lit:   #b4b4ac;          /* bevel highlight — the light body grey */
+  --shade: #000000;          /* bevel shadow + outline */
+  --gold:  #e0342c;          /* BUTTON RED — the accent, on dark grounds */
+  --gold2: #8c1219;          /* silkscreen red — pressed/secondary */
+  --ink:   #ececE4;          /* type on dark — off-white body grey */
+  --cyan:  #9c9c94;          /* secondary type — light grey, NOT mid */
+  --alert: #e0342c;
 
   /* THE SAFE BOX IS MEASURED, not derived from published guides.
      Calibrated 2026-07-20 off a real YouTube mobile livestream screenshot; see
