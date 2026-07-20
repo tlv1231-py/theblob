@@ -579,14 +579,46 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
    **Any full-cover effect needs re-checking whenever the panel resizes** — area
    is half the perceived intensity and it is not in the constant.
 
-7. **Tile changes use the DISSOLVE, never a fade** (`cutTo()` in
-   `retronews.js`): a chunky block dissolve covers the panel in 8 discrete
-   steps, the tile is swapped at full cover behind a one-frame gold flash, then
-   it uncovers in 8 steps. Quantised by construction, which is both the
-   authentic hardware effect (mosaic/window wipes) and the only motion a 24fps
-   software compositor renders cleanly. ~935ms ≈ 22 frames — comfortably above
-   the 6-frame floor. **Never add a CSS fade or slide**; they are inert in the
-   iframe anyway.
+7. **Tile changes use the BLOCK WIPE, never a fade** (`cutTo()` in
+   `retronews.js`): a chunky 18×25 block grid covers the panel in discrete
+   steps, the tile is swapped at full cover behind a one-frame pulse, then it
+   uncovers. Quantised by construction, which is both the authentic hardware
+   effect and the only motion a 24fps software compositor renders cleanly.
+   ~935ms ≈ 22 frames — comfortably above the 6-frame floor. **Never add a CSS
+   fade or slide**; they are inert in the iframe anyway.
+
+   **The pattern varies — five of them, and they CYCLE** (`WIPE_PATTERNS` /
+   `wipeOrder()`, with `Slot.reorder()` called at the top of every `cutTo`):
+   `scatter`, `diagonal`, `shutters`, `iris`, `split`. These emulate what
+   Pokémon R/B and the GBA era actually did between full-screen changes, and
+   the reason they fit here is the reason they existed there: **every one was a
+   cheap register trick — reorder, mask, or palette — and none of them redrew
+   anything.** So the faithful implementation is to permute the block grid we
+   already have. No new DOM, no new cost, identical to the single scatter that
+   preceded it. Cycled rather than randomised: random repeats, and on a 24/7
+   stream a repeat is the one thing a viewer notices.
+
+   Two findings worth not rediscovering:
+   - **A boundary-walk spiral is invisible at this step count.** 6 steps over
+     450 blocks is ~75 cells per step, so a one-cell-wide walk never shows —
+     it rendered pixel-identical to `iris`. Replaced with `diagonal`.
+   - **Outside-in patterns collapse into each other on a tall grid.** On 18×25
+     vertical distance dominates any radial metric, so a Chebyshev or Euclidean
+     iris filled top/bottom first and overlapped `shutters` **87%**. Fixed by
+     normalising the ellipse by the grid's own proportions
+     (`(x-cx)/cx, (y-cy)/cy`). Worst remaining pair is iris vs split at 73%,
+     which reads as clearly distinct (ellipse vs vertical bands).
+
+   The block grid **over-covers by design** — measured 107% of the panel, with
+   the overspill on the right and bottom edges. Over-cover clips harmlessly; a
+   gap would show the outgoing tile through the transition.
+
+   **The flash between tiles must stay dim.** It was gold, and by the time the
+   panel had grown it was 832×1164 = **46.7% of the canvas** at a ×174
+   luminance jump held for 84ms — a full-screen orange strobe between every
+   tile. Its own comment still claimed "single frame… not a flash-bang"; both
+   halves had quietly become false. Now a `--scr3` blue pulse (×19). Any future
+   accent at full-panel scale gets measured, not eyeballed.
 8. **Type has a legibility floor.** Vertical video is watched on phones, and
    stage px × 0.75 = device px, then the phone shrinks it again. Anything under
    ~24px stage is unreadable on air — measured: a 20px face came out around 8px
