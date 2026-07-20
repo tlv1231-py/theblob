@@ -252,15 +252,23 @@ def _build_html(show_guides: bool, live: bool, yt: bool) -> str:
     # fullscreen preview can switch them on without re-rendering the page.
     stage_cls = "guides-on" if show_guides else ""
 
-    # Press Start 2P — an 8x8 bitmap face. Correct HERE, and only here: the
-    # conceit is a Game Boy rendering a cable channel, so the machine's own font
-    # is the joke. For a straight 90s-broadcast homage this would be the wrong
-    # era and a bold sans would be right.
+    # TWO faces, with distinct jobs.
+    #
+    # Press Start 2P for SIGNAGE — headers, labels, data. An 8x8 arcade bitmap,
+    # correct because the conceit is a game machine rendering a cable channel.
+    #
+    # DotGothic16 for SPEECH. Press Start 2P is monospace at font-size per glyph,
+    # so it renders dialogue as 12-characters-a-line signage rather than as
+    # someone talking, and its lowercase is blocky enough to read as caps. A
+    # dot-matrix face is what handhelds ACTUALLY drew text with, it has true
+    # sentence case, and at 18px/char against 36 it holds twice the copy.
+    # Silkscreen was the obvious pixel candidate and was rejected on measurement:
+    # its lowercase is SMALL CAPS, which is the exact problem being solved.
     fonts = (
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         '<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P'
-        '&display=swap" rel="stylesheet">'
+        '&family=DotGothic16&display=swap" rel="stylesheet">'
     )
 
     # Not an f-string: CSS/JS brace density makes escaping a liability.

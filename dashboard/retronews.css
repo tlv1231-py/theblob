@@ -120,6 +120,11 @@
   --safe-h: 1276px;
 
   --face: 'Press Start 2P', 'Courier New', monospace;
+  /* SPEECH, not signage. See views/retronews.py for why this is a second face
+     rather than the same one: --face is monospace at one em per glyph, which
+     renders a sentence as 12-character signage, and its lowercase reads as caps.
+     Dialogue is the only thing that uses this. */
+  --dialogue: 'DotGothic16', 'Courier New', monospace;
 }
 
 /* ── THE BEVEL — the single most GBA thing in this file. ───────────────────
@@ -446,21 +451,22 @@ html, body {
     inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--lit),
     0 0 0 var(--px) var(--shade);
   color: var(--ink);
-  /* ONE FIXED SIZE. Auto-fitting per message was built and REMOVED: sizing text
-     to the space means a short line renders huge, and on a dialogue box that
-     reads as SHOUTING rather than as good use of space. Type size is voice, and
-     the voice should not change with sentence length.
+  /* SPEECH FACE, ONE FIXED SIZE.
+     Auto-fitting per message was built and REMOVED: sizing type to the space
+     makes a short line render huge, and on a dialogue box that reads as SHOUTING
+     rather than as good use of space. Type size is voice, and the voice must not
+     change with sentence length.
 
-     9 logical is chosen, not guessed. The content area is 124x64 logical, so at
-     1.5 leading:
-         11+  ->  33 chars   cannot fit the 35-char intro lines at all
-         10   ->  48 chars   clips the 50-char host line already in the config
-         9    ->  52 chars   fits everything currently written        <-- this
-         8    ->  75 chars   more room, but 24px on a phone
-     9 logical = 36px stage = 27px device, comfortably over rule 7's floor.
-     THE COPY BUDGET IS 52 CHARACTERS and RetroNews HQ enforces it at the input.
-     line-height 1.5, not 1.9: tighter leading is what makes 9 fit 52. */
-  font-size: calc(var(--px) * 9); line-height: 1.5;
+     12 logical is possible only because the face changed. Press Start 2P is
+     monospace at one em per glyph — 36px/char at this size, 12 to a line — so it
+     capped out at 9 logical / 48 characters. DotGothic16 runs ~18px/char, so the
+     same box holds far more and the type can be BIGGER:
+         Press Start 2P @ 9   ->  12 chars/line, 48 capacity, 27px device
+         DotGothic16    @ 12  ->  19 chars/line, 57 capacity, 36px device
+     THE COPY BUDGET IS 57 CHARACTERS and RetroNews HQ enforces it at the input.
+     line-height 1.5 stays: it is what makes the third line fit. */
+  font-family: var(--dialogue);
+  font-size: calc(var(--px) * 12); line-height: 1.5;
   overflow: hidden;
   position: relative;
 }

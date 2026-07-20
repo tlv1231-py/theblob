@@ -444,7 +444,25 @@ infomercial / broadcast chyron). Reference: <https://weather.com/retro/>.
 2. **Ambient motion is palette-based, not positional.** Colour cycling, blinking,
    a slow crawl. It costs nothing and needs no framerate. Do NOT animate position
    to create life.
-3. **THE CONCEIT IS A GAME BOY ADVANCE RENDERING A CABLE CHANNEL** — not a cable
+3. **TWO FACES, WITH DISTINCT JOBS — signage vs speech.**
+   `--face` **Press Start 2P** for headers, labels and data. `--dialogue`
+   **DotGothic16** for the host's speech, and ONLY that.
+   Press Start 2P is monospace at one em per glyph (36px/char at dialogue size,
+   12 to a line), so it renders a sentence as signage rather than as someone
+   talking, and its lowercase is blocky enough to read as caps. A dot-matrix face
+   is what handhelds actually drew text with, has TRUE sentence case (measured:
+   cap height 34 vs x-height 24), and at ~18px/char holds twice the copy — which
+   is what let dialogue go from 9 logical to **12** (36px device) while the
+   budget still ROSE from 48 to 57 characters.
+   **Silkscreen was the obvious pixel candidate and was rejected on measurement:
+   its lowercase is SMALL CAPS**, i.e. the exact problem being solved. Check any
+   replacement by rendering `Aa Ee` and comparing heights, not by reading a
+   specimen.
+   **Do not use a "Pokemon" font.** Those are fan recreations of Nintendo's
+   copyrighted bitmap face, are not on Google Fonts, and this channel is intended
+   to be monetised.
+
+4. **THE CONCEIT IS A GAME BOY ADVANCE RENDERING A CABLE CHANNEL** — not a cable
    channel.
    That mashup decides everything below, and it **reverses** the rule that was
    here first. A straight 90s-broadcast homage wants a real bold sans with a hard

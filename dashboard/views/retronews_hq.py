@@ -173,13 +173,15 @@ def render() -> None:
 
         name = st.text_input("Nameplate", value=cfg.get("host_name") or "YOUR HOST",
                              max_chars=28)
-        # 52 IS THE BOX'S ACTUAL CAPACITY, not a round number. The say box is a
-        # fixed 9 logical (see retronews.css) over a 124x64 logical content area,
-        # which holds 4 lines of 13 characters. Enforcing it HERE, where the copy
-        # is written, is the only place the limit is visible — past it the text
-        # simply clips on air with nothing to say so.
+        # 57 IS THE BOX'S ACTUAL CAPACITY, not a round number. The say box is a
+        # fixed 12 logical in DotGothic16 (see retronews.css) over a 124x64
+        # logical content area — 3 lines of 19 characters. Enforcing it HERE,
+        # where the copy is written, is the only place the limit is visible:
+        # past it the text simply clips on air with nothing to say why.
+        # Sentence case is fine and preferred — the dialogue face has true
+        # lowercase, which the signage face effectively does not.
         say = st.text_area("What he's saying", value=cfg.get("host_say") or "",
-                           max_chars=52, height=100,
+                           max_chars=57, height=100,
                            help="Cleared automatically when a viewer event "
                                 "takes over the dialogue box for ~12s.")
         if st.button("SAVE HOST", type="primary", use_container_width=True):
