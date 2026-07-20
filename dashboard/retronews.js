@@ -560,6 +560,9 @@
   // TIME-BASED, not tick-based — the same rule the crawl obeys. Characters are
   // derived from elapsed wall-clock, so a delayed timer on the loaded broadcast
   // VM jumps to the right character instead of typing slower than in preview.
+  // The face he speaks in. One constant because it is a CHOICE, not a fact —
+  // per-line or per-tile moods are a small change from here.
+  var SPEECH_MOOD = 'SMUG';
   var SAY_STEPS   = 5;                 // stepped open/close
   var SAY_STEP_MS = FRAME_MS * 2;      // 84ms per step = 420ms, ~10 frames
   var SAY_H       = 72 * 4;            // 72 logical x --px, the box's full height
@@ -623,6 +626,12 @@
     if (!sayFull) {                       // nothing to say: close and stay shut
       sayPhase = 'shut'; sayStep = 0; sayApplyStep(); return;
     }
+    // SPEECH IS BOOKENDED BY SMUG. Set here rather than in hostIntro so it
+    // covers EVERY speech event — tile intros, viewer thank-yous and anything
+    // typed from HQ — instead of only the scheduled ones.
+    // Held past the whole utterance: open + typing + the read, so nothing
+    // reverts him to NEUTRAL mid-sentence.
+    setHostMood(SPEECH_MOOD, SAY_STEPS * SAY_STEP_MS + sayFull.length * CHAR_MS + 4000);
     sayPhase = 'open'; sayStep = 0; sayApplyStep();
     sayT0 = Date.now();
     sayTimer = setInterval(sayTick, FRAME_MS);
@@ -643,6 +652,10 @@
         sayTxt.textContent = sayFull;
         sayPhase = 'done'; sayT0 = Date.now();
         hostBob(false);              // land him flat on the last character
+        // ...and land him back on SMUG. Re-asserted rather than assumed: a
+        // donation arriving mid-sentence sets its own mood, and without this he
+        // would finish the line wearing it.
+        setHostMood(SPEECH_MOOD, 4000);
         return;
       }
       // Only touch the DOM when the count actually changes — and that is also
@@ -730,7 +743,6 @@
       saySpeak(line);
       say._introOwned = true;             // so pollConfig does not clobber it
     }
-    setHostMood('NEUTRAL', INTRO_MS);
 
     introT = setTimeout(function () {
       // Box leaves BEFORE he does, so the beat reads as him finishing a line and
@@ -1060,7 +1072,14 @@
           setTimeout(function () { say._locked = false; }, 12000);
         }
         // He reacts. Money gets the big face; everything else is a smaller beat.
-        setHostMood(p.amount != null ? 'HAPPY' : 'SURPRISED', 12000);
+        // A BEAT AFTER the box opens, not with it. Fired simultaneously, this
+        // overwrites saySpeak's SMUG in the same tick and he simply starts
+        // happy — the reaction has nothing to react FROM. Delayed by the open,
+        // the arc is legible: smug, then the tip lands and he brightens, then
+        // the last character puts him back to smug.
+        var reactMood = p.amount != null ? 'HAPPY' : 'SURPRISED';
+        setTimeout(function () { setHostMood(reactMood, 12000); },
+                   SAY_STEPS * SAY_STEP_MS);
       })
       .catch(function () {});
   }
