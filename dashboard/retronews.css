@@ -134,12 +134,12 @@ html, body {
   left: var(--safe-x); top: var(--safe-y);
   width: var(--safe-w); height: var(--safe-h);
   display: flex; flex-direction: column;
-  padding: calc(var(--px) * 3);
-  background: var(--sky1);
-  box-shadow:
-    inset var(--px) var(--px) 0 0 var(--lit),
-    inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--shade),
-    0 0 0 calc(var(--px) * 2) var(--shade);
+  /* TRANSPARENT — a layout box, not a slab.
+     It used to be an opaque panel with its own bevel, which covered 864x1152 of
+     a 1080x1920 stage: with YouTube's chrome over the top and bottom bands, that
+     left ~4.9% of any background actually visible. Now the individual panels
+     carry their own bevels and float, so the city reads in the gaps between
+     them and in the margins. */
 }
 
 /* ── 1. BRAND BAR — 216 x 24 logical ─────────────────────────────────────── */

@@ -173,6 +173,14 @@ def _build_html(show_guides: bool) -> str:
     # stage is delivered as one HTML blob inside a component iframe, which has no
     # route to a static asset — the same reason blob.js carries its sprite sheets
     # as base64. 9KB, so the cost is nothing.
+    _bg = _DASHBOARD / "retronews_bg.png"
+    bg_css = ""
+    if _bg.exists():
+        b64bg = base64.b64encode(_bg.read_bytes()).decode("ascii")
+        bg_css = ("#stage{background-image:url(data:image/png;base64," + b64bg + ");"
+                  "background-size:1080px 1920px;background-repeat:no-repeat;"
+                  "image-rendering:pixelated;}")
+
     _host = _DASHBOARD / "retronews_host.png"
     host_css = ""
     if _host.exists():
@@ -198,7 +206,7 @@ def _build_html(show_guides: bool) -> str:
     # Not an f-string: CSS/JS brace density makes escaping a liability.
     return (
         fonts
-        + "<style>" + css + host_css + "</style>"
+        + "<style>" + css + bg_css + host_css + "</style>"
         + _STAGE_HTML.replace("__GUIDES__", stage_cls)
         + "<script>window._TND_RETRONEWS = " + json.dumps(payload, default=str) + ";</script>"
         + "<script>" + js + "</script>"
