@@ -222,26 +222,44 @@ def render() -> None:
 
     components.html(_build_html(show_guides), height=_STAGE_H, scrolling=False)
 
-    # Size the stage iframe to the REAL viewport — Streamlit guesses a height,
-    # and letterboxing against a guess puts the stage on a fractional scale.
+    # Size the stage iframe to the REAL viewport.
+    #
+    # WITHOUT THIS THE PAGE IS BLACK ON A PHONE. components.html is given
+    # height=1920, and #stage-wrap is position:fixed inset:0 INSIDE that iframe —
+    # so the wrap is 1920 tall and centres the stage in it. On a 812px-tall phone
+    # the stage's top lands ~626px down and everything above it is the wrap's
+    # black background. Measured at a 375x812 viewport: iframe 375x1920, stage
+    # rendered 375x667, sitting mostly below the fold.
+    #
+    # This is the Blob stream's sizer VERBATIM, because it is the one proven on a
+    # real phone. Three details are load-bearing and an earlier hand-rolled
+    # version got the first one wrong:
+    #   * find the BIGGEST iframe, not one matched by title — the component
+    #     iframe's title attribute is not something to rely on.
+    #   * set the height ATTRIBUTE as well as style.height. Streamlit drives the
+    #     attribute, so styling alone gets overridden.
+    #   * listen to the PARENT's resize; the iframe's own event does not fire
+    #     when it is resized from outside.
     components.html("""
     <script>
-    (function () {
-      function size() {
-        try {
-          var d = window.parent.document;
-          var frames = d.querySelectorAll('iframe[title="streamlit_component_v1"]');
-          for (var i = 0; i < frames.length; i++) {
-            var f = frames[i];
-            if (f.height === '0' || f.clientHeight === 0) continue;
-            f.style.height = window.parent.innerHeight + 'px';
-            f.style.width = '100%';
-          }
-        } catch (e) {}
-      }
-      size();
-      setInterval(size, 1000);
-      window.addEventListener('resize', size);
+    (function() {
+        function fit() {
+            try {
+                var p = window.parent, doc = p.document;
+                var big = null, bh = 0;
+                doc.querySelectorAll('iframe').forEach(function(f) {
+                    if (f !== window.frameElement && f.offsetHeight > bh) { big = f; bh = f.offsetHeight; }
+                });
+                if (big) {
+                    big.setAttribute('height', p.innerHeight);
+                    big.style.height = p.innerHeight + 'px';
+                    big.style.width  = '100%';
+                }
+            } catch(e) {}
+        }
+        fit();
+        [100, 400, 900, 2000].forEach(function(ms) { setTimeout(fit, ms); });
+        window.parent.addEventListener('resize', fit);
     })();
     </script>
     """, height=0, scrolling=False)
