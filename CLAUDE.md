@@ -112,6 +112,51 @@ Prerequisites before building:
   single narrative (like Stream) will misrepresent. Decide which book a display
   surface represents before shipping it.
 
+## Telemetry Retention — READ BEFORE ADDING ANY LOGGING TABLE
+
+Supabase free tier warned the org had "breezed through your plan's quota"
+(2026-07-20), Fair Use Policy applying **from 2026-08-19**. Audit found **43% of
+the database was data nobody reads**. 173MB → 93MB after pruning.
+
+**The one distinction that caused all of it: an EVENT is a fact that happened and
+belongs in history; a HEARTBEAT is current state and only the newest is ever
+read. Appending state is the bug.** Three tables did it:
+
+| table | was | why | now |
+|---|---|---|---|
+| `pipeline_events` | 180,423 rows, **576 unique** | `TRADE` mirrored `fills` 1:1, `UPDATE` mirrored `portfolio_snapshots` 1:1 as prose | heartbeat UPSERTS; `TRADE` pruned at 7d |
+| `portfolio_snapshots` | 83,311 rows for **26** real (date,strategy) pairs | INSERTed every scan (~11k/day) despite the documented contract being *end-of-day* | UPSERT per (day, strategy) |
+| `stream_health` | ~25,000 rows/day, unbounded | the 15s liveness beat, kept forever | pruned at 48h |
+
+Rules that follow:
+1. **Anything written on a loop is telemetry. Give it a retention policy in the
+   same commit that introduces it**, or it grows forever — `_RETENTION` in
+   `strategies/crypto/runner.py`.
+2. **State gets UPSERTED, never appended.** If only the newest row is read, one
+   row is the correct number of rows.
+3. **A human-readable mirror of another table is not a log, it is a copy.**
+   `pipeline_events.TRADE` duplicated `fills` for 96,527 rows. Keep the prose
+   only as long as something narrates it (the Stream page does — 7 days), and
+   never treat it as the record. `fills` is the record.
+4. **Write-side fixes here use UPDATE-then-INSERT, not `ON CONFLICT`.** The
+   runner is a GitHub Actions `while true` loop that only re-checks out code at
+   job start, so a unique index added ahead of the deploy would make the live
+   job's INSERTs raise — into a bare `except` that logs a warning, i.e. snapshots
+   would vanish *silently* for up to 5 hours. UPDATE-then-INSERT is correct with
+   or without the index. Add the index and switch to `ON CONFLICT` only if a
+   second writer ever appears.
+5. **Deleted rows are archived first** to gitignored `backups/*.csv.gz` (302,742
+   rows compressed to 5.4MB). They are LOCAL ONLY — not in the repo.
+
+**Storage was never the binding limit** (173MB against a 500MB cap), so the quota
+warning was most likely **egress**: the runner scans every ~7s around the clock,
+and the Stream/RetroNews pages poll config and events every 2–3s. Pruning does
+not reduce egress. **If the warning recurs, attack the POLL INTERVALS, not the
+row counts.**
+
+GitHub Actions minutes are NOT a concern — `tlv1231-py/theblob` is public, so
+Actions is free and unlimited. `.env` is gitignored and verified never committed.
+
 ## Known Fixes Applied
 
 - **`entry_price` = 0 / every position reading +0.00% — FIXED (verified

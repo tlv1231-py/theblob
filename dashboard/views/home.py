@@ -220,9 +220,18 @@ def _load_chart_data() -> dict:
         port_values = [float(r.total_value) for r in port_rows]
 
         # Intraday marks — "marked the book at $X" pipeline events (dense price history)
+        #
+        # TIME-BOUNDED so this can use ix_pipeline_events_recorded_at. A leading-
+        # wildcard ILIKE is unindexable by construction, so without the bound
+        # this sequentially scanned the WHOLE table on every Home render — 180k
+        # rows as of 2026-07-20 — and it has always matched exactly ZERO of them
+        # (verified against the archive too, so the prune did not cause it).
+        # Left in place rather than deleted because the writer may simply not
+        # exist yet; bounded, it costs nothing while matching nothing.
         mark_rows = s.execute(text("""
             SELECT recorded_at, message FROM pipeline_events
-            WHERE message ILIKE '%marked the book at%'
+            WHERE recorded_at > now() - interval '3 days'
+              AND message ILIKE '%marked the book at%'
             ORDER BY recorded_at DESC LIMIT 500
         """)).fetchall()
         mark_ts, mark_vals = [], []

@@ -173,6 +173,79 @@ def _post_event(event_type: str, symbol: str, message: str, detail: str = "") ->
     except Exception as e:
         logger.warning(f"Event log failed: {e}")
 
+
+def _post_heartbeat(message: str, detail: str = "") -> None:
+    """The scan-complete beat: ONE row per day, rewritten in place.
+
+    Distinct from _post_event because the two have opposite semantics.
+    An EVENT is a fact that happened and belongs in history. A HEARTBEAT is
+    current state — only the newest is ever read (the dashboard uses it to reset
+    a progress bar). Appending state produced 83,296 rows of the same sentence.
+
+    Kept as a pipeline_events row rather than its own table so every existing
+    reader keeps working unchanged.
+    """
+    try:
+        params = {
+            "rd":  datetime.now(timezone.utc).date(),
+            "msg": message,
+            "det": detail,
+            "ts":  datetime.now(timezone.utc),
+        }
+        with get_session() as s:
+            r = s.execute(text("""
+                UPDATE pipeline_events
+                   SET message = :msg, detail = :det, recorded_at = :ts
+                 WHERE run_date = :rd AND event_type = 'UPDATE'
+            """), params)
+            if r.rowcount == 0:
+                s.execute(text("""
+                    INSERT INTO pipeline_events
+                        (run_date, event_type, symbol, message, detail, recorded_at)
+                    VALUES (:rd, 'UPDATE', NULL, :msg, :det, :ts)
+                """), params)
+            s.commit()
+    except Exception as e:
+        logger.warning(f"Heartbeat failed: {e}")
+
+
+# Telemetry retention. These tables are APPEND-ONLY BY NATURE and nothing ages
+# out of them on its own, so without a sweep they grow forever — which is how a
+# 500MB quota gets consumed by data nobody reads.
+#
+# TRADE events are NOT pruned as aggressively as the rest: unlike the heartbeat
+# they are load-bearing, the Stream page narrates the book from them. But it
+# narrates only what just happened, and `fills` is the permanent record of the
+# same trades, so a week is generous.
+#
+# NOT run every scan — the sweep is cheap but not free, and the scan loop is a
+# few seconds. Once an hour is plenty for something measured in days.
+_RETENTION = (
+    ("pipeline_events", "recorded_at", "7 days",  "event_type = 'TRADE'"),
+    ("stream_health",   "recorded_at", "48 hours", None),
+)
+_last_prune: datetime | None = None
+
+
+def _prune_telemetry(min_interval_s: int = 3600) -> None:
+    global _last_prune
+    now = datetime.now(timezone.utc)
+    if _last_prune is not None and (now - _last_prune).total_seconds() < min_interval_s:
+        return
+    _last_prune = now
+    try:
+        with get_session() as s:
+            for table, tcol, age, extra in _RETENTION:
+                where = f"{tcol} < now() - interval '{age}'"
+                if extra:
+                    where += f" AND {extra}"
+                r = s.execute(text(f"DELETE FROM {table} WHERE {where}"))
+                if r.rowcount:
+                    logger.info(f"[retention] pruned {r.rowcount:,} from {table}")
+            s.commit()
+    except Exception as e:
+        logger.warning(f"Retention sweep failed: {e}")
+
 def _log_fill(symbol: str, order_id: str, side: str, qty: float, price: float,
               pnl: float | None, reason: str) -> None:
     try:
@@ -196,25 +269,54 @@ def _log_fill(symbol: str, order_id: str, side: str, qty: float, price: float,
 
 
 def _write_snapshot(nav: float, positions: dict) -> None:
+    """ONE ROW PER (day, strategy), updated in place — not one per scan.
+
+    This INSERTed unconditionally, and the scan loop runs every few seconds, so
+    it wrote ~11,000 rows a day for a table whose documented contract is "end-of-
+    day portfolio snapshot". Measured 2026-07-20: 83,311 rows covering 26 real
+    (date, strategy) pairs — 29.6MB of a 173MB database, and the single largest
+    contributor to blowing the Supabase free quota.
+
+    Nothing was reading the intraday rows: every consumer takes the latest per
+    day. The history that matters lives in `fills`.
+
+    UPDATE-then-INSERT rather than ON CONFLICT because that needs a unique index
+    on (snapshot_date, strategy), and adding one while a runner built on the old
+    code is live would make its INSERTs start raising — caught by the except
+    below, so snapshots would vanish silently until a redeploy. This form is
+    correct with or without the index, so there is no window. Safe for a single
+    runner; if a second ever writes this table, add the index and switch to
+    ON CONFLICT DO UPDATE.
+    """
     import json as _json
     try:
         pos_json = _json.dumps({k: v["qty"] for k, v in positions.items()})
+        params = {
+            "sd":    datetime.now(timezone.utc).date(),
+            "strat": "crypto_momentum",
+            "cash":  nav,
+            "gross": nav,
+            "net":   nav,
+            "total": nav,
+            "pos":   pos_json,
+            "ts":    datetime.now(timezone.utc),
+        }
         with get_session() as s:
-            s.execute(text("""
-                INSERT INTO portfolio_snapshots
-                    (snapshot_date, strategy, cash, gross_exposure, net_exposure,
-                     total_value, positions, recorded_at)
-                VALUES (:sd, :strat, :cash, :gross, :net, :total, cast(:pos as jsonb), :ts)
-            """), {
-                "sd":    datetime.now(timezone.utc).date(),
-                "strat": "crypto_momentum",
-                "cash":  nav,
-                "gross": nav,
-                "net":   nav,
-                "total": nav,
-                "pos":   pos_json,
-                "ts":    datetime.now(timezone.utc),
-            })
+            r = s.execute(text("""
+                UPDATE portfolio_snapshots
+                   SET cash = :cash, gross_exposure = :gross, net_exposure = :net,
+                       total_value = :total, positions = cast(:pos as jsonb),
+                       recorded_at = :ts
+                 WHERE snapshot_date = :sd AND strategy = :strat
+            """), params)
+            if r.rowcount == 0:
+                s.execute(text("""
+                    INSERT INTO portfolio_snapshots
+                        (snapshot_date, strategy, cash, gross_exposure, net_exposure,
+                         total_value, positions, recorded_at)
+                    VALUES (:sd, :strat, :cash, :gross, :net, :total,
+                            cast(:pos as jsonb), :ts)
+                """), params)
             s.commit()
     except Exception as e:
         logger.warning(f"Snapshot write failed: {e}")
@@ -452,11 +554,16 @@ def run() -> None:
     nav = _account_value()
     _write_snapshot(nav, positions)
 
-    # Heartbeat — always post so the dashboard progress bar resets each run
+    # Heartbeat — always post so the dashboard progress bar resets each run.
+    # UPSERTED, not appended: a heartbeat is a CURRENT-STATE signal and only the
+    # newest one is ever read, so appending made 83,296 rows of the identical
+    # string ("scan complete - NAV $6,036.04 - 9 open") at ~11k/day. See
+    # _post_heartbeat.
     open_syms = ", ".join(positions.keys()) if positions else "flat"
-    _post_event("UPDATE", None,
+    _post_heartbeat(
         f"▸ scan complete · NAV ${nav:,.2f} · {len(positions)} open ({open_syms})",
         f"positions={len(positions)}")
+    _prune_telemetry()
     logger.info(f"[crypto] snapshot written NAV=${nav:,.2f}")
 
 

@@ -49,3 +49,4 @@ pg_dump_*.sql
 
 # Streamlit
 .streamlit/secrets.toml
+backups/
