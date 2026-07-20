@@ -1077,6 +1077,15 @@ Paper portfolio start date: **2026-05-29**
     other interval kept going. **Never pass a non-timer to clearTimeout/clearInterval** —
     JS coerces it and the call is silently valid.
 
+    **⚠ The 3s config poll will contaminate any measurement of the say box.**
+    It calls `saySpeak` with `host_say` whenever the host is on screen, which
+    restarts the utterance — mid-type, mid-arc, mid-anything. Three separate
+    measurements this session read as failures because of it: a font-fit that
+    looked stuck at the floor, a case check that showed stale text, and a mood arc
+    with a phantom fourth beat. **Read `_TND_RN.sayState()` alongside any trace**;
+    if `full.length` changes under you, a new utterance started and the trace
+    spans two of them.
+
     **⚠ Timing cannot be measured from an automated browser.** Its tab is always
     `document.hidden`, and Chrome throttles background timers hard — a 3s beat straddles a
     minute and is indistinguishable from a deadlock. This produced hours of phantom bugs

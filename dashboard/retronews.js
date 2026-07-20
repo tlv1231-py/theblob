@@ -560,9 +560,13 @@
   // TIME-BASED, not tick-based — the same rule the crawl obeys. Characters are
   // derived from elapsed wall-clock, so a delayed timer on the loaded broadcast
   // VM jumps to the right character instead of typing slower than in preview.
-  // The face he speaks in. One constant because it is a CHOICE, not a fact —
-  // per-line or per-tile moods are a small change from here.
-  var SPEECH_MOOD = 'SMUG';
+  // THE SPEECH ARC: smug -> neutral -> smug, one beat per phase of the box.
+  // Smug while it opens, neutral for the delivery, smug again on the last
+  // character. Constants because they are CHOICES, not facts — per-tile or
+  // per-line arcs are a small change from here.
+  var SPEECH_MOOD = 'SMUG';       // the bookends
+  var SPEECH_MID  = 'NEUTRAL';    // the delivery
+  var sayMid = SPEECH_MID;        // overridden per utterance by viewer events
   var SAY_STEPS   = 5;                 // stepped open/close
   var SAY_STEP_MS = FRAME_MS * 2;      // 84ms per step = 420ms, ~10 frames
   var SAY_H       = 72 * 4;            // 72 logical x --px, the box's full height
@@ -616,8 +620,14 @@
 
   // The ONE entry point. Everything that speaks goes through here so the box can
   // never be half-typed by one writer and overwritten by another.
-  function saySpeak(text) {
+  // midMood REPLACES the neutral delivery beat for this one utterance. That is
+  // how a viewer reaction gets in: it becomes the middle of the arc rather than
+  // racing it. The previous version fired the reaction on its own setTimeout at
+  // the same moment this beat lands, so which mood survived depended on timer
+  // ordering.
+  function saySpeak(text, midMood) {
     if (!sayEls()) return;
+    sayMid = midMood || SPEECH_MID;
     clearInterval(sayTimer);
     sayFull = sayAscii(text == null ? '' : text);
     sayTxt.textContent = '';
@@ -643,7 +653,11 @@
     if (sayPhase === 'open') {
       var st = Math.min(SAY_STEPS, Math.floor(el / SAY_STEP_MS) + 1);
       if (st !== sayStep) { sayStep = st; sayApplyStep(); }
-      if (st >= SAY_STEPS) { sayPhase = 'type'; sayT0 = Date.now(); }
+      if (st >= SAY_STEPS) {
+        sayPhase = 'type'; sayT0 = Date.now();
+        // Box open, delivery starts — drop out of smug for the line itself.
+        setHostMood(sayMid, sayFull.length * CHAR_MS + 2000);
+      }
       return;
     }
     if (sayPhase === 'type') {
@@ -1067,19 +1081,15 @@
         // "We interrupt this broadcast" — the interruption IS the format.
         var say = $('rn-say');
         if (say) {
-          saySpeak(who + amt + ' - thank you!');
+          // The reaction IS the middle beat, so the arc stays smug -> X -> smug
+          // and nothing has to be timed against anything else.
+          saySpeak(who + amt + ' - thank you!',
+                   p.amount != null ? 'HAPPY' : 'SURPRISED');
           say._locked = true;
           setTimeout(function () { say._locked = false; }, 12000);
         }
         // He reacts. Money gets the big face; everything else is a smaller beat.
-        // A BEAT AFTER the box opens, not with it. Fired simultaneously, this
-        // overwrites saySpeak's SMUG in the same tick and he simply starts
-        // happy — the reaction has nothing to react FROM. Delayed by the open,
-        // the arc is legible: smug, then the tip lands and he brightens, then
-        // the last character puts him back to smug.
-        var reactMood = p.amount != null ? 'HAPPY' : 'SURPRISED';
-        setTimeout(function () { setHostMood(reactMood, 12000); },
-                   SAY_STEPS * SAY_STEP_MS);
+
       })
       .catch(function () {});
   }
@@ -1145,7 +1155,11 @@
     },
     // Speak an arbitrary line, so copy length can be checked against the
     // auto-fit without editing the config table to try a sentence.
-    say: function (t) { saySpeak(t); return sayFull; },
+    say: function (t, mid) { saySpeak(t, mid); return sayFull; },
+    sayState: function () {
+      return { phase: sayPhase, full: sayFull, typed: sayTxt ? sayTxt.textContent.length : -1,
+               mid: sayMid };
+    },
     // The EXIT is an animation in its own right and needs to be checkable
     // without waiting out a 5s intro to see it once.
     sayClose: function () { sayClose(); },
