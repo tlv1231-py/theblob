@@ -374,6 +374,29 @@ Only two things actually move the number:
 - **Budget motion in frames, not milliseconds.** A 100ms effect is 2–3 frames.
   If it needs to be seen, give it 6+.
 
+- **CONTINUOUS motion must be TIME-BASED, never tick-count-based.** This is the
+  one class of bug that looks perfect in a dev preview and wrong on air, so it
+  survives every eyeball test. `x -= 5` per `setInterval` tick makes SPEED a
+  function of timer reliability: on a laptop at 60fps with an idle GPU the timer
+  fires on schedule, but the broadcast VM holds its software compositor at ~98%
+  of one core and delays callbacks — so the same code simply runs SLOWER on air.
+  Derive position from wall-clock elapsed (`(Date.now()-t0) * pxPerSec/1000`) and
+  a late tick jumps to where it should be instead of falling behind. Measured on
+  RetroNews' crawl: holds 116/119 px/s across a deliberate 600ms main-thread
+  stall, where the tick-based version lost the whole stall.
+  Advance the ORIGIN by whole loops on wrap rather than resetting it, so nothing
+  drifts and being late by more than a full loop still lands correctly.
+  Discrete/stepped effects do NOT need this — they have state to hold — but they
+  DO need ≥2 frames per step. Continuous motion is the opposite: it tolerates a
+  dropped frame (nothing to lose) but not an unreliable clock.
+
+- **Audit checklist for any new stream page** (RetroNews passed 2026-07-20):
+  no CSS `transition`/`animation`/`@keyframes` and no `requestAnimationFrame`
+  anywhere — all four are INERT in the component iframe and fail SILENTLY;
+  every discrete effect a whole multiple of 42ms and ≥2 frames; every continuous
+  effect time-based; anything measured in stage px divided by `--s` so it is
+  identical at 1080x1920 and the broadcast's 810x1440.
+
 ### RetroNews — the era rule (binding for `?page=RetroNews`)
 
 RetroNews is a **fake 90s cable channel** (WeatherSTAR 4000 / late-night

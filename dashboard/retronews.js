@@ -544,10 +544,23 @@
   // ran 4px/frame over all four idents: a 7515px track, a 79-SECOND loop, and
   // therefore up to 79s before a donation appeared. Fixed by carrying ONE ident
   // per build and capping events, not by dropping the wrap-sync.
-  var CRAWL_PX = 5;
+  // TIME-BASED, NOT TICK-BASED — the one thing on this page whose appearance
+  // would otherwise differ between a dev preview and the broadcast. Position was
+  // accumulated per tick (crawlX -= 5), which makes SPEED a function of timer
+  // reliability: on a laptop at 60fps with an idle GPU the timer fires on
+  // schedule and it runs at exactly 119px/s, but the broadcast VM holds its
+  // software compositor at ~98% of one core, delays timer callbacks, and the
+  // crawl would simply run SLOWER on air than in preview. Deriving position from
+  // wall-clock elapsed makes the speed correct no matter when ticks actually
+  // land — a late tick jumps to where it should be instead of falling behind.
+  //
+  // This is also why a dropped frame is harmless here where it would not be for
+  // a stepped effect: continuous motion has no discrete state to lose.
+  var CRAWL_PX = 5;                         // design px per 42ms frame
+  var CRAWL_PPS = CRAWL_PX * 1000 / FRAME_MS;   // = 119 px/sec, the real unit
   var CRAWL_EVENTS = 4;
   var crawlTrack = $('rn-crawl-track');
-  var crawlX = 0, crawlHalf = 0, crawlPending = null, crawlKey = '';
+  var crawlHalf = 0, crawlPending = null, crawlKey = '', crawlT0 = Date.now();
 
   // Station idents, so the crawl is never empty on a quiet stream. Same job as
   // the Blob stream's AFK lines: silence should read as programming, not death.
@@ -586,24 +599,35 @@
     // Doubled so the wrap is seamless: when the first copy has fully scrolled
     // past, resetting by exactly its width lands on the identical frame.
     crawlTrack.innerHTML = '<span>' + one + SEP + '</span><span>' + one + SEP + '</span>';
+    // Measured in STAGE px: getBoundingClientRect is post-transform, so dividing
+    // by --s undoes the stage scale. That keeps the loop identical at 1080x1920
+    // and at the broadcast's 810x1440, where --s is 0.75.
     crawlHalf = crawlTrack.firstChild.getBoundingClientRect().width /
                 (parseFloat(getComputedStyle(document.documentElement)
                   .getPropertyValue('--s')) || 1);
-    crawlX = 0;
+    crawlT0 = Date.now();
+    crawlTrack.style.transform = 'translateX(0px)';
   }
 
   function crawlTick() {
     if (!crawlTrack || !crawlHalf) return;
-    crawlX -= CRAWL_PX;
-    if (-crawlX >= crawlHalf) {
-      crawlX += crawlHalf;
+    var travelled = (Date.now() - crawlT0) * CRAWL_PPS / 1000;
+
+    if (travelled >= crawlHalf) {
+      // Advance the ORIGIN by whole loops rather than resetting it, so no
+      // distance is lost and no drift accumulates. Handles being late by more
+      // than one full loop, which a stalled VM can genuinely do.
+      var loops = Math.floor(travelled / crawlHalf);
+      crawlT0 += loops * crawlHalf * 1000 / CRAWL_PPS;
+      travelled -= loops * crawlHalf;
+
       // Content changes are applied HERE, at the wrap, not the moment they
       // arrive. Rebuilding mid-scroll resets the transform and the whole line
       // visibly jumps; at the wrap the seam is already invisible.
       if (crawlPending) { buildCrawl(crawlPending); crawlPending = null; return; }
-      if (!crawlKey) { idleCrawl(); return; }   // still idle — show the next ident
+      if (!crawlKey) { idleCrawl(); return; }   // still idle — next ident
     }
-    crawlTrack.style.transform = 'translateX(' + crawlX + 'px)';
+    crawlTrack.style.transform = 'translateX(' + (-travelled).toFixed(1) + 'px)';
   }
   // Idle: ONE ident per loop, rotating. Keeps the quiet-stream loop near 17s
   // instead of 79, so the channel identifies itself often rather than rarely.
@@ -620,7 +644,7 @@
   setInterval(function () {
     dotOn = !dotOn;
     if (crawlDot) crawlDot.classList.toggle('off', !dotOn);
-  }, 700);
+  }, FRAME_MS * 16);     /* 672ms = 16 frames exactly, not 700 */
 
   function setCrawlEvents(rows) {
     var items = [];
