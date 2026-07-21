@@ -148,11 +148,38 @@ Rules that follow:
 5. **Deleted rows are archived first** to gitignored `backups/*.csv.gz` (302,742
    rows compressed to 5.4MB). They are LOCAL ONLY — not in the repo.
 
-**Storage was never the binding limit** (173MB against a 500MB cap), so the quota
-warning was most likely **egress**: the runner scans every ~7s around the clock,
-and the Stream/RetroNews pages poll config and events every 2–3s. Pruning does
-not reduce egress. **If the warning recurs, attack the POLL INTERVALS, not the
-row counts.**
+**Storage was never the binding limit** (173MB against a 500MB cap). The quota
+warning was **egress — CONFIRMED from the Supabase usage page 2026-07-20:
+9.409 / 5 GB (188%), Database Size only 0.118/0.5 GB (24%).** Grace period runs
+to **2026-08-18**; after that, over-quota requests get a 402. Pruning rows does
+**nothing** for egress — this is request VOLUME, not payload size.
+
+What was measured, and what it means for the fix:
+- **Payload bodies are tiny.** pollConfig returns 195 B, pollEvents 2 B–~2 KB.
+  So the cost is **per-request overhead × frequency**, not big responses.
+- **It is death by a thousand polls, no single smoking gun.** RetroNews on air
+  polls Supabase's REST API directly from the browser ~72k times/day
+  (`pollConfig` 3s + `pollEvents` 2s) ≈ 1.7 GB/mo including header overhead.
+  `stream.js` has NINE poll loops; `home_nav.js` (Command Center) polls when
+  open. Summed across a full billing cycle and multiple open pages/tabs, that is
+  the 9.4 GB.
+- **Realtime was RULED OUT.** `home_nav.js`/`home.py` open a websocket to
+  `realtime:public:pipeline_events`, but the `supabase_realtime` publication is
+  **empty**, so no changes fan out — those 6 concurrent connections are idle
+  heartbeats. (This also means the heartbeat UPSERT fix did not accidentally add
+  Realtime egress, which it would have if the table were published.)
+- **The runner is NOT a REST-egress source** — it reads market bars from Alpaca
+  (external) and talks to Postgres over a direct connection with small per-scan
+  reads.
+
+**The fix is to cut POLL FREQUENCY, and the safe subset is the CONFIG polls**
+(`pollConfig`, `pollYtOverlay`, `pollBgSettings`, `pollPotions`): they read
+settings that only change when a human presses a button in HQ, so 3s → 15s is a
+5x cut with zero visible effect. **DO NOT touch `beat` (15s)** — `watchdog.py`
+reboots the render if a `stream_page` beat is >75s old, so slowing it trips a
+90s reboot loop. Leave the trade/donation reaction polls (`pollEvents`,
+`pollStreamEvents`) responsive. Not yet applied — needs an awake eyeball on the
+live broadcast.
 
 GitHub Actions minutes are NOT a concern — `tlv1231-py/theblob` is public, so
 Actions is free and unlimited. `.env` is gitignored and verified never committed.
